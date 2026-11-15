@@ -83,7 +83,7 @@ class BookingNumberRulesTest {
         c = calls.all().single()
         assertFalse(BookingNumberRules.wanted(c, now))
         r = BookingCallRules.rows(calls.all(), mine, emptyList(), now, cal).single()
-        assertEquals("Obi found 01134 960123 · on rosaskitchen.example · check it's theirs", r.numberLine)
+        assertEquals("Obi found 01134 960123 on rosaskitchen.example · check it's theirs", r.numberLine)
         assertTrue(r.canUseFound)
         assertFalse(r.canCall)
         assertEquals(BookingNumberRules.PICK, r.blocked)

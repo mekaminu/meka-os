@@ -10,8 +10,8 @@ class LoneWordGlueTest {
 
     @Test
     fun theLastTwoWordsGoDownTogether() {
-        assertEquals("When Obi says something out loud on his${nb}own", LoneWordGlue.kept(SpeakUpRules.ROW_LINE))
-        assertEquals("Gmail and Outlook${nb}·${nb}read, tidied, sent only on your${nb}tap", LoneWordGlue.kept(MailAccountRules.ROW_LINE))
+        assertEquals("When Obi says something out loud on${nb}his${nb}own", LoneWordGlue.kept(SpeakUpRules.ROW_LINE))
+        assertEquals("Gmail and Outlook${nb}·${nb}read, tidied, sent only on${nb}your${nb}tap", LoneWordGlue.kept(MailAccountRules.ROW_LINE))
     }
 
     @Test
@@ -54,7 +54,7 @@ class LoneWordGlueTest {
     @Test
     fun datesAndNumbersStayWholeToo() {
         assertEquals("Next one due Fri${nb}13${nb}Nov", LoneWordGlue.kept("Next one due Fri 13 Nov"))
-        assertEquals("Ring Sam on 07700${nb}900123", LoneWordGlue.kept("Ring Sam on 07700 900123"))
+        assertEquals("Ring Sam on${nb}07700${nb}900123", LoneWordGlue.kept("Ring Sam on 07700 900123"))
     }
 
     @Test
@@ -76,5 +76,22 @@ class LoneWordGlueTest {
     @Test
     fun thePossessivePairGoesDownTogether() {
         assertTrue(LoneWordGlue.kept("Off · the weather is home's and work's").endsWith("and${nb}work's"))
+    }
+
+    // Walk-through 2026-11-08, A28: Health's "can't see notifications ·" and the call card's "Obi found … · on".
+    @Test
+    fun aDotTakesTheWordAfterALongWord() {
+        val s = LoneWordGlue.kept("Navilife can't see notifications · messages aren't captured")
+        assertTrue(s.contains("notifications${nb}·${nb}messages"), s)
+        assertEquals("Navilife can't see notifications · messages aren't captured", DateGlue.plain(s))
+    }
+
+    @Test
+    fun aSmallWordLeadsIntoTheNext() {
+        val s = LoneWordGlue.kept("Obi found 01134 960123 on rosaskitchen.example · check it's theirs")
+        assertTrue(s.contains("on${nb}rosaskitchen.example"), s)
+        assertTrue(LoneWordGlue.kept("Put away · on both devices").contains("on${nb}both"))
+        assertEquals("Turn it on", DateGlue.plain(LoneWordGlue.kept("Turn it on")))
+        assertFalse(LoneWordGlue.leadsHeld("on").contains(nb))
     }
 }

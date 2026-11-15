@@ -276,6 +276,8 @@ class WatchHealthScreensTest {
         ScreenShots.assertEachOneLine(compose, name, v.rows.mapNotNull { it.fixLabel })
         ScreenShots.assertNoLoneWords(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertNoDotStartingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
+        // Walk-through A28 (2026-11-15): "Navilife can't see notifications ·" ended a line on the dot.
+        ScreenShots.assertNoDotEndingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
         // The walk-through's A7: a row he switched off never wears the working green.
         v.rows.filter { it.line.startsWith("Off ·") && it.state == os.meka.core.domain.HealthState.OK }

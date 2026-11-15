@@ -132,7 +132,7 @@ object LoneWordGlue {
      * held together while that leaves the line somewhere to break.
      */
     fun kept(line: String): String {
-        val s = dotsHeld(PhraseGlue.kept(line.trimEnd()))
+        val s = dotsHeld(leadsHeld(PhraseGlue.kept(line.trimEnd())))
         val starts = wordStarts(s)
         if (starts.size < 3) return s
         var from = starts.size - 2
@@ -152,6 +152,39 @@ object LoneWordGlue {
     /** The longest run a held dot may make with the word after it (beyond it, a line may end on the dot instead). */
     const val DOT_RUN_MAX = 20
 
+    /**
+     * The longest run one word, its dot and the next word may make when no other dot is in the run (A28, walk-through
+     * 2026-11-08: at [DOT_RUN_MAX] Health's "can't see notifications · messages" ended a line on the dot); also the
+     * longest run a small leading word makes with the word after it.
+     */
+    const val PAIR_RUN_MAX = 26
+
+    /** Small words that lead into the word after them, so none ends a line ("Obi found … on" / "rosaskitchen.example"). */
+    private val LEADS = setOf("on", "at", "by", "to", "in", "of", "for", "via")
+
+    /**
+     * [s] with each small leading word ([LEADS]) held to the word after it while that run stays within [PAIR_RUN_MAX]
+     * (A28: "· on" ended the call card's line, "· on both devices" the money lines). Not before a joiner or at the end.
+     */
+    fun leadsHeld(s: String): String {
+        val tokens = s.split(' ')
+        val runs = mutableListOf<String>()
+        var i = 0
+        while (i < tokens.size) {
+            val t = tokens[i]
+            val next = tokens.getOrNull(i + 1)
+            val lead = t.lowercase().let { it in LEADS || it.substringAfterLast(NBSP) in LEADS }
+            if (lead && next != null && next.isNotEmpty() && next !in JOINERS && t.length + 1 + next.length <= PAIR_RUN_MAX) {
+                runs += t + NBSP + next
+                i += 2
+            } else {
+                runs += t
+                i++
+            }
+        }
+        return runs.joinToString(" ")
+    }
+
     /** The longest unbreakable run the last words may make once held (a longer one would break mid-word). */
     const val RUN_MAX = 28
 
@@ -169,7 +202,9 @@ object LoneWordGlue {
             if (t in HELD && runs.isNotEmpty() && runs.last().isNotEmpty()) {
                 runs[runs.lastIndex] = runs.last() + NBSP + t
                 val next = tokens.getOrNull(i + 1)
-                if (next != null && next.isNotEmpty() && next !in HELD && runs.last().length + 1 + next.length <= DOT_RUN_MAX) {
+                val lone = runs.last().split(NBSP).count { it in HELD } == 1
+                val max = if (lone) PAIR_RUN_MAX else DOT_RUN_MAX
+                if (next != null && next.isNotEmpty() && next !in HELD && runs.last().length + 1 + next.length <= max) {
                     runs[runs.lastIndex] = runs.last() + NBSP + next
                     i += 2
                     continue

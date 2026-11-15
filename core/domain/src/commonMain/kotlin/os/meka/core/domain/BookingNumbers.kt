@@ -4,7 +4,7 @@ package os.meka.core.domain
  * Obi on calls, the number looked up: when a call card has no number, the server searches the web for the business
  * (the name alone, through the Brave key the call assistant and errands already use) and keeps the best UK number it
  * finds on the card as a suggestion, with the site it came from. Nothing rings on a found number: the card shows it
- * ("Obi found 020 7946 0018 · on rosaskitchen.example · check it's theirs") with **Use this number**, and his Call now
+ * ("Obi found 020 7946 0018 on rosaskitchen.example · check it's theirs") with **Use this number**, and his Call now
  * still comes after that, through the same [BookingCallRules.numberCheck] (never emergency, premium-rate or personal).
  */
 object BookingNumberRules {
@@ -99,7 +99,9 @@ object BookingNumberRules {
     /** The card's number line while it has no number of its own. */
     fun line(c: BookingCall, personal: Collection<String?>, nowMs: Long): String {
         usable(c, personal)?.let { e164 ->
-            return listOfNotNull("Obi found ${BookingCallRules.pretty(e164)}", c.foundFrom?.let { "on $it" }, "check it's theirs").joinToString(" · ")
+            // A28: "on <site>" reads with the number, not after a dot ("Obi found … · on" ended a line on the cover).
+            val found = "Obi found ${BookingCallRules.pretty(e164)}" + (c.foundFrom?.let { " on $it" } ?: "")
+            return "$found · check it's theirs"
         }
         if (c.lookedUpFor == c.business) return if (c.lookup == LOOKUP_FAILED) FAILED else NONE
         return if (wanted(c, nowMs)) LOOKING else BookingCallRules.NO_NUMBER
