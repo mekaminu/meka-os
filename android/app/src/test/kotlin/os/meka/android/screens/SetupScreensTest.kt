@@ -212,7 +212,9 @@ class SetupScreensTest {
             }
             Fill.MANY -> {
                 if (v.toDo != 0) fail("$name: ${v.toDo} left on a set-up Fold (${v.steps.filter { it.toDo }})")
-                if (!onScreen("All set")) fail("$name: doesn't say all set")
+                // Walk-through A32: a row that couldn't be checked makes the head "No steps left", never "All set".
+                val head = if (v.steps.any { it.state == SetupState.UNKNOWN }) "No steps left" else "All set"
+                if (!onScreen(head)) fail("$name: doesn't say \"$head\" (${v.summary})")
                 if (!onScreen("Google Chirp 3 HD")) fail("$name: the natural voice doesn't name Google's voices")
             }
         }
