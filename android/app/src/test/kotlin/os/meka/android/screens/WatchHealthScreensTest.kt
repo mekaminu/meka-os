@@ -286,6 +286,10 @@ class WatchHealthScreensTest {
         // The walk-through's A7: a row he switched off never wears the working green.
         v.rows.filter { it.line.startsWith("Off ·") && it.state == os.meka.core.domain.HealthState.OK }
             .forEach { fail("$name: ${it.title} is off but drawn as working") }
+        // Walk-through A32: Obi's voice row says the same Face setting as Obi's voice's own shots (ShotLife.FACE_ON).
+        v.rows.firstOrNull { it.key == "voice" }?.detail?.let { d ->
+            if (d.contains("Face · off") == ShotLife.FACE_ON) fail("$name: Obi's voice row says \"$d\" while the Voice shots have Face ${if (ShotLife.FACE_ON) "on" else "off"}")
+        }
         val server0 = v.rows.first { it.key == "server" }
         when (fill) {
             Fill.EMPTY -> if (server0.line != "This device isn't connected yet") fail("$name: not connected, the server row says \"${server0.line}\"")

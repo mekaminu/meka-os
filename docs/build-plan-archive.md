@@ -6422,3 +6422,7 @@ The walk-through saw the No-spend days tile's week dots as ~17 dp circles on the
 ### Found and fixing, week 3 · A32 slice 11 (2026-11-15)
 
 The walk-through saw the What if slider stop short of the card's edge (`inner-dark-columns-plan`: the track ~10 dp in from the bars and figures above it at both ends). Material's slider insets its track by half the knob on each side. Fold `MoneySlider` (shared by What if I cut…, What if I save… and Clear my cards) is now laid out half a knob (10 dp) wider on each side with a small `overhang` layout modifier, so the track spans the card's content and the knob's half overhangs into the card's padding at the ends; the 48 dp drag height is unchanged. The track carries `<tag>-track`. Test: `MoneyPlanMoreScreensTest.theForecastIsTilesAndBarsAndGoalsStartFromATile` checks What if I cut…'s track spans the forecast bars within 1 px. The Mac's native `Slider` already spans its card; no Mac change.
+
+### Found and fixing, week 3 · A32 slice 12 (2026-11-15)
+
+The walk-through saw Obi's voice's shots with Face On beside Health's shots, whose Obi's voice row read "Face · off" (Health reads the device's own Face setting, off on a new phone). Test only: `ShotLife.FACE_ON` (false) is the shots' one Face setting; `VoiceScreensTest`'s empty, one and full screens take it, and `WatchHealthScreensTest`'s Health shots fail if the voice row's face line disagrees with it. Nothing changes in either app.

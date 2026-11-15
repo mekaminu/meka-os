@@ -21,6 +21,12 @@ object ShotLife {
     /** A full set's Work mode switch: Setup's full shot says the call assistant is on, so Health's full one does too. */
     const val CALL_ASSISTANT_ON_WHEN_FULL = true
 
+    /**
+     * Obi's Face setting in every shot (the walk-through 2026-11-08, A32: Obi's voice showed Face On while Health's voice
+     * row said "Face · off"). Health reads the device's own setting, off on a new phone, so Obi's voice shows it off too.
+     */
+    const val FACE_ON = false
+
     /** One event of the shots' week: on 2026-10-[day], [startMin]–[endMin] minutes after midnight in London. */
     data class WeekEvent(
         val id: String, val title: String, val day: Int, val startMin: Int, val endMin: Int,

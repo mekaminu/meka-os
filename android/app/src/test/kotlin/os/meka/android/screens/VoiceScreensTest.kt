@@ -85,7 +85,7 @@ class VoiceScreensTest {
 
     private fun screen(fill: Fill): VoiceScreen = when (fill) {
         Fill.EMPTY -> VoiceScreen(
-            sir = false, faceOn = true, faceReady = false, remembers = true, memoryRows = emptyList(),
+            sir = false, faceOn = ShotLife.FACE_ON, faceReady = false, remembers = true, memoryRows = emptyList(),
             live = LiveTalkRules.view(on = false, voice = null, meterKnown = false, configured = false, level = "ok", spentPence = 0, capPence = 500),
             liveSampleFailed = false,
             view = os.meka.core.domain.OneVoiceRules.view("Charon", null, null, null, mac = false, connected = false),
@@ -93,8 +93,9 @@ class VoiceScreensTest {
             speed = TurnSpeedRules.view(emptyList(), cal), serverSpeed = null,
         )
         // Walk-through 2026-11-08 A23: "one" shows one thing Obi remembers, not the empty memory.
+        // A32: the Face setting is the one Health's shots read (ShotLife.FACE_ON).
         Fill.ONE -> VoiceScreen(
-            sir = false, faceOn = true, faceReady = true, remembers = true, memoryRows = listOf(ONE_MEMORY),
+            sir = false, faceOn = ShotLife.FACE_ON, faceReady = true, remembers = true, memoryRows = listOf(ONE_MEMORY),
             live = LiveTalkRules.view(on = false, voice = null, meterKnown = true, configured = true, level = "ok", spentPence = 40, capPence = 500),
             liveSampleFailed = false,
             view = os.meka.core.domain.OneVoiceRules.view("Charon", null, SpeechRules.ON, "Navilife's voice · Charon · 1,240 of 1,000,000 characters in October", mac = false),
@@ -103,7 +104,7 @@ class VoiceScreensTest {
             serverSpeed = ServerSpeedRules.view(emptyList(), now),
         )
         Fill.MANY -> VoiceScreen(
-            sir = true, faceOn = false, faceReady = true, remembers = true,
+            sir = true, faceOn = ShotLife.FACE_ON, faceReady = true, remembers = true,
             memoryRows = listOf("Likes the 07:42 train", "Training for a 10k in spring", "Prefers short answers in the morning"),
             // One Obi's voice (slice 2): Live has no voice list of its own; the one list below sets it.
             live = LiveTalkRules.view(on = true, voice = "Orus", meterKnown = true, configured = true, level = "ok", spentPence = 210, capPence = 500)
