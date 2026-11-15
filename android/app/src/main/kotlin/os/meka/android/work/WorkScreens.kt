@@ -61,6 +61,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.border
+import os.meka.android.designsystem.LightInk
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -698,8 +700,12 @@ private fun DayChip(isoDay: Int, on: Boolean, onToggle: () -> Unit) {
     val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "day-bg")
     val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "day-fg")
     val name = LocalClock.DAY_SHORT[isoDay - 1]
+    // A31: an off day is surfaceRaised on Light's page (1.1:1), so in Light it has a 1 dp edge in the track ink.
+    val edge = if (on) null else LightInk.pillEdge(Meka.colors, Meka.theme.isDark)
     Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+        Modifier.size(40.dp).clip(RoundedCornerShape(MekaRadius.pill))
+            .then(if (edge != null) Modifier.border(1.dp, edge, RoundedCornerShape(MekaRadius.pill)) else Modifier)
+            .background(bg)
             .clickable(role = Role.Checkbox) { onToggle() }
             .semantics { contentDescription = name; selected = on },
         contentAlignment = Alignment.Center,

@@ -44,6 +44,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.border
+import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -210,6 +212,8 @@ internal fun SettingChip(label: String, on: Boolean, spoken: String, onClick: ()
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "setup-chip-bg")
     val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "setup-chip-fg")
+    // A31: an off chip is surfaceRaised on Light's page (1.1:1), so in Light it has a 1 dp edge in the track ink.
+    val edge = if (on) null else LightInk.pillEdge(Meka.colors, Meka.theme.isDark)
     androidx.compose.foundation.layout.Box(
         Modifier.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
             .clip(RoundedCornerShape(MekaRadius.pill))
@@ -220,7 +224,9 @@ internal fun SettingChip(label: String, on: Boolean, spoken: String, onClick: ()
         Text(
             label, style = MekaType.caption, color = fg, maxLines = 1,
             // Drawn at the Done pill's 32 dp (walk-through A11: these read 20–23 dp tall), the word centred.
-            modifier = Modifier.testTag("setting-chip").clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+            modifier = Modifier.testTag("setting-chip").clip(RoundedCornerShape(MekaRadius.pill))
+                .then(if (edge != null) Modifier.border(1.dp, edge, RoundedCornerShape(MekaRadius.pill)) else Modifier)
+                .background(bg)
                 .heightIn(min = 32.dp).wrapContentHeight(Alignment.CenterVertically)
                 .padding(horizontal = MekaSpace.m),
         )

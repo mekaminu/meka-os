@@ -46,6 +46,15 @@ class LightInkTest {
     }
 
     @Test
+    fun workModesOffDaysAndChipsHaveAnEdgeInLightAndTheirWordsRead() {
+        // Work mode's off day circles and commute chips are surfaceRaised: alone they fade into Light's page.
+        assertTrue(contrast(light.surfaceRaised, light.background) < 1.5)
+        assertTrue(contrast(LightInk.pillEdge(light, dark = false)!!, light.surfaceRaised) >= 1.3)
+        // Their letters and labels stay the secondary ink, readable on the chip.
+        assertTrue(contrast(light.textSecondary, light.surfaceRaised) >= 4.5, "a chip's word is ${contrast(light.textSecondary, light.surfaceRaised)}:1")
+    }
+
+    @Test
     fun moneysOverUsualGoldAlreadyReadsInLight() {
         // The reviewer's gold "£151 over usual" is the accent: measured, it is already over 4.5:1 on page and card.
         pageAndCard.forEach { bg -> assertTrue(contrast(light.accent, bg) >= 4.5, "the accent is ${contrast(light.accent, bg)}:1") }

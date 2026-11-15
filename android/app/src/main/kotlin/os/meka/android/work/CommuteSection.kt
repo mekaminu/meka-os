@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
@@ -145,5 +146,6 @@ private fun OneDay(days: List<CommuteDayRow>, onSetDay: (Long, Int, Int) -> Unit
  */
 @Composable
 private fun ChipRowLabel(text: String) {
-    Text(text, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+    // A31: a small grey word, so Light uses the secondary ink (tertiary is 3.9:1 on Light's page).
+    Text(text, style = MekaType.caption, color = LightInk.small(Meka.colors, Meka.theme.isDark), modifier = Modifier.padding(top = MekaSpace.xs))
 }
