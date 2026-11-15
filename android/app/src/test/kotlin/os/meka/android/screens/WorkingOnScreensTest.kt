@@ -51,6 +51,7 @@ import os.meka.core.domain.HelpPlace
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.StandingErrand
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.WorkingOnRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.HlcClock
@@ -262,6 +263,10 @@ class WorkingOnScreensTest {
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertNoDotEndingALine(compose, name, lines)
         assertTouchTargets(name)
+        // Walk-through 2026-11-08 A28: the chaser card wrapped ~140 px early; its did and need lines now sit on one line each.
+        v.cards.firstOrNull { it.errand == StandingErrand.FOLLOW_UPS }?.let { c ->
+            ScreenShots.assertEachOneLine(compose, name, listOfNotNull(c.did, c.need).map { LoneWordGlue.kept(it) })
+        }
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         val cards = compose.onAllNodes(hasTestTag("working-on-card"), useUnmergedTree = true).fetchSemanticsNodes().size
         when (fill) {
@@ -271,7 +276,7 @@ class WorkingOnScreensTest {
             }
             Fill.ONE -> {
                 if (cards != 1) fail("$name: $cards cards, not 1")
-                if (!onScreen("Time to chase: The drill back from Casey")) fail("$name: the chase isn't said")
+                if (!onScreen("Chase Casey: The drill back")) fail("$name: the chase isn't said")
             }
             Fill.ERRANDS -> {
                 val jobs = compose.onAllNodes(hasTestTag("errand-card"), useUnmergedTree = true).fetchSemanticsNodes().size

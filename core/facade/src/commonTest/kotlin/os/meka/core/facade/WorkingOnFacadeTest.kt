@@ -68,7 +68,7 @@ class WorkingOnFacadeTest {
         assertTrue(v.cards[0].need!!.startsWith("Home insurance "), all)
         assertTrue(v.cards[1].did.startsWith("Sam's birthday"), all)
         assertTrue(v.cards[1].need!!.startsWith("Pick a gift · "), all)
-        assertTrue(v.cards[2].need!!.startsWith("Time to chase: The drill back"), all)
+        assertTrue(v.cards[2].need!!.startsWith("Chase Casey: The drill back"), all)
 
         // Off on the Fold: gone there and, after a sync, on the Mac too.
         val off = fold.setStandingErrand("birthdays", false)

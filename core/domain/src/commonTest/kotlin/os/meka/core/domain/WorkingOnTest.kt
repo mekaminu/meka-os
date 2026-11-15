@@ -42,8 +42,10 @@ class WorkingOnTest {
         assertNull(calm.need)
         val due = WorkingOnRules.followUps(listOf(waiting("Refund", "Shop", DueState.DUE, today), waiting("Photos", null, DueState.DUE, today),
             waiting("Keys", null, DueState.NONE, null)), today)!!
-        assertEquals("Waiting on 3 things for you · 2 to chase now", due.did)
-        assertEquals("Time to chase: Refund from Shop · and 1 more", due.need)
+        assertEquals("Waiting on 3 things for you", due.did)
+        assertEquals("Chase Shop: Refund · and 1 more", due.need)
+        // No one to chase named: the thing alone.
+        assertEquals("Chase: Photos", WorkingOnRules.followUps(listOf(waiting("Photos", null, DueState.DUE, today)), today)!!.need)
         assertEquals("Waiting on 1 thing for you · no chase dates set",
             WorkingOnRules.followUps(listOf(waiting("Keys", null, DueState.NONE, null)), today)!!.did)
     }

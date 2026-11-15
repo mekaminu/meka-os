@@ -149,14 +149,18 @@ object WorkingOnRules {
         if (waiting.isEmpty()) return null
         val due = waiting.filter { it.state == DueState.DUE }
         val nextChase = waiting.mapNotNull { it.chaseDay }.filter { it > today }.minOrNull()
+        // Walk-through 2026-11-08 A28 (the chaser card wrapping early): with a chase due the need line says it, so the did
+        // line stops at the count ("· 2 to chase now" said it twice and held "to chase now" down a line), and the need line
+        // leads with who to chase ("Chase Casey: The drill back"), short enough to sit on one line of the cover screen.
         val tail = when {
-            due.isNotEmpty() -> " · ${plural(due.size, "to chase", "to chase")} now"
+            due.isNotEmpty() -> ""
             nextChase != null -> " · next chase ${RenewalRules.dayWord(nextChase, today)}"
             else -> " · no chase dates set"
         }
         val did = "Waiting on ${plural(waiting.size, "thing")} for you$tail"
         val need = due.firstOrNull()?.let { w ->
-            "Time to chase: ${tidy(w.title)}" + (w.who?.let { tidy(it) }?.takeIf { it.isNotEmpty() }?.let { " from $it" }.orEmpty()) +
+            val who = w.who?.let { tidy(it) }?.takeIf { it.isNotEmpty() }
+            (if (who != null) "Chase $who: ${tidy(w.title)}" else "Chase: ${tidy(w.title)}") +
                 ((due.size - 1).takeIf { it > 0 }?.let { " · and $it more" }.orEmpty())
         }
         return card(StandingErrand.FOLLOW_UPS, did, need)
