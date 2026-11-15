@@ -30,7 +30,7 @@ data class MoneySpendRow(
     val noteTone: MoneyTone, val tone: Int, val icon: MoneyIcon, val spoken: String,
 )
 
-/** One of the three tiles under the ring: "Came in £3,200" (lit), "Bills to come £410", "Left £950". */
+/** One of the three tiles under the ring: "Came in £3,200" (lit), "Bills to come £410", "After bills £540" (or "Left £950" with no payday found). */
 data class MoneyTile(val label: String, val value: String, val lit: Boolean)
 
 /** A day of the latest payments: [label] ("Today", "Yesterday", "Fri 23 Oct"), [total] out that day ("−£48.20") or null. */
@@ -73,6 +73,10 @@ object MoneySpending {
     /** Payments under "Latest payments". */
     const val LATEST = 5
     const val LATEST_HEAD = "LATEST PAYMENTS"
+    const val TILE_BILLS = "Bills to come"
+    const val TILE_LEFT = "Left"
+    /** A32: the month's in less out less the bills still to come before payday. */
+    const val TILE_AFTER_BILLS = "After bills"
     const val FEWER = "Fewer"
     const val SEE_ALL_CLOSE = "Latest only"
 
@@ -184,8 +188,14 @@ object MoneySpending {
         val centre = centre(partial, monthName, spent, avgTotal, usual, dayOfMonth, daysInMonth)
         val tiles = buildList {
             add(MoneyTile("Came in", whole(incomePence.coerceAtLeast(0)), lit = incomePence > 0))
-            toGoPence?.let { add(MoneyTile("Bills to come", whole(it.coerceAtLeast(0)), lit = false)) }
-            leftPence?.let { add(MoneyTile("Left", if (it < 0) "−" + whole(-it) else whole(it), lit = false)) }
+            val toGo = toGoPence?.coerceAtLeast(0)
+            toGo?.let { add(MoneyTile(TILE_BILLS, whole(it), lit = false)) }
+            // Walk-through 2026-11-08 A32: "Left £1,942" (in − spent) beside "Bills to come £142" read as if the bills
+            // were already out of it. With the bills shown, the third tile takes them off too and says so.
+            leftPence?.let { left ->
+                val net = if (toGo != null) left - toGo else left
+                add(MoneyTile(if (toGo != null) TILE_AFTER_BILLS else TILE_LEFT, if (net < 0) "−" + whole(-net) else whole(net), lit = false))
+            }
         }
         val latest = days(txns.take(LATEST), today)
         val seeAll = if (allTxns > LATEST) "See all $allTxns ›" else null

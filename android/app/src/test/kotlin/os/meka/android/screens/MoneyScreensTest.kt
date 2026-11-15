@@ -206,6 +206,9 @@ class MoneyScreensTest {
             val card = v.bills?.amount ?: fail("$name: no Bills card while Spending says $toCome to come")
             if (toCome != card) fail("$name: Spending says $toCome to come, the Bills tab $card")
             if (toCome == "£0") fail("$name: the full month's fixture has nothing to come")
+            // Walk-through 2026-11-08 A32: beside the bills to come, the last tile takes them off and says so.
+            val last = v.month?.spending?.tiles?.lastOrNull()?.label
+            if (last != os.meka.core.domain.MoneySpending.TILE_AFTER_BILLS) fail("$name: the tile beside Bills to come says $last, not After bills")
         }
         // Walk-through 2026-11-08 A19: the three tiles' labels are one size ("Bills to come" read smaller than its
         // neighbours on the closed Fold), and so are their figures.

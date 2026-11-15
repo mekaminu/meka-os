@@ -123,7 +123,7 @@ struct MoneyRingView: View {
     }
 }
 
-/// Came in · Bills to come · Left in raised tiles.
+/// Came in · Bills to come · After bills (Left with no payday found) in raised tiles.
 struct MoneyTilesView: View {
     let tiles: [MoneyTile]
     let palette: MekaPalette

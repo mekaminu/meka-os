@@ -183,7 +183,7 @@ internal fun MoneyRing(s: MoneySpendingView, focus: String?, modifier: Modifier 
 }
 
 /**
- * Came in · Bills to come · Left, side by side in raised tiles. Walk-through 2026-11-08 A19: each label stepped down
+ * Came in · Bills to come · After bills (Left with no payday found), side by side in raised tiles. Walk-through 2026-11-08 A19: each label stepped down
  * on its own, so on the closed Fold "Bills to come" read smaller than "Came in" and "Left"; now the three labels share
  * one size (the largest at which every one fits its tile, never below 10 sp), and so do the three figures (never below
  * 11 sp), found by measuring.

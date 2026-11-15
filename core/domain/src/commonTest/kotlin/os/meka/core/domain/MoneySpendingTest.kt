@@ -92,9 +92,14 @@ class MoneySpendingTest {
     }
 
     @Test
-    fun tilesSayCameInBillsToComeAndLeft() {
+    fun tilesSayCameInBillsToComeAndWhatsLeftAfterThem() {
         val v = view()
-        assertEquals(listOf("Came in" to "£3,200", "Bills to come" to "£410", "Left" to "£950"), v.tiles.map { it.label to it.value })
+        // Walk-through 2026-11-08 A32: with the bills to come shown, the third tile takes them off and says so (950 − 410).
+        assertEquals(listOf("Came in" to "£3,200", "Bills to come" to "£410", "After bills" to "£540"), v.tiles.map { it.label to it.value })
+        val nothingShown = MoneySpending.view(false, "May", spent, 0, cats, null, "usual", 31, 31, null, 95_000, emptyList(), 0, today)
+        assertEquals(listOf("Came in" to "£0", "Left" to "£950"), nothingShown.tiles.map { it.label to it.value })
+        val short = MoneySpending.view(false, "May", spent, 0, cats, null, "usual", 31, 31, 41_000, 10_000, emptyList(), 0, today)
+        assertEquals("After bills" to "−£310", short.tiles.last().let { it.label to it.value })
         val noPayday = MoneySpending.view(false, "May", spent, 0, cats, null, "usual", 31, 31, null, null, emptyList(), 0, today)
         assertEquals(listOf("Came in"), noPayday.tiles.map { it.label })
     }
