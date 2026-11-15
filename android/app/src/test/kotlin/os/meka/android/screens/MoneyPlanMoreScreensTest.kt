@@ -74,12 +74,17 @@ class MoneyPlanMoreScreensTest {
                     "09/$mm/2026,TESCO STORES 2041,-64.90\n" +
                     (if (m < 10) "28/$mm/2026,TESCO STORES 2041,-58.20\n" else "")
             }
-        /** Slice 2: a week away on the card in invented statements — two payments abroad, each with a foreign fee. */
+        /**
+         * Slice 2: a week away on the card in invented statements — two payments abroad, each with a foreign fee.
+         * Walk-through 2026-11-08 A32: they end on 15 Oct like the other Money shots' statements (they ended on 13).
+         */
         const val CARD = "Date,Description,Amount\n" +
-            "12/10/2026,RESTAURANTE SOL EUR 46.20,-40.00\n" +
-            "12/10/2026,NON-STERLING TRANSACTION FEE,-1.20\n" +
-            "13/10/2026,MERCADO CENTRAL 23.10 EUR,-20.00\n" +
-            "13/10/2026,NON-STERLING TRANSACTION FEE,-0.60\n"
+            "14/10/2026,RESTAURANTE SOL EUR 46.20,-40.00\n" +
+            "14/10/2026,NON-STERLING TRANSACTION FEE,-1.20\n" +
+            "15/10/2026,MERCADO CENTRAL 23.10 EUR,-20.00\n" +
+            "15/10/2026,NON-STERLING TRANSACTION FEE,-0.60\n"
+        /** The last day of [CARD], the day every Money shot's statements run to. */
+        const val LAST_DAY = "15/10/2026"
     }
 
     private fun open(card: Boolean = false): MekaCore {
@@ -239,6 +244,9 @@ class MoneyPlanMoreScreensTest {
         assertTrue(shows("money-abroad-payments-toggle"))
         tap("money-abroad-payments-toggle")
         assertTrue(shows("money-abroad-payments") && showsText("£1.20 fee"), "See the payments behind it should list each fee")
+        // A32: the fees' days are the card's own, ending on the 15th like the other Money shots.
+        assertTrue(CARD.trimEnd().lines().last().startsWith(LAST_DAY) && showsText("Thu 15 Oct"),
+            "the last fee should be on Thu 15 Oct, the day the other Money shots' statements end")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-abroad-tiles-cover"))
     }
 
