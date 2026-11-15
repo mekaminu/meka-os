@@ -154,6 +154,7 @@ class MoneyAccountsLayoutScreensTest {
         scrollTo("money-foot-info")
         assertTrue(showsText(MoneyTabs.FOOT_SHORT), "Accounts should end on one foot line")
         if (showsText(MoneyRules.FOOT)) fail("the long read-only line sits on Accounts")
+        ScreenShots.assertSquareTarget(compose, "MoneyAccountsLayoutScreensTest", "money-foot-info")
         tap("money-foot-info")
         assertTrue(showsText(MoneyRules.FOOT) && showsText(MoneyTabs.ACCOUNTS_FROM), "the foot's ⓘ says where the accounts come from")
         assertTrue(showsText(MoneyWorth.FOOT.substringBefore(";")), "the foot's ⓘ says how net worth is worked out")

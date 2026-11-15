@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -26,6 +27,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchSquare
 import os.meka.core.domain.MoneyMonthReviewView
 import os.meka.core.domain.MoneyTabs
 
@@ -60,13 +62,18 @@ internal fun MoneyLabel(text: String, modifier: Modifier = Modifier, color: andr
     Text(text, style = MekaType.cardLabel, color = color, modifier = modifier.semantics { heading() })
 }
 
-/** The small ⓘ that opens a card's help or where its numbers came from. */
+/**
+ * The small ⓘ that opens a card's help or where its numbers came from: the glyph drawn small, centred in a whole
+ * 48 × 48 target (walk-through A32: it was only the glyph's 16 dp wide), on every Money tab; the glyph stays where it was.
+ */
 @Composable
 internal fun MoneyInfoButton(spoken: String, tag: String, onClick: () -> Unit) {
     Text(
         MoneyTabs.INFO, style = MekaType.body, color = Meka.colors.textTertiary,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = spoken }.minTouch().testTag(tag),
+        // Nudged right by the target's spare half so the glyph keeps its place at the card's edge (the target runs into
+        // the card's 16 dp inset, inside the card).
+        modifier = Modifier.offset(x = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = spoken }.minTouchSquare().testTag(tag),
     )
 }
 

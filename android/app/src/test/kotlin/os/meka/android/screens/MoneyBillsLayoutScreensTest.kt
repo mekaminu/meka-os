@@ -173,6 +173,7 @@ class MoneyBillsLayoutScreensTest {
         scrollTo("money-foot-info")
         assertTrue(showsText(MoneyTabs.FOOT_SHORT), "Bills should end on one foot line")
         if (showsText(MoneyRules.FOOT)) fail("the long read-only line sits on Bills")
+        ScreenShots.assertSquareTarget(compose, "MoneyBillsLayoutScreensTest", "money-foot-info")
         tap("money-foot-info")
         assertTrue(showsText(MoneyRules.FOOT) && showsText("Bills are found from"), "the foot's ⓘ says where the bills come from")
     }

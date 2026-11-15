@@ -237,6 +237,7 @@ class MoneyPlanLayoutScreensTest {
         assertTrue(showsText(MoneyTabs.FOOT_SHORT), "Plan should end on one foot line")
         if (showsText(MoneySave.BASIS)) fail("What if I save's basis still sits under its card")
         if (showsText(MoneyChallenges.FOOT)) fail("the challenges' source line still sits on the page")
+        ScreenShots.assertSquareTarget(compose, "MoneyPlanLayoutScreensTest", "money-foot-info")
         tap("money-foot-info")
         assertTrue(showsText(MoneyTabs.PLAN_FROM) && showsText(MoneyRules.FOOT), "the foot's ⓘ says how Plan is worked out")
     }

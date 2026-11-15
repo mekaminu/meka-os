@@ -563,6 +563,15 @@ object ScreenShots {
         return field("shape") as? androidx.compose.foundation.shape.CornerBasedShape
     }
 
+    /** Walk-through A32: the glyph button tagged [tag] (Money's ⓘ) is a whole 48 × 48 target, not as wide as its glyph. */
+    fun assertSquareTarget(compose: ComposeContentTestRule, name: String, tag: String) {
+        val d = compose.density.density
+        val n = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
+            ?: fail("$name: no $tag on screen")
+        if (n.size.width / d < 47.5f || n.size.height / d < 47.5f)
+            fail("$name: $tag is ${(n.size.width / d).toInt()} × ${(n.size.height / d).toInt()} dp, not 48 × 48")
+    }
+
     /**
      * Walk-through 2026-11-02 A9: every button, switch and checkbox on screen is at least 48 dp tall, a glyph's button
      * ("⋯") 48 × 48 (not as wide as its glyph), and every drawn On/Off pill and setting chip is at least 30 dp tall.

@@ -222,6 +222,7 @@ class MoneyTradingLayoutScreensTest {
         scrollTo("money-foot-info")
         assertTrue(showsText(MoneyTradingLayout.FOOT_SHORT), "Trading should end on one foot line")
         if (showsText(MoneyRules.FOOT)) fail("Money's long read-only line sits on Trading")
+        ScreenShots.assertSquareTarget(compose, "MoneyTradingLayoutScreensTest", "money-foot-info")
         tap("money-foot-info")
         assertTrue(showsText(TradingTracker.FOOT.substringBefore(" · ")), "the foot's ⓘ says where the figures come from")
     }
