@@ -6342,3 +6342,11 @@ Obi's spare sum under What if I save… was `roundTen(left − amount)` while th
 - Confirmed in the code: Ask's match rows ran `.appear` after the card's padding, so only the words scaled in (Expressive's entry scale) inside a card already drawn, each row a stagger step behind; the by-hand shot settled only 300 ms, so it caught them part way (74, 74, 75, 76, 77 px). Voice notes' buttons keep 8 dp of padding inside their touch area, so the first word sat 8 dp right of the note's text.
 - Fold: `AskMatchList` puts `.appear` first, so the whole card rises and scales together; `VoiceNotesPane`'s button row is offset −8 dp (tags `voice-note-title`, `voice-note-actions`). The Mac: its voice-note buttons are plain (no inset) and its search is its own list, so nothing changes there.
 - Tests: AskScreensTest's field-by-hand walk settles before its shot and fails if the matches' cards and words don't start in one line (within 1 dp); VoiceNotesScreensTest `assertActionsUnderWords` on every shot.
+
+### Found and fixing, week 3 · A27 slice 3 (2026-11-15): the last edges (A27 done)
+
+- Money → Plan's lead idea card (and the Idea sheet): Not for me's word lost its 8 dp start inset (`padding(end = xs)` only, tagged `TAG_NOT_FOR_ME_WORD`), so when the FlowRow wraps it under the pills on the cover it starts on the card's text line; beside a pill the FlowRow's 8 dp gap is the same as between pills.
+- New `designsystem/StepGlyph.kt`: a 48 dp target with the glyph centred, or at the target's end for a row's last glyph. Notifications' and Work mode's `TimeStepper` use it, so the + ends on the column's edge (it ended ~16 dp short, centred in its target), level with the On pills and the full-width buttons. Work's glyphs had no minimum target before; they now answer 48 dp.
+- Tests: MoneyPlanLayoutScreensTest (word on the text line when wrapped, else within the pills' gap after Remind me); `ScreenShots.assertSteppersEndOnTheEdge` (each + glyph and any switch pill near the edge end within 2 dp of "Send a test" / Stop or Start work now) in NotificationsScreensTest (quiet hours on) and WorkScreensTest.
+- Fold only: the Mac's Not for me is a plain button in an HStack and its steppers are system Steppers.
+

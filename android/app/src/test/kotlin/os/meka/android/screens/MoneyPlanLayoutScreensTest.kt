@@ -151,6 +151,20 @@ class MoneyPlanLayoutScreensTest {
         val lead = v.check?.ideas?.firstOrNull() ?: fail("no lead idea")
         assertTrue(shows("money-check-lead") && showsText(lead.why), "the lead idea is its own card with its why")
         assertTrue(shows("money-lead-remind") && shows("money-lead-not-for-me"), "the lead card has Remind me and Not for me")
+        // Walk-through A27: Not for me's word starts on the card's text line when it wraps under the pills (it sat 8 dp
+        // in, under nothing), and keeps the pills' own gap when it fits beside them.
+        run {
+            fun box(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+            val title = box("money-idea-${lead.id}")
+            val remind = box("money-lead-remind")
+            val word = box(os.meka.android.ask.TAG_NOT_FOR_ME_WORD)
+            val gap = with(compose.density) { os.meka.android.designsystem.MekaSpace.xs.toPx() }
+            if (word.top >= remind.bottom - 1f) {
+                assertTrue(kotlin.math.abs(word.left - title.left) <= 1f, "Not for me starts ${word.left - title.left} px off the card's text line")
+            } else {
+                assertTrue(word.left - remind.right <= gap + 1f, "Not for me sits ${word.left - remind.right} px after Remind me, more than the pills' gap")
+            }
+        }
         if (idea.id != lead.id && showsText(idea.why)) fail("a row idea's why sits on the page")
         if (shows("money-idea-behind")) fail("the payments behind an idea sit on the page")
         tap("money-idea-${idea.id}")

@@ -184,6 +184,7 @@ class NotificationsScreensTest {
         ScreenShots.assertEachOneLine(compose, name, chips)
         assertChipsInView(name, chips)
         assertTouchTargets(name)
+        if (s.quiet.enabled) ScreenShots.assertSteppersEndOnTheEdge(compose, name, "notify", "Send a test")
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         when (fill) {
             Fill.EMPTY -> {

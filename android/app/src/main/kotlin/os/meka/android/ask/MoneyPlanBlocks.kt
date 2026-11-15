@@ -171,13 +171,15 @@ private fun MoneyLeadIdeaCard(i: MoneyIdea, onOpen: () -> Unit, onAct: () -> Uni
             Text(i.figure, style = MekaType.itemTitle, color = if (i.lit) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
         }
         Text(moneyShown(i.why), style = MekaType.caption, color = Meka.colors.textSecondary)
+        // Walk-through A27: on the cover Not for me wraps under the pills; its word starts on the card's text line (it
+        // sat 8 dp in, under nothing), and beside a pill it keeps the pills' own 8 dp gap.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             i.act?.let { a -> IdeaPill(a, Meka.colors.accent, "money-lead-act", onAct) }
             IdeaPill(MoneyCheck.REMIND, Meka.colors.textPrimary, "money-lead-remind", onRemind)
             Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotFor)
                 .minTouch().testTag("money-lead-not-for-me"), contentAlignment = Alignment.Center) {
                 Text(MoneyCheck.NOT_FOR_ME, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(horizontal = MekaSpace.xs))
+                    modifier = Modifier.padding(end = MekaSpace.xs).testTag(TAG_NOT_FOR_ME_WORD))
             }
         }
     }
@@ -220,15 +222,18 @@ internal fun MoneyIdeaDetails(i: MoneyIdea, onAct: () -> Unit, onRemind: () -> U
             modifier = Modifier.padding(top = MekaSpace.xs)) {
             i.act?.let { a -> IdeaPill(a, Meka.colors.accent, "money-idea-act", onAct) }
             IdeaPill(MoneyCheck.REMIND, Meka.colors.textPrimary, "money-idea-remind", onRemind)
-            // As the lead card's: a quiet word with a small inset, not a pill's 16 dp (walk-through A26).
+            // As the lead card's: a quiet word, its first letter on the line where it starts (walk-through A26, A27).
             Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotFor)
                 .minTouch().testTag("money-idea-not-for-me"), contentAlignment = Alignment.Center) {
                 Text(MoneyCheck.NOT_FOR_ME, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                    modifier = Modifier.padding(horizontal = MekaSpace.xs))
+                    modifier = Modifier.padding(end = MekaSpace.xs).testTag(TAG_NOT_FOR_ME_WORD))
             }
         }
     }
 }
+
+/** The drawn word of an idea's Not for me (the lead card's and the sheet's), for the screen tests' edge checks. */
+internal const val TAG_NOT_FOR_ME_WORD = "money-not-for-me-word"
 
 /** A small pill (the mockup's 13 px buttons) drawn inside a 48 dp target. */
 @Composable

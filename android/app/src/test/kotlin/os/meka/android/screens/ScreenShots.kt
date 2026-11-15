@@ -455,6 +455,28 @@ object ScreenShots {
         if (heights.max() - heights.min() > 1f) fail("$name: the number tiles aren't one height: ${heights.map { it.toInt() }} px")
     }
 
+    /**
+     * Walk-through 2026-11-08 A27: a time stepper's + (tagged "[prefix]-step-more-…-glyph") ends on the column's edge,
+     * where the On / Off pills and the full-width button ([edgeText], e.g. "Send a test") end; it ended ~16 dp short,
+     * centred in its 48 dp target. Unclipped positions, so rows below the fold count. Fails if no stepper is drawn.
+     */
+    fun assertSteppersEndOnTheEdge(compose: ComposeContentTestRule, name: String, prefix: String, edgeText: String) {
+        fun right(n: SemanticsNode) = n.positionInRoot.x + n.size.width
+        val glyphs = compose.onAllNodes(SemanticsMatcher("$prefix stepper +") { n ->
+            n.config.getOrNull(SemanticsProperties.TestTag)?.let { it.startsWith("$prefix-step-more-") && it.endsWith("-glyph") } == true
+        }, useUnmergedTree = true).fetchSemanticsNodes()
+        if (glyphs.isEmpty()) fail("$name: no time stepper drawn")
+        val edgeNode = compose.onAllNodes(androidx.compose.ui.test.hasText(edgeText)).fetchSemanticsNodes().firstOrNull()
+            ?: fail("$name: \"$edgeText\" isn't drawn to measure the edge by")
+        val edge = right(edgeNode)
+        val pills = compose.onAllNodesWithTag("switch-pill", useUnmergedTree = true).fetchSemanticsNodes()
+        val slack = 2f * compose.density.density
+        (glyphs + pills.filter { kotlin.math.abs(edge - right(it)) <= 24f * compose.density.density }).forEach { g ->
+            val short = (edge - right(g)) / compose.density.density
+            if (kotlin.math.abs(edge - right(g)) > slack) fail("$name: a stepper's + or a switch ends ${short.toInt()} dp short of the column's edge")
+        }
+    }
+
     /** Quality gate slice 36: none of [texts], where drawn on more than one line, has a line ending on a "·". */
     fun assertNoDotEndingALine(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
         val wanted = texts.map { DateGlue.plain(it) }.toSet()

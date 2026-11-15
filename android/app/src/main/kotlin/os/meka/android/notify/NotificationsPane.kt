@@ -277,15 +277,11 @@ private fun TimeStepper(label: String, minute: Int, onChange: (Int) -> Unit) {
     val day = LocalClock.MINUTES_PER_DAY
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
-        Text("−", style = MekaType.itemTitle, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onChange((minute - STEP_MINUTES + day) % day) }
-                .semantics { contentDescription = "$label 15 minutes earlier" }.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
-                .wrapContentSize().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+        os.meka.android.designsystem.StepGlyph(os.meka.android.designsystem.StepGlyphSpec.LESS, "$label 15 minutes earlier", atEnd = false,
+            tag = "notify-step-less-$label") { onChange((minute - STEP_MINUTES + day) % day) }
         Text(LocalClock.formatMinute(minute), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        Text("+", style = MekaType.itemTitle, color = Meka.colors.accent,
-            modifier = Modifier.clickable(role = Role.Button) { onChange((minute + STEP_MINUTES) % day) }
-                .semantics { contentDescription = "$label 15 minutes later" }.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
-                .wrapContentSize().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+        os.meka.android.designsystem.StepGlyph(os.meka.android.designsystem.StepGlyphSpec.MORE, "$label 15 minutes later", atEnd = true,
+            tag = "notify-step-more-$label") { onChange((minute + STEP_MINUTES) % day) }
     }
 }
 

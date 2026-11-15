@@ -148,6 +148,8 @@ class WorkScreensTest {
         ScreenShots.assertNoDotStartingALine(compose, name, lines + callLine)
         ScreenShots.assertEachOneLine(compose, name, listOf("Stop work now", "Start work now", "Usual start", "Usual end"))
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
+        // Walk-through A27: the hours' + ends on the column's edge, where Stop / Start work now ends.
+        ScreenShots.assertSteppersEndOnTheEdge(compose, name, "work", if (w.atWork) "Stop work now" else "Start work now")
         // Unfolded, the column keeps to Fasting's 600 dp, centred, so Stop work now and the steppers don't sit at the far edge.
         val pane = compose.onNodeWithTag("work-pane").fetchSemanticsNode().boundsInRoot
         val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
