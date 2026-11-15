@@ -62,4 +62,11 @@ class TodayColumnsTest {
         assertEquals(300f, tight[0])
         assertEquals(610f, tight.sum())
     }
+
+    @Test
+    fun aRunningFastLeadsTheLeftColumnWhenSplitAndStaysInTheHeaderWhenNot() {
+        // Walk-through week 4, A6: the capped header crushed the card on the open Fold.
+        assertFalse(TodayColumnsRules.fastInHeader(split = true))
+        assertTrue(TodayColumnsRules.fastInHeader(split = false))
+    }
 }

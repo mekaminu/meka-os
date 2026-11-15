@@ -139,6 +139,7 @@ import os.meka.core.domain.TodayNewsRules
 import os.meka.android.designsystem.BreathingRing
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.footFade
+import os.meka.android.designsystem.edgeFades
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.PullToSyncBox
 import os.meka.android.designsystem.rememberPullToSync
@@ -1111,9 +1112,11 @@ private fun TodayPane(
                         DayTilesStrip(stripTiles, ringPlay, today.watchFace.arcs.size, Modifier.padding(top = MekaSpace.xs))
                     }
                     // Fasting rebuild slice 4: while a fast runs, its live card (the approved today-card design) under the
-                    // header, on the cover screen and unfolded; it rises in and leaves with a fade.
+                    // header on the cover screen; it rises in and leaves with a fade. Walk-through week 4, A6: on the open
+                    // Fold the header is capped at [TodayColumnsRules.HEADER_MAX_SHARE] of the height, which crushed the
+                    // card to a strip under Up next, so there it leads the left column instead ([TodayColumnsRules.fastInHeader]).
                     AnimatedVisibility(
-                        fastCard != null && endFast != null,
+                        TodayColumnsRules.fastInHeader(split) && fastCard != null && endFast != null,
                         enter = fadeIn(MekaMotion.expand(Meka.reducedMotion)),
                         exit = fadeOut(MekaMotion.expand(Meka.reducedMotion)),
                     ) {
@@ -1557,7 +1560,14 @@ private fun TodayPane(
         }
         } else {
             SplitToday(listState, headerBlock, housekeeping = core?.takeIf { !carriesSetup },
-                left = { slotItems { TodayColumnsRules.column(it) == TodayColumn.LEFT } },
+                left = {
+                    // Walk-through week 4, A6: the fast's live card heads the left column, whole, above Up next.
+                    if (fastCard != null && endFast != null) item(key = "fast") {
+                        os.meka.android.goals.FastingTodayCardView(fastCard, openFasting, { endFast.invoke(it) },
+                            Modifier.animateItem().padding(bottom = MekaSpace.xs).testTag(SPLIT_FAST_TAG))
+                    }
+                    slotItems { TodayColumnsRules.column(it) == TodayColumn.LEFT }
+                },
                 right = { slotItems { TodayColumnsRules.column(it) == TodayColumn.RIGHT } })
         }
         if (collapses && headerFace != null) {
@@ -1601,14 +1611,17 @@ private fun SplitToday(
                 val half = MekaSpace.gutter / 2
                 LazyColumn(
                     state = leftState,
-                    modifier = Modifier.weight(TodayColumnsRules.LEFT_SHARE).fillMaxHeight().footFade().testTag(TODAY_LIST_TAG),
+                    modifier = Modifier.weight(TodayColumnsRules.LEFT_SHARE).fillMaxHeight()
+                        .edgeFades { leftState.canScrollBackward }.testTag(TODAY_LIST_TAG),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = MekaSpace.gutter, end = half, bottom = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                     content = left,
                 )
+                val rightState = rememberLazyListState()
                 LazyColumn(
-                    state = rememberLazyListState(),
-                    modifier = Modifier.weight(1f - TodayColumnsRules.LEFT_SHARE).fillMaxHeight().footFade().testTag(TODAY_RIGHT_LIST_TAG),
+                    state = rightState,
+                    modifier = Modifier.weight(1f - TodayColumnsRules.LEFT_SHARE).fillMaxHeight()
+                        .edgeFades { rightState.canScrollBackward }.testTag(TODAY_RIGHT_LIST_TAG),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = half, end = MekaSpace.gutter, bottom = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
@@ -1624,6 +1637,9 @@ private fun SplitToday(
         }
     }
 }
+
+/** The fast's live card at the head of the open Fold's left column (walk-through week 4, A6). */
+internal const val SPLIT_FAST_TAG = "today-split-fast"
 
 /** The open Fold's right-hand list (slice 2c): Schedule, Also today, News. The left one keeps [TODAY_LIST_TAG]. */
 internal const val TODAY_RIGHT_LIST_TAG = "today-list-right"

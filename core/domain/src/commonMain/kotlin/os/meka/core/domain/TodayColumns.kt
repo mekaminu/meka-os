@@ -29,6 +29,13 @@ object TodayColumnsRules {
 
     fun splits(layout: CommandLayout): Boolean = layout != CommandLayout.SINGLE
 
+    /**
+     * Walk-through week 4, A6: a running fast's live card sits in the header only while Today is one list. Split, the
+     * header is capped at [HEADER_MAX_SHARE] of the height and the card was crushed to a strip under Up next (no label,
+     * time or End), so it leads the left column instead, whole, above Now.
+     */
+    fun fastInHeader(split: Boolean): Boolean = !split
+
     fun splits(contentWidthDp: Float): Boolean = splits(CommandCentreRules.layout(contentWidthDp))
 
     fun column(slot: TodaySlot): TodayColumn = when (slot) {

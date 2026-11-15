@@ -39,6 +39,7 @@ import os.meka.android.today.TASK_ROW_TAG
 import os.meka.android.today.CAPTURE_BAR_TAG
 import os.meka.android.today.TODAY_LIST_TAG
 import os.meka.android.today.TODAY_RIGHT_LIST_TAG
+import os.meka.android.today.SPLIT_FAST_TAG
 import os.meka.android.designsystem.MotionMath
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
@@ -201,6 +202,20 @@ class TodayScreensTest {
             ScreenShots.assertOneLine(compose, name, "Ends in 2:30")
             ScreenShots.assertShows(compose, name, "FASTING")
             if (shownText("goal 16 h")) fail("$name: the strip still has a fast tile beside the card")
+            // Walk-through week 4, A6: on the open Fold the capped header crushed the card to a ~30 dp strip under Up
+            // next. Split, it leads the left column: whole (the 76 dp ring and its padding) and above Up next's chips.
+            compose.onAllNodesWithTag(SPLIT_FAST_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let { card ->
+                val d = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
+                val tall = card.boundsInRoot.height / d
+                if (tall < 76f) fail("$name: the fasting card is $tall dp tall on the open Fold (at least 76)")
+                compose.onAllNodesWithTag(NOW_CHIP_TAG, useUnmergedTree = true).fetchSemanticsNodes().forEach { chip ->
+                    if (chip.boundsInRoot.top < card.boundsInRoot.bottom - 0.5f) fail("$name: Up next's chips sit over the fasting card")
+                }
+            } ?: run {
+                if (compose.onAllNodesWithTag(TODAY_RIGHT_LIST_TAG).fetchSemanticsNodes().isNotEmpty()) {
+                    fail("$name: the open Fold's fasting card isn't at the head of the left column")
+                }
+            }
         } else if (compose.onAllNodesWithTag(FASTING_TODAY_TAG).fetchSemanticsNodes().isNotEmpty()) {
             fail("$name: a Fasting card with no fast running")
         }

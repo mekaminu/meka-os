@@ -163,7 +163,7 @@ struct TodayView: View {
         ScrollView {
             todayMotion(
                 LazyVStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    headerBlock
+                    headerBlock()
                     nowBlock
                     scheduleBlock
                     alsoBlock
@@ -193,7 +193,7 @@ struct TodayView: View {
     private var splitToday: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: MekaSpace.xs) { headerBlock }
+                VStack(alignment: .leading, spacing: MekaSpace.xs) { headerBlock(split: true) }
                     .padding(.horizontal, MekaSpace.gutterWide)
                     .padding(.top, MekaSpace.xl)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { splitHeaderHeight = $0 }
@@ -202,6 +202,9 @@ struct TodayView: View {
             .frame(height: min(splitHeaderHeight, splitHeight * CGFloat(TodayColumnsRules.shared.HEADER_MAX_SHARE)))
             HStack(alignment: .top, spacing: 0) {
                 splitList(TodayView.leftColumnID, leading: MekaSpace.gutterWide, trailing: MekaSpace.gutterWide / 2) {
+                    // Walk-through week 4, A6: a running fast's card leads the left column, whole, rather than being
+                    // cut by the capped header (core TodayColumnsRules.fastInHeader).
+                    if !TodayColumnsRules.shared.fastInHeader(split: true) { FastingTodayCardView(palette: palette) }
                     nowBlock
                     eveningBlock
                     tasksBlock(listsNeedsYou: true)
@@ -263,7 +266,7 @@ struct TodayView: View {
     /// The greeting, date, header lines and links, the watch face's slot, the habit chips, the ring's tiles and a
     /// running fast.
     @ViewBuilder
-    private var headerBlock: some View {
+    private func headerBlock(split: Bool = false) -> some View {
         // The Today rebuild, slice 2d-2a (mockup TodayNew.dc.html; as the Fold's 2b-2b-2b-2): the compact header. The
         // date over the compact greeting on the left; the weather chip, ⋯ (Search, Plan my day) and a small 40 pt clock
         // on the right (a click: the whole day); TASKS · NEXT · MAIL across the page under them.
@@ -392,7 +395,8 @@ struct TodayView: View {
             }
         }
         // Fasting rebuild slice 4: the live Fasting card while a fast runs (the approved today-card design).
-        FastingTodayCardView(palette: palette)
+        // Walk-through week 4, A6: split, the card leads the left column instead (core TodayColumnsRules.fastInHeader).
+        if TodayColumnsRules.shared.fastInHeader(split: split) { FastingTodayCardView(palette: palette) }
         Spacer().frame(height: MekaSpace.l)
     }
 
