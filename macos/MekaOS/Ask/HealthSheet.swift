@@ -18,7 +18,7 @@ struct HealthSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Health").font(MekaType.upNextTitle).staggeredAppear(0)
             if let view = model.health {
-                Text(LoneWordGlue.shared.kept(line: view.summary)).font(MekaType.body)
+                Text(LoneWordGlue.shared.kept(line: HealthRules.shared.summaryShown(view: view, checking: model.checkingHealth))).font(MekaType.body)
                     .foregroundStyle(view.critical ? palette.critical : view.attention > 0 ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: view.summary)

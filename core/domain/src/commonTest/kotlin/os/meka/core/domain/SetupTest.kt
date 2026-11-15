@@ -92,6 +92,10 @@ class SetupTest {
         assertEquals("All set for now · 21 done · 3 come later", SetupRules.summaryLine(done = 21, left = 0, later = 3))
         assertEquals("All set · 15 done", SetupRules.summaryLine(done = 15, left = 0, later = 0))
         assertEquals("1 step left · 4 done · 2 couldn't be checked", SetupRules.summaryLine(done = 4, left = 1, later = 0, unknown = 2))
+        // Walk-through A32: nothing left but a row that couldn't be checked isn't "All set".
+        assertEquals("No steps left · 20 done · 1 couldn't be checked", SetupRules.summaryLine(done = 20, left = 0, later = 0, unknown = 1))
+        assertEquals("No steps left · 20 done · 2 come later · 1 couldn't be checked", SetupRules.summaryLine(done = 20, left = 0, later = 2, unknown = 1))
+        assertEquals("All set for now · 20 done · 1 on the Fold", SetupRules.summaryLine(done = 20, left = 0, later = 0, elsewhere = 1))
         // Every row of a real page is in exactly one part.
         listOf(
             facts(),

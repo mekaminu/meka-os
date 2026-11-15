@@ -268,4 +268,17 @@ class HealthTest {
         assertEquals("Checked", HealthRules.checkedShown(v.copy(checkedLine = ""), checking = false))
         assertEquals("Checking now", HealthRules.checkedShown(v.copy(checkedLine = ""), checking = true))
     }
+
+    /** Walk-through A32: "Checking now" beside "5 things need a look" read as the new check's answer. */
+    @Test
+    fun whileCheckingTheLastCountReadsAsTheLastChecks() {
+        val v = HealthRules.view(facts(), cal)
+        assertEquals(v.summary, HealthRules.summaryShown(v, checking = false))
+        val five = v.copy(summary = "5 things need a look", attention = 5)
+        assertEquals("5 things need a look", HealthRules.summaryShown(five, checking = false))
+        assertEquals("5 things needed a look at the last check", HealthRules.summaryShown(five, checking = true))
+        assertEquals("1 thing needed a look at the last check", HealthRules.summaryShown(five.copy(attention = 1), checking = true))
+        val fine = v.copy(summary = "Everything's working", attention = 0)
+        assertEquals("Everything's working", HealthRules.summaryShown(fine, checking = true))
+    }
 }

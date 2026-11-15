@@ -150,12 +150,15 @@ object SetupRules {
      * The page's head (walk-through A8, 2026-10-30: "4 steps left · 0 of 4 done" sat over nine rows, and "21 of 21 done"
      * said the same number twice). Every row on the page is in one of its parts, so the parts add up to the rows:
      * "4 steps left · 2 done · 3 come later · 1 on the Fold"; "All set · 21 done · 3 come later". A part that is 0
-     * is left out (no "0 done"); "couldn't check" rows are counted too, never as done.
+     * is left out (no "0 done"); "couldn't check" rows are counted too, never as done, and with one the head is
+     * "No steps left", not "All set".
      */
     fun summaryLine(done: Int, left: Int, later: Int, elsewhere: Int = 0, unknown: Int = 0): String {
         val head = when {
             left > 0 -> "${steps(left)} left"
-            later > 0 || elsewhere > 0 || unknown > 0 -> "All set for now"
+            // Walk-through 2026-11-08 A32: "All set for now" beside "1 couldn't be checked" claimed what wasn't known.
+            unknown > 0 -> "No steps left"
+            later > 0 || elsewhere > 0 -> "All set for now"
             else -> "All set"
         }
         val parts = listOfNotNull(

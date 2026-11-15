@@ -265,6 +265,17 @@ object HealthRules {
     fun checkedLine(atMs: Long, cal: LocalCalendar): String = "Checked " + LocalClock.formatMinute(cal.minuteOfDay(atMs))
 
     /**
+     * Health's summary as shown: [HealthView.summary], or while a check runs and the last one found things, the same
+     * count in the past ("5 things needed a look at the last check"), so it doesn't read as the new check's answer beside
+     * "Checking now" (walk-through 2026-11-08 A32). Nothing found reads as before ("Everything's working").
+     */
+    fun summaryShown(view: HealthView, checking: Boolean): String = when {
+        !checking || view.attention <= 0 -> view.summary
+        view.attention == 1 -> "1 thing needed a look at the last check"
+        else -> "${view.attention} things needed a look at the last check"
+    }
+
+    /**
      * The line under Health's summary: "Checked 14:05", or "Checking now · last checked 14:05" while a check runs
      * (walk-through 2026-11-02 A14: "Checking… · Checked 14:05" said it was checking and had checked at once).
      */

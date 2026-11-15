@@ -309,4 +309,11 @@ class WatchHealthScreensTest {
         if (HealthRules.checkedShown(view, checking = true) != "Checking now · last checked 17:15") fail(HealthRules.checkedShown(view, true))
         if (HealthRules.checkedShown(view, checking = false) != "Checked 17:15") fail(HealthRules.checkedShown(view, false))
     }
+
+    /** Walk-through A32: while a check runs, the last check's count reads as the last check's. */
+    @Test fun summaryWhileCheckingIsTheLastChecks() {
+        val view = os.meka.core.domain.HealthView(emptyList(), "5 things need a look", 5, false, null, now, "Checked 17:15")
+        if (HealthRules.summaryShown(view, checking = true) != "5 things needed a look at the last check") fail(HealthRules.summaryShown(view, true))
+        if (HealthRules.summaryShown(view, checking = false) != "5 things need a look") fail(HealthRules.summaryShown(view, false))
+    }
 }

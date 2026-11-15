@@ -235,7 +235,7 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Health", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.HEALTH)).appear(rememberAppearance(0)))
-        Crossfade(v?.summary ?: "Checking…", animationSpec = MekaMotion.appear(reduced), label = "health-summary-text") { s ->
+        Crossfade(v?.let { os.meka.core.domain.HealthRules.summaryShown(it, checking) } ?: "Checking…", animationSpec = MekaMotion.appear(reduced), label = "health-summary-text") { s ->
             Text(os.meka.core.domain.LoneWordGlue.kept(s), style = MekaType.body, color = summaryColor, modifier = Modifier.appear(rememberAppearance(0)))
         }
         if (v != null) {
