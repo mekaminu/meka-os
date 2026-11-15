@@ -171,6 +171,8 @@ class HabitsScreensTest {
         awaitCore("walk clear") { markOf(core, "Walk 20 minutes") == HabitMark.CLEAR }
         // Tuesday on the strip: the circle marks Tuesday, today stays as it was.
         compose.onNodeWithTag("habits-day-4").performClick(); settle()
+        // CI run 43733890002: the picked day's line can land a frame after the settle; wait for it before checking.
+        awaitCore("Tuesday picked") { runCatching { ScreenShots.assertShows(compose, "cycle", "done · Tue 10") }.isSuccess }
         ScreenShots.assertShows(compose, "cycle", "done · Tue 10")
         compose.onNodeWithTag("habits-mark-$walk").performClick(); settle()
         awaitCore("walk done on Tuesday") { markOf(core, "Walk 20 minutes", back = 2) == HabitMark.DONE }
