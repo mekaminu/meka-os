@@ -147,12 +147,12 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                             Text(row.line, style = MekaType.caption, color = Meka.colors.textTertiary)
                         }
                         Text(BlockedCallerRules.REPORT_LABEL, style = MekaType.caption, color = Meka.colors.textSecondary,
-                            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); reportScamCall(context, row.number) }.padding(MekaSpace.xs))
+                            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); reportScamCall(context, row.number) }.minTouch().padding(horizontal = MekaSpace.xs))
                         Text("Unblock", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clickable(role = Role.Button) {
                                 haptics.tick(); shown = false
                                 scope.launch { core.unblockCaller(row.key) }
-                            }.padding(MekaSpace.xs))
+                            }.minTouch().padding(horizontal = MekaSpace.xs))
                     }
                 }
             }
@@ -175,7 +175,7 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                 )
             }
             Text("Block", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button, enabled = typed.isNotBlank()) { block() }.padding(MekaSpace.xs))
+                modifier = Modifier.clickable(role = Role.Button, enabled = typed.isNotBlank()) { block() }.minTouch().padding(horizontal = MekaSpace.xs))
         }
         AnimatedVisibility(refused, enter = enter, exit = exit) {
             Text("That isn't a phone number", style = MekaType.caption, color = Meka.colors.critical)
@@ -187,12 +187,12 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
             modifier = Modifier.clickable(role = Role.Button) {
                 haptics.tick()
                 runCatching { context.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            }.padding(vertical = MekaSpace.xxs))
+            }.minTouch())
         // Spam calls still ring, slice 1: spam protection is always on; only Advanced turns it off, after a question.
         var advanced by rememberSaveable { mutableStateOf(!work.spamProtection) }
         var confirming by remember { mutableStateOf(false) }
         Text(SpamProtectionRules.ADVANCED + if (advanced) " ▴" else " ▾", style = MekaType.caption, color = Meka.colors.textSecondary,
-            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); advanced = !advanced; confirming = false }.padding(vertical = MekaSpace.xxs))
+            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); advanced = !advanced; confirming = false }.minTouch())
         AnimatedVisibility(advanced, enter = enter, exit = exit) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Crossfade(work.spamProtection, animationSpec = MekaMotion.appear(reduced), label = "spam-protection") { on ->
@@ -206,21 +206,21 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                         !on -> Text("Turn spam protection on", style = MekaType.caption, color = Meka.colors.accent,
                             modifier = Modifier.clickable(role = Role.Button) {
                                 haptics.light(); scope.launch { core.setSpamProtection(true) }
-                            }.padding(vertical = MekaSpace.xxs))
+                            }.minTouch())
                         asking -> Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                             Text(SpamProtectionRules.OFF_CONFIRM, style = MekaType.caption, color = Meka.colors.textSecondary)
                             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                                 Text("Keep it on", style = MekaType.caption, color = Meka.colors.accent,
-                                    modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); confirming = false }.padding(vertical = MekaSpace.xxs))
+                                    modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); confirming = false }.minTouch())
                                 Text("Turn off", style = MekaType.caption, color = Meka.colors.critical,
                                     modifier = Modifier.clickable(role = Role.Button) {
                                         haptics.tick(); confirming = false
                                         scope.launch { core.setSpamProtection(false) }
-                                    }.padding(vertical = MekaSpace.xxs))
+                                    }.minTouch())
                             }
                         }
                         else -> Text("Turn spam protection off…", style = MekaType.caption, color = Meka.colors.textTertiary,
-                            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); confirming = true }.padding(vertical = MekaSpace.xxs))
+                            modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); confirming = true }.minTouch())
                     }
                 }
             }
@@ -230,7 +230,7 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
                 Text("Recognise callers · let Navilife check your contacts and recent calls, name who left a message, and say how an unknown call ended", style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) {
                         haptics.tick(); runCatching { ask.launch(CallerLookup.PERMISSIONS) }
-                    }.padding(vertical = MekaSpace.xxs))
+                    }.minTouch())
                 Text(
                     "Read on this phone only, never sent. Without it, only family and always-notify are always let through.",
                     style = MekaType.caption, color = Meka.colors.textTertiary,
