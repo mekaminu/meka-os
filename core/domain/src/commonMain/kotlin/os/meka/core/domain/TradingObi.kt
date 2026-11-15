@@ -27,10 +27,12 @@ object TradingRisk {
         val read = wallets.filter { it.equityCents != null }
         if (read.isEmpty()) return null
         val parts = mutableListOf<String>()
-        // 1. How much of what he holds is trading, once net worth counts it in pounds.
+        // 1. How much of what he holds is trading, once net worth counts it in pounds. Walk-through 2026-11-15 A2: not
+        // while an account has no balance yet ("Trading is 100% of everything you hold" beside a current account and a
+        // pension): a share of part of it isn't a share of everything.
         val have = worth?.havePence ?: 0L
         val trading = worth?.tradingPence ?: 0L
-        if (have > 0 && trading > 0) {
+        if (have > 0 && trading > 0 && worth?.missingLine == null) {
             val share = trading.toDouble() / have
             if (share >= SHARE_SHOWN) parts += "Trading is ${TradingTracker.pct(share.coerceAtMost(1.0))} of everything you hold."
         }

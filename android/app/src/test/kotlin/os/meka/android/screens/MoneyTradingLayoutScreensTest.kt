@@ -107,6 +107,11 @@ class MoneyTradingLayoutScreensTest {
     /** The seeded BTC long: down $100 from entry on 0.1, so $10.00 not yet taken; 5×, liquidation 17% below now. */
     private val SEED_BTC = TradingPosition("BTC", "0.1", "60000", "59900", "49800", -1_000, 5)
 
+    /** The month's P&L the trades give: closed 4,200 − fees 300 − funding 3,820 − not yet taken 1,000 (cents). */
+    private val MONTH_PNL = 4_200L - 300L - 3_820L - 1_000L
+    /** A month of day ends before today, so 1M draws the month. */
+    private val MONTH_DAYS = 30
+
     private fun seedKestrelAndRisk(store: InMemoryReplicaStore, equityCard: Boolean = false) {
         var k = 0
         val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
@@ -119,13 +124,17 @@ class MoneyTradingLayoutScreensTest {
             TradingWalletFields.TRADES to TradingTracker.encodeTrades(listOf(TradingCoinStats("BTC", 3, 2, 1, 4_200, 300, -3_820, 6_000, -1_800, 4_000, -1_800))).fv(),
             TradingWalletFields.TRADES_AT to now.fv(),
         ) + if (!equityCard) emptyMap() else mapOf(
-            // The equity card as the mockup: the month's P&L, a fortnight's day ends and the ECB's rate (all invented).
+            // The equity card as the mockup: the month's P&L, a month's day ends and the ECB's rate (all invented).
+            // Walk-through 2026-11-15 A2: the month comes from the month's trades (closed +$42.00, fees −$3.00, funding
+            // −$38.20, the open long's −$10.00 not yet taken: −$9.20), and its line runs the whole month to today.
             TradingWalletFields.PNL_DAY to 1_200L.fv(), TradingWalletFields.PNL_WEEK to (-2_400L).fv(),
-            TradingWalletFields.PNL_MONTH to 47_000L.fv(), TradingWalletFields.PNL_ALL to 120_000L.fv(),
-            TradingWalletFields.CURVE to TradingTracker.encodeCurve((14 downTo 1).map { d ->
-                TradingCurvePoint(now.floorDiv(86_400_000L) - d, 600_000L + (14 - d) * 3_000L + (d % 3) * 2_000L, (14 - d) * 3_000L + (d % 3) * 2_000L)
+            TradingWalletFields.PNL_MONTH to MONTH_PNL.fv(), TradingWalletFields.PNL_ALL to 120_000L.fv(),
+            TradingWalletFields.CURVE to TradingTracker.encodeCurve((MONTH_DAYS downTo 1).map { d ->
+                val i = MONTH_DAYS - d
+                val pnl = MONTH_PNL * i / MONTH_DAYS + listOf(0L, 900L, 400L, -600L)[i % 4]
+                TradingCurvePoint(now.floorDiv(86_400_000L) - d, 650_000L - MONTH_PNL + pnl, pnl)
             }).fv(),
-            TradingWalletFields.CURVE_NOW to 47_000L.fv(), TradingWalletFields.GBP_PER_USD to RATE_MICROS.fv(),
+            TradingWalletFields.CURVE_NOW to MONTH_PNL.fv(), TradingWalletFields.GBP_PER_USD to RATE_MICROS.fv(),
             TradingWalletFields.FX_DAY to now.floorDiv(86_400_000L).fv(),
         ))
         ApprovalRules.requestFields(ApprovalKind.TRADE, "Kestrel", "Go long ETH 0.8 at 3,420", listOf(KESTREL_POUNDS, "Stop 3,330"),
@@ -319,6 +328,11 @@ class MoneyTradingLayoutScreensTest {
         assertTrue(shows("money-trading-other"), "the other currency sits beside the value")
         val month = TradingEquity.range(c, TradingEquity.MONTH).change!!
         assertTrue(showsText(month), "the month's change shows first: $month")
+        // Walk-through 2026-11-15 A2: the month is what its trades and the open long add up to, and 1M draws the month.
+        assertTrue(month.startsWith("−$9.20"), "the month should come from its trades: $month")
+        val t = core.moneyView.value.trading?.tiles ?: fail("no tiles once trades are read")
+        assertEquals(listOf("+$42.00", "−$38.20", "−$3.00"), t.tiles.take(3).map { it.value })
+        assertTrue(TradingEquity.range(c, TradingEquity.MONTH).points.size >= 28, "1M should draw a month of day ends")
         if (shows("money-curve-card")) fail("the P&L line still has a card of its own")
         if (showsText("Dollars")) fail("the Dollars · Pounds row still sits on the card")
         // Walk-through A19: under the line, how to read it, not Now's figure and the account again.

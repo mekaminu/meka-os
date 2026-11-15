@@ -23,8 +23,8 @@ class TradingObiTest {
             trades = trades, tradesAtMs = if (trades.isEmpty()) null else now,
         )
 
-    private fun worth(have: Long, trading: Long) = MoneyWorthView(
-        MoneyWorth.HEAD, "£1", false, null, null, emptyList(), null, emptyList(), null, null, "", "", "", have, trading,
+    private fun worth(have: Long, trading: Long, missing: String? = null) = MoneyWorthView(
+        MoneyWorth.HEAD, "£1", false, null, null, emptyList(), missing, emptyList(), null, null, "", "", "", have, trading,
     )
 
     private fun coin(funding: Long) = TradingCoinStats("BTC", 3, 2, 1, 0, 0, funding, 0, 0, 0, 0)
@@ -45,6 +45,10 @@ class TradingObiTest {
         )
         assertFalse(r.lit)
         assertTrue(r.spoken.startsWith("Obi on your risk."))
+        // Walk-through 2026-11-15 A2: while an account has no balance yet, the share isn't of everything he holds.
+        val partial = assertNotNull(TradingRisk.view(listOf(wallet(listOf(btc), listOf(coin(-3_820)))), worth(630_000, 630_000, "Partial · 2 accounts have no balance yet"), TradingCcy.USD))
+        assertFalse(partial.line.contains("of everything you hold"), partial.line)
+        assertTrue(partial.line.startsWith("Your BTC long is 5×"), partial.line)
         // A short: a rise reaches it, and nearer than the alert's level lights the line.
         val short = TradingPosition("SOL", "-10", null, "100", "105", 0, null)
         val s = assertNotNull(TradingRisk.view(listOf(wallet(listOf(short))), null, TradingCcy.USD))
