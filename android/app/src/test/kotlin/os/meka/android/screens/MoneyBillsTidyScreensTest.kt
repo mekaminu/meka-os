@@ -167,6 +167,12 @@ class MoneyBillsTidyScreensTest {
         assertTrue(showsText("Statement balance, e.g."), "the card's sheet has no fields")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-card-sheet"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-card-sheet")
+        // Walk-through A28: the card sheet's lines and hints wrap whole (no lone "due", "one)" or "on Plan)", no "0% / ends").
+        val card = cv.rows.first()
+        val sheetLines = listOfNotNull(card.dueLine, card.kindLine, card.paidLine, card.statementLine, card.useLine, card.promoLine,
+            card.feesLine, MoneyCards.FOOT) + card.fields.map { if (it.value.isEmpty()) it.hint else "${it.label} · now ${it.value}" }
+        ScreenShots.assertNoLoneWords(compose, "cover-dark-card-sheet", sheetLines)
+        ScreenShots.assertNoDotEndingALine(compose, "cover-dark-card-sheet", sheetLines)
         tap("money-card-sheet-done")
         if (shows("money-card-sheet")) fail("Done didn't close the card's sheet")
         if (v.payday != null) {

@@ -291,7 +291,7 @@ internal fun ColumnScope.MoneyChallengeTilesBlock(
                     Text(v, style = MekaType.metaStrong, maxLines = 1, modifier = Modifier.testTag("money-fun-value"),
                         color = when { f.over -> Meka.colors.critical; f.hasPot -> Meka.colors.textPrimary; else -> Meka.colors.textSecondary })
                 }
-                Text(f.of, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2)
+                Text(moneyShown(f.of), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2)
             }
             var shown by remember { mutableStateOf(if (reduced) f.share else 0f) }
             LaunchedEffect(f.share) { shown = f.share }
@@ -318,10 +318,11 @@ internal fun ColumnScope.MoneyChallengeTilesBlock(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onCap() }
             .semantics(mergeDescendants = true) { contentDescription = "${t.capRow}, set" }
-            .testTag("money-cap-row").minTouch().padding(horizontal = MekaSpace.m),
+            .testTag("money-cap-row").minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(t.capRow, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        // Walk-through A28: "Cap a category for the / month" sat on the row's edge; it wraps whole with room above and below.
+        Text(moneyShown(t.capRow), style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
         Text(t.capSet, style = MekaType.body, color = Meka.colors.accent)
     }
 }

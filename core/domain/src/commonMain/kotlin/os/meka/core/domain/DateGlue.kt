@@ -146,8 +146,15 @@ object LoneWordGlue {
     /**
      * [kept] after [DurationGlue.kept], for a screen whose lines carry durations (found and fixing A10, the Week
      * ahead's balance line "family 6 h of 8 h" leaving "h" alone on a line). A line with no duration reads as [kept].
+     * A percentage also takes the word after it (A28: the card sheet's foot ended a line on "before 0%" over "ends ·").
      */
-    fun measured(line: String): String = kept(DurationGlue.kept(line))
+    fun measured(line: String): String = kept(percentsHeld(DurationGlue.kept(line)))
+
+    /** "0% ends", "10% higher": a percentage and the word after it never part ("10% · a drop" stays free). */
+    private val PERCENT = Regex("(?<=\\d%) (?=[A-Za-z])")
+
+    /** [s] with each percentage held to the word after it. */
+    fun percentsHeld(s: String): String = PERCENT.replace(s, NBSP.toString())
 
     /** The longest run a held dot may make with the word after it (beyond it, a line may end on the dot instead). */
     const val DOT_RUN_MAX = 20

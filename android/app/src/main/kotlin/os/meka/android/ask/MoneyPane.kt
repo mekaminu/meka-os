@@ -1785,7 +1785,8 @@ private fun TradingAlertsRowView(r: TradingAlertsRow, onOpen: () -> Unit) {
                 Text(l, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-row-line") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // Walk-through A28: the row's line wraps whole, so "a big order 5× ·" never ends a line on its dot.
+                Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
@@ -2370,7 +2371,7 @@ private fun CardDetails(
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = c.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(moneyShown(c.kindLine), style = MekaType.caption, color = Meka.colors.textTertiary)
             Crossfade(c.dueLine, animationSpec = MekaMotion.appear(reduced), label = "money-card-due-line-${c.id}") { l ->
-                Text(l, style = MekaType.body, color = dueColor)
+                Text(moneyShown(l), style = MekaType.body, color = dueColor)
             }
             c.paidLine?.let { p -> Text(moneyShown(p), style = MekaType.caption, color = Meka.colors.textSecondary) }
             c.statementLine?.let { l ->
@@ -2394,7 +2395,8 @@ private fun CardDetails(
         SheetSaid(said)
         c.fields.forEach { f ->
             val hint = if (f.value.isEmpty()) f.hint else "${f.label} · now ${f.value}"
-            Field(hint, value = texts[f.key] ?: "", onValue = { t -> texts = texts + (f.key to t) }) { t ->
+            // Walk-through A28: a hint wraps whole ("(if it has one)", "(for Clear my cards on Plan)" never leave a word alone).
+            Field(moneyShown(hint), description = hint, value = texts[f.key] ?: "", onValue = { t -> texts = texts + (f.key to t) }) { t ->
                 texts = texts - f.key
                 onField(f.key, t)
             }

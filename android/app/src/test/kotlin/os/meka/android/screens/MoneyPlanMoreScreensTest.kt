@@ -191,6 +191,8 @@ class MoneyPlanMoreScreensTest {
         scrollTo("money-challenge-tiles")
         assertTrue(showsText(MoneyPlanMore.NO_SPEND) && showsText(MoneyPlanMore.FUN), "the challenges should be two tiles")
         assertTrue(showsText(MoneyPlanMore.START_COUNTING) && showsText(MoneyPlanMore.FUN_NOT_SET), "nothing set yet")
+        // Walk-through A28: "Pick a week's fun money" keeps "fun money" together, and the cap row wraps whole.
+        ScreenShots.assertNoLoneWords(compose, "plan-challenges-tiles-cover", listOf(MoneyPlanMore.FUN_PICK, MoneyPlanMore.CAP_ROW))
         tap("money-nospend-toggle")
         until(core) { showsText(MoneyPlanMore.STOP_COUNTING) }
         assertTrue(showsText(MoneyPlanMore.STOP_COUNTING), "Start counting should switch no-spend days on")

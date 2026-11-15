@@ -98,4 +98,13 @@ class LoneWordGlueTest {
         assertEquals("Turn it on", DateGlue.plain(LoneWordGlue.kept("Turn it on")))
         assertFalse(LoneWordGlue.leadsHeld("on").contains(nb))
     }
+
+    @Test
+    fun aPercentageTakesTheWordAfterIt() {
+        val foot = LoneWordGlue.measured(MoneyCards.FOOT)
+        assertTrue(foot.contains("0%${nb}ends"), foot)
+        assertEquals(MoneyCards.FOOT, DateGlue.plain(foot))
+        assertEquals("a drop 10% · a big order", LoneWordGlue.percentsHeld("a drop 10% · a big order"))
+        assertTrue(LoneWordGlue.measured("Pitch · 10% higher").endsWith("10%${nb}higher"))
+    }
 }

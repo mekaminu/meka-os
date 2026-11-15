@@ -349,6 +349,8 @@ class MoneyTradingLayoutScreensTest {
         scrollTo("money-trading-alerts-card")
         val row = TradingTiles.alertsRow(t.alerts ?: fail("no alerts"))
         assertTrue(showsText(row.title), "ALERTS is one row: ${row.title}")
+        // Walk-through A28: the row's line never ends on "5× ·".
+        ScreenShots.assertNoDotEndingALine(compose, "cover-dark-trading-alerts-row", listOf(row.line))
         if (showsText(t.alerts!!.dropLabel)) fail("the alert choices still sit open on the page")
         tap("money-alerts-row")
         assertTrue(shows("money-alerts-sheet"), "the alerts row opens its sheet")
