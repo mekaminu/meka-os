@@ -176,6 +176,7 @@ class WatchHealthScreensTest {
         settle("watch", name)
         val v = core.watchLinkView.value ?: fail("$name: Watch never read the server")
         ScreenShots.assertShows(compose, name, "Watch")
+        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         ScreenShots.assertEachOneLine(compose, name, listOf("Code from the watch") + v.rows.map { it.title })
         val lines = listOf(v.summary, v.how) + v.rows.map { it.line } + listOfNotNull(v.problem)
         ScreenShots.assertNoLoneWords(compose, name, lines)
@@ -264,7 +265,6 @@ class WatchHealthScreensTest {
         settle("health", name)
         val v = core.healthView.value ?: fail("$name: Health never checked")
         ScreenShots.assertShows(compose, name, "Health")
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         // The core's clock and zone, like every other time on screen: 17:15 in London, whatever the test machine's zone.
         if (v.checkedLine != "Checked 17:15") fail("$name: the check reads \"${v.checkedLine}\" at 17:15 in London")
         // CI run 1561: the screen can still be on "Checking…" (walk-through A14 keeps the two apart) when the core has
