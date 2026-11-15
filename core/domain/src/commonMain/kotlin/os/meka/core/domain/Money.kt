@@ -828,7 +828,7 @@ object MoneyRules {
             // Money's wrong numbers (3): "Left" is the month's in less out (as the mockup), not the bank balance.
             leftPence = income - spent,
             txns = sorted.take(MoneySpending.LATEST).mapNotNull { t -> rows.firstOrNull { it.id == t.id }?.let { MoneySpendTxn(it, t.day, t.pence) } },
-            allTxns = sorted.size, today = today,
+            allTxns = sorted.size, today = today, dayPence = sorted.map { it.day to it.pence },
         ).copy(
             // Needs and wants: the same month split in two, for the view chips over the ring.
             needs = MoneyNeeds.view(

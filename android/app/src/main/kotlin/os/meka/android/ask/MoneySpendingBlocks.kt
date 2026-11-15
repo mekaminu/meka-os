@@ -291,7 +291,7 @@ internal fun MoneyHeadWithLink(head: String, link: String?, modifier: Modifier =
     }
 }
 
-/** A day's line over its payments: "Today" and the day's money out. */
+/** A day's line over its payments: "Today" and the day's figure from the core (its money out, else "+£…" in; A32). */
 @Composable
 internal fun MoneyDayHead(d: MoneyPayDay, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().padding(top = MekaSpace.xs)) {

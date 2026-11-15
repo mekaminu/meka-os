@@ -33,7 +33,7 @@ data class MoneySpendRow(
 /** One of the three tiles under the ring: "Came in £3,200" (lit), "Bills to come £410", "After bills £540" (or "Left £950" with no payday found). */
 data class MoneyTile(val label: String, val value: String, val lit: Boolean)
 
-/** A day of the latest payments: [label] ("Today", "Yesterday", "Fri 23 Oct"), [total] out that day ("−£48.20") or null. */
+/** A day of the latest payments: [label] ("Today", "Yesterday", "Fri 23 Oct"), [total] the whole day's money out ("−£48.20"), else its money in ("+£3,200"), null only for £0 lines. */
 data class MoneyPayDay(val label: String, val total: String?, val rows: List<MoneyTxnRow>)
 
 /** The Spending tab's new look ([MoneySpending.view]). [seeAll] ("See all 42 ›") when the month has more than the latest. */
@@ -139,12 +139,13 @@ object MoneySpending {
     /**
      * The view. [partial] while the month is this month ([dayOfMonth] of [daysInMonth] gone); [avgTotal] the usual
      * month's spending (null with nothing to compare) named [usual] ("usual", or "September" with one month before);
-     * [toGoPence] from Until payday (this month only), [leftPence] the month's in less out; [txns] newest first, [allTxns] the month's count.
+     * [toGoPence] from Until payday (this month only), [leftPence] the month's in less out; [txns] newest first, [allTxns] the month's count,
+     * [dayPence] every payment of the month as day to signed pence, for the day headers' figures (null: [txns]).
      */
     fun view(
         partial: Boolean, monthName: String, spentPence: Long, incomePence: Long, cats: List<MoneySpendCat>,
         avgTotal: Long?, usual: String, dayOfMonth: Int, daysInMonth: Int, toGoPence: Long?, leftPence: Long?,
-        txns: List<MoneySpendTxn>, allTxns: Int, today: Long,
+        txns: List<MoneySpendTxn>, allTxns: Int, today: Long, dayPence: List<Pair<Long, Long>>? = null,
     ): MoneySpendingView {
         val spent = spentPence.coerceAtLeast(0)
         val sorted = cats.filter { it.pence > 0 }.sortedWith(compareByDescending<MoneySpendCat> { it.pence }.thenBy { it.order }.thenBy { it.label })
@@ -197,13 +198,19 @@ object MoneySpending {
                 add(MoneyTile(if (toGo != null) TILE_AFTER_BILLS else TILE_LEFT, if (net < 0) "−" + whole(-net) else whole(net), lit = false))
             }
         }
-        val latest = days(txns.take(LATEST), today)
+        val latest = days(txns.take(LATEST), today, dayPence ?: txns.map { it.day to it.pence })
         val seeAll = if (allTxns > LATEST) "See all $allTxns ›" else null
         return MoneySpendingView(centre, slices, rows, tiles, latest, seeAll)
     }
 
-    /** The latest payments by day, newest first: "Today", "Yesterday", else "Fri 23 Oct", with the day's money out. */
-    fun days(txns: List<MoneySpendTxn>, today: Long): List<MoneyPayDay> {
+    /**
+     * The latest payments by day, newest first: "Today", "Yesterday", else "Fri 23 Oct", each with the day's figure.
+     * Walk-through 2026-11-08 A32: one header carried a total and the next none (a day with only money in), and the last
+     * day's total counted only the payments shown. Now every header has one, from [whole] (every payment of the month as
+     * day to signed pence, default [txns]): the day's money out ("−£48.20"), or with nothing out, its money in ("+£3,200").
+     */
+    fun days(txns: List<MoneySpendTxn>, today: Long, whole: List<Pair<Long, Long>> = txns.map { it.day to it.pence }): List<MoneyPayDay> {
+        val byDay = whole.groupBy({ it.first }, { it.second })
         val out = ArrayList<MoneyPayDay>()
         txns.groupBy { it.day }.entries.sortedByDescending { it.key }.forEach { (day, ts) ->
             val label = when (day) {
@@ -211,10 +218,20 @@ object MoneySpending {
                 today - 1 -> "Yesterday"
                 else -> CivilDate.shortLabel(day)
             }
-            val outP = ts.filter { it.pence < 0 }.sumOf { -it.pence }
-            out += MoneyPayDay(label, if (outP > 0) "−" + MoneyRules.fmt(outP) else null, ts.map { it.row })
+            out += MoneyPayDay(label, dayFigure(byDay[day] ?: ts.map { it.pence }), ts.map { it.row })
         }
         return out
+    }
+
+    /** A day's header figure: its money out, else its money in, else null (only £0 lines). */
+    fun dayFigure(pence: List<Long>): String? {
+        val outP = pence.filter { it < 0 }.sumOf { -it }
+        val inP = pence.filter { it > 0 }.sum()
+        return when {
+            outP > 0 -> "−" + MoneyRules.fmt(outP)
+            inP > 0 -> "+" + MoneyRules.fmt(inP)
+            else -> null
+        }
     }
 
     /** "23%", "<1%" for a sliver. */

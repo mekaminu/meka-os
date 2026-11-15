@@ -118,8 +118,26 @@ class MoneySpendingTest {
         assertEquals(5, v.latest.sumOf { it.rows.size })
         assertEquals("See all 42 ›", v.seeAll)
         assertNull(view(txns = txns.take(3)).seeAll)
-        // A day with only money in has no total.
-        assertNull(MoneySpending.days(listOf(row("pay", today, 100, MoneyCategory.INCOME)), today).single().total)
+        // A day with only money in says what came in (A32: every header carries a figure).
+        assertEquals("+£1", MoneySpending.days(listOf(row("pay", today, 100, MoneyCategory.INCOME)), today).single().total)
+        assertNull(MoneySpending.dayFigure(listOf(0L)))
+    }
+
+    @Test
+    fun everyDayHeaderHasItsWholeDaysFigure() {
+        // Walk-through 2026-11-08 A32: the last day shown counted only its shown payments, and a pay-only day had none.
+        val txns = listOf(
+            row("coffee", today, -570, MoneyCategory.COFFEE), row("lunch", today, -1_230, MoneyCategory.EATING_OUT),
+            row("pay", today - 1, 320_000, MoneyCategory.INCOME),
+            row("train", today - 2, -2_740, MoneyCategory.TRANSPORT), row("tesco", today - 2, -4_250, MoneyCategory.GROCERIES),
+            row("shop", today - 2, -1_000, MoneyCategory.OTHER), row("bus", today - 2, -175, MoneyCategory.TRANSPORT),
+        )
+        val v = MoneySpending.view(true, "October", spent, 320_000, cats, 200_000, "usual", 24, 31, 41_000, 95_000,
+            txns, txns.size, today, dayPence = txns.map { it.day to it.pence })
+        assertEquals(listOf("−£18", "+£3,200", "−£81.65"), v.latest.map { it.total })
+        // Only two of the third day's four payments are shown, but its header is the whole day.
+        assertEquals(2, v.latest[2].rows.size)
+        assertTrue(v.latest.all { it.total != null })
     }
 
     @Test
