@@ -411,7 +411,9 @@ class StudyScreensTest {
         compose.onNode(hasContentDescription("Session done"), useUnmergedTree = true).assertExists()
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.done == 1 }
-        compose.onNode(ScreenShots.plainText("Ticked \u201CWelcome and setup\u201D")).assertExists()
+        // CI run 43725591591: the line was on screen but only in the unmerged tree while its row's semantics settled.
+        val ticked = ScreenShots.plainText("Ticked \u201CWelcome and setup\u201D")
+        compose.waitUntil(5_000L) { compose.onAllNodes(ticked, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test
