@@ -20,10 +20,10 @@ class KidsPageTest {
     private fun fee(id: String, title: String, inDays: Long) =
         KidFeeRow(id, title, "£35 · every month · next ${CivilDate.shortLabel(today + inDays)}", inDays <= 3, today + inDays, title)
 
-    private fun money(pocket: String?, toPay: Long, lit: Boolean = false, chores: Int = 0) = KidMoney(
+    private fun money(pocket: String?, toPay: Long, lit: Boolean = false, chores: Int = 0, earned: Long = 0) = KidMoney(
         shown = true, pocketValue = pocket,
         chores = (0 until chores).map { KidChoreRow("ch$it", "Chore $it", "£1 each · not done yet this week", emptyList(), "Chore $it") },
-        weekLine = null, paidLine = null, payLabel = if (toPay > 0) "Paid ${KidChoreRules.fmt(toPay)}" else null, toPayPence = toPay, lit = lit,
+        weekLine = null, paidLine = null, payLabel = if (toPay > 0) "Paid ${KidChoreRules.fmt(toPay)}" else null, toPayPence = toPay, lit = lit, earnedPence = earned,
     )
 
     @Test
@@ -40,7 +40,7 @@ class KidsPageTest {
     @Test
     fun childrenFeesAndMoneyMakeFourCardsWithTheirNumbers() {
         val a = KidsRules.card(alex, record("c-alex", 120, KidSize.SHOES to "13"), today, cal,
-            fees = listOf(fee("f1", "Football", 2)), money = money("£5", 800, lit = true, chores = 2))
+            fees = listOf(fee("f1", "Football", 2)), money = money("£5", 800, lit = true, chores = 2, earned = 300))
         val s = KidsRules.card(sam, null, today, cal, fees = listOf(fee("f2", "Swimming", 20)))
         val week = KidWeek("3 things this week", listOf(
             KidWeekDay(today + 1, "Tomorrow", listOf(KidWeekItem("Alex: PE kit", true, "Alex: PE kit"), KidWeekItem("Sam: Training 16:55", false, "Sam"))),
@@ -74,7 +74,8 @@ class KidsPageTest {
 
         val m = p.cards[3].rows.single()
         assertEquals("Alex", m.name)
-        assertEquals("2 chores · £5 a week", m.line)
+        // The row's sum is the "to pay" beside it: £5 pocket money + £3 for chores by "£8 to pay".
+        assertEquals("2 chores · £5 + £3 for chores", m.line)
         assertEquals("${KidChoreRules.fmt(800)} to pay", m.whenText)
         assertTrue(m.whenText.endsWith("to pay")); assertTrue(m.lit)
     }
@@ -123,5 +124,19 @@ class KidsPageTest {
         val row = KidsPageRules.page(KidsView("s", listOf(a), null, null), today).cards.first { it.key == KidsPageRules.CHILDREN }.rows.single()
         assertTrue(row.line.length <= KidsPageRules.SHORT_LINE + 1, row.line)
         assertNotNull(a.sizesLine)
+    }
+
+    @Test
+    fun aRowsMoneyAddsUpToItsToPay() {
+        fun row(m: KidMoney) = KidsPageRules.page(KidsView("s", listOf(KidsRules.card(alex, null, today, cal, money = m)), null, null, null), today)
+            .cards.first { it.key == KidsPageRules.MONEY }.rows.single()
+        // Pocket money only, nothing ticked: the week's amount by the same amount to pay.
+        assertEquals("£6 a week", row(money("£6", 600)).line)
+        // Chores ticked with no pocket money: what they earned.
+        assertEquals("1 chore · £1 for chores", row(money(null, 100, chores = 1, earned = 100)).line)
+        // The walk-through's case: £6 a week plus £1 of chores is £7 to pay.
+        val sam = row(money("£6", 700, chores = 2, earned = 100))
+        assertEquals("2 chores · £6 + £1 for chores", sam.line)
+        assertEquals("£7 to pay", sam.whenText)
     }
 }

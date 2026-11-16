@@ -82,9 +82,25 @@ object SchoolPageRules {
         val day = r.startDay
         val soon = day != null && day - today in 0..SOON_DAYS.toLong()
         return PageRow(
-            itemKey(r.id), r.title, if (asking) COVER_ASK else shortLine(r.line),
+            itemKey(r.id), r.title, if (asking) askLine(r) else shortLine(r.line),
             day?.let { LifePageRules.until(it, today) } ?: "", soon || asking,
         )
+    }
+
+    /**
+     * A day off waiting on its cover question keeps its dates beside the question ("26–30 Oct · Who's covering?"), so
+     * the "5 days" on its right reads as how far away it is, never how long it lasts (walk-through 2026-11-15, A10).
+     */
+    fun askLine(r: SchoolRow): String {
+        val first = r.startDay ?: return COVER_ASK
+        val last = r.endDay ?: first
+        val span = if (last <= first) CivilDate.shortLabel(first) else {
+            val a = CivilDate.fromEpochDay(first)
+            val b = CivilDate.fromEpochDay(last)
+            if (a.month == b.month && a.year == b.year) "${a.day}–${b.day} ${Recurrence.MONTH_SHORT[b.month - 1]}"
+            else "${a.day} ${Recurrence.MONTH_SHORT[a.month - 1]}–${b.day} ${Recurrence.MONTH_SHORT[b.month - 1]}"
+        }
+        return "$span · $COVER_ASK".takeIf { it.length <= SHORT_LINE } ?: COVER_ASK
     }
 
     private fun weeklyRow(r: SchoolRow): PageRow = PageRow(itemKey(r.id), r.title, shortLine(r.line), "", false)
@@ -126,8 +142,10 @@ object SchoolPageRules {
     private fun lowerFirst(s: String): String = if (s.length > 1 && s[1].isUpperCase()) s else s.replaceFirstChar { it.lowercase() }
 
     private fun middleTile(view: SchoolView, today: Long): PageTile {
-        val n = view.covers.size
-        if (n > 0) return PageTile("$n", if (n == 1) "day off to cover" else "days off to cover", true)
+        // The office days still to cover across every day off waiting on its question (a 5-day half term over five
+        // office days is 5, never "1 day off"; the days he works from home anyway don't need covering).
+        val n = view.covers.sumOf { it.days.size }
+        if (n > 0) return PageTile("$n", if (n == 1) "office day to cover" else "office days to cover", true)
         val d = view.dates.size
         if (d == 0) return PageTile("None", "school dates ahead", false)
         val soon = view.dates.any { r -> r.startDay?.let { it - today in 0..SOON_DAYS.toLong() } == true }

@@ -87,6 +87,9 @@ class KidChoresTest {
         val v = KidsRules.view(listOf(alex), emptyMap(), sun, cal, money = mapOf("c-alex" to owed))
         assertEquals(LifeTileLine("Alex's pocket money · £6 to pay", true), v.tile)
         assertEquals(owed, v.kids.single().money)
+        // What the ticked chores add on top, for the page's "£5 + £1 for chores" beside "£6 to pay".
+        assertEquals(100L, owed.earnedPence)
+        assertEquals("1 chore · £5 + £1 for chores", KidsPageRules.page(v, sun).cards.first { it.key == KidsPageRules.MONEY }.rows.single().line)
         // Ask hears it.
         val lines = KidAskRules.askLines(v)
         assertTrue(lines.any { it == "Alex's chores and pocket money · pocket money £5 a week · Tidy room 1 this week · this week £5 pocket money + £1 for chores = £6 · 1 chore done · £6 still to pay" }, lines.toString())

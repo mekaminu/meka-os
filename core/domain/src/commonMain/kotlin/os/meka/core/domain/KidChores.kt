@@ -59,6 +59,8 @@ data class KidMoney(
     val payLabel: String?,
     val toPayPence: Long,
     val lit: Boolean,
+    /** What this week's ticked chores add on top of the pocket money, so the page's row can say "£6 + £1 for chores" beside "£7 to pay". */
+    val earnedPence: Long = 0,
 ) {
     companion object {
         val NONE = KidMoney(false, null, emptyList(), null, null, null, 0, false)
@@ -199,6 +201,7 @@ object KidChoreRules {
             payLabel = if (toPay > 0) "Paid ${fmt(toPay)}" else null,
             toPayPence = toPay,
             lit = toPay > 0 && CivilDate.isoDayOfWeek(today) == PAY_DAY,
+            earnedPence = earned,
         )
     }
 

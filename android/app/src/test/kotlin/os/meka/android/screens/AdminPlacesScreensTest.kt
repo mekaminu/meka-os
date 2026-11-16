@@ -517,6 +517,14 @@ class AdminPlacesScreensTest {
         if (kid("Sam").money.pocketValue == pocket) fail("$name: the pocket money field kept $pocket")
         closeSheet()
         assertTouchTargets(name)
+        // Walk-through 2026-11-15 A10: Sam's row adds up to the "to pay" beside it ("£6 + £1 for chores" by "£7 to
+        // pay"), never "£6 a week" by "£7 to pay".
+        val m = kid("Sam").money
+        val after = core.kidsPage().cards.first { it.key == KidsPageRules.MONEY }.rows.first { it.name == "Sam" }
+        if (m.earnedPence > 0 && !after.line.contains("${KidChoreRules.fmt(m.earnedPence)} for chores"))
+            fail("$name: Sam's row says \"${after.line}\" beside \"${after.whenText}\"")
+        until { shows(hasText(after.line) and !sheet) }
+        if (!shows(hasText(after.line) and !sheet)) fail("$name: Sam's row doesn't show \"${after.line}\"")
     }
 
     /**

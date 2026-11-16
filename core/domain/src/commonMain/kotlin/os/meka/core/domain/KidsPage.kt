@@ -107,9 +107,17 @@ object KidsPageRules {
 
     private fun moneyRows(view: KidsView): List<PageRow> = view.kids.filter { it.money.shown }.map { k ->
         val m = k.money
+        // The row's sum is the "to pay" beside it (walk-through 2026-11-15, A10): "£6 + £1 for chores" by "£7 to pay",
+        // never "£6 a week" by "£7 to pay".
+        val earned = m.earnedPence.takeIf { it > 0 }?.let { "${KidChoreRules.fmt(it)} for chores" }
+        val amount = when {
+            m.pocketValue != null && earned != null -> "${m.pocketValue} + $earned"
+            m.pocketValue != null -> "${m.pocketValue} a week"
+            else -> earned
+        }
         val line = when {
-            m.chores.isEmpty() -> m.pocketValue?.let { "$it a week" } ?: KidChoreRules.HEAD
-            else -> "${m.chores.size} ${if (m.chores.size == 1) "chore" else "chores"}" + (m.pocketValue?.let { " · $it a week" } ?: "")
+            m.chores.isEmpty() -> amount ?: KidChoreRules.HEAD
+            else -> "${m.chores.size} ${if (m.chores.size == 1) "chore" else "chores"}" + (amount?.let { " · $it" } ?: "")
         }
         PageRow(moneyKey(k.name), k.name, shortLine(line), if (m.toPayPence > 0) "${KidChoreRules.fmt(m.toPayPence)} to pay" else "", m.lit)
     }

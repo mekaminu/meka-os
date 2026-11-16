@@ -100,6 +100,8 @@ data class SchoolRow(
     val day: Long? = null,
     /** The first day still to come of a day off or a date (a day off under way: today), for the page shape's "5 days"; null for a weekly row. */
     val startDay: Long? = null,
+    /** A day off's last day (epoch day), for the page's "26–30 Oct · Who's covering?"; null on other rows. */
+    val endDay: Long? = null,
 )
 
 /**
@@ -464,7 +466,7 @@ object SchoolRules {
             val line = "${spanLabel(o.startDay, o.endDay)} · ${whoLabel(o.who)}"
             val note = coverNote(o)
             val source = SchoolTerms.sourceLine(o)
-            SchoolRow(o.id, o.title, line, note, listOfNotNull(o.title, line, note, source).joinToString(". "), source, startDay = maxOf(o.startDay, today))
+            SchoolRow(o.id, o.title, line, note, listOfNotNull(o.title, line, note, source).joinToString(". "), source, startDay = maxOf(o.startDay, today), endDay = o.endDay)
         }
         val dateRows = dates.map { d ->
             val line = "${dayWord(d.startDay, today)} · ${whoLabel(d.who)}"

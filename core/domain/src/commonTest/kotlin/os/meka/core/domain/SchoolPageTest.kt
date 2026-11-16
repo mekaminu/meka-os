@@ -48,14 +48,15 @@ class SchoolPageTest {
             item(SchoolKind.WEEKLY, "PE", d(10, 1), who = "Max", weekday = 2),
         )
         val p = SchoolPageRules.page(v, sat)
-        // The next day off is 3 days away and lit; one day off to cover; one weekly thing.
+        // The next day off is 3 days away and lit; one office day to cover; one weekly thing.
         assertEquals(PageTile("3 days", "to INSET day", true), p.tiles[0])
-        assertEquals(PageTile("1", "day off to cover", true), p.tiles[1])
+        assertEquals(PageTile("1", "office day to cover", true), p.tiles[1])
         assertEquals(PageTile("1", "every week", false), p.tiles[2])
         val off = p.cards.first { it.key == SchoolPageRules.OFF }
         val inset = off.rows.first()
         assertEquals("INSET day", inset.name)
-        assertEquals(SchoolPageRules.COVER_ASK, inset.line)
+        // Its date stays beside the question, so "3 days" on the right reads as how far away it is.
+        assertEquals("Tue 13 Oct · ${SchoolPageRules.COVER_ASK}", inset.line)
         assertEquals("3 days", inset.whenText)
         assertTrue(inset.lit)
         // Half term is more than a week off: its days on the left, how far on the right, not lit.
@@ -130,5 +131,23 @@ class SchoolPageTest {
         assertFalse(SchoolPageRules.isNotRead("Added"))
         // Each hint is one short example.
         SchoolPageRules.ADD_CHOICES.forEach { assertTrue(it.hint.length <= 40, it.hint) }
+    }
+
+    @Test
+    fun aHalfTermWaitingOnItsQuestionCountsItsOfficeDaysAndKeepsItsDates() {
+        // Walk-through 2026-11-15, A10: a five-day half term said "1 day off to cover" and its row "5 days" alone.
+        val mon = d(10, 19)
+        val v = SchoolRules.view(listOf(item(SchoolKind.OFF, "Half term", d(10, 26), d(10, 30))), mon, work)
+        val officeDays = v.covers.single().days.size
+        assertTrue(officeDays > 1, "the default week has more than one office day in a school week")
+        val p = SchoolPageRules.page(v, mon)
+        assertEquals(PageTile("$officeDays", "office days to cover", true), p.tiles[1])
+        val row = p.cards.first { it.key == SchoolPageRules.OFF }.rows.single()
+        assertEquals("26–30 Oct · ${SchoolPageRules.COVER_ASK}", row.line)
+        assertEquals("7 days", row.whenText)
+        // Across a month's end the months are both said, and it still fits the cover screen's line.
+        val across = SchoolRow("x", "Half term", "", null, "", startDay = d(10, 28), endDay = d(11, 3))
+        assertEquals("28 Oct–3 Nov · ${SchoolPageRules.COVER_ASK}", SchoolPageRules.askLine(across))
+        assertTrue(SchoolPageRules.askLine(across).length <= SchoolPageRules.SHORT_LINE)
     }
 }
