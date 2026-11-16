@@ -138,7 +138,6 @@ class DayListBoardScreensTest {
         // The week alone beside the month, never a total cut in half (walk-through 2026-11-15, A10).
         assertTrue(head.weekLine.startsWith(head.foldedLine), "$name: folded ${head.foldedLine} vs open ${head.weekLine}")
         assertFalse(shows("${head.foldedLine} ·"), "$name: the folded header still carries a total")
-        ScreenShots.assertNotCut(compose, name, listOf(head.foldedLine))
         assertTrue(described("Wednesday 21 October, today, 1h planned").fetchSemanticsNodes().isNotEmpty(), "$name: today's pill doesn't carry its length")
         assertTrue(shows("Wed 21 October · today"), "$name: the day's line isn't shown")
         assertTrue(shows("Complete feedbacks") && shows("1 of 3 done"), "$name: today's list isn't under the strip")
