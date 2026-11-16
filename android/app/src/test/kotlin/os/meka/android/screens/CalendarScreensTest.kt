@@ -376,6 +376,9 @@ class CalendarScreensTest {
         compose.onAllNodes(hasText("7 days") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
         until { shows(block("Football training")) }
         if (!shows(block("Football training"))) fail("$name: 7 days didn't show Saturday")
+        // Walk-through 2026-11-15 A12 ("calendar week-by-hand = week-inner-dark-many"): the shot was the opening 5-day
+        // week; it is taken again on 7 days, with Saturday's football training on the grid.
+        ScreenShots.reshootAfterHand(compose, "calendar", name)
         // An event opens its detail; Close shuts it.
         compose.onAllNodes(block("Swimming lesson"))[0].performSemanticsAction(SemanticsActions.OnClick)
         val close = hasText("Close") and hasClickAction()

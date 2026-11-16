@@ -306,6 +306,9 @@ class NeedsYouMailScreensTest {
         tap(name, MailNeedsRules.DONE, hasContentDescription(spokenDone(core, football)))
         until { !onCard(core, football) }
         if (onCard(core, football)) fail("$name: Done left \"Football on Saturday\" on From your mail")
+        // Walk-through 2026-11-15 A12 ("needs-you mail-by-hand = mail"): the shot was cover-dark-mail's opening screen;
+        // it is taken again once Done has taken the first email off the card.
+        ScreenShots.reshootAfterHand(compose, "needs-you", "cover-dark-mail-by-hand")
 
         val other = row(core, invoice) ?: fail("$name: \"Invoice question\" left From your mail with Done on the other email")
         openRow(name, invoice)

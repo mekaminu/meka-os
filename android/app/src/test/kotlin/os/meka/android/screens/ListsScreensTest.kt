@@ -272,6 +272,9 @@ class ListsScreensTest {
         until { core.listsView.value.waiting.any { it.title == "Parcel from Oakfield Garden Centre" } }
         if (core.listsView.value.waiting.none { it.title == "Parcel from Oakfield Garden Centre" }) fail("$name: Done on the field added nothing")
         ScreenShots.assertShows(compose, name, "Parcel from Oakfield Garden Centre")
+        // Walk-through 2026-11-15 A12 ("lists one = promises-by-hand"): the shot was One's opening screen; it is taken
+        // again with the promise kept and the parcel added.
+        ScreenShots.reshootAfterHand(compose, "lists", "cover-dark-promises-by-hand")
     }
 
     /**
@@ -295,6 +298,9 @@ class ListsScreensTest {
         until { core.listsView.value.shopping.toBuy.size >= 5 }
         val titles = core.listsView.value.shopping.toBuy.map { it.title.lowercase() }
         if ("eggs" !in titles || "butter" !in titles) fail("$name: the field didn't add eggs and butter ($titles)")
+        // Walk-through 2026-11-15 A12 ("shopping = shopping-by-hand"): the shot was Shopping's opening screen; it is taken
+        // again with Milk got and cleared, Bread removed, and eggs and butter added.
+        ScreenShots.reshootAfterHand(compose, "lists", "cover-dark-shopping-by-hand")
         tabsByHand(name)
     }
 

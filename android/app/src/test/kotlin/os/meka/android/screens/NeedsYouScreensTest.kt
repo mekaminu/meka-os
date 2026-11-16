@@ -320,6 +320,11 @@ class NeedsYouScreensTest {
         tap(name, "Open", hasText(NeedsYouStackRules.buttonLabels(top)[1]))
         until { !shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG)) }
         if (shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG))) fail("$name: opening a task kept the two columns")
+        // Walk-through 2026-11-15 A12 ("inner many = two-columns = two-columns-boxed"): the opening shot was byte for byte
+        // inner-dark-many, so it is dropped and the state only this test reaches is shot instead: the task open beside
+        // the list after ↑ Open.
+        ScreenShots.reshootAfterHand(compose, "needs-you", "inner-dark-task-open")
+        java.io.File(ScreenShots.path("needs-you", "inner-dark-two-columns")).delete()
     }
 
     /**
@@ -345,6 +350,8 @@ class NeedsYouScreensTest {
         until { compose.onAllNodes(hasText(top.title)).fetchSemanticsNodes().isEmpty() }
         if (shows(hasText(top.title))) fail("$name: Close all left To decide open")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "inner-dark-two-columns-closed"))
+        // Walk-through 2026-11-15 A12: the opening shot was inner-dark-many again; the closed boxes are what this shows.
+        java.io.File(ScreenShots.path("needs-you", "inner-dark-two-columns-boxed")).delete()
         tap(name, NeedsYouGroupRules.OPEN_ALL, hasText(NeedsYouGroupRules.OPEN_ALL))
         until { shows(hasText(top.title)) }
         if (!shows(hasText(top.title))) fail("$name: Open all didn't open To decide again")
