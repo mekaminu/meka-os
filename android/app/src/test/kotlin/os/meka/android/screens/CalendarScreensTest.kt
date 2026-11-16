@@ -356,6 +356,9 @@ class CalendarScreensTest {
         shoot("week-inner-dark-many", Fill.MANY, mode = os.meka.core.domain.CalendarMode.WEEK)
         assertWeek("week-inner-dark-many", open = true)
         ScreenShots.assertShows(compose, "week-inner-dark-many", "Booked this week")
+        // 4 h of events on the five days shown, Saturday's football training's hour said apart (walk-through 2026-11-15, A10).
+        ScreenShots.assertShows(compose, "week-inner-dark-many", "5 h")
+        ScreenShots.assertShows(compose, "week-inner-dark-many", "· 1 h at the weekend")
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)

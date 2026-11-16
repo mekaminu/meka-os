@@ -157,6 +157,10 @@ struct CalendarWeekScreen: View {
             Text(CalendarWeekRules.shared.BOOKED).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             Text(grid.booked).font(MekaType.metaStrong).monospacedDigit().foregroundStyle(palette.textPrimary)
                 .contentTransition(.numericText())
+            // What of it is off the grid ("· 1 h at the weekend"), so the line adds up to the blocks shown (A10, week 4).
+            if !grid.outOfView.isEmpty {
+                Text("· \(grid.outOfView)").font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+            }
         }
         .accessibilityElement(children: .combine)
     }

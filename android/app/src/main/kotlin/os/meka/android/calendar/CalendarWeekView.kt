@@ -153,6 +153,10 @@ fun CalendarWeekView(
                     }
                     Text(CalendarWeekRules.BOOKED, style = MekaType.caption, color = Meka.colors.textSecondary)
                     Text(grid.booked, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.padding(start = MekaSpace.xs))
+                    // What of it is off the grid ("· 1 h at the weekend"), so the line adds up to the blocks shown (A10, week 4).
+                    if (grid.outOfView.isNotEmpty()) {
+                        Text("· ${grid.outOfView}", style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.padding(start = MekaSpace.xs))
+                    }
                 }
             } else {
                 FoldedHead(grid, onMode, Modifier.appear(rememberAppearance(0)))

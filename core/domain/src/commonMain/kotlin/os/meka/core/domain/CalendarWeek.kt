@@ -135,9 +135,14 @@ data class WeekGrid(
     val days: List<WeekGridDay>,
     /** "5.8 h": the week's timed events (Monday to Sunday), commutes and all-day events aside. */
     val booked: String,
+    /**
+     * The part of [booked] on days the grid doesn't show (walk-through 2026-11-15, A10: "Booked this week 5 h" over 4 h
+     * of events, the fifth hour Saturday's, off the five-day grid): "1 h at the weekend", "2 h on other days", or "".
+     */
+    val outOfView: String = "",
 ) {
-    /** "Booked this week 5.8 h" */
-    val bookedLine: String get() = "${CalendarWeekRules.BOOKED} $booked"
+    /** "Booked this week 5.8 h", or "Booked this week 5 h · 1 h at the weekend" */
+    val bookedLine: String get() = "${CalendarWeekRules.BOOKED} $booked" + if (outOfView.isEmpty()) "" else " · $outOfView"
 
     /** Folded: "Week 46 · booked 5.8 h" */
     val foldedLine: String get() = "$weekLabel · booked $booked"
@@ -233,6 +238,9 @@ object CalendarWeekRules {
         val days = (0 until count).map { i -> day(start + i, events, board, work, today, nowMs, calendar, toneOf) }
         val monday = monday(start)
         val weekMinutes = (monday until monday + 7).sumOf { d -> timedMinutes(d, events, calendar) }
+        val shown = (start until start + count).toSet()
+        val hidden = (monday until monday + 7).filter { it !in shown }
+        val hiddenMinutes = hidden.sumOf { d -> timedMinutes(d, events, calendar) }
         val ymd = CivilDate.fromEpochDay(start)
         val month = CivilDate.MONTH_LONG[ymd.month - 1]
         return WeekGrid(
@@ -242,8 +250,18 @@ object CalendarWeekRules {
             weekLabel = "Week ${BoardMatchRules.isoWeek(start)}",
             days = days,
             booked = hoursLabel(weekMinutes),
+            outOfView = outOfViewLabel(hiddenMinutes, hidden.all { CivilDate.isoDayOfWeek(it) >= 6 }),
         )
     }
+
+    /** "1 h at the weekend" (only Saturday and Sunday are off the grid) · "2 h on other days" · "" for none. */
+    fun outOfViewLabel(minutes: Int, weekendOnly: Boolean): String = when {
+        minutes <= 0 -> ""
+        weekendOnly -> "${hoursLabel(minutes)} $AT_THE_WEEKEND"
+        else -> "${hoursLabel(minutes)} $ON_OTHER_DAYS"
+    }
+    const val AT_THE_WEEKEND = "at the weekend"
+    const val ON_OTHER_DAYS = "on other days"
 
     /** "5.8 h" · "0 h" · "12 h" */
     fun hoursLabel(minutes: Int): String {

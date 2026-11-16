@@ -52,6 +52,9 @@ class DayListBoardTest {
         val h = DayListBoardRules.head(board.weeks[0])
         assertEquals("November", h.month)
         assertEquals("Week 46 · 2h 15m planned", h.weekLine)
+        // Folded, the same total without "planned", so it fits beside the month whole (A10, week 4).
+        assertEquals("Week 46 · 2h 15m", h.foldedLine)
+        assertEquals("Week 47", DayListBoardRules.head(board.weeks[1]).foldedLine)
         assertEquals("Week 47 · nothing planned", DayListBoardRules.head(board.weeks[1]).weekLine)
     }
 

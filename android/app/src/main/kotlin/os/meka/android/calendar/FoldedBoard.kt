@@ -97,7 +97,11 @@ internal fun FoldedHeader(
         ) {
             Text(month, style = MekaType.nowTitle, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.testTag(MONTH_TAG))
             Spacer(Modifier.width(MekaSpace.xs))
-            Text(week, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.padding(bottom = MekaSpace.xxs))
+            // One line, never wrapped away: a cut line says "…", not half the week's total (A10, week 4).
+            Text(
+                week, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, softWrap = false,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = MekaSpace.xxs),
+            )
         }
         RoundButton("‹", "Previous week", canBack) { haptics.tick(); onBack() }
         RoundButton("›", "Next week", canForward) { haptics.tick(); onForward() }

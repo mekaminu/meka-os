@@ -11,8 +11,12 @@ data class DayListPill(
     val spoken: String,
 )
 
-/** The folded Week board's header: "November" and "Week 46 · 6h 15m planned". */
-data class DayListBoardHead(val month: String, val weekLine: String, val spoken: String)
+/**
+ * The Week board's header: "November" and "Week 46 · 6h 15m planned" (the open spread and the Mac). [foldedLine] is the
+ * folded phone's shorter "Week 46 · 6h 15m" (walk-through 2026-11-15, A10: the long line was cut to "Week 43 · 2h" beside
+ * the month, so it read as half the open Fold's "2h 30m planned"); "Week 47" alone with nothing planned.
+ */
+data class DayListBoardHead(val month: String, val weekLine: String, val spoken: String, val foldedLine: String = weekLine)
 
 /**
  * The Week board on the folded phone as Day lists (approved 2026-11-08, `docs/design/day-list/BoardFolded.dc.html`;
@@ -42,7 +46,10 @@ object DayListBoardRules {
         val h = BoardFoldedRules.head(week.startEpochDay)
         val total = week.days.sumOf(::minutes)
         val line = if (total > 0) "${h.week} · ${TaskEstimateRules.label(total)} planned" else "${h.week} · nothing planned"
-        return DayListBoardHead(h.month, line, "${h.spoken}, " + if (total > 0) "${TaskEstimateRules.label(total)} planned" else "nothing planned")
+        val folded = if (total > 0) "${h.week} · ${TaskEstimateRules.label(total)}" else h.week
+        return DayListBoardHead(
+            h.month, line, "${h.spoken}, " + if (total > 0) "${TaskEstimateRules.label(total)} planned" else "nothing planned", folded,
+        )
     }
 
     fun strip(week: BoardWeek): List<DayListPill> = week.days.map { d ->

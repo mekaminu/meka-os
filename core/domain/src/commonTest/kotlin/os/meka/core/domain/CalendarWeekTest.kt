@@ -42,11 +42,32 @@ class CalendarWeekTest {
         assertEquals(listOf("Mon 9", "Tue 10", "Wed 11", "Thu 12", "Fri 13"), g.days.map { "${it.weekday} ${it.number}" })
         // The whole week counts, Saturday's match too: 15 + 60 + 80 minutes = 2.6 h.
         assertEquals("2.6 h", g.booked)
-        assertEquals("Booked this week 2.6 h", g.bookedLine)
+        // The match's 1.3 h is off the five-day grid, so the line says where it is (A10, week 4).
+        assertEquals("1.3 h at the weekend", g.outOfView)
+        assertEquals("Booked this week 2.6 h · 1.3 h at the weekend", g.bookedLine)
         assertEquals("Week 46 · booked 2.6 h", g.foldedLine)
         assertTrue(g.days[0].isToday)
         assertEquals(19 * 60 + 20, g.days[0].nowMinute)
         assertNull(g.days[1].nowMinute)
+    }
+
+    @Test
+    fun theBookedLineAddsUpToTheGridItShows() {
+        val events = listOf(
+            ev("s", "Stand-up", mon, 9 * 60, 10 * 60),
+            ev("m", "Match", mon + 5, 10 * 60, 11 * 60),
+        )
+        // Seven days show the weekend, so nothing is out of view.
+        val seven = CalendarWeekRules.build(mon, 7, events, null, null, ms(mon, 0), cal)
+        assertEquals("", seven.outOfView)
+        assertEquals("Booked this week 2 h", seven.bookedLine)
+        // Nothing booked at the weekend: the five-day line is the plain one.
+        val weekdays = CalendarWeekRules.build(mon, 5, events.take(1), null, null, ms(mon, 0), cal)
+        assertEquals("Booked this week 1 h", weekdays.bookedLine)
+        // Folded three days from Wednesday: Monday's hour and Saturday's are on other days.
+        val folded = CalendarWeekRules.build(mon + 2, 3, events, null, null, ms(mon, 0), cal)
+        assertEquals("2 h on other days", folded.outOfView)
+        assertEquals("", CalendarWeekRules.outOfViewLabel(0, true))
     }
 
     @Test

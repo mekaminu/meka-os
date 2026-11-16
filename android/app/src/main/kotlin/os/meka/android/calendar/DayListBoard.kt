@@ -115,7 +115,7 @@ fun DayListBoard(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
         ) {
             FoldedHeader(
-                month = head.month, week = head.weekLine, spoken = head.spoken,
+                month = head.month, week = head.foldedLine, spoken = head.spoken,
                 canBack = DayListBoardRules.canStep(board, day, -1), canForward = DayListBoardRules.canStep(board, day, 1),
                 onBack = { DayListBoardRules.stepWeek(board, day, -1)?.let { chosen = it } },
                 onForward = { DayListBoardRules.stepWeek(board, day, 1)?.let { chosen = it } },

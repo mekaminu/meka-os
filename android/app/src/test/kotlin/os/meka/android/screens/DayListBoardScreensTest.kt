@@ -133,7 +133,10 @@ class DayListBoardScreensTest {
         val board = core.weekBoard.value
         val week = board.weeks.first { w -> w.days.any { it.isToday } }
         val head = DayListBoardRules.head(week)
-        assertTrue(shows(head.month) && shows(head.weekLine), "$name: the header isn't the mockup's (${head.weekLine})")
+        assertTrue(shows(head.month) && shows(head.foldedLine), "$name: the header isn't the mockup's (${head.foldedLine})")
+        // The week's total whole beside the month, the same as the open Fold's "… planned" (walk-through 2026-11-15, A10).
+        assertTrue(head.weekLine.startsWith(head.foldedLine), "$name: folded ${head.foldedLine} vs open ${head.weekLine}")
+        ScreenShots.assertNotCut(compose, name, listOf(head.foldedLine))
         assertTrue(described("Wednesday 21 October, today, 1h planned").fetchSemanticsNodes().isNotEmpty(), "$name: today's pill doesn't carry its length")
         assertTrue(shows("Wed 21 October · today"), "$name: the day's line isn't shown")
         assertTrue(shows("Complete feedbacks") && shows("1 of 3 done"), "$name: today's list isn't under the strip")
