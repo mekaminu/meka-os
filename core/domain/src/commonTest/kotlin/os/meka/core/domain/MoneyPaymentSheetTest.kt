@@ -19,7 +19,9 @@ class MoneyPaymentSheetTest {
         assertEquals("Groceries", MoneyPaymentSheet.rowLine(row.copy(shared = false, account = ""), showDay = false))
         // Walk-through 2026-11-15, A15: "Groceries · Current / account" on the cover; the account goes down whole.
         val nb = LifeTileRules.GLUE
-        assertTrue(LoneWordGlue.measured(MoneyPaymentSheet.rowLine(row, showDay = false).replace(" · Shared", "")).endsWith("Current${nb}account"))
+        assertEquals("Mon${nb}26${nb}Oct${nb}· Groceries${nb}· Shared${nb}· Current${nb}account", MoneyPaymentSheet.rowLineShown(row))
+        val long = MoneyPaymentSheet.rowLineShown(row.copy(shared = false, account = "Joint household account"), showDay = false)
+        assertEquals("Groceries${nb}· Joint household account", long)
     }
 
     @Test

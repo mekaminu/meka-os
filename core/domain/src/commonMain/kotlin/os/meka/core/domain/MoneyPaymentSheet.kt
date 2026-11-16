@@ -61,6 +61,22 @@ object MoneyPaymentSheet {
         row.account.takeIf { it.isNotBlank() },
     ).joinToString(" · ")
 
+    /** The longest part of [rowLine] kept whole on screen ("Current account"); a longer name may wrap inside. */
+    const val PART_MAX = 18
+
+    /**
+     * [rowLine] as drawn: each part kept whole (its date, or an account name up to [PART_MAX]) and each "·" held to the
+     * part before it, so the line breaks only after a dot ("Groceries · / Current account"). CI on slice 40: the
+     * whole-line hold made "Groceries · Current account" one run wider than the cover's row, broken mid-word.
+     */
+    fun rowLineShown(row: MoneyTxnRow, showDay: Boolean = true): String {
+        val nb = LifeTileRules.GLUE
+        return rowLine(row, showDay).split(" · ").joinToString("$nb· ") { p ->
+            val kept = PhraseGlue.kept(p)
+            if (p.length <= PART_MAX) kept.replace(" ", nb) else kept
+        }
+    }
+
     /** Under the payee: "Mon 26 Oct · HSBC current". */
     fun sub(row: MoneyTxnRow): String = listOf(row.day, row.account).filter { it.isNotBlank() }.joinToString(" · ")
 

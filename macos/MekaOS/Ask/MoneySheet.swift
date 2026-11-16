@@ -1967,7 +1967,7 @@ struct MoneySheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(t.merchant).font(chip == nil ? MekaType.body : MekaType.taskTitle).foregroundStyle(palette.textPrimary)
                     // A15: the core's line, wrapping whole.
-                    Text(LoneWordGlue.shared.measured(line: MoneyPaymentSheet.shared.rowLine(row: t, showDay: showDay)))
+                    Text(MoneyPaymentSheet.shared.rowLineShown(row: t, showDay: showDay))
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
                     if let r = t.receipt {
