@@ -371,6 +371,28 @@ object ScreenShots {
         if (cut.isNotEmpty()) fail("$name draws these in too little room:\n" + cut.joinToString("\n") { "- $it" })
     }
 
+    /**
+     * Walk-through 2026-11-15 A11: fails when one of [texts] (matched whole, e.g. a chip's word) is laid out but sliced
+     * sideways by a parent's edge (a sliding chip row cutting "Mail" to "M", "Football España" to "Football E") or slid
+     * wholly out of sight. Nodes scrolled out of view vertically are skipped.
+     */
+    fun assertNotSliced(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+        val sliced = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            if (text != null && text in texts && n.size.width > 0) {
+                val seen = n.boundsInRoot
+                val tall = seen.bottom - seen.top
+                if (tall > 0f && seen.right - seen.left < n.size.width - 1f) {
+                    sliced += "$text (${(seen.right - seen.left).toInt().coerceAtLeast(0)} of ${n.size.width} px shown)"
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (sliced.isNotEmpty()) fail("$name cuts these at an edge:\n" + sliced.joinToString("\n") { "- $it" })
+    }
+
     /** Fails when one of [texts] (matched whole, e.g. a field's hint) takes more than a line; ones not on screen are skipped. */
     fun assertEachOneLine(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
         val wrapped = texts.filter { t ->

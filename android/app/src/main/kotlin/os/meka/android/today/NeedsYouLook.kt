@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package os.meka.android.today
 
 import androidx.compose.animation.AnimatedContent
@@ -10,7 +12,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +26,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -131,16 +132,17 @@ internal fun NeedsYouHeaderAction(label: String, onClick: () -> Unit) {
     )
 }
 
-/** All · Decide 2 · Reply 4 · FYI 4 · Mail: one sliding line of chips, the chosen one in gold. */
+/** All · Decide 2 · Reply 4 · FYI 4 · Mail: the chips, the chosen one in gold; on a narrow screen the last ones wrap to a second line, never cut to "M". */
 @Composable
 internal fun NeedsYouChips(chips: List<NeedsYouChip>, chosen: NeedsYouFilter, onPick: (NeedsYouFilter) -> Unit, modifier: Modifier = Modifier) {
     val haptics = rememberMekaHaptics()
-    Row(
-        // Walk-through A27 (2026-11-14): the row slides through the page's gutter to the screen's edge (the last chip was
-        // cut flat at the gutter), its first chip still starting on the page's left edge.
-        modifier.fillMaxWidth().bleedSides(MekaSpace.gutter).testTag(NEEDS_YOU_CHIPS_TAG).horizontalScroll(rememberScrollState())
+    FlowRow(
+        // Walk-through A27 (2026-11-14): the row reaches the screen's edge, its first chip on the page's left edge.
+        // A11 (2026-11-15): it no longer slides; a chip that doesn't fit whole starts the next line ("Mail" was an "M").
+        modifier.fillMaxWidth().bleedSides(MekaSpace.gutter).testTag(NEEDS_YOU_CHIPS_TAG)
             .padding(horizontal = MekaSpace.gutter),
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         chips.forEach { c ->
             val on = c.filter == chosen
@@ -290,9 +292,11 @@ internal fun NeedsYouOpenView(
         ) {
             lines.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textPrimary) }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(start = OpenIndent).horizontalScroll(rememberScrollState()),
+        // A11 (2026-11-15): Reply · Done · Later · Task wrap inside the card instead of sliding Task flat against its edge.
+        FlowRow(
+            Modifier.fillMaxWidth().padding(start = OpenIndent),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             NeedsYouPill(if (replying) NeedsYouOpenRules.SHOW_LESS else NeedsYouOpenRules.REPLY, gold = true) { haptics.light(); replying = !replying }
             NeedsYouPill(NeedsYouOpenRules.DONE) { haptics.light(); onDone() }

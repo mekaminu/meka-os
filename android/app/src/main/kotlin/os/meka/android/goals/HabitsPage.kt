@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package os.meka.android.goals
 
 import androidx.activity.compose.BackHandler
@@ -14,7 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,7 +34,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -197,8 +198,9 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                 }
             }
             item(key = "chips") {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).appear(rememberAppearance(3)),
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                // Walk-through 2026-11-15 A11: the lists wrap onto a second line instead of sliding the fifth chip off the cover screen.
+                FlowRow(Modifier.fillMaxWidth().appear(rememberAppearance(3)),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     b.chips.forEach { c ->
                         MoneyChip(c.name, on = c.selected, tag = "habits-chip-${c.name}") { haptics.tick(); list = c.name; open = null }
                     }
@@ -258,12 +260,12 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
             }
             if (!a.newList) {
                 Text("List", style = MekaType.caption, color = Meka.colors.textSecondary)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     b.lists.forEach { l -> MoneyChip(l, on = l == into, tag = "habits-add-list-$l") { haptics.tick(); into = l } }
                 }
             }
             Text("Days", style = MekaType.caption, color = Meka.colors.textSecondary)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 GoalRules.TARGET_CHOICES.forEach { c -> MoneyChip(c.label, on = c.perWeek == perWeek, tag = "habits-add-days-${c.perWeek}") { haptics.tick(); perWeek = c.perWeek } }
             }
             Text("Reminder", style = MekaType.caption, color = Meka.colors.textSecondary)
@@ -336,7 +338,7 @@ private fun GroupCard(
                         MoneyChip("Do", on = !r.avoid, tag = "habits-row-do-${r.id}") { onAvoid(r, false) }
                         MoneyChip("Avoid", on = r.avoid, tag = "habits-row-avoid-${r.id}") { onAvoid(r, true) }
                     }
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         lists.forEach { l -> MoneyChip(l, on = l == r.list, tag = "habits-row-list-${r.id}-$l") { if (l != r.list) onList(r, l) } }
                     }
                     val asking = removing == r.id

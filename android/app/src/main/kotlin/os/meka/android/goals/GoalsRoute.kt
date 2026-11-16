@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package os.meka.android.goals
 
 import androidx.activity.compose.BackHandler
@@ -16,7 +18,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +33,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -848,12 +849,12 @@ internal fun Action(label: String, critical: Boolean = false, onClick: () -> Uni
     )
 }
 
-/** A label and a scrolling row of chips; [lit] marks the current one. */
+/** A label and its chips, wrapping onto more lines rather than sliding one off the edge (walk-through A11, News' "Football E"); [lit] marks the current one. */
 @Composable
 internal fun Chips(label: String?, options: List<Pair<String, Boolean>>, choose: (Int) -> Unit) {
     Column {
         label?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(Modifier.padding(top = MekaSpace.xxs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             options.forEachIndexed { i, (text, lit) -> Chip(text, lit) { choose(i) } }
         }
     }

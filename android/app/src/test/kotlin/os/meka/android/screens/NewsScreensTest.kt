@@ -246,6 +246,10 @@ class NewsScreensTest {
         tap(name, "Topics", hasTestTag("news-topics"))
         untilShows(name, LoneWordGlue.kept(core.newsPlace.value.spanishLine))
         ScreenShots.assertShows(compose, name, "Done")
+        // A11 (walk-through 2026-11-15): a source chip was cut to "Football E" at the right edge; they wrap whole now.
+        val sources = core.newsPlace.value.sources.map { it.label }
+        if (sources.isEmpty()) fail("$name: no source chips to check")
+        ScreenShots.assertNotSliced(compose, name, sources)
         check(core, name)
         tap(name, "Done", hasTestTag("news-topics"))
         turns()

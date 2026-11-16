@@ -121,6 +121,10 @@ class HabitsScreensTest {
             ScreenShots.assertShows(compose, name, "before work")
             ScreenShots.assertShows(compose, name, "Do · 7 day streak")
             ScreenShots.assertShows(compose, name, "Avoid · 7 day streak")
+            // A11 (walk-through 2026-11-15): the fifth chip was cut at the cover's edge; the lists wrap whole now.
+            val chips = listOf("All", "Morning", "All day", "Night time", "+ New list")
+            chips.forEach { ScreenShots.assertShows(compose, name, it) }
+            ScreenShots.assertNotSliced(compose, name, chips)
             // A19: with habits counted, the summary and today's day carry their bars.
             compose.onNodeWithTag("habits-summary-bar", useUnmergedTree = true).assertExists()
             compose.onNodeWithTag("habits-day-bar-6-true", useUnmergedTree = true).assertExists()

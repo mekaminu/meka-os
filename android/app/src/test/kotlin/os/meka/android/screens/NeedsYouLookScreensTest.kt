@@ -131,6 +131,8 @@ class NeedsYouLookScreensTest {
         if (!onScreen("Clear FYI")) fail("$name: Clear FYI is missing")
         listOf("All", "Decide", "Reply 4", "FYI 2", "Mail").forEach { if (!onScreen(it)) fail("$name: the $it chip is missing") }
         if (onScreen("Decide 2") || onScreen("Mail 12")) fail("$name: a chip counts what the page doesn't show")
+        // A11: the last chip showed as an "M" at the cover's edge; every chip is whole now.
+        ScreenShots.assertNotSliced(compose, name, listOf("All", "Decide", "Reply 4", "FYI 2", "Mail"))
         // The open row (Sam) says its message once, in full under it, not also as the row's preview.
         val samLine = "Did you see my missed call and voice note?"
         val samTimes = ScreenShots.texts(compose).count { it.contains(samLine) }

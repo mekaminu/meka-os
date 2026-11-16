@@ -132,6 +132,8 @@ class NeedsYouOpenScreensTest {
         val first = chats.first()
         NeedsYouOpenRules.lines(first).forEach { if (!onScreen(it)) fail("$name: the open row's line \"$it\" is missing") }
         listOf("Reply", "Done", "Later", "Task").forEach { if (!onScreen(it)) fail("$name: $it is missing") }
+        // A11: Task was sliced flat at the card's edge on the cover screen; the four now wrap whole.
+        ScreenShots.assertNotSliced(compose, name, listOf("Reply", "Done", "Later", "Task"))
         if (!onScreen("swipe right for Done")) fail("$name: the hint doesn't say swipe right for Done")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
