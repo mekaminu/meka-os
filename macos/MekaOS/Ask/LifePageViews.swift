@@ -114,7 +114,8 @@ struct LifePageCardView: View {
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                             Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                             if !r.line.isEmpty {
-                                Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                                // Two lines: a long fact or emergency line comes whole from the core (A14).
+                                Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
                             }
                         }
                         Spacer()

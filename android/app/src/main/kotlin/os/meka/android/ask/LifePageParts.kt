@@ -201,7 +201,9 @@ internal fun LifePageCard(card: PageCard, modifier: Modifier = Modifier, onMore:
                     // Two lines, so a long title (a book's) is read before it's cut (the quality gate's "cut after 0 characters").
                     Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (r.line.isNotEmpty()) {
-                        Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // Two lines too: a long fact or emergency line comes whole from the core and is cut by the row's width,
+                        // read for a line before any "…" (walk-through 2026-11-15, A14).
+                        Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 if (r.whenText.isNotEmpty()) {
