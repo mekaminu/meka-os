@@ -63,26 +63,14 @@ class StudyScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private val now = 1_793_008_800_000L // Mon 26 Oct 2026, 10:00 in London
+    private val now = StudyFixture.NOW // Wed 21 Oct 2026, 10:00 in London, as Board and Calendar (A13)
 
     private fun core(): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
         secureRandom = Random(43), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
-    private val outline = """
-        Module 1: Foundations
-        Welcome and setup 30 min
-        Spreadsheets refresher 45 min
-        Cleaning data 45 min
-        Module 2: Core skills
-        Pivot tables 1 h
-        Charts that say something 40 min
-        Lookups 50 min
-        Module 3: Putting it together
-        A small project 1 h
-        Presenting findings 45 min
-    """.trimIndent()
+    private val outline = StudyFixture.OUTLINE
 
     private fun filled(theme: ThemeChoice): Pair<MekaCore, String> {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
@@ -91,7 +79,7 @@ class StudyScreensTest {
         context.useCoreForScreens(core)
         val id = runBlocking {
             core.tick()
-            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            val id = checkNotNull(core.addStudyCourse(StudyFixture.TITLE).courseId)
             check(!core.addStudyLessons(id, outline).refused)
             core.studyView.value.course(id)!!.modules.first().lessons.forEach { core.tickStudyLesson(it.id, true) }
             core.tick()
@@ -141,7 +129,7 @@ class StudyScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun courseCoverLight() = shoot("cover-light-course", ThemeChoice.LIGHT)
     @Test @Config(qualifiers = ScreenShots.INNER) fun courseInnerDark() = shoot("inner-dark-course")
 
-    private val fourWeeks = 20_752L + 28 // Mon 23 Nov 2026
+    private val fourWeeks = StudyFixture.TODAY + 28 // Wed 18 Nov 2026
 
     private fun shootPlan(name: String, theme: ThemeChoice) {
         val (core, id) = filled(theme)
@@ -155,7 +143,7 @@ class StudyScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
-        ScreenShots.assertShows(compose, name, "On track for Mon 23 Nov")
+        ScreenShots.assertShows(compose, name, "On track for Wed 18 Nov")
         ScreenShots.assertShows(compose, name, "2 sessions a week")
         ScreenShots.assertShows(compose, name, "Fits: the 2 times you picked give 4 sessions a week; you need 2.")
         // Walk-through 2026-11-08 A9: two 45-minute sessions are 1 h 30 a week, not "about 1 h".
@@ -190,8 +178,8 @@ class StudyScreensTest {
         val (core, id) = filled(ThemeChoice.DARK)
         show(core, id)
         val ends = core.studyView.value.course(id)!!.plan.ends
-        compose.onNode(ScreenShots.plainText("23 Nov · 4 wks")).assertExists()
-        compose.onAllNodes(ScreenShots.plainText("Mon 23 Nov · 4 wks")).assertCountEquals(0)
+        compose.onNode(ScreenShots.plainText("18 Nov · 4 wks")).assertExists()
+        compose.onAllNodes(ScreenShots.plainText("Wed 18 Nov · 4 wks")).assertCountEquals(0)
         val first = compose.onNodeWithTag("study-end-${ends[0].key}").getUnclippedBoundsInRoot()
         val second = compose.onNodeWithTag("study-end-${ends[1].key}").getUnclippedBoundsInRoot()
         assertEquals(first.top, second.top, "the first two finish dates share a row")
@@ -222,7 +210,7 @@ class StudyScreensTest {
         // The core's writes land after: the view then says the same.
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.plan.obi != null }
-        assertEquals("Move the date to Mon 7 Dec and it fits the times you picked.", core.studyView.value.course(id)!!.plan.obi)
+        assertEquals("Move the date to Wed 2 Dec and it fits the times you picked.", core.studyView.value.course(id)!!.plan.obi)
     }
 
     @Test
@@ -296,7 +284,7 @@ class StudyScreensTest {
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag("study-lesson-plan-Tomorrow").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
         compose.mainClock.autoAdvance = true
-        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.first().plannedDay == 20_753L }
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.first().plannedDay == StudyFixture.TODAY + 1 }
         assertEquals("Tomorrow", core.studyView.value.course(id)!!.modules[1].lessons.first().planned)
         compose.onNodeWithTag("study-pane").performScrollToNode(hasTestTag("study-lesson-${pivot.id}"))
         compose.waitForIdle()
@@ -332,7 +320,7 @@ class StudyScreensTest {
         ScreenShots.assertSensible(compose, "cover-dark-lessons-selected")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-lessons-selected")
         compose.onNodeWithTag("study-select-plan-Tomorrow").performClick()
-        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.take(2).all { it.plannedDay == 20_753L } }
+        compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.take(2).all { it.plannedDay == StudyFixture.TODAY + 1 } }
         compose.waitForIdle()
         compose.onNodeWithTag("study-select-bar").assertDoesNotExist()
     }
@@ -385,7 +373,7 @@ class StudyScreensTest {
         context.useCoreForScreens(core)
         val id = runBlocking {
             core.tick()
-            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            val id = checkNotNull(core.addStudyCourse(StudyFixture.TITLE).courseId)
             check(!core.addStudyLessons(id, outline).refused)
             core.setStudySession(id, 60)
             core.setStudySlot(id, "eve", true) // Mon and Wed evenings
@@ -426,7 +414,7 @@ class StudyScreensTest {
         context.useCoreForScreens(core)
         val id = runBlocking {
             core.tick()
-            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            val id = checkNotNull(core.addStudyCourse(StudyFixture.TITLE).courseId)
             check(!core.addStudyLessons(id, outline).refused)
             core.setStudySession(id, 60)
             core.setStudySlot(id, "eve", true)
@@ -456,7 +444,7 @@ class StudyScreensTest {
         context.useCoreForScreens(core)
         val id = runBlocking {
             core.tick()
-            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            val id = checkNotNull(core.addStudyCourse(StudyFixture.TITLE).courseId)
             check(!core.addStudyLessons(id, outline).refused)
             core.setStudySession(id, 60)
             core.setStudySlot(id, "eve", true)
@@ -487,7 +475,7 @@ class StudyScreensTest {
         context.useCoreForScreens(core)
         val id = runBlocking {
             core.tick()
-            val id = checkNotNull(core.addStudyCourse("Data analytics certificate").courseId)
+            val id = checkNotNull(core.addStudyCourse(StudyFixture.TITLE).courseId)
             core.tick()
             id
         }

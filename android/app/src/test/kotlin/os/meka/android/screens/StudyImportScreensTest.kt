@@ -46,15 +46,10 @@ class StudyImportScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private val now = 1_793_008_800_000L // Mon 26 Oct 2026, 10:00 in London
+    private val now = StudyFixture.NOW // Wed 21 Oct 2026, 10:00 in London, as Board and Calendar (A13)
 
-    private val link = StudyImportRules.link(
-        "Data analytics",
-        listOf(
-            "Module 1: Foundations" to listOf("Welcome 15 min", "Spreadsheets refresher 45 min"),
-            "Module 2: Core skills" to listOf("Pivot tables 1 h", "Charts 40 min", "Lookups 50 min"),
-        ),
-    )
+    // Walk-through 2026-11-15 A13: the link imports the same course the course page shows (3 modules, 8 lessons).
+    private val link = StudyImportRules.link(StudyFixture.TITLE, StudyFixture.MODULES)
 
     private fun open(theme: ThemeChoice = ThemeChoice.DARK): Pair<ShotApplication, MekaCore> {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
@@ -74,7 +69,7 @@ class StudyImportScreensTest {
         }
         // Flaked once on CI (run 43618122560): the card took longer than 80 turns (about 2 s) on a busy runner while
         // GoalsRoute asks the core for the offer; it stops as soon as the card shows, so more turns only cost a slow run.
-        ScreenShots.awaitShows(compose, "import", "Add Data analytics · 2 modules · 5 lessons?", turns = 320)
+        ScreenShots.awaitShows(compose, "import", "Add ${StudyFixture.TITLE} · 3 modules · 8 lessons?", turns = 320)
         compose.mainClock.advanceTimeBy(1_000L)
         compose.waitForIdle()
         return context to core
@@ -100,11 +95,12 @@ class StudyImportScreensTest {
         compose.mainClock.autoAdvance = true
         compose.onNodeWithTag("$STUDY_IMPORT_TAG-add").performClick()
         // The view catches up after the course and each lesson are written, so wait for the whole course.
-        compose.waitUntil(10_000L) { runBlocking { core.tick() }; core.studyView.value.courses.singleOrNull()?.total == 5 }
+        compose.waitUntil(10_000L) { runBlocking { core.tick() }; core.studyView.value.courses.singleOrNull()?.total == 8 }
         assertNull(app.studyImport.value)
         val c = core.studyView.value.courses.single()
-        assertEquals("Data analytics", c.title)
-        assertEquals(5, c.total)
+        assertEquals(StudyFixture.TITLE, c.title)
+        assertEquals(8, c.total)
+        assertEquals(3, c.modules.size)
     }
 
     @Test
