@@ -14,6 +14,8 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -159,6 +161,14 @@ class MoneyPlanMoreScreensTest {
         // Walk-through A11 (2026-11-08): the tiles' labels whole ("OUT / MONTH", never "OUT /").
         ScreenShots.assertNotCut(compose, "plan-forecast-tiles-cover", listOf(MoneyPlanMore.IN, MoneyPlanMore.OUT, MoneyPlanMore.LEFT, "BY OCT 2027"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-tiles-cover"))
+        // On the Money shots' month Obi's money check sits above the forecast, so the bars' foot can start below the
+        // cover screen: bring What if I cut…'s track (under the month names) on screen before measuring them.
+        var swipes = 0
+        while (!ScreenShots.wholeOnScreen(compose, "money-cut-slider-track") && swipes < 6) {
+            compose.onNodeWithTag("screen").performTouchInput { swipeUp(startY = bottom * 0.6f, endY = bottom * 0.4f, durationMillis = 400) }
+            settle()
+            swipes++
+        }
         // Walk-through A32: the month names under the twelve bars never touch ("Apr" ran into "May" on the cover).
         val names = compose.onAllNodes(
             SemanticsMatcher("a forecast month") { n -> n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("money-forecast-month-") == true },
