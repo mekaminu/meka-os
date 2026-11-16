@@ -32,8 +32,8 @@ object DateGlue {
 object PhraseGlue {
     /** A run of digits with single spaces between them, led by 0 or +: a phone number when it holds 10–13 digits. */
     private val PHONE = Regex("(?<![\\d+])(?:\\+|0)\\d+(?: \\d+)+(?!\\d)")
-    /** "5 work days", "1 day", "12 nights", "3 weeks", "2 months", "4 of 5". */
-    val COUNT = Regex("\\b\\d+ (?:(?:work |working )?(?:days?|nights?|weeks?|months?|years?|hours?|mins?)|of \\d+)\\b")
+    /** "5 work days", "1 day", "12 nights", "3 weeks", "2 months", "14 mo" (Clear my cards' Debt-free tile, A15), "4 of 5". */
+    val COUNT = Regex("\\b\\d+ (?:(?:work |working )?(?:days?|nights?|weeks?|months?|mo|years?|hours?|mins?)|of \\d+)\\b")
 
     private fun glue(s: String) = s.replace(' ', LifeTileRules.GLUE[0])
 
@@ -138,7 +138,30 @@ object LoneWordGlue {
         val s = dotsHeld(leadsHeld(PhraseGlue.kept(line.trimEnd())))
         val starts = wordStarts(s)
         if (starts.size < 3) return s
-        var from = starts.size - 2
+        val base = starts.size - 2
+        var from = base
+        // Walk-through 2026-11-15, A15: a date ending the line goes down whole with the word before it ("Card · Imported /
+        // Wed 21 Oct" could break inside the held pair, before the date).
+        val plain = DateGlue.plain(s)
+        DateGlue.DATE.findAll(plain).lastOrNull()?.takeIf { it.range.last == plain.lastIndex }?.let { d ->
+            val at = starts.indexOfFirst { it >= d.range.first }
+            if (at in 1..from) from = at - 1
+        }
+        // A15: a short last pair ("or two", "just now") takes the word before it too ("within a minute / or two",
+        // "updated / just now"), unless that word is a joiner or a figure.
+        if (from == base && from >= 1 && word(s, starts, from).length <= SHORT && word(s, starts, from + 1).length <= SHORT &&
+            word(s, starts, from - 1) !in JOINERS && word(s, starts, from - 1).none { it.isDigit() }
+        ) from--
+        // When the longer hold doesn't fit, the last two words still go down together as before.
+        return (if (from != base) held(s, starts, from, freeDot = true) else null) ?: held(s, starts, base, freeDot = false) ?: s
+    }
+
+    /**
+     * [s] with its words from [start] on held together (a joiner or a short last sentence before them too); null when too
+     * long. With [freeDot] (A15's longer holds only) a dot held to the word after it may let it go to make room.
+     */
+    private fun held(s: String, starts: List<Int>, start: Int, freeDot: Boolean): String? {
+        var from = start
         if (s.substring(starts[from], starts[from + 1]).trim() in JOINERS && from > 0) from--
         // A28 slice 5: a short last sentence goes down whole with its first word ("… balances. Not / financial advice."
         // left "Not" ending the line before), while the three words stay within PAIR_MAX.
@@ -146,9 +169,16 @@ object LoneWordGlue {
             s.substring(starts[from - 1]).length <= PAIR_MAX
         ) from--
         val tail = s.substring(starts[from])
-        if (tail.length > PAIR_MAX) return s
+        if (tail.length > PAIR_MAX) return null
         val held = s.substring(0, starts[from]) + tail.replace(' ', NBSP)
-        return if (held.length - held.lastIndexOf(' ') - 1 > RUN_MAX) s else held
+        val run = held.lastIndexOf(' ') + 1
+        if (held.length - run <= RUN_MAX) return held
+        // A15: a dot held to the word after it lets that word go, so the last words can still go down together
+        // ("payments · imported Wed 21 Oct" ends a line on the dot rather than breaking before the date).
+        val dot = held.lastIndexOf("$NBSP·$NBSP", starts[from])
+        if (!freeDot || dot < run) return null
+        val freed = held.substring(0, dot + 2) + " " + held.substring(dot + 3)
+        return if (freed.length - (dot + 3) <= RUN_MAX) freed else null
     }
 
     /**
@@ -237,6 +267,13 @@ object LoneWordGlue {
 
     /** True when a laid-out line (plain or kept) starts with a "·", for a screen test. */
     fun dotStartsLine(laidLine: String): Boolean = laidLine.trim { it.isWhitespace() || it == NBSP }.let { l -> HELD.any { l.startsWith(it) } }
+
+    /** The longest word of a "short last pair" ([kept], A15: "or two", "just now"). */
+    const val SHORT = 4
+
+    /** The [i]th word of [s] given its [starts], without the spaces around it. */
+    private fun word(s: String, starts: List<Int>, i: Int): String =
+        s.substring(starts[i], starts.getOrNull(i + 1) ?: s.length).trim { it.isSpace() }
 
     /** The index where each word of [s] starts (words split on plain and no-break spaces). */
     private fun wordStarts(s: String): List<Int> =

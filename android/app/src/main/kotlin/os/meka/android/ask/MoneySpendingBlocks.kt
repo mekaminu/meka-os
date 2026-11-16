@@ -370,7 +370,8 @@ internal fun MoneyUnsortedRow(u: MoneyUnsortedView, modifier: Modifier = Modifie
             .testTag("money-unsorted"),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text(u.line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+        // A15: "2 payments without a / category" left "category" alone on the cover.
+        Text(moneyShown(u.line), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
         Text(MoneySorter.ACTION + " ›", style = MekaType.itemMeta, color = Meka.colors.accent)
     }
 }

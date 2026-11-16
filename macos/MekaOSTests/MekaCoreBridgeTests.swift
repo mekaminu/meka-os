@@ -4503,6 +4503,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyTradingLayout.shared.ADD_TITLE, "Add an address")
         XCTAssertTrue(MoneyTradingLayout.shared.ADD_SHEET_LINE.contains("never a key"))
     }
+    /// Walk-through 2026-11-15, A15: Money's lines reach the Mac held whole ("14 mo", "imported Wed 21 Oct").
+    func testMoneyLinesWrapWholeOnTheMac() {
+        let nb = LifeTileRules.shared.GLUE
+        XCTAssertEqual(PhraseGlue.shared.kept(line: "Dec 2027 · 14 mo"), "Dec\(nb)2027 · 14\(nb)mo")
+        XCTAssertTrue(LoneWordGlue.shared.kept(line: "Card · Imported Wed 21 Oct").hasSuffix("Imported\(nb)Wed\(nb)21\(nb)Oct"))
+    }
     /// Trading's equity card as the mockup reaches the Mac: the ranges 1D · 1W · 1M, the month first, its shares.
     func testTradingEquityCardOnTheMac() {
         XCTAssertEqual(TradingEquity.shared.KEYS, ["1D", "1W", "1M"])

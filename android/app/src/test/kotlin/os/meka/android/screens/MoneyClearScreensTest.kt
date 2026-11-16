@@ -149,6 +149,11 @@ class MoneyClearScreensTest {
         tap("money-clear-order-${MoneyClear.BY_SMALL}")
         assertTrue(showsText("Smallest-first clears"), "smallest first should say it costs more")
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-plan-clear-cover.png")
+        // Walk-through 2026-11-15, A15: the Debt-free tile never leaves "mo" alone ("Dec 2027 · 14 / mo").
+        compose.onAllNodesWithTag("money-clear-free", useUnmergedTree = true).fetchSemanticsNodes().forEach { n ->
+            val free = n.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { it.text }
+            ScreenShots.assertNoLoneWords(compose, "money-plan-clear-cover", listOf(free))
+        }
         tap("money-clear-use")
         fun made() = core.goalsView.value.goals.any { it.title.startsWith("Clear my cards by ") }
         repeat(40) { if (!made()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }

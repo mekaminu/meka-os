@@ -15,6 +15,35 @@ class LoneWordGlueTest {
     }
 
     @Test
+    fun aShortLastPairTakesTheWordBeforeIt() {
+        // Walk-through 2026-11-15, A15: "within a minute / or two" and "updated / just now".
+        val reading = LoneWordGlue.kept(TradingTracker.WAITING)
+        assertTrue(reading.endsWith("minute${nb}or${nb}two"), reading)
+        val updated = LoneWordGlue.kept("0x12…cd34 · \$5,038.20 · updated just now")
+        assertTrue(updated.endsWith("updated${nb}just${nb}now"), updated)
+        // A joiner or a figure before the pair stays as it was.
+        assertTrue(LoneWordGlue.kept("Holiday plan · £185 to go").endsWith("£185 to${nb}go") || LoneWordGlue.kept("Holiday plan · £185 to go").endsWith("to${nb}go"))
+    }
+
+    @Test
+    fun aDateEndingTheLineGoesDownWithTheWordBeforeIt() {
+        // A15: "Card · Imported / Wed 21 Oct" on Accounts.
+        val l = LoneWordGlue.kept("Card · Imported Wed 21 Oct")
+        assertTrue(l.endsWith("Imported${nb}Wed${nb}21${nb}Oct"), l)
+        val sheet = LoneWordGlue.kept("Current account · 18 payments · imported Wed 21 Oct")
+        assertTrue(sheet.endsWith("imported${nb}Wed${nb}21${nb}Oct"), sheet)
+        // Too long a run to hold with the date: the last two words still go down together as before.
+        val long = LoneWordGlue.kept("Statement from Mortgageaccountholders Wed 21 Oct")
+        assertTrue(long.endsWith("21${nb}Oct") && !long.contains("Mortgageaccountholders${nb}"), long)
+    }
+
+    @Test
+    fun monthsAsMoStayWithTheirNumber() {
+        // A15: Clear my cards' Debt-free tile "Dec 2027 · 14 / mo".
+        assertEquals("Dec${nb}2027 · 14${nb}mo", PhraseGlue.kept("Dec 2027 · 14 mo"))
+    }
+
+    @Test
     fun noLineStartsWithADot() {
         assertEquals("Waiting for${nb}·${nb}Someday${nb}· Decisions${nb}·${nb}Renewals", LoneWordGlue.kept("Waiting for · Someday · Decisions · Renewals"))
     }
@@ -53,7 +82,8 @@ class LoneWordGlueTest {
 
     @Test
     fun datesAndNumbersStayWholeToo() {
-        assertEquals("Next one due Fri${nb}13${nb}Nov", LoneWordGlue.kept("Next one due Fri 13 Nov"))
+        // A15: the date takes the word before it down with it.
+        assertEquals("Next one due${nb}Fri${nb}13${nb}Nov", LoneWordGlue.kept("Next one due Fri 13 Nov"))
         assertEquals("Ring Sam on${nb}07700${nb}900123", LoneWordGlue.kept("Ring Sam on 07700 900123"))
     }
 

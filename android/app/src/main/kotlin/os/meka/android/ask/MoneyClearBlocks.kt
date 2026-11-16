@@ -153,7 +153,8 @@ private fun ClearTile(label: String, value: String, color: androidx.compose.ui.g
     ) {
         Text(label, style = MekaType.micro, color = Meka.colors.textSecondary)
         Crossfade(value, animationSpec = MekaMotion.appear(reduced), label = tag) { t ->
-            Text(t, style = MekaType.upNextCardTitle, color = color, modifier = Modifier.testTag(tag))
+            // A15: "Dec 2027 · 14 mo" keeps its date and its count whole ("14 / mo" on the cover), free to break at the dot.
+            Text(os.meka.core.domain.PhraseGlue.kept(t), style = MekaType.upNextCardTitle, color = color, modifier = Modifier.testTag(tag))
         }
     }
 }

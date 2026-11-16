@@ -13,6 +13,16 @@ class MoneyPaymentSheetTest {
     )
 
     @Test
+    fun theRowLineSaysTheDayCategoryMarksAndAccountAndWrapsWhole() {
+        assertEquals("Mon 26 Oct · Groceries · Shared · Current account", MoneyPaymentSheet.rowLine(row))
+        assertEquals("Groceries · yours · Current account", MoneyPaymentSheet.rowLine(row.copy(shared = false, taught = true), showDay = false))
+        assertEquals("Groceries", MoneyPaymentSheet.rowLine(row.copy(shared = false, account = ""), showDay = false))
+        // Walk-through 2026-11-15, A15: "Groceries · Current / account" on the cover; the account goes down whole.
+        val nb = LifeTileRules.GLUE
+        assertTrue(LoneWordGlue.measured(MoneyPaymentSheet.rowLine(row, showDay = false).replace(" · Shared", "")).endsWith("Current${nb}account"))
+    }
+
+    @Test
     fun hisOwnPicksFirstThenTheMostUsedAndIncomeAndTransfersLast() {
         val order = MoneyPaymentSheet.order(
             use = mapOf("groceries" to 40, "coffee" to 12, "transfers" to 99, "income" to 50, "shopping" to 12, "fun" to 3),

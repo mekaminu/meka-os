@@ -2030,8 +2030,8 @@ private fun TxnRow(
         chip?.let { (icon, tone) -> MoneyIconChip(icon, tone) }
         Column(Modifier.weight(1f)) {
             Text(t.merchant, style = if (chip != null) MekaType.taskTitle else MekaType.body, color = Meka.colors.textPrimary)
-            Text((if (showDay) "${t.day} · " else "") + t.categoryLabel + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
-                style = MekaType.caption, color = Meka.colors.textSecondary)
+            // Walk-through 2026-11-15, A15: the line wraps whole ("Groceries · Current / account" left "account" alone).
+            Text(moneyShown(os.meka.core.domain.MoneyPaymentSheet.rowLine(t, showDay)), style = MekaType.caption, color = Meka.colors.textSecondary)
             // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
             t.receipt?.let { r -> Text(moneyShown(r), style = MekaType.caption, color = Meka.colors.textSecondary) }
             t.receiptDetail?.let { d -> Text(d, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2) }

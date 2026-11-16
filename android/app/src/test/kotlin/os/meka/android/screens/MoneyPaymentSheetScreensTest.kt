@@ -372,6 +372,10 @@ class MoneyPaymentSheetScreensTest {
         tap("money-view-needs")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-needs-wants"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-needs-wants")
+        // A15: "2 payments without a / category" and "Income · Current / account" left a word alone on the cover.
+        val m15 = core.moneyView.value.month!!
+        ScreenShots.assertNoLoneWords(compose, "cover-dark-needs-wants",
+            listOfNotNull(m15.unsorted?.line) + m15.txns.flatMap { listOf(os.meka.core.domain.MoneyPaymentSheet.rowLine(it), os.meka.core.domain.MoneyPaymentSheet.rowLine(it, showDay = false)) })
         compose.mainClock.autoAdvance = true
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription("Wants, ", substring = true))
         compose.waitForIdle()

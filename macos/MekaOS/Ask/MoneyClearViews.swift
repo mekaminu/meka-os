@@ -107,7 +107,7 @@ struct MoneyClearCardView: View {
     private func tile(_ label: String, _ value: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(label).font(MekaType.micro).foregroundStyle(palette.textSecondary)
-            Text(value).font(MekaType.upNextCardTitle).foregroundStyle(color).contentTransition(.opacity)
+            Text(PhraseGlue.shared.kept(line: value)).font(MekaType.upNextCardTitle).foregroundStyle(color).contentTransition(.opacity)
         }
         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)

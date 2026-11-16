@@ -152,6 +152,9 @@ class MoneyLayoutScreensTest {
         assertTrue(showsText(MoneyTabs.FOOT_SHORT), "Spending should end on one foot line")
         assertTrue(!showsText(MoneyRules.FOOT), "the long read-only line lives behind ⓘ")
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-layout-foot-cover.png")
+        // Walk-through 2026-11-15, A15: a payment's grey line never leaves a word alone ("Groceries · Current / account").
+        val rowLines = core.moneyView.value.month!!.txns.flatMap { listOf(os.meka.core.domain.MoneyPaymentSheet.rowLine(it), os.meka.core.domain.MoneyPaymentSheet.rowLine(it, showDay = false)) }
+        ScreenShots.assertNoLoneWords(compose, "money-layout-foot-cover", rowLines)
         ScreenShots.assertSquareTarget(compose, "MoneyLayoutScreensTest", "money-foot-info")
         tap("money-foot-info")
         assertTrue(showsText(MoneyRules.FOOT) && showsText("From your statements"), "the foot's ⓘ says where the numbers came from")

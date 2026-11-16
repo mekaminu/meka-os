@@ -50,6 +50,17 @@ object MoneyPaymentSheet {
         }
     }
 
+    /**
+     * A payment row's grey line on Spending and Latest: "Mon 26 Oct · Groceries · yours · Current account" ([showDay]
+     * false leaves the day out). Both apps draw it through [LoneWordGlue.measured] (walk-through 2026-11-15, A15:
+     * "Groceries · Current / account" on the cover).
+     */
+    fun rowLine(row: MoneyTxnRow, showDay: Boolean = true): String = listOfNotNull(
+        row.day.takeIf { showDay && it.isNotBlank() }, row.categoryLabel,
+        "yours".takeIf { row.taught }, "Business".takeIf { row.business }, "Shared".takeIf { row.shared },
+        row.account.takeIf { it.isNotBlank() },
+    ).joinToString(" · ")
+
     /** Under the payee: "Mon 26 Oct · HSBC current". */
     fun sub(row: MoneyTxnRow): String = listOf(row.day, row.account).filter { it.isNotBlank() }.joinToString(" · ")
 
