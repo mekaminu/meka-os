@@ -15,6 +15,23 @@ object ShotLife {
     const val SAM_BIRTHDAY = "Sam's birthday 3 Nov"
     const val SAM_BIRTHDAY_WITH_YEAR = "Sam's birthday 3 Nov 2016"
 
+    /** The older child's birthday, the one Gifts' single-occasion shots keep and its gift ideas go on. */
+    const val ALEX_BIRTHDAY = "Alex's birthday 31 Oct 2019"
+
+    /**
+     * Every birthday a full set knows, as Gifts keeps them and People reads them from Gifts (the walk-through 2026-11-15
+     * A13: People's full shot had Priya and Sam, Gifts' had Alex, Sam and Grandma Rose). Soonest first from Wed 21 Oct.
+     */
+    val BIRTHDAYS: List<String> = listOf(
+        "Priya's birthday 24 Oct 1990",
+        ALEX_BIRTHDAY,
+        SAM_BIRTHDAY_WITH_YEAR,
+        "Grandma Rose's eightieth birthday party at the community hall 6 Nov 1946",
+    )
+
+    /** The one occasion a full Gifts set has that isn't a birthday (People lists birthdays only). */
+    const val ANNIVERSARY = "Wedding anniversary 20 Aug 2015"
+
     /** The next trip: the one Trips lists first and Trip lists packs for. */
     const val NEXT_TRIP = "Seville 28–31 Oct"
 

@@ -103,8 +103,8 @@ class LifePlacesScreensTest {
                     core.addPromise("Return the drill", "Casey", null)
                     core.addWaiting("The quote for the fence", "Casey", 3)
                     core.addWaiting("Their sign-off on the long weekend rota for the whole of November", "Taylor Whitfield", 0)
-                    core.addOccasion(ShotLife.SAM_BIRTHDAY)
-                    core.addOccasion("Priya's birthday 24 Oct")
+                    // Walk-through 2026-11-15 A13: the same birthdays Gifts' full set keeps.
+                    ShotLife.BIRTHDAYS.forEach { check(!core.addOccasion(it).refused) }
                 }
             }
             Place.ERRANDS -> {

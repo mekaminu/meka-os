@@ -114,14 +114,14 @@ class PlansPlacesScreensTest {
                 }
             }
             Place.GIFTS -> {
-                check(!core.addOccasion("Alex's birthday 31 Oct 2019").refused)
+                check(!core.addOccasion(ShotLife.ALEX_BIRTHDAY).refused)
                 if (fill == Fill.MANY) {
-                    check(!core.addOccasion("Wedding anniversary 20 Aug 2015").refused)
-                    check(!core.addOccasion(ShotLife.SAM_BIRTHDAY_WITH_YEAR).refused)
-                    check(!core.addOccasion("Grandma Rose's eightieth birthday party at the community hall 6 Nov 1946").refused)
-                    val first = core.giftsView.value.rows.first()
-                    check(core.addGiftIdea(first.id, "Football boots, size 13"))
-                    check(core.addGiftIdea(first.id, "A space Lego set with the rocket and launch pad"))
+                    // Walk-through 2026-11-15 A13: the same birthdays People's full set shows, plus the anniversary.
+                    ShotLife.BIRTHDAYS.filter { it != ShotLife.ALEX_BIRTHDAY }.forEach { check(!core.addOccasion(it).refused) }
+                    check(!core.addOccasion(ShotLife.ANNIVERSARY).refused)
+                    val alex = core.giftsView.value.rows.first { it.title.startsWith("Alex") }
+                    check(core.addGiftIdea(alex.id, "Football boots, size 13"))
+                    check(core.addGiftIdea(alex.id, "A space Lego set with the rocket and launch pad"))
                 }
             }
             Place.BINS -> {
@@ -202,7 +202,7 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.title, it.line) }, mustShow = false)
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != GiftRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nothing entered")
-                if (fill == Fill.MANY && v.rows.size != 4) fail("$name: ${v.rows.size} rows for four occasions")
+                if (fill == Fill.MANY && v.rows.size != 5) fail("$name: ${v.rows.size} rows for five occasions")
                 // Slice 19: who it is comes before "birthday", never the party's words jumbled into a name.
                 if (fill == Fill.MANY && v.rows.none { it.title == "Grandma Rose's birthday" }) fail("$name: Grandma Rose's row reads ${v.rows.map { it.title }}")
                 // The page shape (slice 3): the three numbers, and Coming up's first row (or the whole list's when nothing's coming).
@@ -387,7 +387,7 @@ class PlansPlacesScreensTest {
         val name = "gifts-by-hand"
         val p = Place.GIFTS
         assertTouchTargets(name)
-        val row = core.giftsView.value.rows.first()
+        val row = core.giftsView.value.rows.first { it.ideas.isNotEmpty() }
         fun cur() = core.giftsView.value.rows.firstOrNull { it.id == row.id }
         val idea = row.ideas.firstOrNull() ?: fail("$name: ${row.title} has no ideas")
         val removeIdea = hasContentDescription("Remove the idea ${idea.text}")
