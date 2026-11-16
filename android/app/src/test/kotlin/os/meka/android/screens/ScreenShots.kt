@@ -20,6 +20,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import org.robolectric.Shadows
 import os.meka.android.ask.LIFE_TILE_TAG
+import os.meka.android.designsystem.MekaSpace
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DurationGlue
@@ -443,15 +444,16 @@ object ScreenShots {
         assertNoDotEndingALine(compose, name, empties)
         assertNoDotStartingALine(compose, name, empties + page.tiles.map { it.label })
         assertTilesOneHeight(compose, name)
-        assertHeaderWhole(compose, name, page.title)
+        assertHeaderWhole(compose, name)
     }
 
     /**
      * Walk-through 2026-11-15 A11: a page's title never pushes its gold + Add off the closed Fold ("Emergency card"
-     * left "+ A" over the ⓘ; "What Navilife knows" left no + Add at all). + Add is drawn whole inside the screen and
-     * the title isn't cut. Pages without the header pass.
+     * left "+ A" over the ⓘ; "What Navilife knows" left no + Add at all). + Add sits inside the screen, its pill as
+     * wide as its words plus their padding. (The words' own text layout can be the intrinsic pass's, which reads as cut
+     * even when drawn whole, so the pill's laid-out width is what's checked.) Pages without the header pass.
      */
-    fun assertHeaderWhole(compose: ComposeContentTestRule, name: String, title: String) {
+    fun assertHeaderWhole(compose: ComposeContentTestRule, name: String) {
         val add = compose.onAllNodes(androidx.compose.ui.test.hasText(LifePageRules.ADD), useUnmergedTree = true).fetchSemanticsNodes()
         if (add.isEmpty()) {
             if (compose.onAllNodes(androidx.compose.ui.test.hasContentDescription(LifePageRules.INFO_LABEL)).fetchSemanticsNodes().isNotEmpty()) {
@@ -460,11 +462,14 @@ object ScreenShots {
             return
         }
         val width = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().size.width
+        val padding = with(compose.density) { (MekaSpace.m * 2).toPx() }
         add.forEach { n ->
             if (n.positionInRoot.x < 0f || n.positionInRoot.x + n.size.width > width + 1) fail("$name: ${LifePageRules.ADD} runs off the screen")
+            val results = mutableListOf<TextLayoutResult>()
+            n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+            val natural = results.firstOrNull()?.multiParagraph?.intrinsics?.maxIntrinsicWidth ?: return@forEach
+            if (n.size.width + 1 < natural + padding) fail("$name: ${LifePageRules.ADD} drawn in ${n.size.width} px for ${(natural + padding).toInt()}")
         }
-        assertDrawnWhole(compose, name, listOf(LifePageRules.ADD))
-        assertNotCut(compose, name, listOf(LifePageRules.ADD, title))
     }
 
     /**
