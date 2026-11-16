@@ -26,6 +26,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -75,18 +77,37 @@ class CarScreensTest {
     val compose = createComposeRule()
 
     /**
-     * The pane reads the parked time against the phone's own clock and zone, so the core runs on the same ones
-     * (walk-through A12: a fixed core clock showed "Parked 14:44 · 1 h 35 ago" beside "Paid until 19:15 · 2 h left").
+     * Walk-through 2026-11-15 A13: the Car shots share today with Board, Calendar and Today (Wed 21 Oct 2026, 17:15 in
+     * London), not the real date (they showed mid-November). The pane and the core read the same fixed [clock] and the
+     * same zone (A12: a core clock apart from the pane's showed "Parked 14:44 · 1 h 35 ago" beside "2 h left").
      * [clock] moves back to the parking moment while the timer is set, so the ticket starts when he parked.
      */
-    private var clock = System.currentTimeMillis()
+    private var clock = NOW
+
+    private var zoneBefore: java.util.TimeZone? = null
+
+    @Before
+    fun london() {
+        zoneBefore = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"))
+        clock = NOW
+    }
+
+    @After
+    fun zoneBack() {
+        zoneBefore?.let { java.util.TimeZone.setDefault(it) }
+    }
 
     private fun core(): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
         secureRandom = Random(41), timeZone = { TimeZone.of(java.util.TimeZone.getDefault().id) }, nowMs = { clock },
     )
 
-    private companion object { const val SETTLE_MS = 3_000L }
+    private companion object {
+        const val SETTLE_MS = 3_000L
+        /** Wed 21 Oct 2026, 17:15 in London: the day every other shot shows. */
+        const val NOW = 1_792_599_300_000L
+    }
 
     private enum class Fill { EMPTY, ONE, MANY }
 
@@ -99,9 +120,8 @@ class CarScreensTest {
         val mot = core.addCarDate(first, "mot") ?: fail("no MOT date")
         core.setRenewalDue(mot, clock / 86_400_000L + 22)
         // Parked 25 minutes ago with a 2-hour ticket bought then: "1 h 35 left" on the pane, against the phone's clock.
-        // Walk-through A14: the core clock is re-read here, so the seconds since it was set don't round the ticket up
-        // to "1 h 36 left" beside "25 min ago".
-        clock = System.currentTimeMillis()
+        // Walk-through A14: one fixed clock, so no seconds pass to round the ticket up to "1 h 36 left" beside "25 min ago".
+        clock = NOW
         val at = clock - 25 * 60_000L
         val realNow = clock
         clock = at
@@ -134,7 +154,7 @@ class CarScreensTest {
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
-                    CarPane(core, onClose = {}, onDates = { datesTapped++ })
+                    CarPane(core, onClose = {}, onDates = { datesTapped++ }, nowMs = { clock })
                 }
             }
         }
@@ -338,6 +358,11 @@ class CarScreensTest {
         // Walk-through A14: 25 min ago and the 2-hour ticket's time left agree to the minute.
         val line = core.parkingTimersView.value.rows.firstOrNull()?.line ?: fail("no timer row")
         if (!line.endsWith("1 h 35 left")) fail("ticket line reads \"$line\", not 1 h 35 left")
+        // Walk-through 2026-11-15 A13: today is Wed 21 Oct as on every other screen, so the MOT 22 days on is in
+        // November and no line names a later month (the real date put it in December).
+        if (NOW / 86_400_000L != 20_747L) fail("the shots' today isn't Wed 21 Oct 2026")
+        val later = ScreenShots.texts(compose).filter { t -> listOf(" Dec", " Jan", " Feb").any { it in t } }
+        if (later.isNotEmpty()) fail("cover-dark-one names a month after November: $later")
     }
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverMany() { shoot("cover-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverManyLight() { shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }

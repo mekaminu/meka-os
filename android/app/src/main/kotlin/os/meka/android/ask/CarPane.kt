@@ -138,13 +138,14 @@ import os.meka.core.facade.MekaCore
 fun CarPane(
     core: MekaCore, onClose: () -> Unit, onDates: () -> Unit,
     findFirst: Boolean = false, findCar: String? = null, parkFirst: String? = null, photoFirst: String? = null,
+    nowMs: () -> Long = System::currentTimeMillis,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val context = LocalContext.current
     val cars by core.carsView.collectAsState()
-    val cal = remember { LocalCalendar.fixedOffset(java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()).toLong()) }
+    val cal = remember { LocalCalendar.fixedOffset(java.util.TimeZone.getDefault().getOffset(nowMs()).toLong()) }
     var spots by remember { mutableStateOf(ParkingStore.spots(context)) }
     var said by remember { mutableStateOf<String?>(null) }
     var refused by remember { mutableStateOf(false) }
@@ -152,8 +153,8 @@ fun CarPane(
     var pendingCar by remember { mutableStateOf<String?>(null) }
     var finding by remember { mutableStateOf<String?>(null) }
     var undo by remember { mutableStateOf<ParkedSpot?>(null) }
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(30_000); now = System.currentTimeMillis() } }
+    var now by remember { mutableStateOf(nowMs()) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(30_000); now = nowMs() } }
     val rows = ParkingRules.rows(spots, cars, now, cal)
     val timers by core.parkingTimersView.collectAsState()
     var timerCar by remember { mutableStateOf<String?>(null) }
@@ -207,7 +208,7 @@ fun CarPane(
         if (car != null && ok) {
             scope.launch {
                 if (ParkingStore.keepPhoto(context, car)) {
-                    spots = ParkingRules.withPhoto(ParkingStore.spots(context), car, System.currentTimeMillis())
+                    spots = ParkingRules.withPhoto(ParkingStore.spots(context), car, nowMs())
                     ParkingStore.store(context, spots)
                     photoTick++
                     said = ParkingRules.PHOTO_KEPT; refused = false
