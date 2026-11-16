@@ -261,6 +261,17 @@ class AskScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
+    /**
+     * After a tab tap: waits until the tab before has left ([gone] no longer composed) and the new one's [here] shows,
+     * then lets the stagger play out, so a shot shows the tab at rest rather than mid-crossfade (week 4, A12).
+     */
+    private fun settled(name: String, tabName: String, gone: SemanticsMatcher, here: SemanticsMatcher) {
+        repeat(4) { until(settle = 500) { !shows(gone) && shows(here) } }
+        if (shows(gone)) fail("$name: the tab before $tabName still shows behind it")
+        if (!shows(here)) fail("$name: $tabName's first row didn't show")
+        turns()
+    }
+
     /** A pane's way back: Close, or News's "‹ Ask". */
     private val close = (hasText("Close") or hasText("‹ Ask")) and hasClickAction()
 
@@ -424,13 +435,15 @@ class AskScreensTest {
             SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
         tap(name, "Daily", tab(os.meka.core.domain.AskTab.DAILY))
         val firstDaily = ShellNav.daily().first()
-        until { shows(hasText(firstDaily.label) and hasClickAction()) }
+        // Week 4's walk-through (A12): the shot waits for Life's tiles to leave and Daily's rows to settle, never mid-crossfade.
+        val lifeTile = hasContentDescription("${ShellNav.lifeLive(core.lifeLines.value).first().label}, ", substring = true)
+        settled(name, "Daily", gone = lifeTile, here = hasText(firstDaily.label) and hasClickAction())
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", "cover-dark-daily-by-hand"))
         ShellNav.daily().filter { it != MoreItem.BEDSIDE }.forEach { opens(name, it, hasText(it.label) and hasClickAction(), places) }
         // Settings' tab: You and your day open the first time, its rows open their panes; another box unfolds and folds.
         tap(name, "Settings", tab(os.meka.core.domain.AskTab.SETTINGS))
         val you = ShellNav.settingsRows(os.meka.core.domain.SettingsBox.YOU, connected = true)
-        until { shows(hasText(you.first().label) and hasClickAction()) }
+        settled(name, "Settings", gone = hasText(firstDaily.label) and hasClickAction(), here = hasText(you.first().label) and hasClickAction())
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", "cover-dark-settings-by-hand"))
         assertTouchTargets(name)
         // Every row's own pane is checked by SettingsScreensTest; here the first one opens over Ask and Close drops it.

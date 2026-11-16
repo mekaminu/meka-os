@@ -211,7 +211,8 @@ class ReviewBalanceReflectScreensTest {
 
     private fun winsView(fill: Fill) = WinRules.view(wins(fill), week(fill).weekStart, today, nowMin)
 
-    private fun reflection(fill: Fill): ReflectionView = when (fill) {
+    /** [asked]: MANY's week is "reflect on my week" said to Talk (the form open); false leaves it folded behind Reflect now. */
+    private fun reflection(fill: Fill, asked: Boolean = true): ReflectionView = when (fill) {
         Fill.EMPTY -> ReflectionRules.view(week(fill), emptyList(), emptyList(), emptyList(), today, nowMin, cal)
         Fill.ONE -> ReflectionRules.view(
             week(fill), listOf(saved(ws - 7, "Got the boiler booked\nWalked most days", "Late-night emails", "Run 5k without stopping")),
@@ -226,7 +227,7 @@ class ReviewBalanceReflectScreensTest {
             ),
             winsView(fill).week.map { it.text },
             listOf(goal("g1", "Run 5k without stopping", weekOf = ws + 7), goal("g2", "Clear the garage")),
-            today, nowMin, cal, requestedWeek = ws,
+            today, nowMin, cal, requestedWeek = ws.takeIf { asked },
         )
     }
 
@@ -250,14 +251,14 @@ class ReviewBalanceReflectScreensTest {
 
     private fun onScreen(text: String): Boolean = ScreenShots.texts(compose).any { DateGlue.plain(it).contains(text) }
 
-    private fun draw(theme: ThemeChoice, fill: Fill, taps: Taps = Taps(), countSaid: String? = null) {
+    private fun draw(theme: ThemeChoice, fill: Fill, taps: Taps = Taps(), countSaid: String? = null, asked: Boolean = true) {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         compose.mainClock.autoAdvance = false
         val v = week(fill)
         val w = winsView(fill)
         val b = balance(fill)
-        val r = reflection(fill)
+        val r = reflection(fill, asked)
         // A9: the facts' wins are the Wins card's wins, one count on one screen.
         val factWins = Regex("(\\d+) wins?").find(r.facts)?.groupValues?.get(1)?.toInt() ?: 0
         if (factWins != w.week.size) fail("$fill: the reflection says ${r.facts} but Wins holds ${w.week.size} (${w.weekLine})")
@@ -357,8 +358,9 @@ class ReviewBalanceReflectScreensTest {
 
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
         val b = balance(fill)
-        val r = reflection(fill)
-        draw(theme, fill)
+        // Week 4's walk-through (A12): MANY's Reflect shot is the card folded behind Reflect now, its form shot the tap's result.
+        val r = reflection(fill, asked = fill != Fill.MANY)
+        draw(theme, fill, asked = fill != Fill.MANY)
         scrollTo("BALANCE")
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         shoot("$name-balance")
@@ -385,7 +387,9 @@ class ReviewBalanceReflectScreensTest {
                 if (!onScreen("Edit")) fail("$name: a saved reflection has no Edit")
             }
             Fill.MANY -> {
-                if (!onScreen(r.wentWellPrompt)) fail("$name: the questions aren't open when asked for")
+                if (onScreen(r.wentWellPrompt)) fail("$name: the questions show before Reflect now is tapped")
+                clickNode(hasText(r.title), "$name: Reflect now")
+                if (!onScreen(r.wentWellPrompt)) fail("$name: Reflect now didn't open the questions")
                 if (!onScreen("+ Shipped the release notes a day early")) fail("$name: went well's suggestions aren't shown")
                 scrollTo("Save")
                 shoot("$name-reflect-form")

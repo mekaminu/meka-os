@@ -376,8 +376,10 @@ class FamilyRecoveryScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverOff() { recovery("cover-dark-not-connected", Fill.EMPTY, connected = false) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverEmpty() { recovery("cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverOne() { recovery("cover-dark-one", Fill.ONE) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverMany() { recovery("cover-dark-many", Fill.MANY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverManyLight() { recovery("cover-light-many", Fill.MANY, theme = ThemeChoice.LIGHT) }
+    // Week 4's walk-through (A12): there's one recovery key at a time, so its third state is a used key, named "used"
+    // (it was "many", which read as more keys than "one").
+    @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverUsed() { recovery("cover-dark-used", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverUsedLight() { recovery("cover-light-used", Fill.MANY, theme = ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun recoveryInnerOne() { recovery("inner-dark-one", Fill.ONE) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryByHandCover() { recoveryByHand("cover-dark-by-hand") }
     @Test @Config(qualifiers = ScreenShots.INNER) fun recoveryByHandInner() { recoveryByHand("inner-dark-by-hand") }

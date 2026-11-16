@@ -111,7 +111,8 @@ class WeekAheadScreensTest {
         context.useCoreForScreens(core)
         runBlocking {
             core.tick()
-            if (fill != Fill.EMPTY) core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
+            // Week 4's walk-through (A12): empty is an empty week, work mode off too, not the default office days.
+            core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, fill != Fill.EMPTY)
             if (fill == Fill.MANY) {
                 core.setWorkDayHours(4, 9 * 60, 15 * 60 + 30)
                 core.setAboutYou(AboutField.PARTNER_NAME, "Morgan")
@@ -206,8 +207,9 @@ class WeekAheadScreensTest {
         ScreenShots.assertWholeTargets(compose, name)
         when (fill) {
             Fill.EMPTY -> {
-                // Nothing on but the default work hours: the summary says the office days and that it's otherwise quiet.
-                if (v.summary != WeekAheadRules.QUIET && !v.summary.endsWith("otherwise quiet")) fail("$name: nothing on, but \"${v.summary}\"")
+                // Nothing on, not even work: the summary says it's a quiet week and no day has an office line.
+                if (v.summary != WeekAheadRules.QUIET) fail("$name: nothing on, but \"${v.summary}\"")
+                v.days.firstOrNull { it.dayLine?.startsWith("Office") == true }?.let { fail("$name: nothing on, but ${it.label} says ${it.dayLine}") }
                 ScreenShots.assertShows(compose, name, LoneWordGlue.measured(v.summary))
                 // The balance still says what the plan leaves short ("family 0 h of 8 h …"), kept whole at its dots.
                 v.balance?.let { ScreenShots.assertShows(compose, name, LoneWordGlue.measured(it)) }

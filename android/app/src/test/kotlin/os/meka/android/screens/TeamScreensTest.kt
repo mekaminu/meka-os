@@ -214,7 +214,8 @@ class TeamScreensTest {
             compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
         }
         if (tops.distinct().size != 1) fail("$name: Open · Pause · Whole day › wrap onto ${tops.distinct().size} rows")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", "cover-dark-unfolded"))
+        // Week 4's walk-through (A22): the folded cover with Obi's row open, named for that (it was "unfolded", read as the open Fold).
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("team", "cover-dark-row-open"))
         ScreenShots.assertSensible(compose, "$name-unfolded")
         ScreenShots.assertNoBrokenWords(compose, "$name-unfolded")
         ScreenShots.assertClocksWhole(compose, "$name-unfolded")
