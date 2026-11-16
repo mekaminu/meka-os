@@ -427,6 +427,9 @@ class KeptPlacesScreensTest {
             until { v().starts.firstOrNull { it.label == other.label }?.chosen == true }
             if (v().starts.firstOrNull { it.label == other.label }?.chosen != true) fail("$name: First night ${other.label} wasn't chosen")
         }
+        // Walk-through 2026-11-15 A12 ("date-night by-hand = empty"): shot after Turn off, the page read as a fresh
+        // install's. It is shot here instead, the evening's sheet open on the start, weekday and first night just moved.
+        ScreenShots.reshootAfterHand(compose, p.area, "cover-dark-date-night-by-hand")
         tap(p, name, DateNightRules.OFF_LABEL, hasText(DateNightRules.OFF_LABEL) and evening)
         until { !v().on }
         if (v().on) fail("$name: Turn off left date night on")
@@ -605,8 +608,7 @@ class KeptPlacesScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun dateNightByHand() {
-        dateNightByHand(shoot(Place.DATE_NIGHT, "cover-dark-date-night-by-hand", Fill.MANY))
-        ScreenShots.reshootAfterHand(compose, Place.DATE_NIGHT.area, "cover-dark-date-night-by-hand") // walk-through A15
+        dateNightByHand(shoot(Place.DATE_NIGHT, "cover-dark-date-night-by-hand", Fill.MANY)) // reshot inside (A15, A12)
     }
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun leaveByHand() {

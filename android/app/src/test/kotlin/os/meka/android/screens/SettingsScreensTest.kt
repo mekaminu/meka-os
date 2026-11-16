@@ -167,6 +167,21 @@ class SettingsScreensTest {
         ScreenShots.assertReadable(compose, name, rows.flatMap { listOf(it.label, it.line) }, mustShow = false)
         ScreenShots.assertEachOneLine(compose, name, rows.map { it.label })
         ScreenShots.assertNoLoneWords(compose, name, rows.map { it.line } + ShellNav.moreLine(MoreItem.WORK, 0, false, null, null))
+        if (appearanceOpen) shootAppearance(name)
+    }
+
+    /**
+     * Walk-through 2026-11-15 A12 ("settings appearance = connected"): Appearance sits low on the list, so its unfolded
+     * choices were under the cover's shot and Appearance open drew the connected shot byte for byte. Swipe down to the
+     * choices' last line (Play the opening) and shoot that as `<name>-below`; when none of the choices was on the opening
+     * screen, its top (a copy of the connected shot) is dropped.
+     */
+    private fun shootAppearance(name: String) {
+        val differs = listOf(MotionCheckRules.PLAY_OPENING, "Topics ›", TickerMode.CALM.label, DoneShow.entries.first().label)
+        val topIsCopy = !ScreenShots.anyOnScreen(compose, differs)
+        val below = ScreenShots.shootBelow(compose, "settings", name, MotionCheckRules.PLAY_OPENING, settle = { turns(1_000) })
+        if (!below && topIsCopy) fail("$name: Appearance's choices aren't on screen")
+        if (below && topIsCopy) java.io.File(ScreenShots.path("settings", name)).delete()
     }
 
     private fun aboutYou(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
@@ -368,6 +383,9 @@ class SettingsScreensTest {
         tap(t, name, MotionCheckRules.PLAY_OPENING, hasText(MotionCheckRules.PLAY_OPENING))
         until(300) { opening == 1 }
         if (opening != 1) fail("$name: ${MotionCheckRules.PLAY_OPENING} played nothing")
+        // Walk-through 2026-11-15 A12 ("settings by-hand = connected"): the by-hand shot was the opening (connected)
+        // screen; it is taken again here, Appearance unfolded with the Motion, Done today and ticker chips just changed.
+        ScreenShots.reshootAfterHand(compose, "settings", "cover-dark-settings-by-hand")
         // A second tap folds it.
         tap(t, name, MoreItem.APPEARANCE.label, appearance)
         until { !shows(light) }

@@ -228,6 +228,10 @@ class WorkScreensTest {
             compose.mainClock.advanceTimeBy(100)
         }
         if (6 !in core.workMode.value.schedule.days) fail("Work: Saturday's chip didn't add Saturday (${core.workMode.value.schedule.days})")
+        // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on
+        // Navilife's hours like the empty page; it is taken again after the hand: work stopped (Start work now, Back to
+        // my hours) and Saturday lit.
+        ScreenShots.reshootAfterHand(compose, "work", "inner-dark-by-hand")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { work("cover-dark-empty", Fill.EMPTY) }

@@ -376,6 +376,9 @@ class LifePlacesScreensTest {
         if (core.errandsView.value.places.none { g -> g.rows.any { it.title.contains("sausages") } }) fail("$name: Done on the field added nothing")
         until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         reach(p, name, hasText("Butcher"), "the new place on the page")
+        // Walk-through 2026-11-15 A12 ("errands by-hand = many"): the shot was Many's opening screen; now it shows the
+        // page after the hand, the Butcher's new errand on it and the pharmacy's order gone.
+        ScreenShots.reshootAfterHand(compose, p.area, "cover-dark-errands-by-hand")
     }
 
     /**
@@ -434,6 +437,9 @@ class LifePlacesScreensTest {
         until { core.mealsView.value.favourites.any { it.title.startsWith("Leek soup") } }
         if (core.mealsView.value.favourites.none { it.title.startsWith("Leek soup") }) fail("$name: Done on the field added no favourite")
         until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        // Walk-through 2026-11-15 A12 ("dinners by-hand = many"): the shot was Many's opening screen; now it shows the
+        // week after the hand, the unplanned day planned with a favourite and Pasta off the favourites.
+        ScreenShots.reshootAfterHand(compose, p.area, "cover-dark-dinners-by-hand")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun peopleCoverEmpty() { shoot(Place.PEOPLE, "cover-dark-empty", Fill.EMPTY) }

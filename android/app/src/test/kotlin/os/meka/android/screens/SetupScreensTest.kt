@@ -239,6 +239,17 @@ class SetupScreensTest {
         tap(battery)
         if (fixed.lastOrNull()?.key != battery.key) fail("$name: Keep Navilife awake handed over ${fixed.lastOrNull()?.key}")
         if (fixed.size != 2) fail("$name: ${fixed.size} hand-overs for two taps")
+        // Walk-through 2026-11-15 A12 ("setup one = by-hand"): each button hands its step to the place that does it, so
+        // the page itself never changes under the hand and its shot was One's byte for byte. The page is checked as
+        // unchanged and the copy is dropped; One's shot shows it.
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("setup", "cover-dark-by-hand-after"))
+        val before = java.io.File(ScreenShots.path("setup", "cover-dark-by-hand"))
+        val after = java.io.File(ScreenShots.path("setup", "cover-dark-by-hand-after"))
+        if (before.exists() && after.exists() && !before.readBytes().contentEquals(after.readBytes())) {
+            fail("$name: the page changed under a hand-over; shoot that state instead of dropping it")
+        }
+        before.delete()
+        after.delete()
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
