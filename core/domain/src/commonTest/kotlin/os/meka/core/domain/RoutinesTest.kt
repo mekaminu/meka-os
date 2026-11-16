@@ -217,6 +217,8 @@ class RoutinesTest {
         // Walk-through A12: step 1 of 4 lights half its quarter of the bar, and LAST RUN says Now, not "Not yet".
         assertEquals(0.125f, card.fraction)
         assertEquals(RoutineRules.LAST_NOW, r.view().detail(id)!!.lastRun)
+        // Walk-through 2026-11-15 A8: LAST TIME doesn't say "It hasn't run yet" while its first run is going.
+        assertEquals(RoutineRules.FIRST_RUN_HISTORY, r.view().detail(id)!!.history)
         assertNull(r.view().detail(id)!!.runNow)
         assertEquals("Running now · step 1 of 4", r.view().rows.single().next)
         assertTrue(r.carryOn(id))
@@ -384,5 +386,33 @@ class RoutinesTest {
         val tidy = item.copy(schedule = RoutineSchedule(setOf(5), 19 * 60), steps = item.steps.filter { it.place == RoutinePlace.INBOX })
         assertEquals(at(fri, 19), RoutineRules.startTimeToday(tidy, at(fri, 19, 30), cal))
         assertEquals(id, tidy.id)
+    }
+
+    // ---- Walk-through 2026-11-15 A8 ----
+
+    @Test
+    fun aRoutineSavedByHandStartsOnAndTheStarterItRepeatsIsNoLongerOffered() {
+        val r = routines(fold)
+        val saved = r.addFromSentence(RoutineSentence.HINT, "")
+        assertFalse(saved.refused)
+        val v = r.view()
+        assertEquals("1 on", v.summary)
+        assertTrue(v.rows.single().on)
+        // "Sunday evening", Sundays 19:00 with bills, next week, inbox and bins, is Sunday reset under another name.
+        assertFalse(v.starters.any { it.key == "sunday-reset" }, v.starters.map { it.name }.toString())
+        assertEquals(3, v.starters.size)
+    }
+
+    @Test
+    fun aStarterIsCoveredOnlyOnItsDaysNearItsTimeAndWithHalfItsPlaces() {
+        val s = RoutineRules.STARTERS.first { it.key == "sunday-reset" }
+        fun item(days: Set<Int>, minute: Int, places: List<RoutinePlace>) = RoutineItem(
+            "x", "Mine", RoutineSchedule(days, minute), places.map { RoutineStep("Step", it, RoutineStepMode.SHOW) }, "", true, null, 0,
+        )
+        assertTrue(RoutineRules.covers(item(setOf(7), 19 * 60 + 30, listOf(RoutinePlace.MONEY, RoutinePlace.INBOX)), s))
+        assertFalse(RoutineRules.covers(item(setOf(6), 19 * 60, listOf(RoutinePlace.MONEY, RoutinePlace.INBOX)), s))
+        assertFalse(RoutineRules.covers(item(setOf(7), 9 * 60, listOf(RoutinePlace.MONEY, RoutinePlace.INBOX)), s))
+        assertFalse(RoutineRules.covers(item(setOf(7), 19 * 60, listOf(RoutinePlace.STUDY)), s))
+        assertFalse(RoutineRules.covers(item(setOf(7), 19 * 60, listOf(RoutinePlace.MONEY)), s))
     }
 }

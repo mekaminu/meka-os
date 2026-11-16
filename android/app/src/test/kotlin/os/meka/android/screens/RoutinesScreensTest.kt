@@ -193,10 +193,13 @@ class RoutinesScreensTest {
         until { sunday() != null && count("routine-row") == 1 }
         if (sunday() == null) fail("$name: Add didn't add Sunday reset")
         if (!onScreen("Added Sunday reset")) fail("$name: Add didn't say so")
+        // Walk-through 2026-11-15 A8: the shot is the routine just added, switched on ("1 on"), not "All paused" under
+        // "Added Sunday reset", which read as if a new routine starts paused.
+        if (core.routinesView.value.summary != "1 on" || sunday()?.on != true) fail("$name: Sunday reset wasn't added switched on")
+        ScreenShots.reshootAfterHand(compose, "routines", "cover-dark-by-hand") // A20: Sunday reset added, on
         tap("Pause Sunday reset")
         until { sunday()?.on == false }
         if (sunday()?.on != false) fail("$name: the switch didn't pause it")
-        ScreenShots.reshootAfterHand(compose, "routines", "cover-dark-by-hand") // A20: Sunday reset added and paused
         tap("Switch on Sunday reset")
         until { sunday()?.on == true }
         if (sunday()?.on != true) fail("$name: the switch didn't switch it back on")
@@ -232,6 +235,9 @@ class RoutinesScreensTest {
         ScreenShots.assertNoDotEndingALine(compose, "$name-running", runLines)
         assertTouchTargets("$name-running")
         if (!onScreen(RoutineRules.WAITING)) fail("$name: an Asks you step doesn't say it's waiting on you")
+        // Walk-through 2026-11-15 A8: LAST TIME never says it hasn't run while its first run is going.
+        if (onScreen("It hasn't run yet")) fail("$name: LAST TIME says it hasn't run beside Running now")
+        if (page()?.history != RoutineRules.FIRST_RUN_HISTORY) fail("$name: LAST TIME reads \"${page()?.history}\"")
         // Walk-through A12: the bar shows the step it's on, and LAST RUN says Now beside Running now, not "Not yet".
         if (c.fraction <= 0f) fail("$name: step 1's bar is empty")
         if (!onScreen(RoutineRules.LAST_NOW) || onScreen(RoutineRules.NOT_YET)) fail("$name: LAST RUN doesn't say Now while it runs")
@@ -300,6 +306,11 @@ class RoutinesScreensTest {
         if (page.steps[1].badge != "Just show") fail("$name: the label he chose wasn't kept (${page.steps[1].badge})")
         if (page.steps.any { it.title.contains("Sam") }) fail("$name: a step that texts someone was saved")
         if (!onScreen("Saved Sunday evening · first run")) fail("$name: the list doesn't say it was saved")
+        // Walk-through 2026-11-15 A8: Sunday evening is Sunday reset in his words, so START WITH ONE doesn't offer it again.
+        until { count("routine-starter") == 3 }
+        if (count("routine-starter") != 3 || core.routinesView.value.starters.any { it.key == "sunday-reset" }) {
+            fail("$name: Sunday reset is still offered beside the Sunday evening just saved")
+        }
         ScreenShots.reshootAfterHand(compose, "routines", "cover-dark-new-list") // A20: the list with the routine just saved
     }
 

@@ -536,6 +536,8 @@ object RoutineRules {
     const val LAST_TIME = "Last time"
     const val NOT_YET = "Not yet"
     const val NO_HISTORY = "It hasn't run yet. What it did will show here after each run."
+    /** LAST TIME on a first run still going (walk-through 2026-11-15 A8: never "It hasn't run yet" beside Running now). */
+    const val FIRST_RUN_HISTORY = "Its first run is going now. What it did will show here when it finishes."
     const val STEPS_NOTE = "Tap a step's label to change it between Just show, Asks you and Obi does it. Obi does it is offered only where Navilife already acts by itself."
     const val BACK = "Routines"
 
@@ -573,7 +575,7 @@ object RoutineRules {
         return RoutineDetail(
             r.id, r.name, whenLine(r.schedule), nextTile(r, today, nowMinute, payday), "${steps.size}",
             if (card != null) LAST_NOW else last?.let { lastTile(it.atMs, today, cal) } ?: NOT_YET, steps,
-            last?.let { historyLine(it, today, cal) } ?: NO_HISTORY, r.on, STEPS_NOTE,
+            last?.let { historyLine(it, today, cal) } ?: if (card != null) FIRST_RUN_HISTORY else NO_HISTORY, r.on, STEPS_NOTE,
             lastSteps = last?.log.orEmpty(),
             running = card,
             runNow = if (card == null && r.steps.isNotEmpty()) RUN_NOW else null,
@@ -640,6 +642,20 @@ object RoutineRules {
     }
 
     /**
+     * Walk-through 2026-11-15 A8: [r] is already [s] under another name, so START WITH ONE doesn't offer it again — it
+     * runs on the same days (or on payday) within the hour of the starter's time, and its steps reach at least half of
+     * the places the starter's do ("Sunday evening", Sundays 19:00 with bills, next week, inbox and bins, is Sunday reset).
+     */
+    fun covers(r: RoutineItem, s: RoutineStarter): Boolean {
+        if (r.schedule.payday != s.schedule.payday || r.schedule.days != s.schedule.days) return false
+        if (kotlin.math.abs(r.schedule.minute - s.schedule.minute) > 60) return false
+        val places = s.steps.map { it.place }.toSet()
+        if (places.isEmpty()) return false
+        val shared = r.steps.map { it.place }.toSet().count { it in places }
+        return shared * 2 >= places.size
+    }
+
+    /**
      * The Routines page: his routines, soonest-running first (paused ones after, by name), and the starters he hasn't
      * added yet (by [RoutineItem.starter], or a routine of his with the same name).
      */
@@ -656,7 +672,8 @@ object RoutineRules {
             .map { row(it, today, nowMinute, payday) }
         val taken = items.mapNotNull { it.starter }.toSet()
         val names = items.map { it.name.lowercase() }.toSet()
-        val starters = STARTERS.filter { it.key !in taken && it.name.lowercase() !in names }.map { starterRow(it) }
+        val starters = STARTERS.filter { s -> s.key !in taken && s.name.lowercase() !in names && items.none { covers(it, s) } }
+            .map { starterRow(it) }
         val running = if (nowMs == null) emptyList() else items
             .mapNotNull { r -> liveRun(r, nowMs)?.let { r to it } }
             .sortedWith(compareBy<Pair<RoutineItem, RoutineRun>> { it.second.startedAtMs }.thenBy { it.first.id })

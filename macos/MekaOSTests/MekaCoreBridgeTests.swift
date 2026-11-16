@@ -441,6 +441,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Walk-through A12: Running now's bar lights half the step it's on, and LAST RUN says Now while it runs.
         XCTAssertEqual(RoutineRules.shared.barFraction(step: 0, count: 4), 0.125, accuracy: 0.0001)
         XCTAssertEqual(RoutineRules.shared.LAST_NOW, "Now")
+        // Walk-through 2026-11-15 A8: the Sunday evening just saved is Sunday reset in his words, so the Mac's START
+        // WITH ONE doesn't offer it again, and a first run going never says it hasn't run.
+        XCTAssertFalse(core.routinesView.value.starters.contains { $0.key == "sunday-reset" })
+        XCTAssertTrue(RoutineRules.shared.FIRST_RUN_HISTORY.hasPrefix("Its first run is going now"))
     }
 
     func testWeekAheadSettingReachesSwift() async throws {
