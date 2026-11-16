@@ -139,6 +139,10 @@ class MoneyAccountsScreensTest {
         // The Money shots' month: the current account and its two cards (walk-through 2026-11-15 A13, the Rewards card too).
         assertTrue(items.size == 1 + MoneyShotMonth.CARD_NAMES.size, "expected the current account and both cards, got ${items.map { it.name }}")
         items.forEach { assertTrue(showsText(it.name), "\"${it.name}\" isn't in the list") }
+        // A13 (g1b 6): the current account says how far its statement reaches, the day Challenges counts to, not the
+        // day it was imported (a second, later date beside it).
+        assertTrue(showsText(MoneyAccountList.STATEMENT_TO + "Tue 20 Oct"), "the current account should say Statement to Tue 20 Oct")
+        if (showsText("Imported ")) fail("an imported account still says the day it was imported")
         // Nothing scattered on the page any more.
         if (showsText("Remove it?") || compose.onAllNodesWithText("Remove", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
             fail("a Remove link is still on the page")

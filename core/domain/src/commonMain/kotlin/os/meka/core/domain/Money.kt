@@ -424,6 +424,12 @@ data class MoneyAccountRow(
     val txns: Int = 0, val bank: Boolean = false, val reconnect: Boolean = false, val updated: String? = null,
     /** Accounts' rest: the name he gave it, shown instead of the short name; null for its own. */
     val nick: String? = null,
+    /**
+     * Walk-through 2026-11-15 A13 (g1b 6): "Tue 20 Oct", the last day its statement reaches (null with no lines), so an
+     * imported account says how far its statement goes, as Challenges' "Your statements reach …" does, not the day it was
+     * imported (which read as a second, later statement date beside it).
+     */
+    val through: String? = null,
 )
 
 /**
@@ -676,7 +682,8 @@ object MoneyRules {
             val when_ = a.importedAtMs?.let { " · ${if (a.source == MoneyBank.SOURCE) "updated" else "imported"} ${CivilDate.shortLabel(cal.epochDayOf(it))}" } ?: ""
             val same = merged.sameAs[a.id]?.let { b -> " · the same account as ${names[b]} from your bank, so lines in both count once" } ?: ""
             MoneyAccountRow(a.id, a.name, bankLine + span + when_ + same, txns = ts.size, bank = a.source == MoneyBank.SOURCE,
-                reconnect = a.bankStatus == MoneyBank.RECONNECT, updated = a.importedAtMs?.let { CivilDate.shortLabel(cal.epochDayOf(it)) }, nick = a.nick)
+                reconnect = a.bankStatus == MoneyBank.RECONNECT, updated = a.importedAtMs?.let { CivilDate.shortLabel(cal.epochDayOf(it)) }, nick = a.nick,
+                through = ts.maxOfOrNull { it.day }?.let { CivilDate.shortLabel(it) })
         }
         // Slice 8: net worth from balances, cards and what he typed (also before any statement is in).
         val liveCards = cards.filter { it.id in names }

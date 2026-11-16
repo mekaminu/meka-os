@@ -76,15 +76,17 @@ class MoneyPlanMoreScreensTest {
             }
         /**
          * Slice 2: a week away on the card in invented statements — two payments abroad, each with a foreign fee.
-         * Walk-through 2026-11-08 A32: they end on 15 Oct like the other Money shots' statements (they ended on 13).
+         * Walk-through 2026-11-08 A32: they end on the day the other Money shots' statements end (they ended on 13).
+         * Walk-through 2026-11-15 A13 (g1b 6): that day is Tue 20 Oct ([MoneyShotMonth]'s last line, Accounts'
+         * "Statement to Tue 20 Oct"); Challenges said "Your statements reach Thu 15 Oct" beside it.
          */
         const val CARD = "Date,Description,Amount\n" +
-            "14/10/2026,RESTAURANTE SOL EUR 46.20,-40.00\n" +
-            "14/10/2026,NON-STERLING TRANSACTION FEE,-1.20\n" +
-            "15/10/2026,MERCADO CENTRAL 23.10 EUR,-20.00\n" +
-            "15/10/2026,NON-STERLING TRANSACTION FEE,-0.60\n"
+            "19/10/2026,RESTAURANTE SOL EUR 46.20,-40.00\n" +
+            "19/10/2026,NON-STERLING TRANSACTION FEE,-1.20\n" +
+            "20/10/2026,MERCADO CENTRAL 23.10 EUR,-20.00\n" +
+            "20/10/2026,NON-STERLING TRANSACTION FEE,-0.60\n"
         /** The last day of [CARD], the day every Money shot's statements run to. */
-        const val LAST_DAY = "15/10/2026"
+        const val LAST_DAY = "20/10/2026"
     }
 
     private fun open(card: Boolean = false): MekaCore {
@@ -245,8 +247,9 @@ class MoneyPlanMoreScreensTest {
         tap("money-abroad-payments-toggle")
         assertTrue(shows("money-abroad-payments") && showsText("£1.20 fee"), "See the payments behind it should list each fee")
         // A32: the fees' days are the card's own, ending on the 15th like the other Money shots.
-        assertTrue(CARD.trimEnd().lines().last().startsWith(LAST_DAY) && showsText("Thu 15 Oct"),
-            "the last fee should be on Thu 15 Oct, the day the other Money shots' statements end")
+        assertTrue(CARD.trimEnd().lines().last().startsWith(LAST_DAY) && showsText("Tue 20 Oct"),
+            "the last fee should be on Tue 20 Oct, the day the other Money shots' statements end")
+        assertTrue(MoneyShotMonth.CURRENT.trimEnd().lines().last().startsWith(LAST_DAY), "the shots' month should end on $LAST_DAY too")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-abroad-tiles-cover"))
     }
 

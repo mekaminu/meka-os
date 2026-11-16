@@ -13,20 +13,21 @@ import os.meka.core.facade.MekaCore
  * Plan; Accounts' shots open on this month too, and its card is the Platinum Card, marked a card. Walk-through 2026-11-15
  * A13 (g1a 10): Plan's Clear my cards listed a "Rewards card" that no Accounts or Bills shot had; the Rewards Card is now
  * this month's second card everywhere, its statement only a repayment (a transfer, so no spending or income moves).
- * Invented data (rule 13).
+ * Walk-through 2026-11-15 A13 (g1b 5): the monthly bill was "Netflix.com" here and "Streamly.com" on every shot that
+ * imports its own statement; it is Streamly (the invented name) everywhere now. Invented data (rule 13).
  */
 internal object MoneyShotMonth {
-    // Walk-through 2026-11-08 A8: three months of the council tax and Netflix, so they're found as regular bills and
+    // Walk-through 2026-11-08 A8: three months of the council tax and Streamly, so they're found as regular bills and
     // Spending's "Bills to come" and the Bills tab show the same council tax due 1 Nov (it was £0 and no card).
     const val CURRENT = "Date,Description,Amount\n" +
         "01/08/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
         "05/08/2026,SALARY OAKFIELD LTD,2500.00\n" +
-        "15/08/2026,NETFLIX.COM,-10.99\n" +
+        "15/08/2026,STREAMLY.COM,-10.99\n" +
         "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
         "04/09/2026,TESCO STORES 2041,-62.40\n" +
         "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
         "11/09/2026,TESCO STORES 2041,-58.10\n" +
-        "15/09/2026,NETFLIX.COM,-10.99\n" +
+        "15/09/2026,STREAMLY.COM,-10.99\n" +
         "18/09/2026,TFL TRAVEL CH,-38.50\n" +
         "25/09/2026,COSTA COFFEE,-3.20\n" +
         "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
@@ -38,7 +39,7 @@ internal object MoneyShotMonth {
         "09/10/2026,TESCO STORES 2041,-64.90\n" +
         "12/10/2026,TFL TRAVEL CH,-41.20\n" +
         "14/10/2026,COSTA COFFEE,-3.40\n" +
-        "15/10/2026,NETFLIX.COM,-10.99\n" +
+        "15/10/2026,STREAMLY.COM,-10.99\n" +
         "16/10/2026,SHELL FORECOURT 112,-58.00\n" +
         "17/10/2026,THE GARDEN SHOP OAKFIELD,-24.99\n" +
         "19/10/2026,COSTA COFFEE,-3.40\n" +

@@ -4314,7 +4314,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyAccountNames.shared.shortName(name: "HSBC Current Account"), "HSBC current")
         XCTAssertEqual(MoneyAccountList.shared.initials(name: "HSBC current"), "HS")
         let v = MoneyView(locked: false, summary: "", empty: nil, month: nil,
-            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: nil)],
+            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: nil, through: nil)],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
             review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files, check: nil)
@@ -4331,7 +4331,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// Import, export and delete.
     func testAccountsRestOnTheMac() {
         let v = MoneyView(locked: false, summary: "", empty: nil, month: nil,
-            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: "Rainy day")],
+            accounts: [MoneyAccountRow(id: "a1", name: "Oakbank Saver", line: "1 transaction", txns: 1, bank: false, reconnect: false, updated: nil, nick: "Rainy day", through: nil)],
             earlier: false, later: false, tips: [], regular: nil, hiddenTips: nil, alerts: [], forecast: nil, refunds: nil, payday: nil,
             bills: nil, cards: nil, worth: nil, bank: nil, trading: nil, business: nil, shared: nil, challenges: nil, travel: nil, year: nil,
             review: nil, goals: nil, opening: nil, skeleton: false, categoryOrder: [], ownCategories: [], ownRows: [], save: nil, clear: nil, source: MoneySource.files, check: nil)

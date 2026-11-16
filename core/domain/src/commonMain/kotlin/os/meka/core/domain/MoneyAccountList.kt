@@ -57,6 +57,8 @@ data class MoneyAccountSheet(
 object MoneyAccountList {
     const val HEAD = "ACCOUNTS"
     const val ADD_BALANCE = "Add balance"
+    /** An imported account's line: "Statement to Tue 20 Oct", the last day its statement reaches. */
+    const val STATEMENT_TO = "Statement to "
     const val BALANCE = "BALANCE"
     const val CARD_SWITCH = "It's a card"
     const val CARD_SWITCH_LINE = "Its due date, statement and limit show on Bills"
@@ -98,7 +100,12 @@ object MoneyAccountList {
                 a.reconnect -> { parts += "Reconnect in Lunch Flow"; lit = true }
                 brief != null -> { parts += brief.line; lit = brief.lit }
                 else -> {
-                    a.updated?.let { parts += (if (a.bank) "Updated " else "Imported ") + it }
+                    // A13: an imported statement says how far it reaches ("Statement to Tue 20 Oct"); the bank's feed when it updated.
+                    when {
+                        a.bank -> a.updated?.let { parts += "Updated $it" }
+                        a.through != null -> parts += "$STATEMENT_TO${a.through}"
+                        else -> a.updated?.let { parts += "Imported $it" }
+                    }
                     lit = false
                 }
             }

@@ -40,7 +40,7 @@ class MoneyAccountListTest {
         return MoneyView(
             locked = false, summary = "", empty = null, month = null,
             accounts = listOf(
-                MoneyAccountRow("a-cur", "HSBC Current Account", "120 transactions", txns = 120, updated = "26 Oct"),
+                MoneyAccountRow("a-cur", "HSBC Current Account", "120 transactions", txns = 120, updated = "26 Oct", through = "Tue 20 Oct"),
                 MoneyAccountRow("a-amex", "American Express Platinum Card", "40 transactions", txns = 40),
                 MoneyAccountRow("a-save", "Oakbank Saver", "From your bank · 1 transaction", txns = 1, bank = true, reconnect = true),
             ),
@@ -59,7 +59,9 @@ class MoneyAccountListTest {
         assertEquals("AM", amex.initials)
         val cur = items[1]
         assertEquals("£1,204", cur.amount)
-        assertEquals("Imported 26 Oct", cur.sub)
+        // A13: how far the statement reaches, not the day it was imported.
+        assertEquals("Statement to Tue 20 Oct", cur.sub)
+        assertEquals("Imported 26 Oct", MoneyAccountList.items(view().copy(accounts = view().accounts.map { it.copy(through = null) }))[1].sub)
         val saver = items[2]
         assertEquals(MoneyAccountList.ADD_BALANCE, saver.amount)
         assertTrue(saver.addBalance)
