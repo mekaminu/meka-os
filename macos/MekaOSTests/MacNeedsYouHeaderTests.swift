@@ -33,6 +33,22 @@ final class MacNeedsYouHeaderTests: XCTestCase {
         XCTAssertEqual(NeedsYouLayoutRules.shared.clearedLine(n: 2), "FYI cleared · 2 chats")
     }
 
+    /// Walk-through 2026-11-15 A7: "to reply" is the sum of the rows' badges (two from Alex here), and an open row
+    /// doesn't repeat its preview over its messages.
+    @MainActor
+    func testToReplyIsTheBadgesSumAndAnOpenRowHidesItsPreview() {
+        let two = TriageChatRules.shared.chatsWith(cards: [
+            card("wa-1", who: "Alex", gist: "Can you call me tonight?", at: 1_000, lane: .needsReply),
+            card("wa-4", who: "Alex", gist: "Or tomorrow morning?", at: 1_500, lane: .needsReply),
+        ], requests: [])
+        let counts = NeedsYouHeaderCounts(decide: 0, chats: two, mail: 0)
+        XCTAssertEqual(counts.reply, 2)
+        XCTAssertEqual(counts.subtitle, "2 to reply")
+        XCTAssertEqual(NeedsYouLayoutRules.shared.row(chat: two[0]).badge, "2 to reply")
+        XCTAssertFalse(NeedsYouLayoutRules.shared.showsLine(open: true))
+        XCTAssertTrue(NeedsYouLayoutRules.shared.showsLine(open: false))
+    }
+
     @MainActor
     func testAllClearHidesClearFyi() {
         let counts = NeedsYouHeaderCounts(decide: 0, chats: [], mail: 0)

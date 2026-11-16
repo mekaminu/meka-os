@@ -234,7 +234,14 @@ internal fun NeedsYouMessageRowView(
                         Text(row.time, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1,
                             modifier = Modifier.padding(start = MekaSpace.xs))
                     }
-                    Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // Open, the messages under the row say it in full, so the preview steps aside (A7, 2026-11-15).
+                    AnimatedVisibility(
+                        NeedsYouLayoutRules.showsLine(open),
+                        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                    ) {
+                        Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
                 Spacer(Modifier.width(MekaSpace.xs))
                 Text(

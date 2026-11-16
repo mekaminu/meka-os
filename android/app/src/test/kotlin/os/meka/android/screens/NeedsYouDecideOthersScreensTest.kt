@@ -32,7 +32,9 @@ import os.meka.android.today.NEEDS_YOU_DECIDE_TAG
 import os.meka.android.today.NeedsYouHead
 import os.meka.android.today.SchoolCoverDecideView
 import os.meka.core.domain.AppointmentNudge
+import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DateNightNudge
+import os.meka.core.domain.DateNightRules
 import os.meka.core.domain.NeedsYouLayoutRules
 import os.meka.core.domain.SchoolCover
 import kotlin.test.fail
@@ -47,6 +49,13 @@ import kotlin.test.fail
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], application = ShotApplication::class)
 class NeedsYouDecideOthersScreensTest {
+    private companion object {
+        /** Mon 14 Dec 2026, the day the shots are drawn on (the dentist is due today). */
+        const val TODAY = 20_801L
+        /** Fri 18 Dec 2026, the date night four days on. */
+        const val NIGHT = 20_805L
+    }
+
     @get:Rule(order = 0)
     val hangWatch = HangWatch()
 
@@ -58,8 +67,10 @@ class NeedsYouDecideOthersScreensTest {
         question = "You're in the office that day. Who's covering?", detail = "Mon 21 Dec shows as work from home",
         days = listOf(20_808L), spoken = "Alex and Sam are off Monday 21 December.",
     )
-    private val night = DateNightNudge(20_808L, "In 7 days · from 19:00", "Date night · Fri 18 Dec", "Book somewhere and arrange cover",
-        "Booked takes this off Needs you.", "Date night in 7 days")
+    // A7 (walk-through 2026-11-15): Fri 18 Dec is 4 days after the shots' Mon 14 Dec (the dentist's due day), not the
+    // INSET Monday's 7, so its line comes from the rule that counts the days.
+    private val night = DateNightNudge(NIGHT, "${DateNightRules.inDays(NIGHT, TODAY)} · from 19:00", "Date night · ${CivilDate.shortLabel(NIGHT)}",
+        "Book somewhere and arrange cover", "Booked takes this off Needs you.", "Date night in 4 days")
     private val dentist = AppointmentNudge("dentist", "Due Mon 14 Dec · every 6 months", "Dentist",
         "Last went Sun 14 Jun. Booked the next one?", "", "Dentist due today.")
 
@@ -97,9 +108,10 @@ class NeedsYouDecideOthersScreensTest {
 
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         draw(theme)
-        listOf("TO DECIDE · 3", "Alex and Sam are off Mon 21 Dec", "INSET day · in 7 days", "Date night · Fri 18 Dec", "Dentist",
+        listOf("TO DECIDE · 3", "Alex and Sam are off Mon 21 Dec", "INSET day · in 7 days", "Date night · Fri 18 Dec", "In 4 days", "Dentist",
             "I'll work from home", "Covered", "Booked", "Skip this one", "Booked…", "Went", "Not yet", "Call to book", "Copy email",
         ).forEach { if (!onScreen(it)) fail("$name: $it is missing") }
+        if (onScreen("In 7 days")) fail("$name: two different days both read \"in 7 days\"")
         if (compose.onAllNodesWithTag(NEEDS_YOU_DECIDE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 3) fail("$name: not three cards")
         ScreenShots.assertEachOneLine(compose, name, listOf("I'll work from home", "Covered", "Skip this one", "Booked…", "Went", "Not yet",
             "Call to book", "Copy email"))

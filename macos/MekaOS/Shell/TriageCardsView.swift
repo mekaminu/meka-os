@@ -114,7 +114,11 @@ struct NeedsYouChatRow: View {
                             Text(row.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                             Text(row.time).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
                         }
-                        Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                        // Open, the messages under the row say it in full, so the preview steps aside (A7, 2026-11-15).
+                        if NeedsYouLayoutRules.shared.showsLine(open: open) {
+                            Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                                .transition(.opacity)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Text(row.badge).font(MekaType.micro).lineLimit(1)

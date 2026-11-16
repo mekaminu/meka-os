@@ -63,8 +63,26 @@ object NeedsYouLayoutRules {
     fun messages(chats: List<TriageChat>): List<TriageChat> = chats.filterNot(::isFyi)
     fun fyi(chats: List<TriageChat>): List<TriageChat> = chats.filter(::isFyi)
 
-    /** How many people or groups wait for a reply (a request counts): the header's "4 to reply". */
-    fun replyCount(chats: List<TriageChat>): Int = messages(chats).count { it.replies > 0 || it.requests.isNotEmpty() || it.askedBy != null }
+    /**
+     * How many messages wait for a reply, as the rows' badges count them (walk-through 2026-11-15 A7: "3 to reply" over
+     * badges 1 + 2 + 1): a chat's requests, else its replies, else 1 when someone he watches asked. The header's
+     * "4 to reply" and the Reply chip are the sum of the badges under them.
+     */
+    fun replyCount(chats: List<TriageChat>): Int = messages(chats).sumOf(::waiting)
+
+    /** The number a chat's hot badge carries: its requests, else its replies, else 1 when asked; 0 when nothing waits. */
+    fun waiting(chat: TriageChat): Int = when {
+        chat.requests.isNotEmpty() -> chat.requests.size
+        chat.replies > 0 -> chat.replies
+        chat.askedBy != null -> 1
+        else -> 0
+    }
+
+    /**
+     * Whether an open row still shows its one-line preview (A7: "Did you see my missed call and voice note?" as the
+     * preview and again in full under it): no; the open row's messages say it in full.
+     */
+    fun showsLine(open: Boolean): Boolean = !open
 
     /** "2 to decide · 4 to reply · 4 FYI", leaving out what is nothing; "All clear" when all are. */
     fun subtitle(decide: Int, reply: Int, fyi: Int): String {
@@ -139,9 +157,8 @@ object NeedsYouLayoutRules {
 
     /** "1 request" first, then "2 to reply", else "3 new". */
     fun badge(chat: TriageChat): Pair<String, Boolean> = when {
-        chat.requests.isNotEmpty() -> plural(chat.requests.size, "request", "requests") to true
-        chat.replies > 0 -> "${chat.replies} to reply" to true
-        chat.askedBy != null -> "1 to reply" to true
+        chat.requests.isNotEmpty() -> plural(waiting(chat), "request", "requests") to true
+        waiting(chat) > 0 -> "${waiting(chat)} to reply" to true
         else -> "${chat.cards.size} new" to false
     }
 

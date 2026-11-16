@@ -101,8 +101,10 @@ class NeedsYouLookScreensTest {
                         .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
-                    NeedsYouHeader(NeedsYouLayoutRules.subtitle(2, NeedsYouLayoutRules.replyCount(chats), fyi.size), fyi.isNotEmpty(), {})
-                    NeedsYouChips(NeedsYouLayoutRules.chips(2, NeedsYouLayoutRules.replyCount(chats), fyi.size, 12), filter, { filter = it })
+                    // A7 (walk-through 2026-11-15): nothing to decide and no mail on this page, so the header and chips
+                    // count none (it said "2 to decide" and "Mail 12" over neither).
+                    NeedsYouHeader(NeedsYouLayoutRules.subtitle(0, NeedsYouLayoutRules.replyCount(chats), fyi.size), fyi.isNotEmpty(), {})
+                    NeedsYouChips(NeedsYouLayoutRules.chips(0, NeedsYouLayoutRules.replyCount(chats), fyi.size, 0), filter, { filter = it })
                     NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.MESSAGES_HEAD, messages.size))
                     messages.forEach { c ->
                         NeedsYouMessageRowView(NeedsYouLayoutRules.row(c), open == c.key, { open = if (open == c.key) null else c.key }) {
@@ -123,14 +125,21 @@ class NeedsYouLookScreensTest {
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         draw(theme)
         val messages = NeedsYouLayoutRules.messages(chats)
-        if (!onScreen("2 to decide · 3 to reply · 2 FYI")) fail("$name: the header's counts aren't shown")
+        // The header's "to reply" is the badges' sum: Sam 1 + Game testing 2 + Alex 1 (A7: it said 3).
+        if (!onScreen("4 to reply · 2 FYI")) fail("$name: the header's counts aren't shown")
+        if (onScreen("to decide")) fail("$name: the header counts decisions the page doesn't show")
         if (!onScreen("Clear FYI")) fail("$name: Clear FYI is missing")
-        listOf("All", "Decide 2", "Reply 3", "FYI 2", "Mail 12").forEach { if (!onScreen(it)) fail("$name: the $it chip is missing") }
+        listOf("All", "Decide", "Reply 4", "FYI 2", "Mail").forEach { if (!onScreen(it)) fail("$name: the $it chip is missing") }
+        if (onScreen("Decide 2") || onScreen("Mail 12")) fail("$name: a chip counts what the page doesn't show")
+        // The open row (Sam) says its message once, in full under it, not also as the row's preview.
+        val samLine = "Did you see my missed call and voice note?"
+        val samTimes = ScreenShots.texts(compose).count { it.contains(samLine) }
+        if (samTimes != 1) fail("$name: the open row's message shows $samTimes times")
         messages.forEach { c -> if (!onScreen(c.title)) fail("$name: ${c.title}'s row is missing") }
         if (!onScreen("2 to reply") || !onScreen("1 to reply")) fail("$name: the badges aren't read")
         if (!onScreen("Casey") || !onScreen("Robin")) fail("$name: the FYI rows are missing")
         val rows = messages.map { NeedsYouLayoutRules.row(it) }
-        ScreenShots.assertEachOneLine(compose, name, rows.map { it.line } + rows.map { it.badge })
+        ScreenShots.assertEachOneLine(compose, name, rows.drop(1).map { it.line } + rows.map { it.badge })
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 

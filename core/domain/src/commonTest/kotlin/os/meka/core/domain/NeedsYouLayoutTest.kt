@@ -31,7 +31,20 @@ class NeedsYouLayoutTest {
         assertFalse(NeedsYouLayoutRules.isFyi(alex))
         assertEquals(listOf(alex.key, group.key), NeedsYouLayoutRules.messages(chats).map { it.key })
         assertEquals(listOf(sam.key), NeedsYouLayoutRules.fyi(chats).map { it.key })
-        assertEquals(2, NeedsYouLayoutRules.replyCount(chats))
+        assertEquals(3, NeedsYouLayoutRules.replyCount(chats))
+    }
+
+    /** Walk-through 2026-11-15 A7: the header's "to reply" is the sum of the badges under it, not the number of rows. */
+    @Test
+    fun theReplyCountIsTheSumOfTheBadges() {
+        val chats = listOf(alex, sam, group)
+        val badges = NeedsYouLayoutRules.messages(chats).map { NeedsYouLayoutRules.badge(it) }.filter { it.second }
+            .sumOf { it.first.substringBefore(' ').toInt() }
+        assertEquals(badges, NeedsYouLayoutRules.replyCount(chats))
+        assertEquals("3 to reply", NeedsYouLayoutRules.subtitle(0, NeedsYouLayoutRules.replyCount(chats), 0))
+        assertEquals(0, NeedsYouLayoutRules.waiting(sam))
+        assertTrue(NeedsYouLayoutRules.showsLine(open = false))
+        assertFalse(NeedsYouLayoutRules.showsLine(open = true))
     }
 
     @Test
