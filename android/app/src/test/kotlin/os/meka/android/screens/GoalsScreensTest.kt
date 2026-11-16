@@ -32,8 +32,8 @@ import kotlin.random.Random
 
 /**
  * The quality gate, slice 9 (build plan: "the same shots for every other screen, Goals and habits next"): the Goals
- * screen on the Fold's cover and inner screens, with nothing set up, with one habit and with a full set (three habits,
- * one ticked today and one linked to a goal, two goals with a long title, a fast that has ended), Dark and Light. Saved
+ * screen on the Fold's cover and inner screens, with nothing set up, with one habit and with a full set (the Habits
+ * screen's eight habits from ShotLife, three done today and one linked to a goal, two goals with a long title, a fast that has ended), Dark and Light. Saved
  * under `goals/` (the `fold-screens` artifact, then the `screens` branch's docs/screens/fold/goals/) and read for
  * nonsense on screen (a "0 m" average, a ring with "—"), cut lines and words broken in two. No fast is left running
  * (the Fasting screen's own shots, FastingScreensTest, cover a running one).
@@ -51,15 +51,17 @@ class GoalsScreensTest {
     val compose = createComposeRule()
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
+    private val dayMs = 86_400_000L
+    private var clock = now
 
     private fun core(): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
-        secureRandom = Random(17), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        secureRandom = Random(17), timeZone = { TimeZone.of("Europe/London") }, nowMs = { clock },
     )
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val MAX_SWIPES = 6
+        const val MAX_SWIPES = 10
     }
 
     private fun shown(text: String) = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -71,7 +73,8 @@ class GoalsScreensTest {
     private fun titles(fill: Fill): List<String> = when (fill) {
         Fill.EMPTY -> emptyList()
         Fill.ONE -> listOf("Read 20 pages")
-        Fill.MANY -> listOf("Read 20 pages", "Stretch", "Run", longGoal, "Learn Spanish")
+        // A13 (walk-through 2026-11-15): the Habits screen's eight habits (ShotLife), not three of Goals' own.
+        Fill.MANY -> ShotLife.HABITS.map { it.name } + listOf(longGoal, "Learn Spanish")
     }
 
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
@@ -79,16 +82,22 @@ class GoalsScreensTest {
         ThemeChoice.save(context, theme)
         val core = core()
         context.useCoreForScreens(core)
+        clock = now
         runBlocking {
             core.tick()
-            if (fill != Fill.EMPTY) core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
+            if (fill == Fill.ONE) core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
             if (fill == Fill.MANY) {
+                // The Habits screen's habits, added six days ago and marked the same (3 of 8 done today), so "Open
+                // Habits ›" leads to the habits Goals lists.
+                clock = now - 6 * dayMs
+                val habits = ShotLife.addHabits(core)
+                clock = now
+                ShotLife.markHabits(core, habits, now / dayMs)
                 val race = core.addGoal(longGoal, "21 km", GoalHorizon.YEAR)
                 core.setGoalProgress(race, 40)
                 core.addGoal("Learn Spanish", null, GoalHorizon.QUARTER)
-                val stretch = core.addHabit("Stretch", 7, HabitTiming.MORNING, 10, null)
-                core.setHabitDone(stretch, true)
-                core.addHabit("Run", 3, HabitTiming.EVENING, 40, race)
+                // One habit counts towards a goal, as before.
+                core.setHabitGoal(habits.getValue("Walk 20 minutes"), race)
                 // A 16-hour fast, started yesterday evening and ended now.
                 core.startFast(16 * 60)
                 core.endFast()

@@ -77,4 +77,40 @@ object ShotLife {
 
     /** Minutes the shots' fast has run at [nowMin] minutes after midnight on Wed 21 Oct. */
     fun fastMinutesAt(nowMin: Int): Int = nowMin - FAST_STARTED_MIN
+
+    /** One habit as the Habits screen keeps it: its name, Do or Avoid, and its list. */
+    data class Habit(val name: String, val avoid: Boolean, val list: String)
+
+    /**
+     * The habits every screen shows (the walk-through 2026-11-15, A13: Goals had Read 20 pages, Run and Stretch while
+     * its own "Open Habits ›" led to eight others). Goals and Habits both add these, in this order, six days before
+     * Wed 21 Oct, then mark them with [markHabits].
+     */
+    val HABITS: List<Habit> = listOf(
+        Habit("Brush teeth", false, "Morning"), Habit("Drink water", false, "Morning"),
+        Habit("Walk 20 minutes", false, "All day"), Habit("No shop coffee", true, "All day"),
+        Habit("No biscuits", true, "All day"), Habit("No cake", true, "Night time"),
+        Habit("Floss", false, "Night time"), Habit("Read 20 pages", false, "Night time"),
+    )
+
+    /** Adds [HABITS] to [core] and returns their ids by name. */
+    suspend fun addHabits(core: os.meka.core.facade.MekaCore): Map<String, String> =
+        HABITS.associate { it.name to core.addHabitToList(it.name, it.avoid, it.list) }
+
+    /**
+     * The week's marks, [today] being the epoch day of Wed 21 Oct: Brush teeth and No shop coffee kept all seven days
+     * (a 7-day streak each), Drink water today, No biscuits missed yesterday, Read 20 pages missed two days ago. So
+     * 3 of 8 are done today.
+     */
+    suspend fun markHabits(core: os.meka.core.facade.MekaCore, ids: Map<String, String>, today: Long) {
+        val done = os.meka.core.domain.HabitMark.DONE
+        val missed = os.meka.core.domain.HabitMark.MISSED
+        for (back in 0..6) {
+            core.setHabitMark(ids.getValue("Brush teeth"), today - back, done)
+            core.setHabitMark(ids.getValue("No shop coffee"), today - back, done)
+        }
+        core.setHabitMark(ids.getValue("Drink water"), today, done)
+        core.setHabitMark(ids.getValue("No biscuits"), today - 1, missed)
+        core.setHabitMark(ids.getValue("Read 20 pages"), today - 2, missed)
+    }
 }

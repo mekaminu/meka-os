@@ -47,7 +47,7 @@ class HabitsScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private val now = 1_794_477_600_000L // Thu 12 Nov 2026, 10:00 in London
+    private val now = 1_792_573_200_000L // Wed 21 Oct 2026, 10:00 in London, the day every other shot stands on (A13)
     private val dayMs = 86_400_000L
     private var clock = now
 
@@ -71,21 +71,10 @@ class HabitsScreensTest {
         context.useCoreForScreens(core)
         runBlocking {
             if (full) {
-                listOf(
-                    Triple("Brush teeth", false, "Morning"), Triple("Drink water", false, "Morning"),
-                    Triple("Walk 20 minutes", false, "All day"), Triple("No shop coffee", true, "All day"),
-                    Triple("No biscuits", true, "All day"), Triple("No cake", true, "Night time"),
-                    Triple("Floss", false, "Night time"), Triple("Read 10 pages", false, "Night time"),
-                ).forEach { (name, avoid, list) -> ids[name] = core.addHabitToList(name, avoid, list) }
+                // The same eight habits Goals shows (ShotLife, the walk-through 2026-11-15 A13).
+                ids.putAll(ShotLife.addHabits(core))
                 clock = now
-                val today = now / dayMs // 10:00 in London is 10:00 UTC in November
-                for (back in 0..6) {
-                    core.setHabitMark(ids.getValue("Brush teeth"), today - back, HabitMark.DONE)
-                    core.setHabitMark(ids.getValue("No shop coffee"), today - back, HabitMark.DONE)
-                }
-                core.setHabitMark(ids.getValue("Drink water"), today, HabitMark.DONE)
-                core.setHabitMark(ids.getValue("No biscuits"), today - 1, HabitMark.MISSED)
-                core.setHabitMark(ids.getValue("Read 10 pages"), today - 2, HabitMark.MISSED)
+                ShotLife.markHabits(core, ids, now / dayMs) // 10:00 in London is 09:00 UTC on 21 Oct
             }
             clock = now
             core.tick()
@@ -113,7 +102,7 @@ class HabitsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Habits")
         ScreenShots.assertShows(compose, name, "+ Add")
-        ScreenShots.assertShows(compose, name, "Thu")
+        ScreenShots.assertShows(compose, name, "Wed")
         if (full) {
             ScreenShots.assertShows(compose, name, "3 of 8 done today")
             ScreenShots.assertShows(compose, name, "best streak 7 days")
@@ -173,13 +162,13 @@ class HabitsScreensTest {
         awaitCore("walk missed") { markOf(core, "Walk 20 minutes") == HabitMark.MISSED }
         compose.onNodeWithTag("habits-mark-$walk").performClick(); settle()
         awaitCore("walk clear") { markOf(core, "Walk 20 minutes") == HabitMark.CLEAR }
-        // Tuesday on the strip: the circle marks Tuesday, today stays as it was.
+        // Monday on the strip: the circle marks Monday, today stays as it was.
         compose.onNodeWithTag("habits-day-4").performClick(); settle()
         // CI run 43733890002: the picked day's line can land a frame after the settle; wait for it before checking.
-        awaitCore("Tuesday picked") { runCatching { ScreenShots.assertShows(compose, "cycle", "done · Tue 10") }.isSuccess }
-        ScreenShots.assertShows(compose, "cycle", "done · Tue 10")
+        awaitCore("Monday picked") { runCatching { ScreenShots.assertShows(compose, "cycle", "done · Mon 19") }.isSuccess }
+        ScreenShots.assertShows(compose, "cycle", "done · Mon 19")
         compose.onNodeWithTag("habits-mark-$walk").performClick(); settle()
-        awaitCore("walk done on Tuesday") { markOf(core, "Walk 20 minutes", back = 2) == HabitMark.DONE }
+        awaitCore("walk done on Monday") { markOf(core, "Walk 20 minutes", back = 2) == HabitMark.DONE }
         assertEquals(HabitMark.CLEAR, markOf(core, "Walk 20 minutes"))
     }
 
