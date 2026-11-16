@@ -90,7 +90,7 @@ import os.meka.core.domain.PressureFix
 /**
  * The month and the week's line ([content]: the month's Text, then the week's): side by side on the month's baseline while
  * the week's line fits there whole, else the week's line under the month (walk-through 2026-11-15, A10: it was cut to
- * "Week 43 · 2h" beside the month, half the open Fold's "2h 30m planned"). A line too long even on its own says "…".
+ * "Week 43 · 2h" beside the month, half the open Fold's "2h 30m planned"). The week's line is measured for its whole width first, so it is given room for all of it.
  */
 @Composable
 private fun MonthAndWeek(modifier: Modifier, content: @Composable () -> Unit) {
@@ -135,7 +135,7 @@ internal fun FoldedHeader(
         // "Week 43 · 2h" beside the month, half the open Fold's "2h 30m planned"); a line that's still too long says "…".
         MonthAndWeek(Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken }) {
             Text(month, style = MekaType.nowTitle, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.testTag(MONTH_TAG))
-            Text(week, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+            Text(week, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
         }
         RoundButton("‹", "Previous week", canBack) { haptics.tick(); onBack() }
         RoundButton("›", "Next week", canForward) { haptics.tick(); onForward() }
