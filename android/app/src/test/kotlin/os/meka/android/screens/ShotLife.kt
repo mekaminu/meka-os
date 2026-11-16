@@ -60,7 +60,11 @@ object ShotLife {
     )
     val DENTIST = WeekEvent("ev-dentist", "Dentist", 21, 13 * 60 + 45, 14 * 60 + 15, "Personal", "Oakfield Dental")
     val CALL = WeekEvent("ev-call", "Call with Priya", 21, 17 * 60, 17 * 60 + 45, "Personal")
-    val PARENTS_EVENING = WeekEvent("ev-parents", "Parents' evening at Oakfield School", 22, 9 * 60 + 30, 10 * 60, "Kids")
+    /**
+     * Thursday's one event, in the evening (the walk-through 2026-11-15 A13: it sat at 09:30, an "evening" in the morning
+     * inside work, and was the bedside's "first thing" while Tomorrow said the day starts with the gym at 07:40).
+     */
+    val PARENTS_EVENING = WeekEvent("ev-parents", "Parents' evening at Oakfield School", 22, 18 * 60, 19 * 60, "Kids")
 
     /**
      * Wednesday's and Thursday's timed events as every screen shows them (the walk-through 2026-11-08, A8: the brief and the
@@ -68,6 +72,28 @@ object ShotLife {
      * parents' evening, only the Calendar Wednesday's call). The swim first, as a screen's "one event" shots keep only it.
      */
     val WEEK: List<WeekEvent> = listOf(SWIM, PLANNING, DENTIST, CALL, PARENTS_EVENING)
+
+    /** Thursday's first thing: the task dated tomorrow at 07:40 that Tomorrow, the bedside and the brief all lead with. */
+    const val GYM = "Gym before work"
+    const val GYM_MIN = 7 * 60 + 40
+
+    /** Thursday's untimed task and the bill due that day (Lists → Renewals), as Tomorrow and the bedside count them. */
+    const val RING_SCHOOL = "Ring the school about the trip"
+    const val WATER_BILL = "Water bill"
+
+    /**
+     * Adds Thursday's tasks and bill to [core] ([tomorrow] the epoch day of Thu 22 Oct) and returns the two task ids
+     * (gym, school), so every screen that looks at tomorrow sees the same day: [GYM] at 07:40 first, [RING_SCHOOL],
+     * the [WATER_BILL] due and, from [WEEK], [PARENTS_EVENING] at 18:00.
+     */
+    suspend fun addThursday(core: os.meka.core.facade.MekaCore, tomorrow: Long): Pair<String, String> {
+        val gym = core.addTask(GYM)
+        core.setWhen(gym, tomorrow, GYM_MIN)
+        val school = core.addTask(RING_SCHOOL)
+        core.setWhen(school, tomorrow, null)
+        core.addRenewal(WATER_BILL, os.meka.core.domain.ObligationKind.BILL, tomorrow, os.meka.core.domain.RenewalRepeat.MONTHLY, "32.50", null)
+        return gym to school
+    }
 
     /**
      * The fast every screen shows on Wed 21 Oct: started at 03:45 that morning (Fasting's shot at 17:15 is 13½ hours in,

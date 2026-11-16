@@ -42,15 +42,23 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.TomorrowPane
 import os.meka.android.today.TomorrowPeekCard
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.toInstant
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.EventFields
 import os.meka.core.domain.LoneWordGlue
-import os.meka.core.domain.ObligationKind
-import os.meka.core.domain.RenewalRepeat
+import os.meka.core.domain.MekaSchema
 import os.meka.core.facade.MekaCore
+import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
+import os.meka.core.sync.Replica
+import os.meka.core.sync.ReplicaStore
+import os.meka.core.sync.fv
 
 /**
  * The Tomorrow peek and sheet (Meka 2026-10-26: "I asked the AI to add a task for tomorrow, it did, but on this screen how
- * do I see tomorrow's stuff?"), on the Fold at 19:10 on a Wednesday with two tasks dated tomorrow (one at 07:40): the peek
+ * do I see tomorrow's stuff?"), on the Fold at 19:10 on a Wednesday with ShotLife's Thursday (two tasks, one at 07:40, a bill
+ * and the parents' evening at 18:00): the peek
  * card says what's on and the sheet lists both; **Today** moves one to today in the same frame and says so; the tick
  * ring completes the other. Every button answers a 48 dp touch. Dark and Light; saved under `tomorrow/`. Invented data.
  */
@@ -73,22 +81,20 @@ class TomorrowScreensTest {
     private fun setUp(theme: ThemeChoice): Pair<MekaCore, Pair<String, String>> {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
+        val store = InMemoryReplicaStore()
+        seed(store)
         val core = MekaCore(
-            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+            householdId = "hh", deviceId = "android", store = store, transport = null,
             secureRandom = Random(27), timeZone = { london }, nowMs = { now },
         )
         context.useCoreForScreens(core)
         val ids = runBlocking {
             core.tick()
-            val tomorrow = core.todayEpochDay() + 1
-            val gym = core.addTask("Gym before work")
-            core.setWhen(gym, tomorrow, 7 * 60 + 40)
-            val school = core.addTask("Ring the school about the trip")
-            core.setWhen(school, tomorrow, null)
-            // Tomorrow on Today, slice 2: a bill due tomorrow from Lists → Renewals.
-            core.addRenewal("Water bill", ObligationKind.BILL, tomorrow, RenewalRepeat.MONTHLY, "32.50", null)
+            // Walk-through 2026-11-15 A13: the Thursday the bedside and Week ahead show (ShotLife), the gym at 07:40
+            // first, the school call, the water bill due (Tomorrow on Today, slice 2) and the parents' evening at 18:00.
+            val made = ShotLife.addThursday(core, core.todayEpochDay() + 1)
             core.tick()
-            gym to school
+            made
         }
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -115,6 +121,25 @@ class TomorrowScreensTest {
         turns()
         return core to ids
     }
+
+    /** ShotLife's week, written as the calendar mirror writes it (only Thursday's parents' evening is tomorrow's). */
+    private fun seed(store: ReplicaStore) {
+        var k = 0
+        val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
+        ShotLife.WEEK.forEach { e ->
+            mirror.commitLocal(EntityTypes.EVENT, e.id, buildMap {
+                put(EventFields.TITLE, e.title.fv())
+                put(EventFields.START_AT, at(e.day, e.startMin).fv())
+                put(EventFields.END_AT, at(e.day, e.endMin).fv())
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
+                put(EventFields.CALENDAR, e.calendar.fv())
+                e.place?.let { put(EventFields.LOCATION, it.fv()) }
+            })
+        }
+    }
+
+    private fun at(day: Int, minute: Int) =
+        LocalDateTime(2026, 10, day, minute / 60, minute % 60).toInstant(london).toEpochMilliseconds()
 
     private fun turns(ms: Long = 3_000L) {
         repeat((ms / 100).toInt()) {
@@ -148,7 +173,7 @@ class TomorrowScreensTest {
         val (gym, school) = ids
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", name))
         val peek = assertNotNull(core.shutdownView.value.peek)
-        assertTrue(peek.line.endsWith("2 tasks · 1 bill due · first 07:40 Gym before work"), peek.line)
+        assertTrue(peek.line.endsWith("1 event · 2 tasks · 1 bill due · first 07:40 Gym before work"), peek.line)
         // Lines are drawn through LoneWordGlue (the last words held together), so look for them as drawn.
         assertTrue(shows(LoneWordGlue.kept(peek.line)), "$name: the peek isn't shown")
         // A19: the peek stands clear of the screen's edges (Today's gutter at the sides, its top space above).
@@ -159,6 +184,11 @@ class TomorrowScreensTest {
         assertTrue((card.left - screen.left) / dp >= 15.5f && (screen.right - card.right) / dp >= 15.5f,
             "$name: the peek runs into the side edges")
         assertTrue(shows("Gym before work") && shows("Ring the school about the trip"), "$name: tomorrow's tasks aren't listed")
+        // A13: Thursday's parents' evening is in the evening, as the bedside and Week ahead show it, after the gym.
+        val rows = core.shutdownView.value.tomorrow.rows
+        val evening = rows.firstOrNull { it.title == ShotLife.PARENTS_EVENING.title } ?: fail("$name: no parents' evening tomorrow ($rows)")
+        assertEquals("18:00", evening.time, "$name: the parents' evening's time")
+        assertTrue(rows.indexOfFirst { it.title == ShotLife.GYM } < rows.indexOf(evening), "$name: the gym isn't before the evening")
         assertTrue(shows(LoneWordGlue.kept("Due tomorrow · Water bill £32.50")), "$name: tomorrow's bill isn't shown")
         assertTouchTargets(name)
 
@@ -172,7 +202,7 @@ class TomorrowScreensTest {
         until { shows(moved) }
         assertTrue(shows(moved), "$name: the move isn't said")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-moved"))
-        assertEquals(listOf("t-$gym"), core.shutdownView.value.tomorrow.rows.map { it.id })
+        assertEquals(listOf("t-$gym"), core.shutdownView.value.tomorrow.rows.filter { !it.isEvent }.map { it.id })
         val afterMove = assertNotNull(core.shutdownView.value.peek).line
         assertTrue(afterMove.contains("1 task ·") && !afterMove.contains("2 tasks"), afterMove)
         until { shows(LoneWordGlue.kept(afterMove)) }

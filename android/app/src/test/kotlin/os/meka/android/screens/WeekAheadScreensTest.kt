@@ -78,8 +78,6 @@ class WeekAheadScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
-    private val longTitle = "Quarterly planning with the design and engineering leads"
-
     private fun seed(store: ReplicaStore, fill: Fill) {
         if (fill == Fill.EMPTY) return
         var n = 0
@@ -91,9 +89,13 @@ class WeekAheadScreensTest {
                 put(EventFields.CALENDAR, calendar.fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
-        event("ev1", "Swimming lesson", at(21, 18, 30), at(21, 19, 15), "Kids", place = "Oakfield Leisure Centre")
+        fun event(e: ShotLife.WeekEvent) =
+            event(e.id, e.title, at(e.day, e.startMin / 60, e.startMin % 60), at(e.day, e.endMin / 60, e.endMin % 60), e.calendar, e.place)
+        // The shots' one week (ShotLife; the walk-through 2026-11-15 A13: the planning meeting was on Thursday here, on
+        // Wednesday everywhere else, and Thursday had no parents' evening). The swim first, the "one event" shots' only.
+        event(ShotLife.SWIM)
         if (fill != Fill.MANY) return
-        event("ev2", longTitle, at(22, 10, 0), at(22, 11, 30), "Personal", place = "Harbour House, Dock Street")
+        ShotLife.WEEK.drop(1).forEach(::event)
         event("ev3", "Dinner with Priya and Jo", at(23, 19, 30), at(23, 22, 0), "Personal")
         event("ev4", "Football training", at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
         event("ev5", "Car boot sale", at(25, 8, 0), at(25, 11, 0), "Personal")
@@ -225,6 +227,9 @@ class WeekAheadScreensTest {
                 if (v.goals.line != "1 picked · up to 3") fail("$name: the goals say \"${v.goals.line}\"")
                 if (v.days.first { it.label.startsWith("Thu") }.dayLine != "Office 09:00–15:30") fail("$name: Thursday's day line ${v.days.first { it.label.startsWith("Thu") }.dayLine}")
                 ScreenShots.assertShows(compose, name, "Swimming lesson")
+                // A13: Thursday has the parents' evening at 18:00, as Tomorrow and the bedside have it.
+                val thu = v.days.first { it.label.startsWith("Thu") }.lines
+                if (thu.none { it.time == "18:00" && it.text.startsWith("Parents' evening") }) fail("$name: Thursday has no parents' evening at 18:00 ($thu)")
             }
         }
     }

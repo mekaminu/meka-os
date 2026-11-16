@@ -48,6 +48,7 @@ import os.meka.core.domain.FoldModeRules
 import os.meka.core.domain.FoldPosture
 import os.meka.core.domain.HeadlineFields
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.LocalClock
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.WatchFaceRules
 import os.meka.core.facade.MekaCore
@@ -180,6 +181,9 @@ class BedsideScreensTest {
                 core.addOnBoardSized("Book the MOT", today, 30)
                 core.addOnBoardSized("Plan Saturday's football run with Sam", today, 60)
                 core.addWaiting("Quote for the new fence", "Casey", 0)
+                // Walk-through 2026-11-15 A13: tomorrow as Tomorrow and Week ahead show it (ShotLife's Thursday), so the
+                // evening's "first thing" is the gym at 07:40, never the parents' evening (18:00).
+                ShotLife.addThursday(core, today + 1)
             }
             core.tick()
         }
@@ -266,7 +270,12 @@ class BedsideScreensTest {
             }
             Scene.MORNING -> ScreenShots.assertShows(compose, name, "Open the brief ›")
             Scene.DAY -> if (v.lines.none { "Dentist" in it }) fail("$name: the dentist at 13:45 isn't what's next (${v.lines})")
-            Scene.EVENING -> ScreenShots.assertShows(compose, name, "See tomorrow ›")
+            Scene.EVENING -> {
+                ScreenShots.assertShows(compose, name, "See tomorrow ›")
+                // A13: tomorrow's first thing is the one Tomorrow leads with ("first 07:40 Gym before work").
+                val first = "First thing ${LocalClock.formatMinute(ShotLife.GYM_MIN)} ${ShotLife.GYM}"
+                if (v.lines.none { it.startsWith(first) }) fail("$name: tomorrow doesn't start with the gym (${v.lines})")
+            }
             Scene.QUIET -> if (!v.dim) fail("$name: 23:30 is in quiet hours, but the clock isn't dimmed")
         }
         // A19: one alarm through the day: every shot with the daily alarm says the same 06:30.
