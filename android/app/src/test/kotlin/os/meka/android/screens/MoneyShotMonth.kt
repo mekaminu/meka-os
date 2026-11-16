@@ -7,7 +7,10 @@ import os.meka.core.facade.MekaCore
  * pension counted in net worth), shared so shots read side by side agree. Walk-through 2026-11-08 A32: Spending's
  * "1 payment without a category" (MoneyScreensTest's month) sat beside the sorter's "SORT YOUR PAYMENTS · 2 LEFT"
  * (MoneySorterScreensTest's own statement); both now open on this month, which has two payees without a category
- * (Zebra Plover twice, The Garden Shop once): "3 payments without a category" and "2 LEFT". Invented data (rule 13).
+ * (Zebra Plover twice, The Garden Shop once): "3 payments without a category" and "2 LEFT". Walk-through 2026-11-15 A13:
+ * Accounts' own shots imported shorter statements of their own, so "2026 SO FAR" read three ways (£578.16, £425.17 and
+ * £1,050.95 spent) and the card was "Credit card" on one Accounts shot and "Platinum card" on the rest and on Bills and
+ * Plan; Accounts' shots open on this month too, and its card is the Platinum Card, marked a card. Invented data (rule 13).
  */
 internal object MoneyShotMonth {
     // Walk-through 2026-11-08 A8: three months of the council tax and Netflix, so they're found as regular bills and
@@ -47,10 +50,21 @@ internal object MoneyShotMonth {
     /** The biggest payee without a category first: Zebra Plover (2 × £12.60) over The Garden Shop (£24.99). */
     val UNSORTED = listOf("Zebra Plover", "The Garden Shop")
 
-    /** Imports the month into [core] (Money already open). */
-    suspend fun fill(core: MekaCore) {
-        check(!core.importMoneyStatement("Current account", CURRENT).refused)
-        check(!core.importMoneyStatement("Credit card", CARD).refused)
-        check(!core.moneyWorthAdd("Pension £42,000").refused)
+    /** The current account's name and the card's, as every Money shot names them (Bills, Plan and Accounts). */
+    const val CURRENT_NAME = "Current account"
+    const val CARD_NAME = "Platinum Card"
+
+    /**
+     * Imports the month into [core] (Money already open) and marks [CARD_NAME] a card; [pension] adds the £42,000 pension
+     * net worth counts (Accounts' shots that start from an empty total leave it out).
+     */
+    suspend fun fill(core: MekaCore, pension: Boolean = true) {
+        check(!core.importMoneyStatement(CURRENT_NAME, CURRENT).refused)
+        check(!core.importMoneyStatement(CARD_NAME, CARD).refused)
+        core.tick()
+        val card = core.moneyView.value.accounts.firstOrNull { it.name == CARD_NAME } ?: error("no card account")
+        check(!core.moneyCardKind(card.id, card = true, charge = false).refused)
+        if (pension) check(!core.moneyWorthAdd("Pension £42,000").refused)
+        core.tick()
     }
 }

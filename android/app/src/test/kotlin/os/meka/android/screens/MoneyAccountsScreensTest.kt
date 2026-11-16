@@ -69,17 +69,6 @@ class MoneyAccountsScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val CURRENT = "Date,Description,Amount\n" +
-            "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "15/09/2026,STREAMLY.COM,-10.99\n" +
-            "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/10/2026,TESCO STORES 2041,-64.90\n" +
-            "15/10/2026,STREAMLY.COM,-10.99\n"
-        const val CARD = "Date,Description,Amount\n" +
-            "06/10/2026,AMAZON MARKETPLACE,-32.49\n" +
-            "13/10/2026,DELIVEROO,-21.80\n"
     }
 
     private fun open(): MekaCore {
@@ -93,11 +82,8 @@ class MoneyAccountsScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", CURRENT).refused)
-            check(!core.importMoneyStatement("Platinum Card", CARD).refused)
-            core.tick()
-            val card = core.moneyView.value.accounts.firstOrNull { it.name == "Platinum Card" } ?: error("no card account")
-            check(!core.moneyCardKind(card.id, card = true, charge = false).refused)
+            // Walk-through 2026-11-15 A13: the same month as Spending's shots, so 2026 SO FAR reads one way everywhere.
+            MoneyShotMonth.fill(core, pension = false)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
