@@ -131,7 +131,7 @@ class MoneyClearScreensTest {
         val clear = v.clear ?: fail("no cards to clear on this month")
         // Walk-through 2026-11-15 A13 (g1a 10): the cards Plan clears are the cards Bills and Accounts list, no others.
         val onBills = v.cards?.rows.orEmpty().map { it.id }.toSet()
-        if (clear.rows.map { it.id }.toSet() != onBills) fail("Clear my cards lists ${clear.rows.map { it.name }}, Bills ${v.cards?.rows?.map { it.name }}")
+        if (clear.cards.map { it.id }.toSet() != onBills) fail("Clear my cards lists ${clear.cards.map { it.name }}, Bills ${v.cards?.rows?.map { it.name }}")
         val names = v.accounts.map { it.name }.toSet()
         if (!names.containsAll(MoneyShotMonth.CARD_NAMES)) fail("Accounts has $names")
         scrollTo("money-clear-card")
