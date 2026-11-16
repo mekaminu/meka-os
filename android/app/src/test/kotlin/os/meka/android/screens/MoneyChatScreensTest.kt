@@ -1,6 +1,8 @@
 package os.meka.android.screens
 
 import android.os.Looper
+import os.meka.android.ask.AskBarCut
+import os.meka.android.ask.AskBarShown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +32,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlin.random.Random
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -165,6 +168,16 @@ class MoneyChatScreensTest {
         assertTrue(abs((b.width - b.height).value) < 1f, "$tag isn't round: ${b.width} × ${b.height}")
     }
 
+    /** The Ask Obi bar draws [words] (any, when null) and none of them is cut. */
+    private fun assertBarWhole(words: String?) {
+        settle()
+        val c = compose.onAllNodesWithTag("money-ask-bar", useUnmergedTree = true).fetchSemanticsNodes().first().config
+        val shown = c.getOrNull(AskBarShown)
+        if (words != null) assertEquals(words, shown, "the Ask Obi bar's words")
+        assertTrue(shown == MoneyChat.BAR || shown == MoneyChat.BAR_SHORT, "the Ask Obi bar says \"$shown\"")
+        assertEquals(false, c.getOrNull(AskBarCut), "the Ask Obi bar's \"$shown\" is cut")
+    }
+
     private fun pick(tab: MoneyTab) {
         compose.onNodeWithContentDescription(MoneyTabs.spoken(tab, chosen = false), useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         settle()
@@ -174,6 +187,8 @@ class MoneyChatScreensTest {
     fun askObiAnswersAWhatIfAndMakesTheGoal() {
         val core = open()
         assertTrue(shows("money-ask-bar"), "the Ask Obi bar isn't on Spending")
+        // Walk-through 2026-11-15 A14: on the cover the bar stopped at "“What"; it shows its first question whole instead.
+        assertBarWhole(MoneyChat.BAR_SHORT)
         pick(MoneyTab.BILLS)
         assertTrue(shows("money-ask-bar"), "the Ask Obi bar isn't on Bills")
         tap("money-ask-bar")
@@ -208,6 +223,8 @@ class MoneyChatScreensTest {
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun askObiOnTheOpenFold() {
         val core = open()
+        // A14: with the room, the open Fold keeps both questions; either way nothing is cut.
+        assertBarWhole(null)
         tap("money-ask-bar")
         until(core) { shows("money-chat-try-0") }
         tap("money-chat-try-1")

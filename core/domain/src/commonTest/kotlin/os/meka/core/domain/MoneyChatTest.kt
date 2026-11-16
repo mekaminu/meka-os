@@ -31,6 +31,14 @@ class MoneyChatTest {
     )
 
     @Test
+    fun theBarsShortFormIsItsFirstQuestionWhole() {
+        // A14: the folded Fold shows the short form whole, never "Ask Obi: “Can I afford…”, “What".
+        assertTrue(MoneyChat.BAR.startsWith(MoneyChat.BAR_SHORT.removeSuffix("”")))
+        assertTrue(MoneyChat.BAR_SHORT.endsWith("…”"))
+        assertTrue(MoneyChat.BAR_SHORT.length < MoneyChat.BAR.length)
+    }
+
+    @Test
     fun whatTheChatAnswers() {
         listOf(
             "What if I save £300 a month for 6 months?", "Can I afford a £1,200 holiday in July?", "Which card should I pay off first?",

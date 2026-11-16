@@ -193,6 +193,15 @@ class CarScreensTest {
             // once Nearby devices is allowed); with two the Dates rows name each car.
             if (fill == Fill.MANY) ScreenShots.assertShows(compose, name, "The Golf")
         }
+        // Walk-through 2026-11-15 A14: the parked rows ended "±…" and the MOT row "Every year from the dat…" on the cover;
+        // a row's grey line now takes two lines before any "…", so each reads to its end.
+        if (fill == Fill.MANY) {
+            val laid = ScreenShots.laidOut(compose)
+            val parked = laid.filter { "±" in it.text }
+            if (parked.isEmpty()) fail("$name: no parked row's line on screen to check")
+            val cut = (parked + laid.filter { "Every year from the date" in it.text }).filter { it.cut }
+            if (cut.isNotEmpty()) fail("$name cuts these with …: ${cut.map { it.text }}")
+        }
         return core
     }
 

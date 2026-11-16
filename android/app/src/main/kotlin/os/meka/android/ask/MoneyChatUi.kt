@@ -31,6 +31,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,12 +80,18 @@ import os.meka.core.domain.TalkProblem
  * Motion: the sheet rises on the expand spring ([MoneyDetailSheet]); each new turn appears on the appear spring (a fade
  * with reduced motion); the bar and every button press like every control.
  */
+/** The Ask Obi bar's drawn words and whether they're cut (read by MoneyChatScreensTest; never spoken). */
+val AskBarShown = SemanticsPropertyKey<String>("AskBarShown")
+val AskBarCut = SemanticsPropertyKey<Boolean>("AskBarCut")
+
 @Composable
 internal fun MoneyAskBar(
     modifier: Modifier = Modifier,
     onMic: () -> Unit = {},
     /** Your team, slice 3: the same bar says "Ask the team…" at the foot of Your team. */
     text: String = MoneyChat.BAR,
+    /** A14: shown whole instead of [text] when [text] doesn't fit on one line (null: [text] ends in "…"). */
+    short: String? = if (text == MoneyChat.BAR) MoneyChat.BAR_SHORT else null,
     spoken: String = MoneyChat.BAR_SPOKEN,
     micSpoken: String = MoneyChatSpoken.MIC_SPOKEN,
     tag: String = "money-ask-bar",
@@ -96,16 +104,34 @@ internal fun MoneyAskBar(
             .background(Meka.colors.background),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // A14: the words drawn and whether they're cut, for the screen tests (the bar's semantics are its spoken label).
+        var useShort by remember(text, short) { mutableStateOf(false) }
+        var cut by remember(text, short) { mutableStateOf(false) }
         Row(
             Modifier.weight(1f).testTag(tag)
                 .clickable(role = Role.Button, onClick = onOpen)
-                .clearAndSetSemantics { contentDescription = spoken; role = Role.Button }
+                .clearAndSetSemantics {
+                    contentDescription = spoken; role = Role.Button
+                    this[AskBarShown] = if (useShort && short != null) short else text
+                    this[AskBarCut] = cut
+                }
                 .minTouch().padding(start = MekaSpace.m, end = MekaSpace.xs, top = MekaSpace.xs, bottom = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             ObiDot()
-            Text(text, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, modifier = Modifier.weight(1f))
+            // Walk-through 2026-11-15 A14: on the folded Fold the two questions stopped at "“What" with nothing after it;
+            // when the line doesn't fit, the first question is shown whole instead.
+            val shown = if (useShort && short != null) short else text
+            Text(
+                shown, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                onTextLayout = { r ->
+                    val over = r.hasVisualOverflow || r.isLineEllipsized(0)
+                    if (!useShort && short != null && over) useShort = true
+                    cut = over
+                },
+            )
         }
         // Slice 3: the mockup's mic: opens Obi · money already listening.
         Box(

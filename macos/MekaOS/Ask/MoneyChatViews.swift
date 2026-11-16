@@ -15,9 +15,14 @@ struct MoneyAskBarView: View {
     var onMic: () -> Void = {}
     /// Your team, slice 3: the same bar says "Ask the team…" at the foot of Your team.
     var text: String = MoneyChat.shared.BAR
+    /// Walk-through 2026-11-15 A14: shown whole when `text` doesn't fit on one line (nil: `text` is cut with "…").
+    var short: String? = nil
     var spoken: String = MoneyChat.shared.BAR_SPOKEN
     var micSpoken: String = MoneyChatSpoken.shared.MIC_SPOKEN
     let onOpen: () -> Void
+
+    /// The money bar's own short form; another bar (Your team's) keeps its words, cut with "…" if it must be.
+    private var shortText: String { short ?? (text == MoneyChat.shared.BAR ? MoneyChat.shared.BAR_SHORT : text) }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -26,7 +31,10 @@ struct MoneyAskBarView: View {
                     Circle()
                         .fill(RadialGradient(colors: [palette.accent, palette.accent.opacity(0.45)], center: .topLeading, startRadius: 0, endRadius: 22))
                         .frame(width: 20, height: 20)
-                    Text(text).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    ViewThatFits(in: .horizontal) {
+                        Text(text).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1).fixedSize()
+                        Text(shortText).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    }
                     Spacer(minLength: MekaSpace.xs)
                 }
                 .padding(.leading, MekaSpace.m).padding(.vertical, MekaSpace.xs)

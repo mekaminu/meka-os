@@ -48,6 +48,7 @@ import os.meka.android.ask.TRIPS_ROW_SHEET_TAG
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.DateGlue
 import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.BinRules
 import os.meka.core.domain.BinsPageRules
@@ -251,6 +252,11 @@ class PlansPlacesScreensTest {
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(ReadingPageRules.GO_EMPTY))
+                // Walk-through 2026-11-15 A14: the goal's line was cut "… · about 4 a m…" on the cover; it reads to its end.
+                v.goal?.line?.let { line ->
+                    val shown = ScreenShots.laidOut(compose).filter { it.text == line || DateGlue.plain(it.text) == line }
+                    if (shown.any { it.cut }) fail("$name cuts the goal's line \"$line\"")
+                }
             }
         }
         return core

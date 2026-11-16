@@ -52,6 +52,11 @@ data class MoneyChatData(
 
 object MoneyChat {
     const val BAR = "Ask Obi: “Can I afford…”, “What if I save…”"
+    /**
+     * Walk-through 2026-11-15 A14: where [BAR] doesn't fit on one line (the folded Fold), the bar shows this whole
+     * instead of stopping at "“What" with nothing after it.
+     */
+    const val BAR_SHORT = "Ask Obi: “Can I afford…”"
     const val BAR_SPOKEN = "Ask Obi about your money"
     const val HEAD = "Obi · money"
     const val TRY = "Try"
