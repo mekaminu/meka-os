@@ -95,9 +95,15 @@ object AppointmentsPageRules {
         else -> emptyList()
     }.map { pageRow(it, today) }
 
+    /**
+     * The To book card's own count (walk-through 2026-11-15 A9: "None due to book" sat over To book 1 · Dentist, a row that
+     * needs a date), less the ones he put off ("Not yet"); "due to book" while every one is due, "to book" once one only
+     * needs a date.
+     */
     private fun dueTile(view: AppointmentView): PageTile {
-        val n = view.nudges.size
-        return if (n > 0) PageTile("$n", "due to book", true) else PageTile("None", "due to book", false)
+        val rows = view.rows.filter { toBook(it) && it.laterDay == null } // "Not yet" ones he put off aren't counted
+        val label = if (rows.any { it.state == AppointmentState.UNKNOWN }) "to book" else "due to book"
+        return if (rows.isNotEmpty()) PageTile("${rows.size}", label, true) else PageTile("None", "due to book", false)
     }
 
     private fun bookedTile(view: AppointmentView, today: Long): PageTile {

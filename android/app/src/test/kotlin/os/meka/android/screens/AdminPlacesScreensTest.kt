@@ -189,6 +189,7 @@ class AdminPlacesScreensTest {
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
+                assertToBookTileAgrees(name, page)
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
                 if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(AppointmentsPageRules.EMPTY))
@@ -373,6 +374,17 @@ class AdminPlacesScreensTest {
         if (rows().firstOrNull { it.id == physio.id }?.dueDay == null) fail("$name: When did you last go? noted nothing for ${physio.title}")
         closeSheet()
         assertTouchTargets(name)
+        // Walk-through 2026-11-15 A9: after his taps the first number is still the To book card's count, never "None" over Dentist.
+        assertToBookTileAgrees(name, core.appointmentsPage(core.appointmentsView.value))
+    }
+
+    /** Appointments' first number counts the To book card's rows (less "Not yet"): "None" only over an empty card. */
+    private fun assertToBookTileAgrees(name: String, page: os.meka.core.domain.LifePageView) {
+        val card = page.cards.firstOrNull { it.key == AppointmentsPageRules.TO_BOOK } ?: return
+        if (card.count > card.rows.size) return
+        val toBook = card.rows.count { it.whenText != AppointmentsPageRules.NOT_YET } // put off ones aren't counted
+        val want = if (toBook == 0) "None" else "$toBook"
+        if (page.tiles.first().number != want) fail("$name: the first number says \"${page.tiles.first().number} ${page.tiles.first().label}\" over To book's $toBook")
     }
 
     /**

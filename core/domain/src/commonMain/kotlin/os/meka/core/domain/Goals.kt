@@ -167,13 +167,16 @@ data class GoalsView(
     val behind: Int get() = habits.count { it.pace == HabitPace.BEHIND }
     val dueToday: Int get() = habits.count { it.pace == HabitPace.DUE }
     val doneToday: Int get() = habits.count { it.doneToday }
+    /** On track but not ticked today (an open circle that isn't due today): walk-through 2026-11-15 A9, "1 habit to do today" over two open circles. */
+    val openThisWeek: Int get() = habits.count { it.pace == HabitPace.ON_TRACK && !it.doneToday }
     /** "Add Gym" is offered (no booked habit, and none already named gym/workout/training). */
     val offersAddGym: Boolean get() = SessionRules.offersAddGym(habits)
     /** The hand-made gym habit to offer "Let MEKA book “gym”" on; null when there is none or a habit is already booked. */
     val bookOffer: HabitItem? get() = SessionRules.bookOffer(habits)
 
     /**
-     * "1 habit behind · 2 to do today"; "1 habit to do today" alone (walk-through 2026-11-08 A8: a bare "1 to do today"
+     * "1 habit behind · 2 to do today"; "1 habit to do today · 1 more this week" when an open habit isn't due today
+     * (walk-through 2026-11-15 A9); "1 habit to do today" alone (walk-through 2026-11-08 A8: a bare "1 to do today"
      * under the brief's "4 tasks" read as a task count); "All habits on track" or null with no habits.
      */
     val paceLine: String? get() {
@@ -182,6 +185,7 @@ data class GoalsView(
         val parts = listOfNotNull(
             behind.takeIf { it > 0 }?.let { "$it ${habits(it)} behind" },
             dueToday.takeIf { it > 0 }?.let { if (behind > 0) "$it to do today" else "$it ${habits(it)} to do today" },
+            openThisWeek.takeIf { it > 0 && (behind > 0 || dueToday > 0) }?.let { "$it more this week" },
         )
         return parts.joinToString(" · ").ifEmpty { "All habits on track" }
     }

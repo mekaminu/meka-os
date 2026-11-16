@@ -31,10 +31,23 @@ class AppointmentsPageTest {
     fun theThreeNumbersAreDueToBookTheNextBookedVisitAndHowManyHeKeepsUpWith() {
         val p = AppointmentsPageRules.page(view(), today)
         assertEquals("Appointments", p.title)
-        assertEquals(listOf("2", "4 days", "5"), p.tiles.map { it.number })
-        assertEquals(listOf("due to book", "to Hygienist", "kept up with"), p.tiles.map { it.label })
+        // The first number is the To book card's count (walk-through 2026-11-15 A9); Physio only needs a date, so "to book".
+        assertEquals(listOf("3", "4 days", "5"), p.tiles.map { it.number })
+        assertEquals(listOf("to book", "to Hygienist", "kept up with"), p.tiles.map { it.label })
         assertEquals(listOf(true, true, false), p.tiles.map { it.lit })
         assertEquals(listOf(AppointmentsPageRules.TO_BOOK, AppointmentsPageRules.BOOKED, AppointmentsPageRules.NEXT_DUE), p.cards.map { it.key })
+    }
+
+    @Test
+    fun theFirstNumberNeverSaysNoneOverAToBookCardWithARow() {
+        // Walk-through 2026-11-15 A9: "None due to book" over To book 1 · Dentist · Add a date.
+        val p = AppointmentsPageRules.page(view(listOf(item("a1", "Dentist", months = 6), optician)), today)
+        assertEquals(1, p.cards.first { it.key == AppointmentsPageRules.TO_BOOK }.rows.size)
+        assertEquals("1" to "to book", p.tiles[0].number to p.tiles[0].label)
+        assertTrue(p.tiles[0].lit)
+        // Only due ones: "due to book"; nothing in the card: "None".
+        assertEquals("2" to "due to book", AppointmentsPageRules.page(view(listOf(dentist, haircut)), today).tiles[0].let { it.number to it.label })
+        assertEquals("None", AppointmentsPageRules.page(view(listOf(optician)), today).tiles[0].number)
     }
 
     @Test

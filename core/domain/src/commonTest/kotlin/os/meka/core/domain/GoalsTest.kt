@@ -39,7 +39,14 @@ class GoalsTest {
         assertEquals("To do today", habit(h).meta)
         // Walk-through 2026-11-08 A8: the line names habits, so it never reads as a task count beside "4 tasks".
         assertEquals("1 habit to do today", g.view(d.tasks.all()).paceLine)
+        // Walk-through 2026-11-15 A9: an open habit not due today is counted beside it, so two open circles aren't "1".
+        val run = g.addHabit("Run", perWeek = 3)
+        assertEquals(HabitPace.ON_TRACK, habit(run).pace)
+        assertEquals("1 habit to do today · 1 more this week", g.view(d.tasks.all()).paceLine)
         g.setHabitDone(h, true)
+        // Nothing due today: the week's open one alone isn't a to-do.
+        assertEquals("All habits on track", g.view(d.tasks.all()).paceLine)
+        g.deleteHabit(run)
         assertEquals(HabitPace.DONE_TODAY, habit(h).pace)
         nextDay()
         assertEquals(HabitPace.DUE, habit(h).pace)
