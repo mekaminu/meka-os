@@ -362,7 +362,24 @@ object ScreenShots {
         }
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
         if (texts.isEmpty()) fail("$name: nothing under $tag")
-        assertNotCut(compose, name, texts)
+        // Only a last line drawn with an ellipsis: [assertNotCut]'s width and visible-end reads flagged every one-line title
+        // and pill in these cards under Robolectric while they were drawn whole (slice 36's first CI run).
+        val cut = mutableListOf<String>()
+        fun check(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && text in texts && action != null) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.let { r ->
+                    val last = r.lineCount - 1
+                    if (r.isLineEllipsized(last)) cut += "$text (${r.lineCount} lines, ends at ${r.getLineEnd(last, visibleEnd = true)} of ${text.length})"
+                }
+            }
+            n.children.forEach { check(it) }
+        }
+        check(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (cut.isNotEmpty()) fail("$name draws these cut:\n" + cut.joinToString("\n") { "- $it" })
     }
 
     /**
