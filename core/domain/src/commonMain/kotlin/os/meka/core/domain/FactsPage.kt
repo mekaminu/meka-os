@@ -45,20 +45,13 @@ object FactsPageRules {
 
     fun lineKey(id: String): String = "fact:$id"
 
-    /** A card row's fact fits one line on the cover screen; the whole fact is in the row's sheet. */
-    const val SHORT_LINE = 34
-    /** Shorter on a kept fact's row: [KEPT_SHORT] sits on its right. */
-    const val SHORT_LINE_KEPT = 26
-
-    /** A row's grey line: the fact when it fits the row, else its first words with "…". */
-    fun shortLine(row: FactRow): String {
-        val most = if (row.keptFromAi) SHORT_LINE_KEPT else SHORT_LINE
-        val v = row.value.replace(Regex("\\s+"), " ").trim()
-        if (v.length <= most) return PhraseGlue.kept(v)
-        val head = v.take(most - 1)
-        val cut = head.substringBeforeLast(' ', head).trimEnd(',', ';', ' ', '.')
-        return PhraseGlue.kept(cut) + "…"
-    }
+    /**
+     * A row's grey line: the whole fact (spaces tidied), cut by the row's width on screen (one line, "…" where it
+     * runs out), never by a count of characters, so the open Fold and the Mac show as much as they have room for
+     * (A14, walk-through 2026-11-15: "Oakfield Combi 30, serviced…" was cut with three-quarters of the row empty).
+     * The sheet has the fact whole.
+     */
+    fun shortLine(row: FactRow): String = PhraseGlue.kept(row.value.replace(Regex("\\s+"), " ").trim())
 
     private fun pageRow(r: FactRow): PageRow =
         PageRow(lineKey(r.id), r.label, shortLine(r), if (r.keptFromAi) KEPT_SHORT else "", false)

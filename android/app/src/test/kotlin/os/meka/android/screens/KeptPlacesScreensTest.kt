@@ -53,6 +53,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.LifePageRules
+import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DateNightPageRules
 import os.meka.core.domain.DateNightRules
 import os.meka.core.domain.EmergencyPageRules
@@ -284,6 +285,15 @@ class KeptPlacesScreensTest {
                     val example = EmergencyRules.read(g.hint)?.title
                     if (g.rows.any { it.title == example }) fail("$name: ${g.label}'s hint \"${g.hint}\" repeats a line")
                 }
+                // A14 (walk-through 2026-11-15): a line is cut by the row's width, not a count of characters, so the open
+                // Fold shows "the grey box file in the loft above the landing" whole; Who to call keeps the number.
+                if (fill == Fill.MANY) {
+                    val lines = page.cards.flatMap { c -> c.rows.map { it.line } }
+                    if (lines.any { it.endsWith("…") }) fail("$name: a line cut by a count of characters: $lines")
+                    val neighbour = page.cards.first().rows.firstOrNull { it.name.startsWith("Neighbour") } ?: fail("$name: no neighbour row")
+                    if ("07700 900123" !in DateGlue.plain(neighbour.line)) fail("$name: the neighbour's line \"${neighbour.line}\" has no number")
+                    if (name.startsWith("inner") && ScreenShots.assertNotEllipsized(compose, name, lines) == 0) fail("$name: no line was on screen to check")
+                }
             }
             Place.FACTS -> {
                 val v = core.factsView.value
@@ -298,6 +308,12 @@ class KeptPlacesScreensTest {
                 if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, LifePageRules.shown(it)) }
                 if (fill == Fill.EMPTY && v.summary != FactRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.count != 6) fail("$name: ${v.count} facts for six")
+                // A14 (walk-through 2026-11-15): the boiler's fact is cut by the row's width, so the open Fold shows it whole.
+                if (fill == Fill.MANY) {
+                    val lines = page.cards.flatMap { c -> c.rows.map { it.line } }
+                    if (lines.any { it.endsWith("…") }) fail("$name: a fact cut by a count of characters: $lines")
+                    if (name.startsWith("inner") && ScreenShots.assertNotEllipsized(compose, name, lines) == 0) fail("$name: no fact was on screen to check")
+                }
             }
         }
         return core

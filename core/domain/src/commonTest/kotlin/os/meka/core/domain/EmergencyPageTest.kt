@@ -49,17 +49,22 @@ class EmergencyPageTest {
     }
 
     @Test
-    fun aLongLineIsShortOnTheCardAndWholeInTheSheet() {
+    fun aLongLineIsWholeOnTheCardForTheScreenToCutAndLeadsWithThePhone() {
         val long = listOf(
             entry(EmergencySection.CALL, "Neighbour", "Pat two doors down with the spare key, 07700 900123"),
             entry(EmergencySection.DOCUMENTS, "Wills", "the grey box file in the loft above the landing"),
+            entry(EmergencySection.CALL, "Gas", "National Gas emergency line, 0800 111999, any time"),
         )
         val v = EmergencyRules.view(long)
         val p = EmergencyPageRules.page(v)
-        assertEquals("07700 900123", DateGlue.plain(p.cards[0].rows.single().line))
+        // Who to call: the number first, then the rest, so the cover screen shows the number before its one-line cut.
+        val call = p.cards[0].rows.map { DateGlue.plain(it.line) }
+        assertTrue("07700 900123 · Pat two doors down with the spare key" in call, call.toString())
+        assertTrue("0800 111999 · National Gas emergency line, any time" in call, call.toString())
+        // Where things are: the whole line, never a count of characters with "…" (A14: cut with ~1,400 px spare).
         val docs = DateGlue.plain(p.cards[1].rows.single().line)
-        assertEquals("the grey box file in the loft…", docs)
-        assertTrue(docs.length <= EmergencyPageRules.SHORT_LINE)
+        assertEquals("the grey box file in the loft above the landing", docs)
+        assertTrue(p.cards.flatMap { it.rows }.none { it.line.endsWith("…") })
         assertEquals("the grey box file in the loft above the landing", EmergencyPageRules.line(v, p.cards[1].rows.single().key)!!.detail)
     }
 

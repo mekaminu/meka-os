@@ -40,22 +40,26 @@ object EmergencyPageRules {
         EmergencySection.ACCOUNTS -> "None yet · + Add → A key account, by name"
     }
 
-    /** A card row's grey line fits one line on the cover screen; the whole details are in the row's sheet. */
+    /**
+     * Under Who to call, details longer than this lead with the phone number, so the number is what the cover screen
+     * shows before the app's own one-line cut (A14, walk-through 2026-11-15).
+     */
     const val SHORT_LINE = 34
 
     /**
-     * A row's grey line: the details when they fit [SHORT_LINE]; under Who to call, the phone number as typed when they
-     * don't; otherwise their first words with "…" (the sheet has them all). [NAME_ONLY] for a name alone.
+     * A row's grey line: the whole details (spaces tidied), cut by the row's width on screen, never by a count of
+     * characters, so the open Fold and the Mac show as much as they have room for (A14: "the grey box file in the
+     * loft…" was cut with ~1,400 px spare). Under Who to call, long details lead with the phone number as typed ("07700
+     * 900123 · Pat two doors down with the spare key"), so the cover screen always shows the number. [NAME_ONLY] for a
+     * name alone. The sheet has the details as typed.
      */
     fun shortLine(r: EmergencyRow): String {
-        val d = r.detail ?: return NAME_ONLY
-        if (d.length <= SHORT_LINE) return PhraseGlue.kept(d)
-        if (r.phone != null) {
-            EmergencyRules.digitRuns(d).firstOrNull(EmergencyRules::isPhone)?.let { return PhraseGlue.kept(it.trim()) }
-        }
-        val head = d.take(SHORT_LINE - 1)
-        val cut = head.substringBeforeLast(' ', head).trimEnd(',', ';', ' ', '.')
-        return PhraseGlue.kept(cut) + "…"
+        val d = r.detail?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() } ?: return NAME_ONLY
+        if (d.length <= SHORT_LINE || r.phone == null) return PhraseGlue.kept(d)
+        val phone = EmergencyRules.digitRuns(d).firstOrNull(EmergencyRules::isPhone)?.trim() ?: return PhraseGlue.kept(d)
+        val rest = listOf(d.substringBefore(phone), d.substringAfter(phone))
+            .map { it.trim().trim(',', ';', '.', ' ') }.filter { it.isNotEmpty() }.joinToString(", ")
+        return PhraseGlue.kept(if (rest.isEmpty()) phone else "$phone · $rest")
     }
 
     private fun pageRow(r: EmergencyRow): PageRow = PageRow(lineKey(r.id), r.title, shortLine(r), "", false)

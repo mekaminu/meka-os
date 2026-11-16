@@ -52,16 +52,23 @@ class FactsPageTest {
     }
 
     @Test
-    fun aLongFactIsShortOnTheCardAndWholeInTheSheet() {
-        val long = listOf(fact("Boiler", "Oakfield Combi 30, serviced every autumn by the plumber on the high street"))
+    fun aLongFactIsWholeOnTheCardForTheScreenToCut() {
+        val long = listOf(
+            fact("Boiler", "Oakfield Combi 30,  serviced every autumn by the plumber on the high street"),
+            fact("Spare key", "with the neighbour at number twelve, behind the blue door", aiOff = true),
+        )
         val v = FactRules.view(long)
-        val line = DateGlue.plain(FactsPageRules.page(v).cards.single().rows.single().line)
-        assertTrue(line.length <= FactsPageRules.SHORT_LINE, "the card's line is $line")
-        assertTrue(line.endsWith("…"))
-        assertTrue(long.single().value.startsWith(line.removeSuffix("…")))
-        // The sheet has it whole.
-        val row = FactsPageRules.fact(v, FactsPageRules.lineKey(long.single().id))!!
-        assertEquals(long.single().value, row.value)
+        val rows = FactsPageRules.page(v).cards.flatMap { it.rows }
+        // The whole fact, spaces tidied; the row cuts it by its width on screen (A14: "Oakfield Combi 30, serviced…"
+        // with three-quarters of the open Fold's row empty), kept or not.
+        assertEquals(
+            setOf("Oakfield Combi 30, serviced every autumn by the plumber on the high street", "with the neighbour at number twelve, behind the blue door"),
+            rows.map { DateGlue.plain(it.line) }.toSet(),
+        )
+        assertTrue(rows.none { it.line.endsWith("…") })
+        // The sheet has it as typed.
+        val row = FactsPageRules.fact(v, FactsPageRules.lineKey(long.first().id))!!
+        assertEquals(long.first().value, row.value)
     }
 
     @Test

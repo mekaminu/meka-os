@@ -383,6 +383,32 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-15 A14: fails when one of [texts] (matched whole) is drawn with its last line ellipsized, as
+     * Facts' boiler and the Emergency card's loft line were cut on the open Fold with most of the row empty. Returns how
+     * many of [texts] were on screen, so a caller can insist one was checked.
+     */
+    fun assertNotEllipsized(compose: ComposeContentTestRule, name: String, texts: Collection<String>): Int {
+        val cut = mutableListOf<String>()
+        var seen = 0
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && text in texts && action != null) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.let { r ->
+                    seen++
+                    if (r.isLineEllipsized(r.lineCount - 1)) cut += text
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (cut.isNotEmpty()) fail("$name cuts these with \u2026:\n" + cut.joinToString("\n") { "- \"$it\"" })
+        return seen
+    }
+
+    /**
      * Fails when one of [texts] (matched whole) is drawn in less room than its natural one-line width. For a pill whose
      * text node is measured for its intrinsics as well as laid out (A6's "Other" chip on a Board card), the text layout
      * [assertNotCut] reads can be the intrinsic pass's, not the drawn one; the node's laid-out width is what's drawn.
