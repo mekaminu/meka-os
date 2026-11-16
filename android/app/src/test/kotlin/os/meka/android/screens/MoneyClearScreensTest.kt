@@ -42,8 +42,9 @@ import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 
 /**
- * Money redesign, Plan (mockup): Clear my cards on the Plan tab. Two invented credit cards with their statements and
- * APRs typed in their sheets; the card lists both with their rates, the Debt-free and Interest tiles fill, switching to
+ * Money redesign, Plan (mockup): Clear my cards on the Plan tab, on the Money shots' month ([MoneyShotMonth]: walk-through
+ * 2026-11-15 A13, its Rewards card was on no other shot). The month's two cards with their statements and APRs typed in
+ * their sheets; the card lists both with their rates, the Debt-free and Interest tiles fill, switching to
  * Smallest balance first changes Obi's line, and Use this plan puts "Clear my cards by …" in Goals. Shot on the cover
  * screen and the open Fold in Dark. Invented data (rule 13).
  */
@@ -62,19 +63,6 @@ class MoneyClearScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val CURRENT = "Date,Description,Amount\n" +
-            "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "15/09/2026,STREAMLY.COM,-10.99\n" +
-            "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/10/2026,TESCO STORES 2041,-64.90\n" +
-            "15/10/2026,STREAMLY.COM,-10.99\n"
-        const val CARD = "Date,Description,Amount\n" +
-            "06/10/2026,AMAZON MARKETPLACE,-32.49\n" +
-            "13/10/2026,DELIVEROO,-21.80\n"
-        const val CARD2 = "Date,Description,Amount\n" +
-            "08/10/2026,OAKFIELD GARAGE,-45.00\n"
     }
 
     private fun open(): MekaCore {
@@ -88,13 +76,9 @@ class MoneyClearScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", CURRENT).refused)
-            check(!core.importMoneyStatement("Platinum Card", CARD).refused)
-            check(!core.importMoneyStatement("Rewards Card", CARD2).refused)
-            core.tick()
-            for ((name, owed, apr) in listOf(Triple("Platinum Card", "£4,200", "24.9%"), Triple("Rewards Card", "£1,800", "22.9%"))) {
+            MoneyShotMonth.fill(core)
+            for ((name, owed, apr) in listOf(Triple(MoneyShotMonth.CARD_NAME, "£4,200", "24.9%"), Triple(MoneyShotMonth.REWARDS_NAME, "£1,800", "22.9%"))) {
                 val card = core.moneyView.value.accounts.firstOrNull { it.name == name } ?: error("no $name")
-                check(!core.moneyCardKind(card.id, card = true, charge = false).refused)
                 check(!core.moneyCardField(card.id, MoneyCards.STATEMENT, owed).refused)
                 check(!core.moneyCardField(card.id, MoneyCards.APR, apr).refused)
             }
@@ -143,7 +127,13 @@ class MoneyClearScreensTest {
 
     private fun plan(core: MekaCore) {
         pick(MoneyTab.PLAN)
-        if (core.moneyView.value.clear == null) fail("no cards to clear on this month")
+        val v = core.moneyView.value
+        val clear = v.clear ?: fail("no cards to clear on this month")
+        // Walk-through 2026-11-15 A13 (g1a 10): the cards Plan clears are the cards Bills and Accounts list, no others.
+        val onBills = v.cards?.rows.orEmpty().map { it.id }.toSet()
+        if (clear.rows.map { it.id }.toSet() != onBills) fail("Clear my cards lists ${clear.rows.map { it.name }}, Bills ${v.cards?.rows?.map { it.name }}")
+        val names = v.accounts.map { it.name }.toSet()
+        if (!names.containsAll(MoneyShotMonth.CARD_NAMES)) fail("Accounts has $names")
         scrollTo("money-clear-card")
     }
 

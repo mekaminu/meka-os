@@ -94,6 +94,8 @@ class MoneyBillsLayoutScreensTest {
             core.tick()
             val card = core.moneyView.value.accounts.firstOrNull { it.name == "Platinum Card" } ?: error("no card account")
             check(!core.moneyCardKind(card.id, card = true, charge = false).refused)
+            // Walk-through 2026-11-15 A13: the Rewards Card Plan's Clear my cards lists is on Bills' CARDS too.
+            MoneyShotMonth.addRewards(core)
             listOf("Refund · Shoe Shop · £40", "Refund · Lamp Store · £18", "Refund · Kettle Co · £25", "Refund · Book Barn · £9")
                 .forEach { core.addWaiting(it, null, null) }
             core.tick()
