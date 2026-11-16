@@ -70,7 +70,8 @@ object GiftsPageRules {
         val coming = rows.filter { r -> r.day?.let { it - today in 0..COMING_DAYS } == true }.map { r ->
             PageRow(rowKey(r.id), r.title, r.note.removePrefix("✓ "), if (r.sorted) SORTED else PeoplePageRules.dayWord(r.day!!, today), r.noteLit)
         }
-        val all = rows.map { r -> PageRow(rowKey(r.id), r.title, r.line, "", false) }
+        // Found and fixing, week 4, A9: the ideas the third number counts are named on their occasion's row.
+        val all = rows.map { r -> PageRow(rowKey(r.id), r.title, listOfNotNull(r.line, ideasLine(r)).joinToString(" · "), "", false) }
         return LifePageView(
             TITLE, INFO,
             listOf(nextTile, orderTile, ideasTile),
@@ -81,6 +82,24 @@ object GiftsPageRules {
             ADD_TITLE, ADD_CHOICES,
         )
     }
+
+    /** "Idea: Lego" · "Ideas: Lego, A ball" · "Ideas: Lego, A ball +1 more" · null with none. */
+    fun ideasLine(r: GiftRow): String? {
+        val i = r.ideas
+        if (i.isEmpty()) return null
+        val named = i.take(2).joinToString(", ") { short(it.text) }
+        return (if (i.size == 1) "Idea: " else "Ideas: ") + named + if (i.size > 2) " +${i.size - 2} more" else ""
+    }
+
+    /** An idea cut at [IDEA_CHARS] on a word ("A space Lego set with the…"), whole in the occasion's sheet. */
+    private fun short(t: String): String {
+        val w = t.trim()
+        if (w.length <= IDEA_CHARS) return w
+        val cut = w.take(IDEA_CHARS).substringBeforeLast(' ').trimEnd(',', ' ')
+        return (cut.ifEmpty { w.take(IDEA_CHARS) }) + "…"
+    }
+
+    const val IDEA_CHARS = 26
 
     /** The occasion behind a row's key, or null when it's gone (removed while the sheet was opening). */
     fun occasion(view: GiftsView, rowKey: String): GiftRow? = occasionId(rowKey)?.let { id -> view.rows.firstOrNull { it.id == id } }

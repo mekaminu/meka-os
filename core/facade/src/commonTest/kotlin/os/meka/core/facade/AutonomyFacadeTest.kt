@@ -58,7 +58,9 @@ class AutonomyFacadeTest {
         val fold = core()
         val mac = core("mac")
         fold.answerTrustOffer("add_task", yes = true)
-        assertEquals("Navilife does 1 thing on its own · each with Undo and in Activity", fold.autonomyView.value.summary)
+        // A9: the header counts the lit rows: Add what you ask for, Add a task and Inbox autopilot.
+        assertEquals("Navilife does 3 things on its own · each with Undo and in Activity", fold.autonomyView.value.summary)
+        assertEquals(3, AutonomyRules.lit(fold.autonomyView.value.sections))
         assertTrue(fold.row("add_task").onItsOwn)
         assertEquals(AutonomyRules.ASK_FIRST, fold.row("add_task").action)
 
@@ -103,7 +105,8 @@ class AutonomyFacadeTest {
         assertEquals("Navilife may offer again after 5 yeses in a row.", c.resetTrust("shopping"))
         assertNull(c.row("shopping").action)
         assertNull(c.resetTrust("nonsense"))
-        assertEquals(AutonomyRules.NONE_LINE, c.autonomyView.value.summary)
+        // Add what you ask for and Inbox autopilot are still lit (on by default).
+        assertEquals(AutonomyRules.onItsOwnLine(2), c.autonomyView.value.summary)
 
         addTask("Milk")
         val answer = assertIs<AskOutcome.Answered>(c.askMeka("milk?")).answer
@@ -149,9 +152,10 @@ class AutonomyFacadeTest {
         fold.syncNow()
         assertEquals(AutonomyRules.MAIL_ON_LINE, fold.row(AutonomyRules.MAIL_AUTOPILOT).line)
         assertEquals("Turn off", fold.row(AutonomyRules.MAIL_AUTOPILOT).action)
-        // It doesn't count as busy on a fresh install (nothing connected yet).
-        assertEquals(AutonomyRules.NONE_LINE, fold.autonomyView.value.summary)
+        // A9: its lit dot counts, beside Add what you ask for's (never "asks before everything" over them).
+        assertEquals(AutonomyRules.onItsOwnLine(2), fold.autonomyView.value.summary)
         assertTrue(fold.resetTrust(AutonomyRules.MAIL_AUTOPILOT)!!.startsWith("Autopilot is off"))
+        assertEquals(AutonomyRules.onItsOwnLine(1), fold.autonomyView.value.summary)
         assertEquals(AutonomyRules.MAIL_OFF_LINE, fold.row(AutonomyRules.MAIL_AUTOPILOT).line)
         fold.syncNow(); mac.syncNow()
         assertEquals("Turn on", mac.row(AutonomyRules.MAIL_AUTOPILOT).action)
@@ -228,7 +232,7 @@ class AutonomyAskFacadeTest {
         assertTrue(status.text.startsWith("Yes · Paused since 17:15"))
 
         val resumed = assertIs<AskOutcome.Answered>(mac.talk("resume Navilife", emptyList())).answer
-        assertEquals("Resumed · ${AutonomyRules.NONE_LINE}.", resumed.text)
+        assertEquals("Resumed · ${AutonomyRules.onItsOwnLine(2)}.", resumed.text)
         assertFalse(mac.autonomyView.value.paused)
         assertNull(mac.autonomyView.value.todayLine)
         mac.syncNow(); fold.syncNow()

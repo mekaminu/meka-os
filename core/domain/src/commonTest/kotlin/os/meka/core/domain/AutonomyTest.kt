@@ -92,4 +92,31 @@ class AutonomyTest {
         assertEquals(emptyList(), long)
         assertFalse("Renewals and promises on Waiting" in MailFindAutoRules.ON_LINE)
     }
+
+    /** Found and fixing, week 4, A9: the header counts the lit rows, never "asks before everything" over a lit dot. */
+    @Test
+    fun theSummaryCountsTheLitRows() {
+        val on = MailAutopilotSetting(on = true, changedAtMs = null)
+        val off = MailAutopilotSetting(on = false, changedAtMs = null)
+        val fresh = AutonomyRules.view(emptyMap(), AutonomySetting(false, null), cal, 0L, on, mailFinds = false, direct = DirectAddSetting(askFirst = false))
+        assertEquals(2, AutonomyRules.lit(fresh.sections))
+        assertEquals("Navilife does 2 things on its own · each with Undo and in Activity", fresh.summary)
+        val one = AutonomyRules.view(
+            mapOf(TrustKind.ADD_TASK to TrustRules.answered(true)), AutonomySetting(false, null), cal, 0L, off, mailFinds = false,
+            direct = DirectAddSetting(askFirst = false),
+        )
+        assertEquals("Navilife does 2 things on its own · each with Undo and in Activity", one.summary)
+        val none = AutonomyRules.view(emptyMap(), AutonomySetting(false, null), cal, 0L, off, mailFinds = false, direct = DirectAddSetting(askFirst = true))
+        assertEquals(0, AutonomyRules.lit(none.sections))
+        assertEquals(AutonomyRules.NONE_LINE, none.summary)
+        val many = AutonomyRules.view(
+            mapOf(TrustKind.ADD_TASK to TrustRules.answered(true), TrustKind.ADD_SHOPPING to TrustRules.answered(true)),
+            AutonomySetting(false, null), cal, 0L, on, mailFinds = true, direct = DirectAddSetting(askFirst = false),
+        )
+        assertEquals("Navilife does ${AutonomyRules.lit(many.sections)} things on its own · each with Undo and in Activity", many.summary)
+        assertEquals(5, AutonomyRules.lit(many.sections))
+        val paused = AutonomyRules.view(emptyMap(), AutonomySetting(true, null), cal, 0L, on, mailFinds = true, direct = DirectAddSetting(askFirst = false))
+        assertEquals(0, AutonomyRules.lit(paused.sections))
+        assertEquals("Paused · Navilife asks before everything", paused.summary)
+    }
 }

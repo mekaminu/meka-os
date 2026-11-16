@@ -26,6 +26,15 @@ class GiftsPageTest {
         assertEquals(PageTile("Sat", "Theo's birthday", true), p.tileAt(0))
         assertEquals(PageTile("1", "gift to sort soon", true), p.tileAt(1))
         assertEquals(PageTile("3", "gift ideas noted", false), p.tileAt(2))
+        // A9: the ideas counted are named on their occasions' rows.
+        val all = p.cardAt(1).rows
+        assertTrue(all.first { it.name == "Theo's birthday" }.line.endsWith(" · Ideas: Lego, A ball"))
+        assertTrue(all.first { it.name == "Jo's birthday" }.line.endsWith(" · Idea: Book"))
+        assertTrue("Idea" !in all.first { it.name == "Mum's birthday" }.line)
+        val many = GiftsPageRules.page(view(occ("a", "Theo", 10, 17, ideas = listOf("Lego", "A ball", "Kite", "Bike"))), today)
+        assertTrue(many.cardAt(1).rows.single().line.endsWith(" · Ideas: Lego, A ball +2 more"))
+        val long = GiftsPageRules.page(view(occ("a", "Theo", 10, 17, ideas = listOf("A space Lego set with the rocket and launch pad"))), today)
+        assertTrue(long.cardAt(1).rows.single().line.endsWith(" · Idea: A space Lego set with the…"))
         assertEquals(listOf("birthday", "anniversary"), p.addChoices.map { it.key })
     }
 

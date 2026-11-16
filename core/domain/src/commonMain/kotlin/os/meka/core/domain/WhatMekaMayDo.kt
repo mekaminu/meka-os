@@ -243,16 +243,34 @@ object AutonomyRules {
 
     /**
      * "The mic should just add it", slice 1: "Add what you ask for" leads Your lists ([DirectAddRules.row]) — on unless
-     * Meka chose Ask first. The summary is unchanged: adding what he asked for isn't Navilife acting on its own.
+     * Meka chose Ask first.
+     *
+     * Found and fixing, week 4, A9: the summary counts the page's **lit rows** ([lit]), so it never says "asks before
+     * everything" over Add what you ask for's lit dot ("are added at once") or Inbox autopilot's, and "does 1 thing"
+     * never sits over two lit rows. Paused, it is the paused line as before (every row then says it asks first).
      */
     fun view(
         states: Map<TrustKind, TrustState>, setting: AutonomySetting, cal: LocalCalendar, nowMs: Long,
         mail: MailAutopilotSetting, mailFinds: Boolean, direct: DirectAddSetting,
     ): AutonomyView {
         val v = view(states, setting, cal, nowMs, mail, mailFinds)
-        return v.copy(sections = v.sections.map { s ->
+        val sections = v.sections.map { s ->
             if (s.label == LISTS_LABEL) s.copy(rows = listOf(DirectAddRules.row(direct, setting.paused)) + s.rows) else s
-        })
+        }
+        return v.copy(
+            summary = if (setting.paused) v.summary else onItsOwnLine(lit(sections)),
+            sections = sections,
+        )
+    }
+
+    /** How many rows are lit (Navilife does them on its own right now). */
+    fun lit(sections: List<AutonomySection>): Int = sections.sumOf { s -> s.rows.count { it.onItsOwn } }
+
+    /** The summary for [n] lit rows while not paused. */
+    fun onItsOwnLine(n: Int): String = when (n) {
+        0 -> NONE_LINE
+        1 -> "Navilife does 1 thing on its own · each with Undo and in Activity"
+        else -> "Navilife does $n things on its own · each with Undo and in Activity"
     }
 
     /**
