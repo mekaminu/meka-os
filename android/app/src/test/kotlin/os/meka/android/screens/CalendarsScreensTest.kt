@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -160,7 +161,7 @@ class CalendarsScreensTest {
         }
     }
 
-    private fun calendars(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
+    private fun calendars(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, shot: Boolean = true): MekaCore {
         val core = setUp(theme, fill)
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -173,7 +174,7 @@ class CalendarsScreensTest {
         turns()
         compose.waitForIdle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("calendars", name))
+        if (shot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("calendars", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -233,9 +234,39 @@ class CalendarsScreensTest {
                 // Quality gate slice 34: the feed is titled by what it brings, its source under it.
                 ScreenShots.assertShows(compose, name, "Bank holidays")
                 if (list.none { it.title == "Bank holidays" }) fail("$name: the bank holidays feed is titled ${list.map { it.title }}")
+                everyCalendarOnToday(name, core)
             }
         }
         return core
+    }
+
+    /**
+     * Walk-through week 4, A13: Calendar's legend shows Kids and Personal, but the Calendars shots showed only the
+     * accounts ("Personal" is the Google account's title) with ON TODAY under the fold, so the Kids calendar looked
+     * missing. Every calendar the events come in has its ON TODAY row (the Google account's Kids and Personal, the
+     * Outlook one), named as Calendar names it.
+     */
+    private fun everyCalendarOnToday(name: String, core: MekaCore) {
+        val rows = core.calendarsOnToday.value.map { it.label }
+        val wanted = listOf("Kids", "Personal")
+        wanted.filter { w -> rows.none { it == w } }.takeIf { it.isNotEmpty() }?.let { fail("$name: ON TODAY has $rows, missing $it") }
+        if (rows.size < 3) fail("$name: ON TODAY has $rows, not one row for each of the three calendars with events")
+    }
+
+    /** The many shot scrolled to ON TODAY, so the shots show the Kids calendar beside Personal (walk-through week 4, A13). */
+    private fun onTodayShot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
+        val core = calendars(name, Fill.MANY, theme, shot = false)
+        compose.onAllNodes(hasText("ON TODAY"), useUnmergedTree = true)[0].performScrollTo()
+        turns()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("calendars", name))
+        ScreenShots.assertSensible(compose, name)
+        core.calendarsOnToday.value.forEach { c ->
+            if (compose.onAllNodes(hasContentDescription("${c.label} on Today")).fetchSemanticsNodes().isEmpty()) {
+                fail("$name: no ON TODAY row for ${c.label}")
+            }
+        }
+        ScreenShots.assertShows(compose, name, "Kids")
+        ScreenShots.assertShows(compose, name, "Personal")
     }
 
     /** Quality gate slice 33: on the cover screen an account's actions sit under its words, never squeezing them. */
@@ -320,5 +351,7 @@ class CalendarsScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { calendars("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerEmpty() { calendars("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { calendars("inner-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyOnToday() { onTodayShot("cover-dark-many-on-today") }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyOnTodayLight() { onTodayShot("cover-light-many-on-today", ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun byHand() { byHand(calendars("inner-dark-by-hand", Fill.ONE)) }
 }

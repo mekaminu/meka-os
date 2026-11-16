@@ -405,6 +405,18 @@ class TodayScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
         if (core.today.value.timeline.head == null) fail("$name: the day has no schedule")
+        // Walk-through week 4, A13: the setup card said "11 steps left" here and "12" on every other Today shot. Not a
+        // fixture slip: this day has his commute set (Work's 50 minutes each way), so Setup's Commute step is ticked and
+        // one fewer is left. The card's count is Setup's own, and the one step it moved is the commute.
+        core.setupView.value?.let { view ->
+            val commute = view.steps.firstOrNull { it.key == os.meka.core.domain.SetupRules.COMMUTE_KEY }
+                ?: return fail("$name: Setup has no Commute step")
+            if (commute.state != os.meka.core.domain.SetupState.DONE) fail("$name: the commute is set but Setup's step is ${commute.state}")
+            view.todayLine?.let { line ->
+                if (compose.onAllNodes(hasText(line, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() &&
+                    name.startsWith("inner")) fail("$name: the setup card doesn't say Setup's own count (\"$line\")")
+            }
+        }
         ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[2])
         // The open Fold's right column lays out what fits its screen; the late dinner is under it there.
         if (name.startsWith("cover")) ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
