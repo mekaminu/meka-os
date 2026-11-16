@@ -63,7 +63,7 @@ data class WorkingOnView(
     val openJobs: Int get() = jobs.count { it.canStop }
 
     companion object {
-        val EMPTY = WorkingOnView(emptyList(), StandingErrand.entries.map { WorkingOnSwitch(it, true) }, WorkingOnRules.EMPTY_LINE)
+        val EMPTY = WorkingOnView(emptyList(), StandingErrand.entries.map { WorkingOnSwitch(it, true) }, WorkingOnRules.emptyLine(StandingErrand.entries.size))
     }
 }
 
@@ -77,7 +77,13 @@ object WorkingOnRules {
     const val TITLE = "Obi is working on"
     const val ROW_LINE = "Renewals, birthdays, follow-ups, mail and school he keeps an eye on"
     const val INTRO = "Obi keeps an eye on these for you and says when he needs you. He never sends, books or buys anything without your tap."
-    const val EMPTY_LINE = "Nothing to keep an eye on yet · add a renewal, a birthday, something you're waiting on, your mail or the children and Obi watches it here"
+    /**
+     * Walk-through 2026-11-15 A8: with errands on and nothing yet for them, the head says they're on ("3 standing
+     * errands on · nothing for them to watch yet · …") rather than "Nothing to keep an eye on yet" over their Turn off.
+     */
+    fun emptyLine(on: Int): String =
+        if (on <= 0) ALL_OFF_LINE
+        else "${plural(on, "standing errand")} on · nothing for them to watch yet · add a renewal, a birthday, something you're waiting on, your mail or the children"
     const val ALL_OFF_LINE = "Every standing errand is off · turn one on below"
     const val SWITCHES = "Standing errands"
     /** The heading over the standing errands' cards, under the errands he asked for (part 3 slice 4). */
@@ -265,7 +271,7 @@ object WorkingOnRules {
         // says there's nothing to keep an eye on over it.
         val summary = when {
             switches.none { it.on } && open == 0 && calls.isEmpty() -> ALL_OFF_LINE
-            cards.isEmpty() && open == 0 && calls.isEmpty() -> EMPTY_LINE
+            cards.isEmpty() && open == 0 && calls.isEmpty() -> emptyLine(switches.count { it.on })
             cards.isEmpty() && open == 0 && openCalls == 0 -> "${plural(calls.size, "call")} finished$needs"
             cards.isEmpty() && open == 0 -> "Holding ${plural(openCalls, "call card")} for you$needs"
             cards.isEmpty() -> "On ${plural(open, "errand")} for you$callsPart$needs"

@@ -306,8 +306,11 @@ class WorkingOnScreensTest {
         val cards = compose.onAllNodes(hasTestTag("working-on-card"), useUnmergedTree = true).fetchSemanticsNodes().size
         when (fill) {
             Fill.EMPTY -> {
-                if (v.summary != WorkingOnRules.EMPTY_LINE) fail("$name: the summary reads \"${v.summary}\"")
+                if (v.summary != WorkingOnRules.emptyLine(v.switches.count { it.on })) fail("$name: the summary reads \"${v.summary}\"")
                 if (cards != 0) fail("$name: $cards cards with nothing to watch")
+                // Walk-through 2026-11-15 A8: never "Nothing to keep an eye on yet" over errands that are on.
+                if (onScreen("Nothing to keep an eye on yet")) fail("$name: the head says nothing is watched over errands that are on")
+                if (!onScreen("standing errands on")) fail("$name: the head doesn't say its errands are on")
             }
             Fill.ONE -> {
                 if (cards != 1) fail("$name: $cards cards, not 1")
@@ -370,6 +373,8 @@ class WorkingOnScreensTest {
         val fresh = rows.first()
         if (!fresh.canCall || fresh.business != "Rosa's Kitchen" || fresh.peopleTile != "4") fail("$name: the new card isn't the same brief: $fresh")
         if (rows.last().canTryAgain || rows.last().triedAgainLine == null) fail("$name: the old card can still be tried again")
+        // Walk-through 2026-11-15 A8: they were full at 7 and offered 21:00, so the new card asks for 21:00, not the full slot.
+        if (fresh.windowTile != "21:00–22:00") fail("$name: the new card asks for ${fresh.windowTile}, not the 21:00 they offered")
         if (!onScreen(BookingCallRules.TRIED_AGAIN)) fail("$name: Try again didn't say so")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("working-on", "cover-dark-tried-again"))
         ScreenShots.assertNoBrokenWords(compose, name)

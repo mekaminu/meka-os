@@ -21,6 +21,23 @@ class WorkingOnTest {
     )
 
     @Test
+    fun anEmptyPaneSaysItsErrandsAreOnNeverNothingToKeepAnEyeOn() {
+        // Walk-through 2026-11-15 A8: the head sat "Nothing to keep an eye on yet" over errands that are on (Turn off).
+        val all = WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today)
+        assertEquals("5 standing errands on · nothing for them to watch yet · add a renewal, a birthday, something you're waiting on, your mail or the children", all.summary)
+        assertTrue(all.switches.all { it.on && it.action == "Turn off" })
+        val two = WorkingOnRules.view(WorkingOnSetting(setOf(StandingErrand.INBOX, StandingErrand.SCHOOL, StandingErrand.RENEWALS)),
+            RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today)
+        assertTrue(two.summary.startsWith("2 standing errands on · nothing for them to watch yet"), two.summary)
+        assertEquals(two.switches.count { it.on }, 2)
+        assertEquals("1 standing errand on · nothing for them to watch yet · add a renewal, a birthday, something you're waiting on, your mail or the children",
+            WorkingOnRules.emptyLine(1))
+        assertEquals(WorkingOnRules.ALL_OFF_LINE, WorkingOnRules.view(WorkingOnSetting(StandingErrand.entries.toSet()),
+            RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today).summary)
+        assertFalse(all.summary.contains("Nothing to keep an eye on"))
+    }
+
+    @Test
     fun theBirthdayKeeperSpeaksUpTenDaysAheadAndOnTheDay() {
         assertNull(WorkingOnRules.birthdays(GiftsView.EMPTY, today))
         val far = WorkingOnRules.birthdays(GiftsView(listOf(gift("Sam's birthday", 20)), "x"), today)!!

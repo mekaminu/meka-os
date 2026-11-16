@@ -478,7 +478,38 @@ object BookingCallRules {
         if (c.state != BookingCallState.NOT_BOOKED && c.state != BookingCallState.FAILED) return false
         val today = cal.epochDayOf(nowMs)
         if (c.day < today) return false
-        return !(c.day == today && c.toMin != null && c.toMin <= cal.minuteOfDay(nowMs))
+        val to = retryWindow(c)?.second ?: c.toMin
+        return !(c.day == today && to != null && to <= cal.minuteOfDay(nowMs))
+    }
+
+    private val OFFER_WORD = Regex("""\b(offered|offer|could do|can do|instead|free at|available at|have a table at|has a table at|have space at|has space at)\b""", RegexOption.IGNORE_CASE)
+    private val TIME_24 = Regex("""\b([01]?\d|2[0-3])[:.]([0-5]\d)\b(?!\s?(am|pm))""", RegexOption.IGNORE_CASE)
+    private val TIME_12 = Regex("""\b(1[0-2]|[1-9])(?:[:.]([0-5]\d))?\s?(am|pm)\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Walk-through 2026-11-15 A8: the time the business offered instead, from the call's [BookingCall.result] ("They're
+     * full at 7 on Saturday · they offered 21:00" → 21:00), minutes of the day: the first time named after an offer word
+     * that falls outside the card's window. Null when nothing was offered.
+     */
+    fun offeredMin(c: BookingCall): Int? {
+        val text = c.result ?: return null
+        val at = OFFER_WORD.find(text) ?: return null
+        val rest = text.substring(at.range.last + 1)
+        val times = (TIME_24.findAll(rest).map { it.range.first to it.groupValues[1].toInt() * 60 + it.groupValues[2].toInt() } +
+            TIME_12.findAll(rest).map { m ->
+                val h = m.groupValues[1].toInt() % 12 + if (m.groupValues[3].equals("pm", ignoreCase = true)) 12 else 0
+                m.range.first to h * 60 + (m.groupValues[2].toIntOrNull() ?: 0)
+            }).sortedBy { it.first }.map { it.second }
+        val from = c.fromMin
+        val to = c.toMin ?: from?.plus(60)
+        return times.firstOrNull { t -> from == null || to == null || t < from || t >= to }
+    }
+
+    /** Try again's window: the offered time ([offeredMin]) for as long as the old window ran (an hour without one), else null. */
+    fun retryWindow(c: BookingCall): Pair<Int, Int>? {
+        val t = offeredMin(c) ?: return null
+        val length = if (c.fromMin != null && c.toMin != null && c.toMin > c.fromMin) c.toMin - c.fromMin else 60
+        return t to minOf(t + length, 24 * 60 - 1)
     }
 
     /** The fields Try again's new card writes: the old brief (who, number, what, day, window, people, note), as a draft. */
@@ -487,8 +518,10 @@ object BookingCallRules {
         c.number?.let { put(BookingCallFields.NUMBER, it.fv()) }
         put(BookingCallFields.WHAT, c.what.fv())
         put(BookingCallFields.DAY, c.day.fv())
-        c.fromMin?.let { put(BookingCallFields.FROM, it.toLong().fv()) }
-        c.toMin?.let { put(BookingCallFields.TO, it.toLong().fv()) }
+        // Walk-through 2026-11-15 A8: when they offered another time, the new card asks for that one, not the full slot.
+        val window = retryWindow(c)
+        (window?.first ?: c.fromMin)?.let { put(BookingCallFields.FROM, it.toLong().fv()) }
+        (window?.second ?: c.toMin)?.let { put(BookingCallFields.TO, it.toLong().fv()) }
         c.people?.let { put(BookingCallFields.PEOPLE, it.toLong().fv()) }
         c.note?.let { put(BookingCallFields.NOTE, it.fv()) }
         put(BookingCallFields.STATE, BookingCallState.DRAFT.code.fv())

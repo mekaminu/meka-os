@@ -25,7 +25,7 @@ class ObiErrandAppsTest {
 
     @Test
     fun hisErrandsCountInTheSummaryAndTheDailyRow() {
-        assertEquals(WorkingOnRules.EMPTY_LINE, view(emptyList()).summary)
+        assertEquals(WorkingOnRules.emptyLine(StandingErrand.entries.size), view(emptyList()).summary)
         val one = view(listOf(job("a", ObiJobState.WORKING)))
         assertEquals("On 1 errand for you · nothing needs you", one.summary)
         assertEquals(DailyLine("On 1 errand", false), WorkingOnRules.dailyLine(one))

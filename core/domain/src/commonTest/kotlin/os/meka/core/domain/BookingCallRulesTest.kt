@@ -165,8 +165,9 @@ class BookingCallRulesTest {
         assertEquals("Rosa's Kitchen", fresh.business)
         assertEquals("+441234567890", fresh.number)
         assertEquals(saturday, fresh.day)
-        assertEquals(19 * 60, fresh.fromMin)
-        assertEquals(20 * 60, fresh.toMin)
+        // Walk-through 2026-11-15 A8: they were full at 7 and offered 21:00, so the new card asks for 21:00, not the full slot.
+        assertEquals(21 * 60, fresh.fromMin)
+        assertEquals(22 * 60, fresh.toMin)
         assertEquals(4, fresh.people)
         assertEquals("a quiet table", fresh.note)
         assertNull(fresh.result)
@@ -179,6 +180,32 @@ class BookingCallRulesTest {
         assertEquals(BookingCallRules.TRIED_AGAIN_LINE, old.triedAgainLine)
         assertEquals(BookingCallRules.TRIED_AGAIN_LINE, calls.tryAgain(id, cal))
         assertEquals(2, calls.all().size)
+    }
+
+    @Test
+    fun tryAgainAsksForTheTimeTheyOfferedNotTheFullSlot() {
+        fun call(result: String?, from: Int? = 19 * 60, to: Int? = 20 * 60) = BookingCall(
+            "c", "Rosa's", null, "Table for 4", saturday, from, to, 4, null, BookingCallState.NOT_BOOKED, 0, null, result, false,
+        )
+        assertEquals(21 * 60, BookingCallRules.offeredMin(call("Not booked · they're full at 7 on Saturday · they offered 21:00")))
+        assertEquals(21 * 60 + 30, BookingCallRules.offeredMin(call("Full at 19:00 · they could do 9.30pm")))
+        assertEquals(17 * 60 + 45, BookingCallRules.offeredMin(call("No tables then · free at 17:45 or 21:00")))
+        // A time inside the asked-for window isn't an offer of another one; nor is a time said before any offer.
+        assertNull(BookingCallRules.offeredMin(call("Full from 19:30 · nothing offered")))
+        assertNull(BookingCallRules.offeredMin(call("Full at 21:00 tonight")))
+        assertNull(BookingCallRules.offeredMin(call("No answer")))
+        assertNull(BookingCallRules.offeredMin(call(null)))
+        assertEquals(21 * 60 to 22 * 60, BookingCallRules.retryWindow(call("they offered 21:00")))
+        assertEquals(21 * 60 to 21 * 60 + 30, BookingCallRules.retryWindow(call("they offered 21:00", 19 * 60, 19 * 60 + 30)))
+        assertEquals(23 * 60 to 24 * 60 - 1, BookingCallRules.retryWindow(call("they offered 23:00")))
+        assertNull(BookingCallRules.retryWindow(call("No answer")))
+        // Nothing offered: the same brief and window as before.
+        val fields = BookingCallRules.retryFields(call("No answer"), 0)
+        assertEquals(FieldValue.Int64(19L * 60), fields[BookingCallFields.FROM])
+        // The day's window gone, but the offered time still to come: Try again stays.
+        val offered = call("they offered 21:00").copy(day = today)
+        assertTrue(BookingCallRules.canTryAgain(offered, cal.toEpochMs(today, 20 * 60 + 15), cal))
+        assertFalse(BookingCallRules.canTryAgain(call("No answer").copy(day = today), cal.toEpochMs(today, 20 * 60 + 15), cal))
     }
 
     @Test
@@ -223,7 +250,7 @@ class BookingCallRulesTest {
         val allOff = WorkingOnRules.view(WorkingOnSetting(StandingErrand.entries.toSet()), RenewalsView.EMPTY, GiftsView.EMPTY,
             emptyList(), today, calls = listOf(gone.copy(canCancel = false)))
         assertEquals("1 call finished · nothing needs you", allOff.summary)
-        assertEquals(WorkingOnRules.EMPTY_LINE,
+        assertEquals(WorkingOnRules.emptyLine(StandingErrand.entries.size),
             WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today).summary)
     }
 }

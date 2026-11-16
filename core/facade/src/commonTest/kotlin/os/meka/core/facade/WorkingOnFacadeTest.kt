@@ -52,7 +52,7 @@ class WorkingOnFacadeTest {
         val fold = core("android")
         val mac = core("mac")
         assertTrue(fold.workingOnView().isEmpty)
-        assertEquals(WorkingOnRules.EMPTY_LINE, fold.workingOnView().summary)
+        assertEquals(WorkingOnRules.emptyLine(StandingErrand.entries.size), fold.workingOnView().summary)
         val today = fold.todayEpochDay()
         fold.addRenewal("Home insurance", ObligationKind.INSURANCE, today + 15, RenewalRepeat.YEARLY, null, null)
         fold.addOccasion("Sam's birthday 3 Nov")
