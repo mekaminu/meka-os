@@ -257,6 +257,13 @@ class KeptPlacesScreensTest {
                 if (fill == Fill.MANY) {
                     val christmas = v.holidays.firstOrNull { "Christmas" in it.title } ?: fail("$name: no Christmas holidays row")
                     if ("7 work days" !in christmas.line) fail("$name: the Christmas holidays read \"${christmas.line}\", not 7 work days")
+                    // Walk-through 2026-11-15 A10: Booked and Taken add up to the headline's days; next year's leave
+                    // (Feb, Jul) has its own card, and Spain says the days this year counts.
+                    val today = core.todayEpochDay()
+                    val thisYear = LeavePageRules.allRows(v, LeavePageRules.BOOKED, today) + LeavePageRules.allRows(v, LeavePageRules.TAKEN, today)
+                    val sum = thisYear.sumOf { r -> Regex("(\\d+)[  ]days?").findAll(r.line).lastOrNull()?.groupValues?.get(1)?.toInt() ?: 0 }
+                    if (sum != v.daysBooked) fail("$name: Booked and Taken add up to $sum days under ${v.daysBooked} booked")
+                    if (page.cards.none { it.key == LeavePageRules.NEXT_YEAR }) fail("$name: no Next leave year card for Feb and Jul")
                 }
             }
             Place.EMERGENCY -> {

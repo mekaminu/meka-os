@@ -57,6 +57,11 @@ data class LeaveRow(
     /** The stretch's first and last days (the page shape's "3 wks" on the right; slice 9). */
     val startDay: Long = 0L,
     val endDay: Long = 0L,
+    /**
+     * Walk-through 2026-11-15 A10: the stretch starts after this leave year ends, so its days count against the next
+     * one (the page lists it under "Next leave year", never under this year's Booked).
+     */
+    val nextYear: Boolean = false,
 ) {
     /** [line] as drawn: "12 days" and dates kept whole (quality gate slice 24). */
     val lineShown: String get() = PhraseGlue.kept(line)
@@ -255,25 +260,42 @@ object LeaveRules {
         ).joinToString(" · ")
         val booked = items.filter { it.endDay >= today }
             .sortedWith(compareBy<LeaveItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id })
-            .map { row(it, work, today, end) }
+            .map { row(it, work, today, start, end) }
         val past = items.filter { it.endDay < today && it.endDay >= start }
             .sortedWith(compareByDescending<LeaveItem> { it.startDay }.thenBy { it.id })
-            .map { row(it, work, today, end) }
+            .map { row(it, work, today, start, end) }
         return LeaveView(
             summary, yearLine, settings.allowance, settings.yearStartMonth, allowanceLine(settings),
             booked, past, holidays(school, all, work, today), counted.size, left,
         )
     }
 
-    private fun row(it: LeaveItem, work: WorkHours, today: Long, yearEnd: Long): LeaveRow {
-        val n = workDays(work, it.startDay, it.endDay).size
-        val line = "${SchoolRules.spanLabel(it.startDay, it.endDay)} · ${if (n == 0) "no work days" else daysWord(n)}"
+    /** The quieter line on a stretch whose days are split across leave years. */
+    const val SPLIT_NEXT = "in the next leave year"
+    const val SPLIT_LAST = "in the last leave year"
+
+    private fun row(it: LeaveItem, work: WorkHours, today: Long, yearStart: Long, yearEnd: Long): LeaveRow {
+        val nextYear = it.startDay > yearEnd
+        val days = workDays(work, it.startDay, it.endDay)
+        // Walk-through 2026-11-15 A10: a stretch across the leave year's edge says the days this year counts, so
+        // Booked and Taken add up to the headline ("13 of 25 days booked"); the rest are named in its sheet.
+        val inYear = if (nextYear) days.size else days.count { d -> d in yearStart..yearEnd }
+        val after = if (nextYear) 0 else days.count { d -> d > yearEnd }
+        val before = if (nextYear) 0 else days.count { d -> d < yearStart }
+        val count = when {
+            days.isEmpty() -> "no work days"
+            inYear < days.size -> "${daysWord(inYear)} this year"
+            else -> daysWord(days.size)
+        }
+        val line = "${SchoolRules.spanLabel(it.startDay, it.endDay)} · $count"
         val note = when {
             today in it.startDay..it.endDay -> "On leave now"
-            it.startDay > yearEnd -> "Next leave year"
+            nextYear -> "Next leave year"
+            after > 0 -> "${daysWord(after)} more $SPLIT_NEXT"
+            before > 0 -> "${daysWord(before)} more $SPLIT_LAST"
             else -> null
         }
-        return LeaveRow(it.id, it.title, line, note, listOfNotNull(it.title, line, note).joinToString(". "), it.startDay, it.endDay)
+        return LeaveRow(it.id, it.title, line, note, listOfNotNull(it.title, line, note).joinToString(". "), it.startDay, it.endDay, nextYear)
     }
 
     /** "Tomorrow", "In 5 days", "Next week", "In 3 weeks". */

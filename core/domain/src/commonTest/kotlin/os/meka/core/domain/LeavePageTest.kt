@@ -52,9 +52,38 @@ class LeavePageTest {
         // A leave year from April: a stretch in next April is next year's; the row's line stays one line (the cover
         // screen cut "… · Next leave year") and its sheet says so.
         val april = LeaveRules.view(listOf(item("l4", "Ski", d(4, 2, 2027), d(4, 9, 2027))), emptyList(), work, LeaveSettings(25, 4), sat)
-        val ski = LeavePageRules.page(april, sat).cards.first().rows.single()
+        val aprilPage = LeavePageRules.page(april, sat)
+        // Walk-through 2026-11-15 A10: next year's stretch has its own card, so Booked holds only this year's.
+        assertEquals(LeavePageRules.BOOKED_EMPTY_THIS_YEAR, aprilPage.cards.first { it.key == LeavePageRules.BOOKED }.empty)
+        assertTrue(aprilPage.cards.first { it.key == LeavePageRules.BOOKED }.rows.isEmpty())
+        val ski = aprilPage.cards.first { it.key == LeavePageRules.NEXT_YEAR }.rows.single()
         assertTrue(!ski.line.contains("Next leave year"), ski.line)
         assertEquals("Next leave year", LeavePageRules.leave(april, ski.key)?.note)
+    }
+
+    @Test
+    fun bookedAndTakenAddUpToTheHeadlineWithNextYearsLeaveInItsOwnCard() {
+        // Walk-through 2026-11-15 A10: "13 of 25 days booked" over rows that added to 17 (Spain's 9 with 1 in 2027,
+        // and two stretches in the next leave year listed under Booked).
+        val feb = item("l5", LeaveRules.TITLE, d(2, 5, 2027), d(2, 8, 2027))
+        val v = view(listOf(octLeave, spain, august, feb))
+        val p = LeavePageRules.page(v, sat)
+        assertEquals(
+            listOf(LeavePageRules.BOOKED, LeavePageRules.NEXT_YEAR, LeavePageRules.HOLIDAYS, LeavePageRules.TAKEN, LeavePageRules.ALLOWANCE),
+            p.cards.map { it.key },
+        )
+        fun days(line: String): Int = Regex("(\\d+)[ \u00A0]days?").findAll(line).last().groupValues[1].toInt()
+        val thisYear = (p.cards.first { it.key == LeavePageRules.BOOKED }.rows + p.cards.first { it.key == LeavePageRules.TAKEN }.rows)
+        assertEquals(v.daysBooked, thisYear.sumOf { days(it.line) })
+        assertEquals(17, v.daysBooked)
+        val spainRow = p.cards.first { it.key == LeavePageRules.BOOKED }.rows.first { it.name == "Spain" }
+        assertTrue(spainRow.line.replace("\u00A0", " ").endsWith("8 days this year"), spainRow.line)
+        assertEquals("1 day more in the next leave year", LeavePageRules.leave(v, spainRow.key)?.note)
+        val next = p.cards.first { it.key == LeavePageRules.NEXT_YEAR }.rows
+        assertEquals(listOf(LeaveRules.TITLE), next.map { it.name })
+        assertEquals(2, days(next.single().line))
+        // Only this year's are summed on the headline; next year's still lead the "next leave" tile when soonest.
+        assertTrue(v.summary.startsWith("17 of 25 days booked"), v.summary)
     }
 
     @Test

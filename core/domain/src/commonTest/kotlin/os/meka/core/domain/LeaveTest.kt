@@ -65,7 +65,8 @@ class LeaveTest {
         assertEquals("17 of 25 days booked · 8 days left", v.summary)
         assertEquals("Leave year Jan – Dec 2026 · 5 taken · 12 to come", v.yearLine)
         assertEquals(listOf("Annual leave", "Spain"), v.booked.map { it.title })
-        assertEquals("Fri 18 Dec – Mon 4 Jan · 9 days", v.booked[1].line)
+        assertEquals("Fri 18 Dec – Mon 4 Jan · 8 days this year", v.booked[1].line)
+        assertEquals("1 day more in the next leave year", v.booked[1].note)
         assertEquals(listOf("Mon 3 – Fri 7 Aug · 5 days"), v.taken.map { it.line })
         assertEquals(17, v.daysBooked)
 
@@ -229,7 +230,7 @@ class LeaveTest {
         assertEquals(
             listOf(
                 "Annual leave · 13 of 25 days booked · 12 days left · Leave year Jan – Dec 2026 · 5 taken · 8 to come",
-                "Booked · Spain · Fri 18 Dec – Mon 4 Jan · 9 days",
+                "Booked · Spain · Fri 18 Dec – Mon 4 Jan · 8 days this year · 1 day more in the next leave year",
                 "Taken · Annual leave · Mon 3 – Fri 7 Aug · 5 days",
                 "School holiday · Half term · Mon 26 – Fri 30 Oct · 5 work days · In 2 weeks · book before the good weeks go",
             ),

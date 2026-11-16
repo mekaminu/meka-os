@@ -16,10 +16,14 @@ object LeavePageRules {
     const val INFO = "Your leave allowance and each stretch you book against it; only work days count, and a day booked twice counts once. Booked leave is a day off on both apps: no work band, no commute, and the brief says “Annual leave · no work”. Nothing is sent anywhere."
     const val ADD_TITLE = "Add to Annual leave"
     const val BOOKED = "Booked"
+    /** Walk-through 2026-11-15 A10: stretches whose days count against the next leave year, kept out of Booked. */
+    const val NEXT_YEAR = "Next leave year"
     const val HOLIDAYS = "School holidays"
     const val TAKEN = "Taken this leave year"
     const val ALLOWANCE = "Allowance"
     const val BOOKED_EMPTY = "Nothing booked yet · + Add a stretch of leave"
+    /** Booked's empty line while only next leave year's stretches are booked. */
+    const val BOOKED_EMPTY_THIS_YEAR = "Nothing else to come this leave year"
     const val GONE = "That isn't on your leave now"
     const val DAYS_A_YEAR = "Days a year"
     const val YEAR_STARTS = "Leave year starts"
@@ -67,7 +71,8 @@ object LeavePageRules {
 
     /** Every row of the card [cardKey] (See all), not only the first five. */
     fun allRows(view: LeaveView, cardKey: String, today: Long): List<PageRow> = when (cardKey) {
-        BOOKED -> view.booked.map { bookedRow(it, today) }
+        BOOKED -> view.booked.filter { !it.nextYear }.map { bookedRow(it, today) }
+        NEXT_YEAR -> view.booked.filter { it.nextYear }.map { bookedRow(it, today) }
         HOLIDAYS -> view.holidays.map(::holidayRow)
         TAKEN -> view.taken.map(::takenRow)
         ALLOWANCE -> listOf(allowanceRow(view))
@@ -93,7 +98,9 @@ object LeavePageRules {
     fun page(view: LeaveView, today: Long): LifePageView {
         val tiles = listOf(daysLeftTile(view), nextTile(view, today), holidaysTile(view))
         val cards = buildList {
-            add(LifePageRules.card(BOOKED, BOOKED, allRows(view, BOOKED, today), empty = BOOKED_EMPTY))
+            add(LifePageRules.card(BOOKED, BOOKED, allRows(view, BOOKED, today),
+                empty = if (view.booked.any { it.nextYear }) BOOKED_EMPTY_THIS_YEAR else BOOKED_EMPTY))
+            if (view.booked.any { it.nextYear }) add(LifePageRules.card(NEXT_YEAR, NEXT_YEAR, allRows(view, NEXT_YEAR, today)))
             if (view.holidays.isNotEmpty()) add(LifePageRules.card(HOLIDAYS, HOLIDAYS, allRows(view, HOLIDAYS, today)))
             if (view.taken.isNotEmpty()) add(LifePageRules.card(TAKEN, TAKEN, allRows(view, TAKEN, today)))
             add(LifePageRules.card(ALLOWANCE, ALLOWANCE, allRows(view, ALLOWANCE, today)))
