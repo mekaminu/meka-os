@@ -170,7 +170,7 @@ class NewsScreensTest {
         turns()
     }
 
-    private fun check(core: MekaCore, name: String) {
+    private fun check(core: MekaCore, name: String, lanesInView: Boolean = true) {
         compose.waitForIdle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("news", name))
@@ -192,9 +192,9 @@ class NewsScreensTest {
         val headers = compose.onAllNodes(hasTestTag("news-lane-header"), useUnmergedTree = true).fetchSemanticsNodes()
             .map { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty() }
         val wanted = place.lanes.map { lane -> lane.label.uppercase() + (lane.unreadLabel?.let { " · " + it.uppercase() } ?: "") }
-        if (place.lanes.isNotEmpty() && headers.isEmpty()) fail("$name: ${place.lanes.size} lanes, but no lane header drawn")
+        if (lanesInView && place.lanes.isNotEmpty() && headers.isEmpty()) fail("$name: ${place.lanes.size} lanes, but no lane header drawn")
         headers.forEach { h -> if (h !in wanted) fail("$name: a lane's header reads \"$h\", not one of $wanted in one text") }
-        if (place.lanes.any { it.unreadLabel != null } && headers.none { "·" in it }) fail("$name: no lane header carries its count ($headers)")
+        if (lanesInView && place.lanes.any { it.unreadLabel != null } && headers.none { "·" in it }) fail("$name: no lane header carries its count ($headers)")
         // Topics is a real button: 48 dp to tap, like the rest.
         val topics = compose.onAllNodes(hasTestTag("news-topics")).fetchSemanticsNodes().firstOrNull() ?: fail("$name: no Topics")
         val touchDp = topics.boundsInRoot.height / compose.density.density
@@ -250,7 +250,8 @@ class NewsScreensTest {
         val sources = core.newsPlace.value.sources.map { it.label }
         if (sources.isEmpty()) fail("$name: no source chips to check")
         ScreenShots.assertNotSliced(compose, name, sources)
-        check(core, name)
+        // The open topics, their sources now wrapped whole, fill the cover screen; the lanes sit below it.
+        check(core, name, lanesInView = false)
         tap(name, "Done", hasTestTag("news-topics"))
         turns()
         ScreenShots.assertShows(compose, name, "Topics")
