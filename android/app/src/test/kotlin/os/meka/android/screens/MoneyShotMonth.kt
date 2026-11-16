@@ -56,8 +56,9 @@ internal object MoneyShotMonth {
 
     /**
      * Walk-through 2026-11-15 A13 (g1b 4): Forecast's OUT / MONTH read £230 on the open Fold's Plan, £280 on Plan's
-     * layout shots and £270 on the plan-* shots, each from its own statement. Every Plan shot now imports [CURRENT], so
-     * the forecast is this month's August and September averaged: £234 out, shown as £230.
+     * layout shots and £270 on the plan-* shots, each from its own statement. Plan's shots import [CURRENT] (the plan-*
+     * shots a statement whose months average the same), so the forecast is August and September averaged: £234 out,
+     * shown as £230.
      */
     const val FORECAST_OUT_PENCE = 23_000L
 

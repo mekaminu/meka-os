@@ -14,8 +14,6 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -50,8 +48,7 @@ import os.meka.core.sync.InMemoryReplicaStore
 /**
  * Plan's lower half, slice 1 (approved mockup `Phone-PlanMore.dc.html`): with no £ goal, GOALS is a card of start tiles
  * and Add a £ goal opens its sheet; the forecast is In / Out / Left over tiles, the 6 · 12 months toggle, the bars and
- * the By tiles, with What if I cut… under them. On the Money shots' month ([MoneyShotMonth], walk-through 2026-11-15
- * A13: OUT / MONTH read £270 here beside £230 and £280 on Plan's other shots); shot on the cover screen
+ * the By tiles, with What if I cut… under them. Three whole months of invented statements; shot on the cover screen
  * and the open Fold in Dark (rule 13: invented data only).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -69,6 +66,20 @@ class MoneyPlanMoreScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
+        /**
+         * Walk-through 2026-11-15 A13 (g1b 4): OUT / MONTH read £270 on these shots beside £230 on Plan's others (the
+         * Money shots' month, [MoneyShotMonth.FORECAST_OUT_PENCE]); the second shop of each month is now £25.00, so
+         * July to September average £231.90 out, shown as the same £230. (The Money shots' month itself puts Obi's
+         * money check above the forecast and leaves the bars' month names unmeasured on the cover.)
+         */
+        val CURRENT = "Date,Description,Amount\n" +
+            listOf(7, 8, 9, 10).joinToString("") { m ->
+                val mm = m.toString().padStart(2, '0')
+                "01/$mm/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
+                    "05/$mm/2026,SALARY OAKFIELD LTD,2500.00\n" +
+                    "09/$mm/2026,TESCO STORES 2041,-64.90\n" +
+                    (if (m < 10) "28/$mm/2026,TESCO STORES 2041,-25.00\n" else "")
+            }
         /**
          * Slice 2: a week away on the card in invented statements — two payments abroad, each with a foreign fee.
          * Walk-through 2026-11-08 A32: they end on the day the other Money shots' statements end (they ended on 13).
@@ -95,7 +106,7 @@ class MoneyPlanMoreScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement(MoneyShotMonth.CURRENT_NAME, MoneyShotMonth.CURRENT).refused)
+            check(!core.importMoneyStatement("Current account", CURRENT).refused)
             if (card) check(!core.importMoneyStatement("Credit card", CARD).refused)
             core.tick()
         }
@@ -144,7 +155,7 @@ class MoneyPlanMoreScreensTest {
         pick(MoneyTab.PLAN)
         val v = core.moneyView.value
         val f = v.forecast ?: fail("the forecast isn't on Plan")
-        if (MoneyPlanMore.forecast(f, 12, 0) == null) fail("two whole months with pay should make the forecast's tiles: ${f.notReady}")
+        if (MoneyPlanMore.forecast(f, 12, 0) == null) fail("three whole months with pay should make the forecast's tiles: ${f.notReady}")
         if (f.outRounded != MoneyShotMonth.FORECAST_OUT_PENCE) fail("OUT / MONTH is ${f.outRounded}p, not the Money shots' ${MoneyShotMonth.FORECAST_OUT_PENCE}p")
         if (v.goals?.rows?.isNotEmpty() != false) fail("there should be no £ goal yet")
     }
@@ -161,14 +172,6 @@ class MoneyPlanMoreScreensTest {
         // Walk-through A11 (2026-11-08): the tiles' labels whole ("OUT / MONTH", never "OUT /").
         ScreenShots.assertNotCut(compose, "plan-forecast-tiles-cover", listOf(MoneyPlanMore.IN, MoneyPlanMore.OUT, MoneyPlanMore.LEFT, "BY OCT 2027"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-tiles-cover"))
-        // On the Money shots' month Obi's money check sits above the forecast, so the bars' foot can start below the
-        // cover screen: bring What if I cut…'s track (under the month names) on screen before measuring them.
-        var swipes = 0
-        while (!ScreenShots.wholeOnScreen(compose, "money-cut-slider-track") && swipes < 6) {
-            compose.onNodeWithTag("screen").performTouchInput { swipeUp(startY = bottom * 0.6f, endY = bottom * 0.4f, durationMillis = 400) }
-            settle()
-            swipes++
-        }
         // Walk-through A32: the month names under the twelve bars never touch ("Apr" ran into "May" on the cover).
         val names = compose.onAllNodes(
             SemanticsMatcher("a forecast month") { n -> n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("money-forecast-month-") == true },
