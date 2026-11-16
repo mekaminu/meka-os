@@ -136,7 +136,8 @@ class MoneyAccountsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-list")
         val v = core.moneyView.value
         val items = MoneyAccountList.items(v)
-        assertTrue(items.size == 2, "expected the two accounts, got ${items.map { it.name }}")
+        // The Money shots' month: the current account and its two cards (walk-through 2026-11-15 A13, the Rewards card too).
+        assertTrue(items.size == 1 + MoneyShotMonth.CARD_NAMES.size, "expected the current account and both cards, got ${items.map { it.name }}")
         items.forEach { assertTrue(showsText(it.name), "\"${it.name}\" isn't in the list") }
         // Nothing scattered on the page any more.
         if (showsText("Remove it?") || compose.onAllNodesWithText("Remove", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
