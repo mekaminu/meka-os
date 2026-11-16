@@ -74,6 +74,14 @@ object DayListRules {
     const val HINT = "Type one after another · “30m”, “9:00”, “#work” work in the text · paste a list for many at once"
     const val PLACEHOLDER = "New task"
     const val PASTE = "Paste a list"
+    /**
+     * Walk-through 2026-11-15 A11: a column of the open Fold's spread (~270 dp) had no room for "Say them · Paste a
+     * list · Fit times from 19:30", so the last chip slid off as "F". There the chips read [SAY_SHORT], [PASTE_SHORT]
+     * and [FIT_SHORT] (a screen reader still hears the whole names) and all three sit whole on one line.
+     */
+    const val SAY_SHORT = "Say"
+    const val PASTE_SHORT = "Paste"
+    const val FIT_SHORT = "Fit times"
     const val EMPTY = "Nothing planned yet. Type a task and press Enter, then the next."
     /** The way in beside Today's "Anytime today" heading, and under Today when nothing is unplanned (both apps). */
     const val LINK = "Day list ›"

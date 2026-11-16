@@ -11,8 +11,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -149,6 +147,8 @@ fun DayListPane(
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val undo = rememberEventUndo()
+    // The add bar's height, so the Undo bar rises above it rather than covering the New task field (A11).
+    var addBarPx by remember { mutableStateOf(0) }
     var draft by rememberSaveable { mutableStateOf("") }
     var said by remember { mutableStateOf<String?>(null) }
     var sheetId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -308,7 +308,8 @@ fun DayListPane(
 
             // The add bar stays open at the foot, over the keyboard: Enter adds and clears for the next.
             Column(
-                Modifier.fillMaxWidth().background(Meka.colors.background).padding(horizontal = sidePadding, vertical = MekaSpace.xs),
+                Modifier.fillMaxWidth().onSizeChanged { addBarPx = it.height }.background(Meka.colors.background)
+                    .padding(horizontal = sidePadding, vertical = MekaSpace.xs),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 AnimatedContent(
@@ -343,13 +344,12 @@ fun DayListPane(
                             .minTouch().clip(CircleShape).background(Meka.colors.accent).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                     )
                 }
-                // In a narrow column the chips keep to one line (sliding sideways) so every column's add bar sits level.
-                FlowRow(
-                    if (inBoard?.narrow == true) Modifier.horizontalScroll(rememberScrollState()) else Modifier,
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                ) {
-                    SayChip(saying, listener.level, sayThem)
-                    DayChip(DayListRules.PASTE) {
+                // In a narrow column the chips take their short names so all three sit whole on one line and every
+                // column's add bar sits level (they slid sideways and cut "Fit times…" to "F"; walk-through A11).
+                val short = inBoard?.narrow == true
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    SayChip(saying, listener.level, sayThem, short = short)
+                    DayChip(if (short) DayListRules.PASTE_SHORT else DayListRules.PASTE, spoken = DayListRules.PASTE.takeIf { short }) {
                         val primary = context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip
                         val text = primary?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
                         if (text.isBlank()) said = DayListRules.COPY_FIRST else add(text)
@@ -357,7 +357,7 @@ fun DayListPane(
                     if (v != null && v.openIds.isNotEmpty()) {
                         // Today fits from now (never before 9:00); another day from 9:00.
                         val from = DayListRules.fitFrom(v.isToday, java.time.LocalTime.now().let { it.hour * 60 + it.minute })
-                        DayChip(DayListRules.fitLabel(from)) {
+                        DayChip(if (short) DayListRules.FIT_SHORT else DayListRules.fitLabel(from), spoken = DayListRules.fitLabel(from).takeIf { short }) {
                             haptics.tick()
                             scope.launch {
                                 val fit = runCatching { core.fitDayList(day, from) }.getOrNull() ?: return@launch
@@ -368,7 +368,7 @@ fun DayListPane(
                 }
             }
         }
-        EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = MekaSpace.xxl + MekaSpace.xxl + MekaSpace.l))
+        EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = with(LocalDensity.current) { addBarPx.toDp() }).testTag(DAY_LIST_UNDO_TAG))
 
         // A task's sheet springs up over the dimmed list; in a column of the open Fold's spread it springs up over the
         // whole spread instead (the spread draws it), so the sheet and Edit's detail aren't squeezed into one narrow day.
@@ -554,11 +554,12 @@ private fun LengthChip(len: String, guessed: Boolean) {
 
 /** A chip: Times on, Paste a list, Fit times, and the sheet's choices; [selected] wears the accent edge. */
 @Composable
-private fun DayChip(label: String, selected: Boolean = false, onClick: () -> Unit) {
+private fun DayChip(label: String, selected: Boolean = false, spoken: String? = null, onClick: () -> Unit) {
     Text(
         label, style = MekaType.caption, maxLines = 1,
         color = if (selected) Meka.colors.textPrimary else Meka.colors.textSecondary,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onClick() }.minTouch()
+        modifier = Modifier.then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
+            .clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onClick() }.minTouch()
             .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
             .then(if (selected) Modifier.border(1.dp, Meka.colors.accent, RoundedCornerShape(MekaRadius.pill)) else Modifier)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
@@ -570,7 +571,7 @@ private fun DayChip(label: String, selected: Boolean = false, onClick: () -> Uni
  * (scale on the level, none with reduced motion).
  */
 @Composable
-private fun SayChip(on: Boolean, level: Float, onClick: () -> Unit) {
+private fun SayChip(on: Boolean, level: Float, onClick: () -> Unit, short: Boolean = false) {
     val reduced = Meka.reducedMotion
     val breathe by animateFloatAsState(if (on && !reduced) 1f + 0.25f * level.coerceIn(0f, 1f) else 1f, MekaMotion.appear(reduced), label = "day-say-breathe")
     Row(
@@ -584,12 +585,15 @@ private fun SayChip(on: Boolean, level: Float, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         MicGlyph(Meka.colors.accent, Modifier.graphicsLayer { scaleX = breathe; scaleY = breathe })
-        Text(if (on) DayListSpoken.STOP else DayListSpoken.SAY, style = MekaType.caption, maxLines = 1,
+        Text(if (on) DayListSpoken.STOP else if (short) DayListRules.SAY_SHORT else DayListSpoken.SAY, style = MekaType.caption, maxLines = 1,
             color = if (on) Meka.colors.textPrimary else Meka.colors.textSecondary)
     }
 }
 
 private fun Modifier.testTagSay(): Modifier = this.then(Modifier.testTag(DAY_LIST_SAY_TAG))
+
+/** The Day list's Undo bar, for screen tests (it sits above the add bar, never over it). */
+const val DAY_LIST_UNDO_TAG = "day-list-undo"
 
 /** The Say them chip, for screen tests. */
 const val DAY_LIST_SAY_TAG = "day-list-say"

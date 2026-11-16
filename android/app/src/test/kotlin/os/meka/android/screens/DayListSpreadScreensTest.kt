@@ -50,6 +50,7 @@ import os.meka.android.today.DAY_TASK_SHEET_TAG
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import os.meka.core.domain.DayListBoardRules
+import os.meka.core.domain.DayListRules
 import os.meka.core.domain.BoardArea
 import os.meka.core.domain.BoardAreaRules
 import os.meka.core.domain.LoneWordGlue
@@ -137,6 +138,35 @@ class DayListSpreadScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
+    /**
+     * Walk-through 2026-11-15 A11: under each column the chips slid sideways and "Fit times from 19:30" was cut to "F".
+     * Every button in a column (unclipped, so a chip past the edge counts) ends inside it, and Wednesday's three chips
+     * are there by their short names, each telling a screen reader its whole name.
+     */
+    private fun assertChipsWhole(name: String) {
+        val cols = compose.onAllNodesWithTag(DAY_LIST_COLUMN_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        fun walk(n: androidx.compose.ui.semantics.SemanticsNode, out: MutableList<androidx.compose.ui.semantics.SemanticsNode>) {
+            if (n.config.getOrNull(SemanticsProperties.Role) == Role.Button) out += n
+            n.children.forEach { walk(it, out) }
+        }
+        cols.forEach { c ->
+            val left = c.positionInRoot.x
+            val right = left + c.size.width
+            val buttons = mutableListOf<androidx.compose.ui.semantics.SemanticsNode>().also { walk(c, it) }
+            buttons.forEach { b ->
+                val x = b.positionInRoot.x
+                if (x < left - 1f || x + b.size.width > right + 1f) {
+                    val label = b.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+                        ?: b.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString("") ?: "?"
+                    fail("$name: \"$label\" runs past its column's edge")
+                }
+            }
+        }
+        assertTrue(described(DayListRules.PASTE).fetchSemanticsNodes().isNotEmpty() && shows(DayListRules.PASTE_SHORT), "$name: no short Paste chip")
+        assertTrue(described("Fit times from").fetchSemanticsNodes().isNotEmpty() && shows(DayListRules.FIT_SHORT), "$name: no short Fit times chip")
+        assertTrue(!shows(DayListRules.PASTE), "$name: a column's chip says the whole \"${DayListRules.PASTE}\"")
+    }
+
     private fun columns() = compose.onAllNodesWithTag(DAY_LIST_COLUMN_TAG).fetchSemanticsNodes().size
 
     private fun run(theme: ThemeChoice, name: String) {
@@ -158,6 +188,7 @@ class DayListSpreadScreensTest {
         val title = compose.onAllNodes(hasText("Complete feedbacks"), useUnmergedTree = true).fetchSemanticsNodes().first()
         assertTrue(title.size.width / compose.density.density > 80f, "$name: a task's title is squeezed (${title.size.width / compose.density.density} dp)")
         assertTouchTargets(name)
+        assertChipsWhole(name)
 
         // Drag across days (slice 4b): hold "Call the school"'s ≡ and drag it into Thursday's list: a card follows the
         // finger once it leaves Wednesday, Thursday wears a gold ring, and on letting go the task lands on Thursday.

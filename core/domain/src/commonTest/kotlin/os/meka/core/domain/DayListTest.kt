@@ -128,6 +128,10 @@ class DayListTest {
         assertEquals(14 * 60 + 15, DayListRules.fitFrom(isToday = true, nowMinute = 14 * 60 + 11))
         assertEquals(DayListRules.DAY_START, DayListRules.fitFrom(isToday = false, nowMinute = 14 * 60 + 11))
         assertEquals("Fit times from 09:00", DayListRules.fitLabel(DayListRules.DAY_START))
+        // A11: a narrow column's chips are the short names, each the start of its whole name.
+        assertTrue(DayListSpoken.SAY.startsWith(DayListRules.SAY_SHORT))
+        assertTrue(DayListRules.PASTE.startsWith(DayListRules.PASTE_SHORT))
+        assertTrue(DayListRules.fitLabel(DayListRules.DAY_START).startsWith(DayListRules.FIT_SHORT))
     }
 
     @Test

@@ -38,6 +38,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.DayListPane
+import os.meka.android.today.DAY_LIST_UNDO_TAG
 import os.meka.core.domain.BoardArea
 import os.meka.core.domain.BoardAreaRules
 import os.meka.core.domain.LoneWordGlue
@@ -175,6 +176,12 @@ class DayListScreensTest {
         fun open() = core.weekBoard.value.day(core.weekBoard.value.todayEpochDay)!!.openCards.map { it.title }
         until { open().firstOrNull() == second }
         assertEquals(listOf(second, first), open())
+        // Walk-through 2026-11-15 A11: the Undo bar sat over the New task field; it rises above the add bar instead.
+        assertTrue(shows("Undo"), "no Undo after the move")
+        val bar = compose.onNodeWithTag(DAY_LIST_UNDO_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
+        assertTrue(bar.height > 0f, "the Undo bar isn't shown after the move")
+        assertTrue(bar.bottom <= field.top + 1f, "the Undo bar covers the New task field (${bar.bottom} over ${field.top})")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("day-list", "fold-dark-moved"))
     }
 
