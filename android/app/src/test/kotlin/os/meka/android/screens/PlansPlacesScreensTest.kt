@@ -373,7 +373,7 @@ class PlansPlacesScreensTest {
         }
         tap(p, name, "+ Add", hasContentDescription("Add"))
         tap(p, name, "A trip", hasText("A trip"))
-        type(p, name, TripsPageRules.spokenHint(TripsPageRules.ADD_TRIP), "Rome 20–22 Nov")
+        type(p, name, TripsPageRules.spokenHint(TripsPageRules.ADD_TRIP), ShotLife.LATER_TRIP)
         until { core.tripsView.value.rows.any { it.name == "Rome" } }
         if (core.tripsView.value.rows.none { it.name == "Rome" }) fail("$name: Done on the field added no trip")
         reach(p, name, hasText("Rome"), "new trip on screen")

@@ -59,7 +59,11 @@ class TripListsScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private val now = 1_793_008_800_000L // Mon 26 Oct 2026, 10:00 in London
+    /**
+     * Walk-through 2026-11-15 A13: the same day as Trips and the rest of the shots (Wed 21 Oct 2026, 17:15 in London),
+     * so Seville is "7 days to go" here as Trips' "in 7 days" (it said "2 days to go" on Mon 26 Oct).
+     */
+    private val now = 1_792_599_300_000L
 
     private fun core(): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
@@ -117,8 +121,8 @@ class TripListsScreensTest {
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Seville trip")
-        ScreenShots.assertShows(compose, name, "2 days to go")
-        ScreenShots.assertNotCornerClipped(compose, name, "2 days to go")
+        ScreenShots.assertShows(compose, name, "7 days to go")
+        ScreenShots.assertNotCornerClipped(compose, name, "7 days to go")
         // A19: lists with things on them keep their tracks.
         compose.onNodeWithTag("trip-bar-Packed-true", useUnmergedTree = true).assertExists()
         // Walk-through 2026-11-02 A9: each "⋯" is a whole 48 × 48 target, not as wide as its glyph.
@@ -251,7 +255,7 @@ class TripListsScreensTest {
     fun anEmptyTripStartsFromTheLastTripsLists() {
         val (core, sevilleId) = filled(ThemeChoice.DARK)
         val rome = runBlocking {
-            check(!core.addTrip("Rome 20–23 Dec").refused)
+            check(!core.addTrip(ShotLife.LATER_TRIP).refused)
             core.tick()
             core.tripsView.value.rows.first { it.id != sevilleId }.id
         }
@@ -279,7 +283,7 @@ class TripListsScreensTest {
         assertEquals("Save as a template for next time", core.tripListsView.value.single().saveTemplate)
         val rome = runBlocking {
             check(!core.saveTripTemplate(sevilleId).refused)
-            check(!core.addTrip("Rome 20–23 Dec").refused)
+            check(!core.addTrip(ShotLife.LATER_TRIP).refused)
             core.tick()
             core.tripsView.value.rows.first { it.id != sevilleId }.id
         }

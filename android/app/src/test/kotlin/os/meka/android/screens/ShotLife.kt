@@ -18,6 +18,9 @@ object ShotLife {
     /** The next trip: the one Trips lists first and Trip lists packs for. */
     const val NEXT_TRIP = "Seville 28–31 Oct"
 
+    /** The trip after it, as Trips' by-hand shot types it and Trip lists starts from Seville (walk-through 2026-11-15 A13). */
+    const val LATER_TRIP = "Rome 20–22 Nov"
+
     /** A full set's Work mode switch: Setup's full shot says the call assistant is on, so Health's full one does too. */
     const val CALL_ASSISTANT_ON_WHEN_FULL = true
 
