@@ -34,6 +34,12 @@ data class NeedsYouMailSummary(
     val foot: String,
     /** What a screen reader says for the tiles: "Tidied today: 138. 33 newsletters, 71 promos, 33 junk and scams." */
     val spoken: String,
+    /**
+     * Found and fixing week 4, A7 ("138 tidied" over 33 + 71 + 33): what the three part tiles leave out, so the tiles add
+     * up on screen: "Also 1 receipt or order", "Also 4 receipts and orders · 2 emails rescued from Junk"; null when the
+     * three parts make the whole.
+     */
+    val rest: String?,
 )
 
 object NeedsYouMailRules {
@@ -70,6 +76,21 @@ object NeedsYouMailRules {
         )
     }
 
+    /** Kinds the three part tiles count; everything else tidied today goes on [rest]'s line. */
+    private val PART_KINDS = setOf(MailTidy.NEWSLETTER, MailTidy.ARCHIVE) + JUNK_KINDS
+
+    /**
+     * The line under the tiles naming what the three parts leave out (receipts, rescues, a tidy from before kinds were
+     * kept as "3 more"), so tidied = newsletters + promos + junk & scams + this; null when nothing is left out.
+     */
+    fun rest(today: List<MailTidyBatch>): String? {
+        val byKind = MailTidy.entries.filter { it !in PART_KINDS && it != MailTidy.KEEP }
+            .map { k -> k to today.sumOf { it.kinds[k] ?: 0 } }.filter { it.second > 0 }
+        val unknown = today.sumOf { b -> (b.count - b.kinds.values.sum()).coerceAtLeast(0) }
+        val parts = byKind.map { (k, n) -> "$n ${if (n == 1) k.one else k.many}" } + listOfNotNull(unknown.takeIf { it > 0 }?.let { "$it more" })
+        return if (parts.isEmpty()) null else "Also " + parts.joinToString(" · ")
+    }
+
     /** The busiest sender on the weekly offer as one question, or null when there's no offer. */
     fun question(offer: MailUnopenedCard?): NeedsYouUnsubQuestion? {
         val row = offer?.rows?.firstOrNull() ?: return null
@@ -84,12 +105,15 @@ object NeedsYouMailRules {
      * nothing was tidied today but the weekly offer stands.
      */
     fun summary(batches: List<MailTidyBatch>, offer: MailUnopenedCard?, nowMs: Long, cal: LocalCalendar): NeedsYouMailSummary? {
-        val tiles = tiles(today(batches, nowMs, cal))
+        val today = today(batches, nowMs, cal)
+        val tiles = tiles(today)
         val q = question(offer)
         if (tiles.isEmpty() && q == null) return null
+        val rest = if (tiles.isEmpty()) null else rest(today)
         val spoken = if (tiles.isEmpty()) "Nothing tidied yet today." else {
-            "Tidied today: ${tiles[0].number}. " + tiles.drop(1).joinToString(", ") { "${it.number} ${it.label.replace("&", "and")}" } + "."
+            "Tidied today: ${tiles[0].number}. " + tiles.drop(1).joinToString(", ") { "${it.number} ${it.label.replace("&", "and")}" } + "." +
+                (rest?.let { " ${it.replace(" · ", ", ")}." } ?: "")
         }
-        return NeedsYouMailSummary(tiles, q, FOOT, spoken)
+        return NeedsYouMailSummary(tiles, q, FOOT, spoken, rest)
     }
 }

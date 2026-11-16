@@ -341,6 +341,9 @@ internal fun NeedsYouFyiRowView(row: NeedsYouFyiRow, onSeen: () -> Unit, modifie
     }
 }
 
+/** Below this a tile's label can't hold "newsletters" whole, so the four tiles go two by two. */
+internal val MAIL_TILE_MIN_WIDTH = 76.dp
+
 /**
  * MAIL NAVILIFE TIDIED TODAY (slice 2): four number tiles (tidied · newsletters · promos · junk & scams), the one
  * unsubscribe question with Unsubscribe and Keep (the next sender cross-fades in; Undo on the bar), and the quiet foot
@@ -359,21 +362,30 @@ internal fun NeedsYouMailCard(
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         if (summary.tiles.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().height(IntrinsicSize.Min).semantics(mergeDescendants = true) { contentDescription = summary.spoken },
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                summary.tiles.forEach { t ->
-                    Column(
-                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
-                            .padding(MekaSpace.xs).testTag(NEEDS_YOU_TILE_TAG),
-                    ) {
-                        Text(t.number, style = MekaType.upNextCardTitle, maxLines = 1,
-                            color = if (t.warn) Meka.colors.critical else Meka.colors.textPrimary)
-                        // On the cover screen a quarter leaves ~48 dp for words: "junk & scams" takes two lines, never cut.
-                        Text(t.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 2)
+            // Week 4, A7 ("newslett / ers"): a quarter of the cover screen is too narrow for "newsletters" whole, so
+            // there the tiles sit two by two; a word never breaks across lines.
+            BoxWithConstraints(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = summary.spoken }) {
+                val perRow = if ((maxWidth - MekaSpace.xs * 3) / 4 < MAIL_TILE_MIN_WIDTH) 2 else 4
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    summary.tiles.chunked(perRow).forEach { row ->
+                        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            row.forEach { t ->
+                                Column(
+                                    Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
+                                        .padding(MekaSpace.xs).testTag(NEEDS_YOU_TILE_TAG),
+                                ) {
+                                    Text(t.number, style = MekaType.upNextCardTitle, maxLines = 1,
+                                        color = if (t.warn) Meka.colors.critical else Meka.colors.textPrimary)
+                                    Text(t.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 2)
+                                }
+                            }
+                        }
                     }
                 }
+            }
+            // What the three parts leave out, so the tiles add up ("Also 1 receipt or order").
+            summary.rest?.let {
+                Text(needsShown(it), style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         summary.question?.let { first ->

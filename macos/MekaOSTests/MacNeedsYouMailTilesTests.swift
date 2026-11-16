@@ -19,7 +19,8 @@ final class MacNeedsYouMailTilesTests: XCTestCase {
     func testTheTilesStandForTodayAndTheQuestionForTheOffer() {
         let rules = NeedsYouMailRules.shared
         let tiles = [tile("138", rules.TIDIED), tile("33", rules.NEWSLETTERS), tile("71", rules.PROMOS), tile("34", rules.JUNK, warn: true)]
-        let both = NeedsYouMailSummary(tiles: tiles, question: question(), foot: rules.FOOT, spoken: "Tidied today: 138.")
+        let both = NeedsYouMailSummary(tiles: tiles, question: question(), foot: rules.FOOT, spoken: "Tidied today: 138.",
+                                       rest: "Also 1 receipt or order")
         XCTAssertFalse(NeedsYouMailGroup.showsLog(both))
         XCTAssertFalse(NeedsYouMailGroup.showsOffer(both))
         XCTAssertEqual(both.tiles.map(\.label), ["tidied", "newsletters", "promos", "junk & scams"])
@@ -29,12 +30,21 @@ final class MacNeedsYouMailTilesTests: XCTestCase {
     @MainActor
     func testNothingTidiedTodayKeepsTheLogAndNoQuestionKeepsTheOffer() {
         let rules = NeedsYouMailRules.shared
-        let questionOnly = NeedsYouMailSummary(tiles: [], question: question(), foot: rules.FOOT, spoken: "Nothing tidied yet today.")
+        let questionOnly = NeedsYouMailSummary(tiles: [], question: question(), foot: rules.FOOT,
+                                               spoken: "Nothing tidied yet today.", rest: nil)
         XCTAssertTrue(NeedsYouMailGroup.showsLog(questionOnly))
         XCTAssertFalse(NeedsYouMailGroup.showsOffer(questionOnly))
         XCTAssertTrue(NeedsYouMailGroup.showsLog(nil))
         XCTAssertTrue(NeedsYouMailGroup.showsOffer(nil))
         XCTAssertEqual(NeedsYouMailTilesView.heading, "MAIL NAVILIFE TIDIED TODAY")
         XCTAssertEqual(rules.SEE_ALL, "See all ›")
+    }
+
+    /// Week 4, A7: "138 tidied" over 33 + 71 + 33: the peek and the line under the tiles name what the parts leave out.
+    func testTheTilesAddUpWithTheRestNamed() {
+        let rules = NeedsYouMailRules.shared
+        let tiles = [tile("138", rules.TIDIED), tile("33", rules.NEWSLETTERS), tile("71", rules.PROMOS), tile("33", rules.JUNK, warn: true)]
+        XCTAssertEqual(NeedsYouGroupRules.shared.tidiedPeek(tiles: tiles),
+                       "138 tidied · 33 newsletters · 71 promos · 33 junk & scams · 1 other")
     }
 }

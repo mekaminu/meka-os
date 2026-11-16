@@ -85,10 +85,12 @@ class NeedsYouMailTilesScreensTest {
         }
     }
 
+    private val summary get() = NeedsYouMailRules.summary(tidies, offer, now, cal) ?: fail("no summary")
+
     private fun draw(theme: ThemeChoice) {
         ThemeChoice.save(ApplicationProvider.getApplicationContext<ShotApplication>(), theme)
         compose.mainClock.autoAdvance = false
-        val summary = NeedsYouMailRules.summary(tidies, offer, now, cal) ?: fail("no summary")
+        val summary = this.summary
         compose.setContent {
             MekaTheme {
                 Column(
@@ -113,6 +115,11 @@ class NeedsYouMailTilesScreensTest {
         if (!onScreen("Unsubscribe from Oakfield Kids Club?")) fail("$name: the one question is missing")
         if (!onScreen(NeedsYouMailRules.FOOT) || !onScreen("See all")) fail("$name: the foot is missing")
         ScreenShots.assertEachOneLine(compose, name, listOf("138", "71", "tidied", "promos", NeedsYouMailRules.UNSUBSCRIBE, NeedsYouMailRules.SEE_ALL))
+        // Week 4, A7: the tiles add up on screen (138 = 33 + 71 + 33 + the receipt named under them), and no word breaks.
+        if (summary.rest != "Also 1 receipt or order" || !onScreen("Also 1 receipt or order")) fail("$name: what the parts leave out isn't named")
+        val parts = summary.tiles.drop(1).sumOf { it.number.toInt() } + 1
+        if (summary.tiles[0].number.toInt() != parts) fail("$name: the tiles don't add up")
+        ScreenShots.assertNoBrokenWords(compose, name)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 

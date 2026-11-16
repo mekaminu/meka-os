@@ -260,7 +260,12 @@ object NeedsYouGroupRules {
     fun renewalsPeek(names: List<String>): String = listOf(names(names, 3), RENEWALS_PEEK).filter { it.isNotEmpty() }.joinToString(" · ")
 
     /** "41 tidied · 12 newsletters · 24 promos · 5 junk & scams" from the tiles. */
-    fun tidiedPeek(tiles: List<NeedsYouMailTile>): String = tiles.joinToString(" · ") { "${it.number} ${it.label}" }
+    fun tidiedPeek(tiles: List<NeedsYouMailTile>): String {
+        // Week 4, A7: the peek adds up like the tiles: what the three parts leave out (receipts, rescues) is "· 1 other".
+        val other = (tiles.firstOrNull()?.number?.toIntOrNull() ?: 0) - tiles.drop(1).sumOf { it.number.toIntOrNull() ?: 0 }
+        return (tiles.map { "${it.number} ${it.label}" } + listOfNotNull(other.takeIf { it > 0 && tiles.size == 4 }?.let { "$it other" }))
+            .joinToString(" · ")
+    }
 
     /**
      * The head of [group]: [count] (0 shows no number), the [peek] while closed, and while open the page's line when it

@@ -41,6 +41,8 @@ import os.meka.android.today.NEEDS_YOU_FYI_TAG
 import os.meka.android.today.NEEDS_YOU_GROUP_TAG
 import os.meka.android.today.NEEDS_YOU_LISTS_LEAD_TAG
 import os.meka.android.today.NEEDS_YOU_PAGER_TAG
+import os.meka.android.today.NEEDS_YOU_ROW_TAG
+import os.meka.android.today.NeedsYouMessageRowView
 import os.meka.android.today.NeedsYouChips
 import os.meka.android.today.NeedsYouFyiRowView
 import os.meka.android.today.NeedsYouGroupFoot
@@ -61,6 +63,7 @@ import os.meka.core.domain.NeedsYouFilter
 import os.meka.core.domain.NeedsYouStackRules
 import os.meka.core.domain.PersonSummary
 import os.meka.core.domain.NeedsYouFyiRow
+import os.meka.core.domain.NeedsYouMessageRow
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.NeedsYouGroupRules
 import os.meka.core.domain.NeedsYouLayoutRules
@@ -85,6 +88,12 @@ class NeedsYouGroupsScreensTest {
 
     private val fyi = listOf("Alex", "Sam", "Jo", "Kim", "Robin", "Casey", "Morgan").mapIndexed { i, who ->
         NeedsYouFyiRow("f$i", who, "Says thanks for Saturday", "$who: Says thanks for Saturday. No reply needed.")
+    }
+
+    // Week 4, A7: Messages opens onto its three chats (it showed open with nothing under it); one to reply each, as the header says.
+    private val messages = listOf("Alex" to "AL", "Game testing group" to "GT", "Sam" to "SA").mapIndexed { i, (who, letters) ->
+        NeedsYouMessageRow("m$i", letters, who, "1${7 + i}:0$i", "Can you send the times for Saturday?", "1 to reply", true,
+            "$who: Can you send the times for Saturday? 1 to reply.")
     }
 
     // Slice 2: the lists card as To decide's one row, the after-work card as its foot line.
@@ -154,6 +163,9 @@ class NeedsYouGroupsScreensTest {
                                 Modifier.testTag(NEEDS_YOU_LISTS_LEAD_TAG))
                             NeedsYouGroupFoot(foot, { footTaps++ })
                         }
+                        if (o && g == NeedsYouGroup.MESSAGES) {
+                            messages.forEach { NeedsYouMessageRowView(it, false, {}) {} }
+                        }
                         if (o && g == NeedsYouGroup.FYI) {
                             NeedsYouGroupLead(NeedsYouGroupRules.FYI_LEAD, NeedsYouGroupRules.CLEAR_ALL, {})
                             pg.of(fyi).forEach { NeedsYouFyiRowView(it, {}) }
@@ -180,6 +192,8 @@ class NeedsYouGroupsScreensTest {
         if (!onScreen(NeedsYouGroupRules.CLOSE_ALL)) fail("$name: Close all is missing while To decide and Messages are open")
         NeedsYouGroup.entries.forEach { if (!onScreen(it.title)) fail("$name: the ${it.title} box is missing") }
         if (fyiRows() != 0) fail("$name: FYI starts open")
+        val rows = compose.onAllNodesWithTag(NEEDS_YOU_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().size
+        if (rows != counts.getValue(NeedsYouGroup.MESSAGES)) fail("$name: Messages is open with $rows rows under it, not 3")
         if (!onScreen(peeks.getValue(NeedsYouGroup.TIDIED))) fail("$name: a closed box doesn't peek")
         if (!onScreen("1 renewal due · from your lists")) fail("$name: From your lists isn't one row inside To decide")
         if (!onScreen("At work until 17:30 · 37 held for later ›")) fail("$name: the after-work foot line is missing")

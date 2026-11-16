@@ -24,6 +24,13 @@ struct NeedsYouMailTilesView: View {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         if !summary.tiles.isEmpty {
                             NeedsYouMailTilesRow(tiles: summary.tiles, spoken: summary.spoken, palette: palette)
+                            // Week 4, A7: what the three parts leave out, so the tiles add up ("Also 1 receipt or order").
+                            if let rest = summary.rest {
+                                Text(rest)
+                                    .font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                                    .lineLimit(2)
+                                    .accessibilityHidden(true)
+                            }
                         }
                         if let q = summary.question {
                             NeedsYouUnsubQuestionView(question: q, palette: palette)

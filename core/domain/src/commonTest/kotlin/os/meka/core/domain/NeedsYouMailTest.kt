@@ -68,4 +68,37 @@ class NeedsYouMailTest {
         assertEquals("Tidied today: 4. 3 newsletters, 0 promos, 1 junk and scams.", full.spoken)
         assertNull(full.question)
     }
+
+    @Test
+    fun theTilesAddUpWithWhatThePartsLeaveOutNamedUnderThem() {
+        // Week 4, A7: "138 tidied" over 33 + 71 + 33 = 137; the receipt is named under the tiles, not lost.
+        val tidies = listOf(
+            batch("a", at(8 * 60), mapOf(MailTidy.NEWSLETTER to 20, MailTidy.ARCHIVE to 40, MailTidy.RECEIPT to 1)),
+            batch("b", at(9 * 60), mapOf(MailTidy.NEWSLETTER to 13, MailTidy.ARCHIVE to 31)),
+            batch("c", at(10 * 60), mapOf(MailTidy.JUNK_TRASH to 30, MailTidy.SCAM_JUNK to 3)),
+        )
+        val s = assertNotNull(NeedsYouMailRules.summary(tidies, null, at(12 * 60), cal))
+        assertEquals(listOf("138", "33", "71", "33"), s.tiles.map { it.number })
+        assertEquals("Also 1 receipt or order", s.rest)
+        assertEquals("Tidied today: 138. 33 newsletters, 71 promos, 33 junk and scams. Also 1 receipt or order.", s.spoken)
+        assertEquals(138, 33 + 71 + 33 + 1)
+        assertEquals("138 tidied · 33 newsletters · 71 promos · 33 junk & scams · 1 other", NeedsYouGroupRules.tidiedPeek(s.tiles))
+    }
+
+    @Test
+    fun manyKindsLeftOutAndATidyFromBeforeKindsWereKept() {
+        val old = MailTidyBatch("o", at(8 * 60), "Personal", "Tidied 3", "", 3, null, null, null, emptyMap())
+        val tidies = listOf(old, batch("a", at(9 * 60), mapOf(MailTidy.RECEIPT to 4, MailTidy.RESCUE to 2, MailTidy.NEWSLETTER to 1)))
+        assertEquals("Also 4 receipts and orders · 2 emails rescued from Junk · 3 more",
+            NeedsYouMailRules.rest(NeedsYouMailRules.today(tidies, at(12 * 60), cal)))
+    }
+
+    @Test
+    fun nothingLeftOutMeansNoLineAndAPeekThatAddsUp() {
+        val tidies = listOf(batch("a", at(9 * 60), mapOf(MailTidy.NEWSLETTER to 3, MailTidy.SCAM_JUNK to 1)))
+        val s = assertNotNull(NeedsYouMailRules.summary(tidies, null, at(12 * 60), cal))
+        assertNull(s.rest)
+        assertEquals("4 tidied · 3 newsletters · 0 promos · 1 junk & scams", NeedsYouGroupRules.tidiedPeek(s.tiles))
+        assertNull(assertNotNull(NeedsYouMailRules.summary(emptyList(), offer(1), at(12 * 60), cal)).rest)
+    }
 }
