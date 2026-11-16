@@ -120,6 +120,8 @@ class NeedsYouMailTilesScreensTest {
         val parts = summary.tiles.drop(1).sumOf { it.number.toInt() } + 1
         if (summary.tiles[0].number.toInt() != parts) fail("$name: the tiles don't add up")
         ScreenShots.assertNoBrokenWords(compose, name)
+        // Week 4, A14: the foot was cut to "Put back fro…" on the cover; it wraps instead.
+        ScreenShots.assertNotCut(compose, name, listOf(NeedsYouMailRules.FOOT))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 

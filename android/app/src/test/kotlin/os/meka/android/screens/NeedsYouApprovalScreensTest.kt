@@ -103,6 +103,7 @@ class NeedsYouApprovalScreensTest {
         if (onScreen("TRADE · KESTREL")) fail("$name: the label still shouts in capitals")
         if (compose.onAllNodesWithTag(NEEDS_YOU_DECIDE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 2) fail("$name: not two cards")
         ScreenShots.assertEachOneLine(compose, name, listOf(ApprovalRules.APPROVE, ApprovalRules.DECLINE))
+        ScreenShots.assertNothingCutUnder(compose, name, NEEDS_YOU_DECIDE_TAG)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 

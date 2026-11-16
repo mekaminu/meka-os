@@ -115,6 +115,7 @@ class NeedsYouDecideOthersScreensTest {
         if (compose.onAllNodesWithTag(NEEDS_YOU_DECIDE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 3) fail("$name: not three cards")
         ScreenShots.assertEachOneLine(compose, name, listOf("I'll work from home", "Covered", "Skip this one", "Booked…", "Went", "Not yet",
             "Call to book", "Copy email"))
+        ScreenShots.assertNothingCutUnder(compose, name, NEEDS_YOU_DECIDE_TAG)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 

@@ -88,8 +88,10 @@ internal fun NeedsYouDecideShell(
             DecideIcon(card.icon)
             Column(Modifier.weight(1f).padding(start = MekaSpace.xs)) {
                 Text(card.what, style = MekaType.taskTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // The line under it carries the reason to act (an expiry, when he last went, who asked): it wraps
+                // to three lines rather than being cut on the folded phone (walk-through 2026-11-15, A14).
                 Text(card.from, style = MekaType.caption, color = if (card.urgent) Meka.colors.critical else Meka.colors.textSecondary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    maxLines = 3, overflow = TextOverflow.Ellipsis)
                 // An approval's detail lines (what would happen) stay whole, never cut.
                 card.details.forEach { Text(needsShown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
             }

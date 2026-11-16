@@ -348,6 +348,24 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-15 A14: fails when any text inside a node tagged [tag] (every decide card, the mail card) is
+     * drawn cut, as the cover's decide cards cut "expires i…", "Dentist · … · Las…" and "Put back fro…" with room below.
+     */
+    fun assertNothingCutUnder(compose: ComposeContentTestRule, name: String, tag: String) {
+        val texts = mutableSetOf<String>()
+        fun collect(n: SemanticsNode) {
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.let { texts += it }
+            n.children.forEach { collect(it) }
+        }
+        fun walk(n: SemanticsNode) {
+            if (n.config.getOrNull(SemanticsProperties.TestTag) == tag) collect(n) else n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (texts.isEmpty()) fail("$name: nothing under $tag")
+        assertNotCut(compose, name, texts)
+    }
+
+    /**
      * Fails when one of [texts] (matched whole) is drawn in less room than its natural one-line width. For a pill whose
      * text node is measured for its intrinsics as well as laid out (A6's "Other" chip on a Board card), the text layout
      * [assertNotCut] reads can be the intrinsic pass's, not the drawn one; the node's laid-out width is what's drawn.

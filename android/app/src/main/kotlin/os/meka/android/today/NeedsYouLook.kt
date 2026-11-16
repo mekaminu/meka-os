@@ -426,7 +426,7 @@ internal fun NeedsYouMailCard(
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(summary.foot, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            Text(summary.foot, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f))
             Text(
                 NeedsYouMailRules.SEE_ALL, style = MekaType.captionStrong, color = Meka.colors.accent,

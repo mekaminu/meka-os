@@ -36,7 +36,7 @@ struct NeedsYouDecideCardView: View {
                     Text(card.what).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
                     Text(card.from).font(MekaType.caption)
                         .foregroundStyle(card.urgent ? palette.critical : palette.textSecondary)
-                        .lineLimit(1).truncationMode(.tail)
+                        .lineLimit(3).truncationMode(.tail)
                     // An approval's detail lines (what would happen) stay whole, never cut.
                     ForEach(Array(card.details.enumerated()), id: \.offset) { _, line in
                         Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)

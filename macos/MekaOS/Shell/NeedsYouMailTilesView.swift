@@ -40,7 +40,7 @@ struct NeedsYouMailTilesView: View {
                         HStack(spacing: MekaSpace.xs) {
                             Text(summary.foot)
                                 .font(MekaType.micro).foregroundStyle(palette.textTertiary)
-                                .lineLimit(1).truncationMode(.tail)
+                                .lineLimit(2).truncationMode(.tail)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Button(NeedsYouMailRules.shared.SEE_ALL) {
                                 MekaHaptics.tick()
