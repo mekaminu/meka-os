@@ -348,7 +348,7 @@ class MoneyScreensTest {
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerBills() {
         shoot("inner-dark-columns-bills", Fill.MANY, tab = MoneyTab.BILLS)
-        // Walk-through A32: one pay month's bills (Streamly paid since payday on 5 Oct, the council tax due 1 Nov), not
+        // Walk-through A32: one pay month's bills (Netflix paid since payday on 5 Oct, the council tax due 1 Nov), not
         // "£153 of £295 this month" with the council tax counted twice, above Plan's whole month out.
         val line = "£11 of £153 already paid since payday"
         if (compose.onAllNodes(ScreenShots.plainText(line, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
