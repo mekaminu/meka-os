@@ -18,8 +18,9 @@ struct LifePageHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(spacing: MekaSpace.xs) {
+                // A long title wraps rather than pushing + Add out (walk-through 2026-11-15 A11, seen on the Fold).
                 Text(title).font(MekaType.upNextTitle).tracking(MekaType.upNextTitleTracking)
-                    .foregroundStyle(palette.textPrimary)
+                    .foregroundStyle(palette.textPrimary).lineLimit(2)
                     .accessibilityAddTraits(.isHeader)
                 Button {
                     withAnimation(MekaMotion.expand(reduced: reduceMotion)) { infoOpen.toggle() }
@@ -36,8 +37,10 @@ struct LifePageHeader: View {
                     Text(LifePageRules.shared.ADD).font(MekaType.captionStrong).foregroundStyle(palette.onAccent)
                         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                         .background(Capsule().fill(palette.accent))
+                        .fixedSize()
                 }
                 .buttonStyle(MekaPressStyle())
+                .layoutPriority(1)
                 .accessibilityLabel("Add")
             }
             if infoOpen {

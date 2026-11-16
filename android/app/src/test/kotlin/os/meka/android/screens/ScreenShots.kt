@@ -23,6 +23,7 @@ import os.meka.android.ask.LIFE_TILE_TAG
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DurationGlue
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.LifePageView
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PhraseGlue
@@ -442,6 +443,28 @@ object ScreenShots {
         assertNoDotEndingALine(compose, name, empties)
         assertNoDotStartingALine(compose, name, empties + page.tiles.map { it.label })
         assertTilesOneHeight(compose, name)
+        assertHeaderWhole(compose, name, page.title)
+    }
+
+    /**
+     * Walk-through 2026-11-15 A11: a page's title never pushes its gold + Add off the closed Fold ("Emergency card"
+     * left "+ A" over the ⓘ; "What Navilife knows" left no + Add at all). + Add is drawn whole inside the screen and
+     * the title isn't cut. Pages without the header pass.
+     */
+    fun assertHeaderWhole(compose: ComposeContentTestRule, name: String, title: String) {
+        val add = compose.onAllNodes(androidx.compose.ui.test.hasText(LifePageRules.ADD), useUnmergedTree = true).fetchSemanticsNodes()
+        if (add.isEmpty()) {
+            if (compose.onAllNodes(androidx.compose.ui.test.hasContentDescription(LifePageRules.INFO_LABEL)).fetchSemanticsNodes().isNotEmpty()) {
+                fail("$name: the page's header has no ${LifePageRules.ADD}")
+            }
+            return
+        }
+        val width = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().size.width
+        add.forEach { n ->
+            if (n.positionInRoot.x < 0f || n.positionInRoot.x + n.size.width > width + 1) fail("$name: ${LifePageRules.ADD} runs off the screen")
+        }
+        assertDrawnWhole(compose, name, listOf(LifePageRules.ADD))
+        assertNotCut(compose, name, listOf(LifePageRules.ADD, title))
     }
 
     /**

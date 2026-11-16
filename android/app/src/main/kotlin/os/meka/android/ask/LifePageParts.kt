@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -82,22 +83,30 @@ internal fun LifePageHeader(
     val reduced = Meka.reducedMotion
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = titleModifier.semantics { heading() })
-            Box(
-                Modifier.clip(CircleShape).clickable(role = Role.Button, onClick = onInfo)
-                    .semantics {
-                        contentDescription = LifePageRules.INFO_LABEL
-                        stateDescription = if (infoOpen) "Shown" else "Hidden"
-                    }
-                    .minTouch(),
-                contentAlignment = Alignment.Center,
-            ) {
+            // The title and its ⓘ take what + Add leaves (walk-through 2026-11-15 A11: "Emergency card" and "What Navilife
+            // knows" pushed + Add to "+ A" or off the closed Fold); a long title takes a second line, then steps down.
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                BasicText(
+                    title, style = MekaType.greeting.copy(color = Meka.colors.textPrimary), maxLines = 2,
+                    autoSize = TextAutoSize.StepBased(minFontSize = MekaType.itemTitle.fontSize, maxFontSize = MekaType.greeting.fontSize, stepSize = 1.sp), // type: ok (steps down to item title, then wraps)
+                    modifier = Modifier.weight(1f, fill = false).then(titleModifier).semantics { heading() },
+                )
                 Box(
-                    Modifier.size(MekaSpace.l).border(1.dp, Meka.colors.accent, CircleShape),
+                    Modifier.clip(CircleShape).clickable(role = Role.Button, onClick = onInfo)
+                        .semantics {
+                            contentDescription = LifePageRules.INFO_LABEL
+                            stateDescription = if (infoOpen) "Shown" else "Hidden"
+                        }
+                        .minTouch(),
                     contentAlignment = Alignment.Center,
-                ) { Text("i", style = MekaType.caption, color = Meka.colors.accent) }
+                ) {
+                    Box(
+                        Modifier.size(MekaSpace.l).border(1.dp, Meka.colors.accent, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("i", style = MekaType.caption, color = Meka.colors.accent) }
+                }
             }
-            Box(Modifier.weight(1f))
+            Box(Modifier.width(MekaSpace.xs))
             Text(
                 LifePageRules.ADD, style = MekaType.metaStrong, color = Meka.colors.onAccent, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onAdd)
