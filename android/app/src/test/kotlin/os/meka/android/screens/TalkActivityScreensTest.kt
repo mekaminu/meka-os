@@ -145,6 +145,17 @@ class TalkActivityScreensTest {
         if (compose.onAllNodes(hasText(off.action!!) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
             fail("Talk: no ${off.action} after Turn off")
         }
+        // Walk-through 2026-11-15 A12 ("talk by-hand = default"): Talk over sits at the foot of the pane, so the opening
+        // shot (the default page) never showed it turned off. Swipe down to its Off and shoot that as `-below`, dropping
+        // the top copy; when it was on screen already, shoot the top again instead.
+        val shot = "cover-dark-by-hand"
+        val below = ScreenShots.shootBelow(compose, "talk", shot, LoneWordGlue.kept(off.status), settle = {
+            repeat(10) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                compose.mainClock.advanceTimeBy(100)
+            }
+        })
+        if (below) java.io.File(ScreenShots.path("talk", shot)).delete() else ScreenShots.reshootAfterHand(compose, "talk", shot)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun talkCover() = talk("cover-dark")

@@ -222,7 +222,26 @@ class SpeakUpAutonomyScreensTest {
                 if (!onScreen("Said today: 0 of 3")) fail("$name: \"Said today: 0 of 3\" isn't on screen")
             }
         }
+        shootWhatDiffers(name, fill, theme)
         return core
+    }
+
+    /**
+     * Walk-through 2026-11-15 A12 ("speak-up empty = one = many = by-hand"): the cover shows Urgent and the first few
+     * moments only, so One's mute and Many's reply moment, How often and mute sat below the shot. One swipes down to its
+     * mute ("Muted till 19:15"), Many to How often's "Said today: 0 of 3", each shot as `<name>-below`; when none of what
+     * differs was on the opening screen, the top (a copy of Empty's) is dropped in Dark (Light has no Empty to copy).
+     */
+    private fun shootWhatDiffers(name: String, fill: Fill, theme: ThemeChoice) {
+        val (last, differs) = when (fill) {
+            Fill.EMPTY -> return
+            Fill.ONE -> "Muted till 19:15" to listOf("Muted till 19:15", SpeakUpRules.UNMUTE_ACTION)
+            Fill.MANY -> "Said today: 0 of 3" to listOf("Said today: 0 of 3", "Muted till 19:15", SpeakMoment.REPLY.label.uppercase(), SpeakMoment.PRESSURE.label.uppercase())
+        }
+        val topIsCopy = theme == ThemeChoice.DARK && !ScreenShots.anyOnScreen(compose, differs)
+        // The pane keeps each line's last words together (no-break spaces), so the swipe looks for the words as drawn.
+        val below = ScreenShots.shootBelow(compose, "speak-up", name, LoneWordGlue.kept(last), settle = { turns(1_000) })
+        if (topIsCopy && below) java.io.File(ScreenShots.path("speak-up", name)).delete()
     }
 
     /** Works by hand: Urgent's Turn off turns it off; How often swaps; Mute mutes for 2 hours and Speak again now ends it. */
@@ -257,6 +276,8 @@ class SpeakUpAutonomyScreensTest {
         tap("${SpeakUpRules.UNMUTE_ACTION}: ${SpeakUpRules.MUTE_LABEL}")
         until { onScreen("Not muted") }
         if (!onScreen("Not muted")) fail("$name: Speak again now left it muted")
+        // Walk-through 2026-11-15 A12: the by-hand shot was the opening (Empty's) screen; now it shows Urgent turned off.
+        ScreenShots.reshootAfterHand(compose, "speak-up", "cover-dark-by-hand")
     }
 
     // ---- What Navilife may do ----
@@ -342,6 +363,9 @@ class SpeakUpAutonomyScreensTest {
         until { core.autonomyView.value.paused && onScreen(AutonomyRules.RESUME) }
         if (!core.autonomyView.value.paused) fail("$name: Pause left Navilife running")
         if (!onScreen("Paused since 17:15")) fail("$name: the summary doesn't say paused since 17:15")
+        // Walk-through 2026-11-15 A12 ("autonomy by-hand = one"): the shot was One's opening screen; it is taken again
+        // while paused, the one state no other shot shows (Ask first at the end returns it to a fresh install's page).
+        ScreenShots.reshootAfterHand(compose, "autonomy", "cover-dark-by-hand")
         tap(AutonomyRules.RESUME)
         until { !core.autonomyView.value.paused }
         if (core.autonomyView.value.paused) fail("$name: Resume left it paused")
