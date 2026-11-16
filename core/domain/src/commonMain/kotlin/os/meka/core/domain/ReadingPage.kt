@@ -102,7 +102,8 @@ object ReadingPageRules {
                 LifePageRules.card(GO, GO, allRows(view, GO), empty = GO_EMPTY),
                 LifePageRules.card(NEXT, NEXT, allRows(view, NEXT), empty = NEXT_EMPTY),
                 LifePageRules.card(DONE, DONE, allRows(view, DONE), empty = DONE_EMPTY),
-                LifePageRules.card(GOAL, GOAL, listOf(goalRow)),
+                // No goal: its row only offers to set one, so the card counts nothing (A9: "Reading goal 1" over "No goal").
+                LifePageRules.card(GOAL, GOAL, listOf(goalRow), count = if (g != null) 1 else 0),
             ),
             ADD_TITLE, ADD_CHOICES,
         )

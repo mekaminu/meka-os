@@ -87,9 +87,11 @@ struct LifePageCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: MekaSpace.xs) {
                 Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).accessibilityAddTraits(.isHeader)
-                Text("\(card.count)").font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .padding(.horizontal, MekaSpace.xs)
-                    .background(Capsule().fill(palette.surface))
+                if card.showsCount {
+                    Text("\(card.count)").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .padding(.horizontal, MekaSpace.xs)
+                        .background(Capsule().fill(palette.surface))
+                }
                 Spacer()
                 if let more = card.more {
                     Button("\(more) ›", action: onMore).buttonStyle(.link).font(MekaType.caption)

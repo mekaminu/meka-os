@@ -148,6 +148,13 @@ class LifeTilesTest {
         // What he chose on this device wins.
         assertEquals(true, LifeTileRules.setUpOpen(true, some))
         assertEquals(false, LifeTileRules.setUpOpen(false, empty))
+        // Walk-through 2026-11-15 A9: never "Nothing set up yet" over Lists "1 to buy" or a countdown to Christmas.
+        val listed = LifeTileRules.lines(LifeTileInputs(toBuy = 1, countdownLine = LifeTileLine("Christmas in 65 days", false)))
+        assertEquals(listOf(LifeTile.LISTS, LifeTile.COUNTDOWNS), LifeTileRules.filled(listed))
+        assertEquals(LifeTileRules.WELCOME_REST, LifeTileRules.welcome(listed))
+        assertTrue("Nothing" !in LifeTileRules.welcome(listed)!!)
+        assertTrue(LifeTileRules.setUpOpen(null, listed))
+        assertEquals(emptyList(), LifeTileRules.filled(empty))
     }
 
     @Test

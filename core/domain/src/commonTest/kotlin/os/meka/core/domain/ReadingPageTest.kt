@@ -52,6 +52,14 @@ class ReadingPageTest {
         val goal = p.cardAt(3).rowAt(0)
         assertEquals(ReadingPageRules.KEY_GOAL, goal.key)
         assertEquals(ReadingPageRules.NO_GOAL, goal.name)
+        // Walk-through 2026-11-15 A9: no goal counts nothing ("Reading goal 1" over "No goal for the year"), no "0" pill.
+        assertEquals(0, p.cardAt(3).count)
+        assertFalse(p.cardAt(3).showsCount)
+        assertEquals(0, ReadingPageRules.page(ReadingView.EMPTY).cardAt(3).count)
+        val g = ReadingGoalView("Read 12 books in 2026", "4 of 12", "On pace", 0.33f, true, "")
+        assertEquals(1, ReadingPageRules.page(view(g)).cardAt(3).count)
+        assertTrue(ReadingPageRules.page(view(g)).cardAt(3).showsCount)
+        assertTrue(p.cardAt(0).showsCount)
     }
 
     @Test

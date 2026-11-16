@@ -56,6 +56,7 @@ import os.meka.core.domain.ReviewOpen
 import os.meka.core.domain.ReviewRules
 import os.meka.core.domain.ReviewTile
 import os.meka.core.domain.WeeklyReviewView
+import os.meka.core.domain.Win
 import os.meka.core.domain.WinRules
 import os.meka.core.domain.WorkHours
 import os.meka.core.domain.WorkSchedule
@@ -192,11 +193,29 @@ class ReviewBalanceReflectScreensTest {
     private fun saved(week: Long, wentWell: String, drop: String, matters: String) =
         Reflection(week, wentWell, drop, matters, false, at(week + 6, 18, 50))
 
+    /**
+     * The week's wins, kept on its Friday: the same list feeds Wins and the reflection's facts, so "2 wins" never sits over
+     * WINS "Nothing yet" (walk-through 2026-11-15, A9).
+     */
+    private fun wins(fill: Fill): List<Win> {
+        val start = week(fill).weekStart
+        return when (fill) {
+            Fill.EMPTY -> emptyList()
+            Fill.ONE -> listOf(Win("w1", "Fixed the rota clash", start + 4, at(start + 4, 17, 0)))
+            Fill.MANY -> listOf(
+                Win("w1", "Shipped the release notes a day early", start + 2, at(start + 2, 17, 0)),
+                Win("w2", "Closed the audit actions", start + 4, at(start + 4, 17, 0)),
+            )
+        }
+    }
+
+    private fun winsView(fill: Fill) = WinRules.view(wins(fill), week(fill).weekStart, today, nowMin)
+
     private fun reflection(fill: Fill): ReflectionView = when (fill) {
         Fill.EMPTY -> ReflectionRules.view(week(fill), emptyList(), emptyList(), emptyList(), today, nowMin, cal)
         Fill.ONE -> ReflectionRules.view(
             week(fill), listOf(saved(ws - 7, "Got the boiler booked\nWalked most days", "Late-night emails", "Run 5k without stopping")),
-            listOf("Fixed the rota clash"), emptyList(), today, nowMin, cal,
+            winsView(fill).week.map { it.text }, emptyList(), today, nowMin, cal,
         )
         Fill.MANY -> ReflectionRules.view(
             week(fill),
@@ -205,7 +224,7 @@ class ReviewBalanceReflectScreensTest {
                 saved(ws - 14, "Shipped the release notes a day early\nThree runs", "", "Book the half-term swimming lessons"),
                 saved(ws - 21, "", "Scrolling after midnight", ""),
             ),
-            listOf("Shipped the release notes a day early", "Closed the audit actions"),
+            winsView(fill).week.map { it.text },
             listOf(goal("g1", "Run 5k without stopping", weekOf = ws + 7), goal("g2", "Clear the garage")),
             today, nowMin, cal, requestedWeek = ws,
         )
@@ -236,9 +255,12 @@ class ReviewBalanceReflectScreensTest {
         ThemeChoice.save(context, theme)
         compose.mainClock.autoAdvance = false
         val v = week(fill)
-        val w = WinRules.view(emptyList(), v.weekStart, today, nowMin)
+        val w = winsView(fill)
         val b = balance(fill)
         val r = reflection(fill)
+        // A9: the facts' wins are the Wins card's wins, one count on one screen.
+        val factWins = Regex("(\\d+) wins?").find(r.facts)?.groupValues?.get(1)?.toInt() ?: 0
+        if (factWins != w.week.size) fail("$fill: the reflection says ${r.facts} but Wins holds ${w.week.size} (${w.weekLine})")
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {

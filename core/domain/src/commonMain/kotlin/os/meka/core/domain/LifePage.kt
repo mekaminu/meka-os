@@ -42,6 +42,9 @@ data class PageCard(
 ) {
     val rowCount: Int get() = rows.size
     fun rowAt(index: Int): PageRow = rows[index]
+
+    /** Whether the count pill shows: never a "0" beside a card with nothing in it (walk-through 2026-11-15, A9). */
+    val showsCount: Boolean get() = count > 0
 }
 
 /** One choice in + Add's sheet ("A date", "Where I parked"): the app maps [key] to what it already does. */
@@ -78,8 +81,8 @@ object LifePageRules {
      * A card of [rows]: the first [MAX_ROWS] shown, the count of all of them, and [more] (else See all once there are
      * more than fit).
      */
-    fun card(key: String, title: String, rows: List<PageRow>, more: String? = null, empty: String? = null): PageCard =
-        PageCard(key, title, rows.size, rows.take(MAX_ROWS), more ?: if (rows.size > MAX_ROWS) SEE_ALL else null, empty)
+    fun card(key: String, title: String, rows: List<PageRow>, more: String? = null, empty: String? = null, count: Int = rows.size): PageCard =
+        PageCard(key, title, count, rows.take(MAX_ROWS), more ?: if (rows.size > MAX_ROWS) SEE_ALL else null, empty)
 
     /**
      * Words a page draws where they may wrap (the ⓘ's words, a card's empty line, a row's name, + Add's choices), with no

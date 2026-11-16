@@ -152,7 +152,21 @@ object LifeTileRules {
     /** First run (nothing at all set up): one line over the open set-up group, not an empty grid. */
     const val WELCOME = "Nothing set up yet · pick one to start; each takes a minute"
 
-    fun welcome(lines: LifeLines): String? = if (lines.toSetUp.containsAll(SET_UP_TILES)) WELCOME else null
+    /**
+     * The same first run with something already in a place (Lists "1 to buy", a countdown to Christmas): the line names
+     * the rest, so it never says "Nothing set up yet" over tiles that have something (walk-through 2026-11-15, A9).
+     */
+    const val WELCOME_REST = "The rest aren't set up yet · pick one to start; each takes a minute"
+
+    /** The tiles with something real in them: not waiting to be set up and not on their empty prompt. */
+    fun filled(lines: LifeLines): List<LifeTile> =
+        ORDER.filter { !lines.needsSetUp(it) && lines.of(it).let { l -> l != null && l.text != prompt(it) } }
+
+    fun welcome(lines: LifeLines): String? = when {
+        !lines.toSetUp.containsAll(SET_UP_TILES) -> null
+        filled(lines).isEmpty() -> WELCOME
+        else -> WELCOME_REST
+    }
 
     /**
      * Whether "To set up" is open: what he chose on this device ([stored], remembered per device), else open on the

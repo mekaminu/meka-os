@@ -162,7 +162,7 @@ internal fun LifePageCard(card: PageCard, modifier: Modifier = Modifier, onMore:
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
-            Text(
+            if (card.showsCount) Text(
                 "${card.count}", style = MekaType.caption, color = Meka.colors.textSecondary,
                 modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
                     .background(Meka.colors.surfaceRaised).padding(horizontal = MekaSpace.xs),

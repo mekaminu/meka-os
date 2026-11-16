@@ -130,8 +130,18 @@ class AskScreensTest {
         os.meka.core.domain.AskHubRules.TABS.forEach { ScreenShots.assertShows(compose, name, it.label) }
         when (fill) {
             // Nothing set up: one line says so over the open set-up group, never an empty grid.
-            Fill.EMPTY -> ScreenShots.assertShows(compose, name, LifeTileRules.WELCOME)
-            Fill.ONE -> ScreenShots.assertShows(compose, name, "1 to buy")
+            // Walk-through 2026-11-15 A9: the countdown to Christmas is there from the start, so the line names the rest
+            // and never says "Nothing set up yet" over a tile with something in it.
+            Fill.EMPTY -> {
+                val counting = ScreenShots.texts(compose).any { "Christmas" in it }
+                ScreenShots.assertShows(compose, name, if (counting) LifeTileRules.WELCOME_REST else LifeTileRules.WELCOME)
+                if (counting && ScreenShots.texts(compose).any { LifeTileRules.WELCOME in it }) fail("$name: \"${LifeTileRules.WELCOME}\" over a countdown")
+            }
+            Fill.ONE -> {
+                ScreenShots.assertShows(compose, name, "1 to buy")
+                ScreenShots.assertShows(compose, name, LifeTileRules.WELCOME_REST)
+                if (ScreenShots.texts(compose).any { LifeTileRules.WELCOME in it }) fail("$name: \"${LifeTileRules.WELCOME}\" over \"1 to buy\"")
+            }
             Fill.MANY -> {
                 ScreenShots.assertShows(compose, name, "3 to buy")
                 // Slice 8 (the Ask re-shot's findings): the errand counts, and a two-line name keeps its icon on top.
