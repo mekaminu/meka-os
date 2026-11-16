@@ -42,9 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.FirstBaseline
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.LastBaseline
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
@@ -55,8 +52,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.constrainHeight
-import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import os.meka.android.designsystem.Meka
@@ -87,41 +82,6 @@ import os.meka.core.domain.PressureFix
  * the day's cards high on the screen. One typeface (the app's sans): no serif, no monospace. The open Fold keeps its columns.
  */
 
-/**
- * The month and the week's line ([content]: the month's Text, then the week's): side by side on the month's baseline while
- * the week's line fits there whole, else the week's line under the month (walk-through 2026-11-15, A10: it was cut to
- * "Week 43 · 2h" beside the month, half the open Fold's "2h 30m planned"). The week's line is measured for its whole width first, so it is given room for all of it.
- */
-@Composable
-private fun MonthAndWeek(modifier: Modifier, content: @Composable () -> Unit) {
-    val gap = MekaSpace.xs
-    Layout(content, modifier) { measurables, constraints ->
-        val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val gapPx = gap.roundToPx()
-        val monthM = measurables[0]
-        val weekM = measurables[1]
-        val month = monthM.measure(loose)
-        val weekWidth = weekM.maxIntrinsicWidth(loose.maxHeight)
-        val beside = month.width + gapPx + weekWidth <= loose.maxWidth
-        val week = weekM.measure(loose.copy(maxWidth = if (beside) (loose.maxWidth - month.width - gapPx).coerceAtLeast(0) else loose.maxWidth))
-        val monthBase = month[FirstBaseline].takeIf { it != androidx.compose.ui.layout.AlignmentLine.Unspecified } ?: month.height
-        val weekBase = week[LastBaseline].takeIf { it != androidx.compose.ui.layout.AlignmentLine.Unspecified } ?: week.height
-        if (beside) {
-            val top = maxOf(0, monthBase - weekBase)
-            val height = maxOf(month.height, top + week.height)
-            layout(constraints.constrainWidth(month.width + gapPx + week.width), constraints.constrainHeight(height)) {
-                month.place(0, 0)
-                week.place(month.width + gapPx, top)
-            }
-        } else {
-            layout(constraints.constrainWidth(maxOf(month.width, week.width)), constraints.constrainHeight(month.height + week.height)) {
-                month.place(0, 0)
-                week.place(0, month.height)
-            }
-        }
-    }
-}
-
 /** "October  Week 43" then ‹ › ⋯ as 40 dp round buttons on the card surface; ⋯ opens [menu]. */
 @Composable
 internal fun FoldedHeader(
@@ -131,11 +91,13 @@ internal fun FoldedHeader(
     val haptics = rememberMekaHaptics()
     var open by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth().testTag(FOLDED_HEAD_TAG), verticalAlignment = Alignment.CenterVertically) {
-        // The week's line sits beside the month while it fits whole, else under it (walk-through 2026-11-15, A10: cut to
-        // "Week 43 · 2h" beside the month, half the open Fold's "2h 30m planned"); a line that's still too long says "…".
-        MonthAndWeek(Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken }) {
+        Row(
+            Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken },
+            verticalAlignment = Alignment.Bottom,
+        ) {
             Text(month, style = MekaType.nowTitle, color = Meka.colors.textPrimary, maxLines = 1, modifier = Modifier.testTag(MONTH_TAG))
-            Text(week, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
+            Spacer(Modifier.width(MekaSpace.xs))
+            Text(week, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.padding(bottom = MekaSpace.xxs))
         }
         RoundButton("‹", "Previous week", canBack) { haptics.tick(); onBack() }
         RoundButton("›", "Next week", canForward) { haptics.tick(); onForward() }

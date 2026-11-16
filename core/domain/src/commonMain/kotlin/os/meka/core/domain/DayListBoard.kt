@@ -13,8 +13,9 @@ data class DayListPill(
 
 /**
  * The Week board's header: "November" and "Week 46 · 6h 15m planned" (the open spread and the Mac). [foldedLine] is the
- * folded phone's shorter "Week 46 · 6h 15m" (walk-through 2026-11-15, A10: the long line was cut to "Week 43 · 2h" beside
- * the month, so it read as half the open Fold's "2h 30m planned"); "Week 47" alone with nothing planned.
+ * folded phone's "Week 46", as the approved folded mockup (walk-through 2026-11-15, A10: the long line was cut to
+ * "Week 43 · 2h" beside the month, so it read as half the open Fold's "2h 30m planned"; even "Week 43 · 2h 30m" has no
+ * room there beside the month and ‹ › ⋯). The folded phone's total is the day pills' and the spoken line's.
  */
 data class DayListBoardHead(val month: String, val weekLine: String, val spoken: String, val foldedLine: String = weekLine)
 
@@ -46,9 +47,8 @@ object DayListBoardRules {
         val h = BoardFoldedRules.head(week.startEpochDay)
         val total = week.days.sumOf(::minutes)
         val line = if (total > 0) "${h.week} · ${TaskEstimateRules.label(total)} planned" else "${h.week} · nothing planned"
-        val folded = if (total > 0) "${h.week} · ${TaskEstimateRules.label(total)}" else h.week
         return DayListBoardHead(
-            h.month, line, "${h.spoken}, " + if (total > 0) "${TaskEstimateRules.label(total)} planned" else "nothing planned", folded,
+            h.month, line, "${h.spoken}, " + if (total > 0) "${TaskEstimateRules.label(total)} planned" else "nothing planned", h.week,
         )
     }
 

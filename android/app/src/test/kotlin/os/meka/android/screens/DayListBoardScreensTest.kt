@@ -23,6 +23,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlin.random.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlinx.coroutines.runBlocking
@@ -134,8 +135,9 @@ class DayListBoardScreensTest {
         val week = board.weeks.first { w -> w.days.any { it.isToday } }
         val head = DayListBoardRules.head(week)
         assertTrue(shows(head.month) && shows(head.foldedLine), "$name: the header isn't the mockup's (${head.foldedLine})")
-        // The week's total whole beside the month, the same as the open Fold's "… planned" (walk-through 2026-11-15, A10).
+        // The week alone beside the month, never a total cut in half (walk-through 2026-11-15, A10).
         assertTrue(head.weekLine.startsWith(head.foldedLine), "$name: folded ${head.foldedLine} vs open ${head.weekLine}")
+        assertFalse(shows("${head.foldedLine} ·"), "$name: the folded header still carries a total")
         ScreenShots.assertNotCut(compose, name, listOf(head.foldedLine))
         assertTrue(described("Wednesday 21 October, today, 1h planned").fetchSemanticsNodes().isNotEmpty(), "$name: today's pill doesn't carry its length")
         assertTrue(shows("Wed 21 October · today"), "$name: the day's line isn't shown")
