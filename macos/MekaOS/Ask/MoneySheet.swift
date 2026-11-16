@@ -1766,7 +1766,8 @@ struct MoneySheet: View {
     @ViewBuilder
     private func sorter() -> some View {
         let items = model.money?.month?.unsorted?.items ?? []
-        let left = items.filter { !sortSkipped.contains($0.key) && !sortDone.contains($0.key) }.count
+        // Walk-through A13: what's left counts payments, as Spending's "3 payments without a category" does.
+        let left = items.filter { !sortSkipped.contains($0.key) && !sortDone.contains($0.key) }.reduce(0) { $0 + Int($1.count) }
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let it = sortItem() {
                 let id = it.row.id
@@ -1790,7 +1791,7 @@ struct MoneySheet: View {
                     newCategoryForm(txnId: id).transition(.opacity)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: MekaSpace.xs, alignment: .leading)], alignment: .leading, spacing: MekaSpace.xs) {
-                        ForEach(MoneyPaymentSheet.shared.chips(order: order, current: it.row.category, own: own), id: \.key) { c in
+                        ForEach(MoneySorter.shared.chips(order: order, own: own), id: \.key) { c in
                             sheetPill(c.label, on: c.on, spoken: c.spoken) {
                                 guard !c.on else { return }
                                 let cat = c.key

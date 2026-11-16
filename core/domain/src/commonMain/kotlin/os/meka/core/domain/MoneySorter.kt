@@ -63,9 +63,20 @@ object MoneySorter {
     fun current(v: MoneyUnsortedView?, skipped: Set<String>, done: Set<String> = emptySet()): MoneySortItem? =
         v?.items?.firstOrNull { it.key !in skipped && it.key !in done }
 
-    /** How many payees are left to sort, counting the one shown. */
+    /**
+     * How many payments are left to sort, counting the shown payee's: the same count as Spending's "3 payments without a
+     * category" until he picks or skips one (walk-through 2026-11-15, A13: the head counted payees, "2 LEFT" over "3
+     * payments").
+     */
     fun left(v: MoneyUnsortedView?, skipped: Set<String>, done: Set<String> = emptySet()): Int =
-        v?.items?.count { it.key !in skipped && it.key !in done } ?: 0
+        v?.items?.filter { it.key !in skipped && it.key !in done }?.sumOf { it.count } ?: 0
+
+    /**
+     * The sorter's category chips: [MoneyPaymentSheet.chips] with none lit, since a payee to sort has no category of his
+     * choosing yet (walk-through A13: Other was lit, as if picked). Picking Other himself sorts it, as [view] counts.
+     */
+    fun chips(order: List<String>, own: List<MoneyOwnCategory> = emptyList()): List<MoneySheetChip> =
+        MoneyPaymentSheet.chips(order, current = "", own = own)
 
     /** Over the sheet: "SORT YOUR PAYMENTS · 12 LEFT", or the head alone for the last one. */
     fun head(left: Int): String = if (left > 1) "$HEAD · $left LEFT" else HEAD

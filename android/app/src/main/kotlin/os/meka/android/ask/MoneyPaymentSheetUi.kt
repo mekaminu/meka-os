@@ -163,7 +163,7 @@ internal fun PaymentSheet(
                         onCancel = { making = false },
                     ) else Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            for (c in MoneyPaymentSheet.chips(order, r.category, own)) {
+                            for (c in if (so != null) MoneySorter.chips(order, own) else MoneyPaymentSheet.chips(order, r.category, own)) {
                                 TripPill(c.label, on = c.on, tag = "money-sheet-cat-${c.key}", description = c.spoken) { if (!c.on) onCategory(c.key) }
                             }
                             if (!r.moneyIn) TripPill(MoneyOwnCategories.NEW, tag = "money-sheet-new", description = MoneyOwnCategories.NEW_SPOKEN) { making = true }

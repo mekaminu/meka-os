@@ -110,8 +110,10 @@ class MoneyPaymentSheetScreensTest {
         compose.mainClock.advanceTimeBy(100)
     }
 
-    private fun tapNewest(core: MekaCore): String {
-        val row = core.moneyView.value.month?.spending?.latest?.firstOrNull()?.rows?.firstOrNull() ?: fail("no latest payment")
+    /** Taps the newest payment, or the newest from [merchant], in Spending's latest payments; its id. */
+    private fun tapNewest(core: MekaCore, merchant: String? = null): String {
+        val rows = core.moneyView.value.month?.spending?.latest.orEmpty().flatMap { it.rows }
+        val row = (if (merchant == null) rows.firstOrNull() else rows.firstOrNull { it.merchant == merchant }) ?: fail("no latest payment")
         val tag = "money-txn-${row.id}"
         // A lazy list's scroll waits for a frame, so the clock runs while it scrolls (as BriefScreensTest does).
         compose.mainClock.autoAdvance = true
@@ -174,7 +176,9 @@ class MoneyPaymentSheetScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun aNewCategoryOfHisOwnTakesThePayee() {
         val core = open(ThemeChoice.DARK)
-        val id = tapNewest(core)
+        // Walk-through 2026-11-15, A13: Treats is made from Costa Coffee, as in the category's own shots (its sheet's
+        // "1 payee · £3.40 of £10"); it was made from Corner Stores' −£55.60 here.
+        val id = tapNewest(core, "Costa Coffee")
         assertTrue(shows("money-sheet-new"), "no + New category chip")
         tap("money-sheet-new")
         assertTrue(shows("money-new-category"), "the New category form didn't open")
@@ -334,6 +338,11 @@ class MoneyPaymentSheetScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun theNeedToggleAndTheNeedsView() {
         val core = open(ThemeChoice.DARK)
+        // Walk-through 2026-11-15, A13: Corner Stores is put in Groceries first, so the Needs vs wants shot isn't
+        // uncategorised money filed as a Need under "2 payments without a category" (the toggle had made Other a need).
+        val corner = core.moneyView.value.month!!.txns.first { it.merchant.startsWith("Corner") }
+        runBlocking { check(!core.setMoneyCategory(corner.id, "groceries").refused) }
+        settle()
         val id = tapNewest(core)
         assertTrue(shows("money-sheet-mark-need"), "no Need toggle")
         val was = core.moneyView.value.month!!.txns.first { it.id == id }.need
@@ -343,6 +352,10 @@ class MoneyPaymentSheetScreensTest {
         assertEquals(!was, now.need, "Need didn't flip")
         assertTrue(now.needMarked)
         assertTrue(shows("money-sheet-undo"), "no Undo after Need")
+        // Undo puts Groceries back as a need, so the view shows the month as it is: groceries a need, the coffee a want.
+        tap("money-sheet-undo")
+        waitFor(core) { core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.need == was }
+        assertEquals(was, core.moneyView.value.month!!.txns.first { it.id == id }.need, "Undo didn't put Need back")
         tap("money-sheet-done")
         compose.mainClock.autoAdvance = true
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("money-view-needs"))
@@ -365,6 +378,9 @@ class MoneyPaymentSheetScreensTest {
         compose.mainClock.autoAdvance = false
         settle()
         assertTrue(compose.onAllNodes(hasContentDescription("Needs, ", substring = true)).fetchSemanticsNodes().isNotEmpty(), "no Needs row")
+        val needs = core.moneyView.value.month!!.spending!!.needs!!.rows
+        assertTrue(needs.first { it.key == "needs" }.note.contains("Groceries"), "Groceries isn't under Needs: $needs")
+        assertTrue(needs.none { it.note.contains("Other") && it.key == "needs" }, "uncategorised money is under Needs: $needs")
         tap("money-view-categories")
     }
 }

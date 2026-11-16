@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -127,9 +128,16 @@ class MoneySorterScreensTest {
         tap("money-unsorted")
         assertTrue(shows("money-sort-head"), "the sorter didn't open")
         assertTrue(shows("money-sort-skip"), "no Skip in the sorter")
-        // Walk-through A32: the head counts the same payees as Spending's line.
+        // Walk-through A13 (2026-11-15): the head counts the same payments as Spending's line, "3 LEFT" under "3 payments
+        // without a category" (it counted the 2 payees).
         val head = MoneySorter.head(MoneySorter.left(u, emptySet()))
-        assertEquals("${MoneySorter.HEAD} · 2 LEFT", head)
+        assertEquals("${MoneySorter.HEAD} · ${u.count} LEFT", head)
+        assertEquals("${MoneySorter.HEAD} · 3 LEFT", head)
+        // No chip is lit for a payee still to sort (Other was, as if he'd picked it), so Other can be picked too.
+        compose.onNodeWithTag("money-sheet-cat-other", useUnmergedTree = true).assertExists()
+        if (compose.onAllNodes(hasContentDescription(", chosen", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("the sorter lights a category for a payee still to sort")
+        }
         if (compose.onAllNodesWithText(head, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
             fail("the sorter's head isn't \"$head\"")
         }

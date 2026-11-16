@@ -4292,6 +4292,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyLook.shared.moreLabel(rows: 5, open: false), "2 more ›")
         XCTAssertEqual(MoneySorter.shared.head(left: 3), "SORT YOUR PAYMENTS · 3 LEFT")
         XCTAssertEqual(MoneySorter.shared.doneLine(skipped: 0), MoneySorter.shared.ALL_DONE)
+        // Walk-through A13: the sorter lights no category for a payee still to sort.
+        XCTAssertFalse(MoneySorter.shared.chips(order: [], own: []).contains { $0.on })
         XCTAssertEqual(MoneySection.unsorted.name, "UNSORTED")
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .year), MoneyTab.accounts)
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .tips), MoneyTab.plan)

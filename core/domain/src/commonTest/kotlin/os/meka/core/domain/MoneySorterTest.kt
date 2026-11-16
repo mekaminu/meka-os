@@ -57,12 +57,23 @@ class MoneySorterTest {
         // Skip leaves one for later; a pick still on its way is passed over too.
         assertEquals("Xantho Widgets", MoneySorter.current(after, skipped = setOf(after.items[0].key))!!.row.merchant)
         assertNull(MoneySorter.current(after, skipped = setOf(after.items[0].key), done = setOf(after.items[1].key)))
+        // What's left counts payments, as Spending's line does: Xantho's one once Qwerty's two are skipped.
+        assertEquals(3, MoneySorter.left(after, emptySet()))
+        assertEquals(after.count, MoneySorter.left(after, emptySet()))
         assertEquals(1, MoneySorter.left(after, skipped = setOf(after.items[0].key)))
         // His own category and his own choice of Other both count as sorted.
         m.addOwnCategory("Gadgets", 2, MoneyIcon.BAG, after.items[0].row.id)
         m.setCategory(after.items[1].row.id, "other")
         assertNull(view(m).month!!.unsorted)
         assertTrue(MoneySection.UNSORTED !in MoneyTabs.sections(MoneyTab.SPENDING, view(m)))
+    }
+
+    @Test
+    fun theSortersChipsLightNoneSoOtherCanBePicked() {
+        val chips = MoneySorter.chips(emptyList())
+        assertTrue(chips.none { it.on })
+        val other = chips.first { it.key == MoneyCategory.OTHER.key }
+        assertEquals("Put it in ${other.label}", other.spoken)
     }
 
     @Test
