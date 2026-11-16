@@ -21,8 +21,11 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
@@ -449,7 +452,17 @@ class SettingsScreensTest {
         until { v().children.any { it.name == "Casey" } }
         if (v().children.none { it.name == "Casey" }) fail("$name: Done on the child field added nobody")
         assertTouchTargets(name)
-        // Walk-through 2026-11-08 A20: the shot shows what the hand changed (the new name, Casey added), not the opening page again.
+        // Walk-through 2026-11-15 A14 ("About you by-hand starting mid-scroll"): the child field left the list scrolled to
+        // its foot, so the shot began on a field cut by the top edge with no title. It goes back to the top first, so the
+        // shot opens on Close and the title with the hand's new name under them.
+        compose.onNodeWithTag(t).performScrollToIndex(0)
+        turns()
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        fun wholeOnScreen(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes()
+            .any { it.boundsInRoot.top >= screen.top && it.boundsInRoot.bottom <= screen.bottom }
+        if (!wholeOnScreen(AboutYouRules.TITLE)) fail("$name: the by-hand shot doesn't open on the title (still scrolled)")
+        if (!wholeOnScreen("Jordan Lee")) fail("$name: the by-hand shot doesn't show the name the hand typed")
+        // Walk-through 2026-11-08 A20: the shot shows what the hand changed (the new name), not the opening page again.
         ScreenShots.reshootAfterHand(compose, "about-you", "cover-dark-about-you-by-hand")
     }
 
