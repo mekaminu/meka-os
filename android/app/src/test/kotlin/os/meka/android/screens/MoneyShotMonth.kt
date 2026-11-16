@@ -54,6 +54,13 @@ internal object MoneyShotMonth {
     const val REWARDS = "Date,Description,Amount\n" +
         "15/10/2026,PAYMENT THANK YOU,50.00\n"
 
+    /**
+     * Walk-through 2026-11-15 A13 (g1b 4): Forecast's OUT / MONTH read £230 on the open Fold's Plan, £280 on Plan's
+     * layout shots and £270 on the plan-* shots, each from its own statement. Every Plan shot now imports [CURRENT], so
+     * the forecast is this month's August and September averaged: £234 out, shown as £230.
+     */
+    const val FORECAST_OUT_PENCE = 23_000L
+
     /** The biggest payee without a category first: Zebra Plover (2 × £12.60) over The Garden Shop (£24.99). */
     val UNSORTED = listOf("Zebra Plover", "The Garden Shop")
 

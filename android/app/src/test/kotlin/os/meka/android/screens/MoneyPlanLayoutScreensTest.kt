@@ -66,16 +66,13 @@ class MoneyPlanLayoutScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        val CURRENT = "Date,Description,Amount\n" +
-            listOf(7, 8, 9, 10).joinToString("") { m ->
-                val mm = m.toString().padStart(2, '0')
-                "01/$mm/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-                    "05/$mm/2026,SALARY OAKFIELD LTD,2500.00\n" +
-                    "09/$mm/2026,TESCO STORES 2041,-64.90\n" +
-                    "15/$mm/2026,STREAMLY.COM,-10.99\n" +
-                    (if (m < 10) "28/$mm/2026,TESCO STORES 2041,-58.20\n" else "")
-            } +
-            (1..12).joinToString("") { d -> "${d.toString().padStart(2, '0')}/10/2026,COSTA COFFEE,-4.80\n" }
+        /**
+         * The Money shots' month ([MoneyShotMonth], so OUT / MONTH is the same £230 as on every Plan shot; walk-through
+         * 2026-11-15 A13: this statement's own months made it £280) with nine more coffees in October, so twelve Costa
+         * Coffees in the last 30 days make Obi's habit idea and its sheet lists six with "more" under them.
+         */
+        val CURRENT = MoneyShotMonth.CURRENT +
+            listOf(1, 2, 5, 6, 7, 8, 9, 10, 12).joinToString("") { d -> "${d.toString().padStart(2, '0')}/10/2026,COSTA COFFEE,-3.40\n" }
     }
 
     private fun open(): MekaCore {
@@ -89,7 +86,7 @@ class MoneyPlanLayoutScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", CURRENT).refused)
+            check(!core.importMoneyStatement(MoneyShotMonth.CURRENT_NAME, CURRENT).refused)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
@@ -139,7 +136,8 @@ class MoneyPlanLayoutScreensTest {
         val v = core.moneyView.value
         val idea = v.check?.ideas?.firstOrNull { it.kind == "habit" } ?: fail("twelve coffees should make an idea in Obi's money check")
         val f = v.forecast ?: fail("the forecast isn't on Plan")
-        if (f.notReady != null) fail("three whole months should make a forecast: ${f.notReady}")
+        if (f.notReady != null) fail("two whole months should make a forecast: ${f.notReady}")
+        if (f.outRounded != MoneyShotMonth.FORECAST_OUT_PENCE) fail("OUT / MONTH is ${f.outRounded}p, not the Money shots' ${MoneyShotMonth.FORECAST_OUT_PENCE}p")
         if (v.challenges == null) fail("the challenges aren't on Plan")
 
         // Obi's money check as the mockup: the brass head card with the yearly total, the lead idea as its own card (its

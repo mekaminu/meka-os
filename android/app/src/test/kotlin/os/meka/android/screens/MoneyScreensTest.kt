@@ -360,6 +360,9 @@ class MoneyScreensTest {
     fun innerPlan() {
         shoot("inner-dark-columns-plan", Fill.MANY, tab = MoneyTab.PLAN)
         checkHasItsBigLine("inner-dark-columns-plan")
+        // Walk-through 2026-11-15 A13: one OUT / MONTH on every Plan shot.
+        val out = shotCore.moneyView.value.forecast?.outRounded
+        if (out != MoneyShotMonth.FORECAST_OUT_PENCE) fail("OUT / MONTH is ${out}p, not the Money shots' ${MoneyShotMonth.FORECAST_OUT_PENCE}p")
     }
 
     /** Walk-through 2026-11-15, A3: with ideas, Obi's money check has its big line ("2 ideas"), never just "from 2 ideas". */
