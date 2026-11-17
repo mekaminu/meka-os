@@ -31,6 +31,8 @@ class KidsPageTest {
         val p = KidsPageRules.page(KidsView.EMPTY, today)
         assertEquals(3, p.tiles.size)
         assertTrue(p.tiles.none { it.number.isBlank() || it.number == "—" })
+        // Each reads as one sentence (A16): "None needed this week", "No fees kept yet", "No sizes kept yet".
+        assertEquals(listOf("None needed this week", "No fees kept yet", "No sizes kept yet"), p.tiles.map { "${it.number} ${it.label}" })
         assertEquals(listOf("Children"), p.cards.map { it.title })
         assertEquals(KidsPageRules.CHILDREN_EMPTY, p.cards[0].empty)
         assertEquals("Add to Kids", p.addTitle)

@@ -219,7 +219,7 @@ class LoneWordGlueTest {
     // their family / page") and the fuel sheet's line ("about 1 km is / sent") each go down with the words before them.
     @Test
     fun lifePagesLastWordsGoDownTogether() {
-        assertTrue(LoneWordGlue.kept(MealsPageRules.EMPTY_SUMMARY).endsWith("with${nb}its${nb}ingredients"))
+        assertTrue(LoneWordGlue.kept(MealsPageRules.EMPTY_SUMMARY).endsWith(" its${nb}ingredients to${nb}start"), LoneWordGlue.kept(MealsPageRules.EMPTY_SUMMARY))
         assertTrue(LoneWordGlue.kept("2 lines · your partner sees it read-only on their family page").endsWith("family${nb}page"))
         assertTrue(LoneWordGlue.measured(FuelRules.NO_LOCATION_LINE).endsWith("km${nb}is${nb}sent"))
         assertEquals(FuelRules.NO_LOCATION_LINE, DateGlue.plain(LoneWordGlue.measured(FuelRules.NO_LOCATION_LINE)))

@@ -39,8 +39,8 @@ object TripsPageRules {
         else -> "A trip with its dates, for example ${TripRules.ADD_HINT}"
     }
 
-    const val TRIPS_EMPTY = "No trips yet · + Add → A trip with its dates"
-    const val BOOKED_EMPTY = "Nothing booked yet · + Add → A booking"
+    const val TRIPS_EMPTY = "No trips yet. Tap + Add and pick “A trip” with its dates."
+    const val BOOKED_EMPTY = "Nothing booked yet. Tap + Add and pick “A booking”."
     const val DOCS_EMPTY = "None in the Vault · add passports in Settings → Vault"
     /** A document's row on the right when it doesn't last the trip. */
     const val CHECK = "Check"
@@ -133,7 +133,7 @@ object TripsPageRules {
 
     private fun docsTile(next: TripRow?): PageTile {
         val docs = next?.documents
-        if (docs == null || docs.isEmpty) return PageTile("None", "documents in the Vault", false)
+        if (docs == null || docs.isEmpty) return LifePageRules.none("documents in the Vault")
         val check = docs.rows.count { it.lit }
         return if (check > 0) PageTile("$check", if (check == 1) "document to check" else "documents to check", true)
         else PageTile("All set", "travel documents", false)

@@ -65,7 +65,10 @@ class MealsPageTest {
     fun anEmptyPageSaysHowToStartInWordsNeverADash() {
         val v = view(meals = emptyList(), plan = emptyMap())
         val p = MealsPageRules.page(v)
-        assertEquals(listOf("None", "None", "None"), p.tiles.map { it.number })
+        assertEquals(listOf("No", "None", "No"), p.tiles.map { it.number })
+        assertTrue(p.tiles.all(LifePageRules::readsWhole))
+        // Said once (A16): the summary says how to start, the tile "No favourites", the card only what to tap.
+        assertFalse(MealsPageRules.FAVOURITES_EMPTY.contains("No favourites"))
         assertEquals(MealsPageRules.EMPTY_SUMMARY, MealsPageRules.summary(v))
         assertEquals(listOf(MealsPageRules.WEEK_EMPTY, MealsPageRules.FAVOURITES_EMPTY), p.cards.map { it.empty })
         assertTrue(p.cards.all { it.rows.isEmpty() })

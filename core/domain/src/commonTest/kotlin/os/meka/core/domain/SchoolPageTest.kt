@@ -31,7 +31,8 @@ class SchoolPageTest {
     fun anEmptySchoolIsThreeWordsAndFourEmptyCardsAtMost() {
         val p = SchoolPageRules.page(SchoolView.EMPTY, sat)
         assertEquals(3, p.tiles.size)
-        assertEquals(listOf("None", "None", "None"), p.tiles.map { it.number })
+        assertEquals(listOf("No", "No", "None"), p.tiles.map { it.number })
+        assertTrue(p.tiles.all(LifePageRules::readsWhole))
         assertTrue(p.tiles.none { it.lit })
         assertEquals(listOf("Days off", "Dates", "Every week"), p.cards.map { it.title })
         assertEquals(listOf(SchoolPageRules.OFF_EMPTY, SchoolPageRules.DATES_EMPTY, SchoolPageRules.WEEKLY_EMPTY), p.cards.map { it.empty })

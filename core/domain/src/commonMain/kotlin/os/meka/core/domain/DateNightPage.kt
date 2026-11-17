@@ -16,7 +16,7 @@ object DateNightPageRules {
     const val ADD_TITLE = "Add to Date night"
     const val COMING_UP = "Coming up"
     const val EVENING = "The evening"
-    const val COMING_EMPTY = "Off · + Add → The evening to keep one clear every two weeks"
+    const val COMING_EMPTY = "Off. To keep one evening clear every two weeks, tap + Add and pick “The evening”."
     const val GONE = "That night isn't coming up now"
     /** On a night's right. */
     const val BOOKED = "Booked"

@@ -84,7 +84,7 @@ object LeavePageRules {
         else PageTile("${-v.daysLeft} over", "your ${LeaveRules.daysWord(v.allowance)}", true)
 
     private fun nextTile(v: LeaveView, today: Long): PageTile {
-        val next = v.booked.firstOrNull() ?: return PageTile("None", "leave to come", false)
+        val next = v.booked.firstOrNull() ?: return LifePageRules.none("leave to come")
         if (today in next.startDay..next.endDay) return PageTile("Now", "on leave", true)
         val name = if (next.title == LeaveRules.TITLE) "your next leave" else next.title
         return PageTile(LifePageRules.until(next.startDay, today), "to $name", next.startDay - today <= SOON_DAYS)
@@ -92,7 +92,7 @@ object LeavePageRules {
 
     private fun holidaysTile(v: LeaveView): PageTile {
         val open = v.holidays.count { it.bookLabel != null }
-        return PageTile(if (open > 0) "$open" else "None", if (open == 1) "holiday to book" else "holidays to book", v.holidays.any { it.nudge })
+        return if (open > 0) PageTile("$open", if (open == 1) "holiday to book" else "holidays to book", v.holidays.any { it.nudge }) else LifePageRules.none("holidays to book")
     }
 
     fun page(view: LeaveView, today: Long): LifePageView {

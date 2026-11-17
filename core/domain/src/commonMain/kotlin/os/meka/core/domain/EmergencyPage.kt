@@ -34,10 +34,10 @@ object EmergencyPageRules {
 
     fun lineKey(id: String): String = "line:$id"
 
-    private fun empty(section: EmergencySection): String = when (section) {
-        EmergencySection.CALL -> "No one yet · + Add → Someone to call"
-        EmergencySection.DOCUMENTS -> "Nothing yet · + Add → Where something is"
-        EmergencySection.ACCOUNTS -> "None yet · + Add → A key account, by name"
+    internal fun empty(section: EmergencySection): String = when (section) {
+        EmergencySection.CALL -> "No one yet. Tap + Add and pick “Someone to call”."
+        EmergencySection.DOCUMENTS -> "Nothing yet. Tap + Add and pick “Where something is”."
+        EmergencySection.ACCOUNTS -> "None yet. Tap + Add and pick “A key account”, by name only."
     }
 
     /**

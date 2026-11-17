@@ -29,7 +29,7 @@ class BinsPageTest {
         // Both Tuesday bins go out tonight for tomorrow: lit.
         assertEquals(PageTile("Tomorrow", "Black bin and food caddy", true), p.tileAt(0))
         assertEquals(PageTile("3", "bins on your list", false), p.tileAt(1))
-        assertEquals(PageTile("None", "one-offs to come", false), p.tileAt(2))
+        assertEquals(PageTile("No", "one-offs to come", false), p.tileAt(2))
         assertEquals(listOf("bin", "one-off", "council"), p.addChoices.map { it.key })
         assertFalse(BinsPageRules.takesText(BinsPageRules.ADD_COUNCIL))
         assertTrue(BinsPageRules.takesText(BinsPageRules.ADD_ONE_OFF))
@@ -81,9 +81,10 @@ class BinsPageTest {
     @Test
     fun emptySaysItInWordsNeverADash() {
         val p = BinsPageRules.page(BinsView.EMPTY, mon)
-        assertEquals(PageTile("No bins", "added yet", false), p.tileAt(0))
+        assertEquals(PageTile("Nothing", "to put out yet", false), p.tileAt(0))
+        assertTrue(p.tiles.all(LifePageRules::readsWhole))
         assertEquals(PageTile("0", "bins on your list", false), p.tileAt(1))
-        assertEquals(PageTile("None", "one-offs to come", false), p.tileAt(2))
+        assertEquals(PageTile("No", "one-offs to come", false), p.tileAt(2))
         assertTrue(p.cardAt(0).rows.isEmpty() && p.cardAt(0).empty != null)
         assertTrue(p.cardAt(1).rows.isEmpty() && p.cardAt(1).empty != null)
         assertTrue(p.tiles.none { it.number.trim() == "—" || it.number.isBlank() })

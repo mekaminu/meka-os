@@ -24,7 +24,7 @@ object ReadingPageRules {
     const val DONE = "Finished lately"
     const val GOAL = "Reading goal"
     const val GO_EMPTY = "Nothing on the go · open one in Up next and tap Start"
-    const val NEXT_EMPTY = "Nothing up next · + Add → A book, podcast or course"
+    const val NEXT_EMPTY = "Nothing up next. Tap + Add and pick “A book, podcast or course”."
     const val DONE_EMPTY = "Nothing finished in the last 90 days"
     const val NO_GOAL = "No goal for the year"
     const val NO_GOAL_LINE = "Tap to set one, e.g. 12 books"

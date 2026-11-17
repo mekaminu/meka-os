@@ -20,7 +20,7 @@ object ErrandsPageRules {
     const val WAITING = "Waiting"
     const val DONE = "Done lately"
     const val NEAR = "Near-me reminders"
-    const val WAITING_EMPTY = "Nothing waiting · + Add → Things to do at a place"
+    const val WAITING_EMPTY = "Nothing waiting. Tap + Add and pick “Things to do at a place”."
     const val DONE_EMPTY = "Nothing ticked off in the last week"
     const val GONE = "Nothing waiting there now"
 
@@ -60,8 +60,8 @@ object ErrandsPageRules {
         val places = view.places.size
         val done = view.done.size
         val tiles = listOf(
-            PageTile(if (waiting > 0) "$waiting" else "None", if (waiting == 1) "errand waiting" else "errands waiting", false),
-            PageTile(if (places > 0) "$places" else "None", if (places == 1) "place" else "places", false),
+            if (waiting > 0) PageTile("$waiting", if (waiting == 1) "errand waiting" else "errands waiting", false) else LifePageRules.none("errands waiting"),
+            if (places > 0) PageTile("$places", if (places == 1) "place" else "places", false) else LifePageRules.none("places"),
             PageTile(if (done > 0) "$done" else "None", "done this week", false),
         )
         val cards = buildList {

@@ -77,6 +77,18 @@ object LifePageRules {
     /** The ⓘ's spoken name. */
     const val INFO_LABEL = "What this page does"
 
+    /** The first words "None" reads with as a sentence ("None to book", "None booked yet"); before a noun it's "No". */
+    private val NONE_READS_WITH = setOf("to", "booked", "done", "on", "up", "kept", "promised", "for", "due", "needed", "yet", "weekly", "coming", "placed", "finished")
+
+    /**
+     * A tile with nothing to count that reads as one sentence (walk-through A16): "None to book", but "No favourites",
+     * "No leave to come" (never "None favourites").
+     */
+    fun none(label: String): PageTile = PageTile(if (label.substringBefore(' ').lowercase() in NONE_READS_WITH) "None" else "No", label, false)
+
+    /** True when [t] reads as one sentence: "None" only before a word it reads with. */
+    fun readsWhole(t: PageTile): Boolean = t.number != "None" || t.label.substringBefore(' ').lowercase() in NONE_READS_WITH
+
     /**
      * A card of [rows]: the first [MAX_ROWS] shown, the count of all of them, and [more] (else See all once there are
      * more than fit).
@@ -134,7 +146,7 @@ object CarPageRules {
     /** The Dates card's link: every car's dates in Lists → Renewals (the registration, the DVLA's dates, adding one). */
     const val ALL_DATES = "All dates"
     const val DATES_EMPTY = "No dates yet · + Add puts the MOT, tax, insurance and service here"
-    const val PARKED_EMPTY = "Not parked · + Add → Where I parked when you leave the car"
+    const val PARKED_EMPTY = "Not parked. When you leave the car, tap + Add and pick “Where I parked”."
     /** Slice 4: fuel prices near him and each car's Bluetooth, as cards whose rows open sheets. */
     const val FUEL = "Fuel near you"
     const val BLUETOOTH = "Car Bluetooth"

@@ -21,7 +21,8 @@ class ErrandsPageTest {
             p.tiles,
         )
         val empty = ErrandsPageRules.page(ErrandView.EMPTY)
-        assertEquals(listOf("None", "None", "None"), empty.tiles.map { it.number })
+        assertEquals(listOf("No", "No", "None"), empty.tiles.map { it.number })
+        assertTrue(empty.tiles.all(LifePageRules::readsWhole))
         assertEquals(listOf("things"), p.addChoices.map { it.key })
         assertEquals(ErrandRules.HINT, ErrandsPageRules.hint(ErrandsPageRules.ADD_THINGS))
     }

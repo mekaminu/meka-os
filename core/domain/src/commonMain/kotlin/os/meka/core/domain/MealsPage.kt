@@ -18,9 +18,9 @@ object MealsPageRules {
     const val WEEK = "This week"
     const val SHOPPING = "Shopping"
     const val FAVOURITES = "Favourites"
-    const val EMPTY_SUMMARY = "No favourite dinners yet · + Add one with its ingredients"
-    const val WEEK_EMPTY = "Add a favourite first · then pick the week's dinners here"
-    const val FAVOURITES_EMPTY = "No favourites yet · + Add → A favourite dinner"
+    const val EMPTY_SUMMARY = "Add a favourite dinner with its ingredients to start"
+    const val WEEK_EMPTY = "Pick the week's dinners here once you have a favourite"
+    const val FAVOURITES_EMPTY = "Tap + Add and pick “A favourite dinner”."
     const val PICK = "Tap to pick a dinner"
     const val NOTHING_TO_ADD = "Nothing to add"
     const val PLAN_FOR = "Plan it for"
@@ -63,9 +63,9 @@ object MealsPageRules {
         val toAdd = view.toAdd.size
         val favs = view.favourites.size
         val tiles = listOf(
-            PageTile(if (planned > 0) "$planned of ${MealRules.WEEK_DAYS}" else "None", if (planned == 1) "dinner planned" else "dinners planned", false),
+            if (planned > 0) PageTile("$planned of ${MealRules.WEEK_DAYS}", if (planned == 1) "dinner planned" else "dinners planned", false) else LifePageRules.none("dinners planned"),
             PageTile(if (toAdd > 0) "$toAdd" else "None", "to add to shopping", toAdd > 0),
-            PageTile(if (favs > 0) "$favs" else "None", if (favs == 1) "favourite" else "favourites", false),
+            if (favs > 0) PageTile("$favs", if (favs == 1) "favourite" else "favourites", false) else LifePageRules.none("favourites"),
         )
         val cards = buildList {
             add(LifePageRules.card(WEEK, WEEK, allRows(view, WEEK), empty = WEEK_EMPTY))

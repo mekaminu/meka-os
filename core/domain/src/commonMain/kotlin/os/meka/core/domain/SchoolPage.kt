@@ -51,10 +51,10 @@ object SchoolPageRules {
     /** The answer lines that mean nothing was read (shown in the accent, the words kept in the field to fix). */
     fun isNotRead(line: String?): Boolean = line == SchoolRules.NOT_READ || line == SchoolTerms.INSET_NONE
 
-    const val OFF_EMPTY = "None coming up · + Add → A day off"
-    const val DATES_EMPTY = "None coming up · + Add → A school date"
-    const val WEEKLY_EMPTY = "Nothing weekly · + Add → Every week"
-    const val COUNCIL_EMPTY = "Type the holidays with + Add → A day off"
+    const val OFF_EMPTY = "None coming up. Tap + Add and pick “A day off”."
+    const val DATES_EMPTY = "None coming up. Tap + Add and pick “A school date”."
+    const val WEEKLY_EMPTY = "Nothing weekly. Tap + Add and pick “Every week”."
+    const val COUNCIL_EMPTY = "Type the holidays: tap + Add and pick “A day off”."
     /** A day off's row while Needs you asks who's covering it. */
     const val COVER_ASK = "Who's covering?"
     /** A council's row on the right while its holidays aren't in, and once they are. */
@@ -133,7 +133,7 @@ object SchoolPageRules {
     }
 
     private fun offTile(view: SchoolView, today: Long): PageTile {
-        val day = view.nextOffDay ?: return PageTile("None", "days off coming up", false)
+        val day = view.nextOffDay ?: return LifePageRules.none("days off coming up")
         val title = view.nextOffTitle ?: "day off"
         return PageTile(LifePageRules.until(day, today), "to ${lowerFirst(title)}", day - today <= SOON_DAYS)
     }
@@ -147,7 +147,7 @@ object SchoolPageRules {
         val n = view.covers.sumOf { it.days.size }
         if (n > 0) return PageTile("$n", if (n == 1) "office day to cover" else "office days to cover", true)
         val d = view.dates.size
-        if (d == 0) return PageTile("None", "school dates ahead", false)
+        if (d == 0) return LifePageRules.none("school dates ahead")
         val soon = view.dates.any { r -> r.startDay?.let { it - today in 0..SOON_DAYS.toLong() } == true }
         return PageTile("$d", if (d == 1) "school date ahead" else "school dates ahead", soon)
     }

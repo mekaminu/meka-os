@@ -124,7 +124,8 @@ class LeavePageTest {
     @Test
     fun theEmptyPageSaysItInWordsWithTheAllowanceStillThere() {
         val p = LeavePageRules.page(view(emptyList(), emptyList()), sat)
-        assertEquals(listOf("25", "None", "None"), p.tiles.map { it.number })
+        assertEquals(listOf("25", "No", "No"), p.tiles.map { it.number })
+        assertTrue(p.tiles.all(LifePageRules::readsWhole))
         assertEquals(listOf(LeavePageRules.BOOKED, LeavePageRules.ALLOWANCE), p.cards.map { it.key })
         assertEquals(LeavePageRules.BOOKED_EMPTY, p.cards.first().empty)
         assertTrue(p.cards.first().rows.isEmpty())

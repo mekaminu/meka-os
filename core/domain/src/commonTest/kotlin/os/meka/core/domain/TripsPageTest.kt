@@ -88,7 +88,8 @@ class TripsPageTest {
     fun noVaultReadMeansNoDocumentsCardAndPastTripsHaveTheirOwn() {
         val p = page(listOf(bcn, rome), withDocs = null)
         assertEquals(listOf(TripsPageRules.TRIPS, TripsPageRules.BOOKED, TripsPageRules.PAST), p.cards.map { it.key })
-        assertEquals("None", p.tileAt(2).number)
+        assertEquals("No", p.tileAt(2).number)
+        assertTrue(p.tiles.all(LifePageRules::readsWhole))
         assertEquals("Rome", p.cardAt(2).rowAt(0).name)
         assertEquals("trip:r", p.cardAt(2).rowAt(0).key)
     }

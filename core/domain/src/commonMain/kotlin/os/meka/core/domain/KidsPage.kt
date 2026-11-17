@@ -43,8 +43,8 @@ object KidsPageRules {
     const val WEEK_EMPTY = "Nothing they need in the next 7 days"
     /** The header already says to add them in About you, so the card doesn't say it again (A15/A16: "you first" alone). */
     const val CHILDREN_EMPTY = "No children yet"
-    const val FEES_EMPTY = "No club fees · + Add → A club fee"
-    const val MONEY_EMPTY = "No chores or pocket money · + Add → A chore"
+    const val FEES_EMPTY = "No club fees. Tap + Add and pick “A club fee”."
+    const val MONEY_EMPTY = "No chores or pocket money. Tap + Add and pick “A chore”."
     /** A child's row on the right once their sizes are three months old. */
     const val CHECK = "Check sizes"
     /** A card row's grey line fits one line on the cover screen; the whole line is in the row's sheet. */
@@ -144,14 +144,14 @@ object KidsPageRules {
     private fun weekTile(view: KidsView): PageTile {
         val w = view.week
         val n = w?.count ?: 0
-        if (n == 0) return PageTile("None", "needed this week", false)
+        if (n == 0) return LifePageRules.none("needed this week")
         val lit = w?.days?.any { d -> d.items.any { it.lit } } == true
         return PageTile("$n", if (n == 1) "thing this week" else "things this week", lit)
     }
 
     private fun feeTile(view: KidsView, today: Long): PageTile {
         val (k, f) = view.kids.flatMap { k -> k.fees.map { k to it } }.minByOrNull { it.second.dueDay }
-            ?: return PageTile("No fees", "club fees kept", false)
+            ?: return PageTile("No fees", "kept yet", false)
         return PageTile(LifePageRules.until(f.dueDay, today), "to ${k.name}'s ${f.title.lowercaseFirst()}", f.due)
     }
 
@@ -166,7 +166,7 @@ object KidsPageRules {
             else PageTile("Paid", "pocket money this week", false)
         }
         val kept = view.kids.count { it.sizesLine != null }
-        return if (kept == 0) PageTile("None", "sizes kept yet", false)
+        return if (kept == 0) LifePageRules.none("sizes kept yet")
         else PageTile("$kept of ${view.kids.size}", "sizes kept", false)
     }
 
