@@ -4524,6 +4524,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // A15 part 8: Activity's "(1 digest)" and Voice's "where you left off" go down whole.
         XCTAssertTrue(LoneWordGlue.shared.measured(line: "This week: 1 reminder (1 digest) · 3 changes").contains("(1\(nb)digest)"))
         XCTAssertTrue(LoneWordGlue.shared.kept(line: CompanionMemoryRules.shared.onLine(count: 3)).contains("left\(nb)off"))
+        // A15 part 9: Study's "Module 2: Core skills" and "Welcome and setup" go down whole, as do the Agenda's titles.
+        XCTAssertTrue(LoneWordGlue.shared.measured(line: "Next: Pivot tables · Module 2: Core skills").contains("Module\(nb)2:\(nb)Core\(nb)skills"))
+        XCTAssertTrue(LoneWordGlue.shared.kept(line: "Quarterly planning with the design and engineering leads").contains("and\(nb)engineering"))
     }
     /// Walk-through 2026-11-15, A15: Money's lines reach the Mac held whole ("14 mo", "imported Wed 21 Oct").
     func testMoneyLinesWrapWholeOnTheMac() {

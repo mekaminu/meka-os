@@ -162,6 +162,8 @@ class CalendarScreensTest {
         if (mode == os.meka.core.domain.CalendarMode.WEEK) return core
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
+        // Walk-through 2026-11-15, A15 (g4a 14): the Agenda's "Quarterly planning with the / design and engineering / leads".
+        ScreenShots.assertNoLoneWords(compose, name, titles(fill))
         ScreenShots.assertShows(compose, name, "Calendar")
         ScreenShots.assertShows(compose, name, "Today")
         val today = core.calendarView.value.sections.first()

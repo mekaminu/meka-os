@@ -11,7 +11,7 @@ class LoneWordGlueTest {
     @Test
     fun theLastTwoWordsGoDownTogether() {
         assertEquals("When Obi says something out loud on${nb}his${nb}own", LoneWordGlue.kept(SpeakUpRules.ROW_LINE))
-        assertEquals("Gmail and Outlook${nb}·${nb}read, tidied, sent only on${nb}your${nb}tap", LoneWordGlue.kept(MailAccountRules.ROW_LINE))
+        assertEquals("Gmail and${nb}Outlook${nb}·${nb}read, tidied, sent only on${nb}your${nb}tap", LoneWordGlue.kept(MailAccountRules.ROW_LINE))
     }
 
     @Test
@@ -259,6 +259,22 @@ class LoneWordGlueTest {
         assertEquals(CompanionMemoryRules.onLine(3), DateGlue.plain(memory))
         // A bracket alone is no figure.
         assertFalse(LoneWordGlue.kept("Open the list (it saves) and close it").contains("(it${nb}saves)"))
+    }
+
+    @Test
+    fun aNumberedPartKeepsItsNameAndAndLeadsItsWord() {
+        // Walk-through 2026-11-15, A15 (g4b 9): Study's "Next: Pivot tables · Module 2: / Core skills".
+        val next = LoneWordGlue.measured("Next: Pivot tables · Module 2: Core skills")
+        assertTrue(next.contains("Module${nb}2:${nb}Core${nb}skills"), next)
+        assertEquals("Next: Pivot tables · Module 2: Core skills", DateGlue.plain(next))
+        // A long name keeps only its first word with the label.
+        val long = LoneWordGlue.kept("Module 3: Advanced formulas and lookups for beginners")
+        assertTrue(long.contains("Module${nb}3:${nb}Advanced "), long)
+        // "Welcome and / setup · 30 min" (g4b 9) and the Agenda's "design and / engineering leads" (g4a 14).
+        assertTrue(LoneWordGlue.measured("Welcome and setup · 30 min").contains("and${nb}setup"))
+        assertTrue(LoneWordGlue.kept("Quarterly planning with the design and engineering leads").contains("and${nb}engineering"))
+        // A plain number after a label word that isn't a part stays free.
+        assertFalse(LoneWordGlue.kept("Room 2: Core skills today").contains("Room${nb}2"))
     }
 
     @Test

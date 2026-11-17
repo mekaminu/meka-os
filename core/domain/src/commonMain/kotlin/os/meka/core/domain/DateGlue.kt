@@ -223,6 +223,12 @@ object LoneWordGlue {
     private val ARTICLES = setOf("the", "a", "an", "your", "my", "his", "its", "their", "our", "+")
 
     /**
+     * "and" leads the word after it too (walk-through 2026-11-15, A15, g4b 9: Study's THIS WEEK read "Welcome and / setup ·
+     * 30 min"; g4a 14: the Agenda's "… with the / design and engineering / leads").
+     */
+    private val CONJUNCTIONS = setOf("and", "&")
+
+    /**
      * [s] with each small leading word ([LEADS], and [ARTICLES]) held to the word after it while that run stays within [PAIR_RUN_MAX]
      * (A28: "Obi found … on" ended the call card's line). Not before a joiner, just after a dot or at the end.
      */
@@ -233,7 +239,7 @@ object LoneWordGlue {
         while (i < tokens.size) {
             val t = tokens[i]
             val next = tokens.getOrNull(i + 1)
-            val lead = t.lowercase().let { it in LEADS || it.substringAfterLast(NBSP) in LEADS || it in ARTICLES || it.substringAfterLast(NBSP) in ARTICLES }
+            val lead = t.lowercase().let { w -> listOf(LEADS, ARTICLES, CONJUNCTIONS).any { w in it || w.substringAfterLast(NBSP) in it } }
             // Just after a dot the word stays free, for the dot to take (CI: "Sun 25 Oct · in 4 days" ended on the dot).
             val afterDot = tokens.getOrNull(i - 1) in HELD && t != "+"  // "· + Add": the dot takes "+ Add" whole
             if (lead && !afterDot && next != null && next.isNotEmpty() && next !in JOINERS && t.length + 1 + next.length <= PAIR_RUN_MAX) {
@@ -264,6 +270,21 @@ object LoneWordGlue {
      */
     private val FIGURE = Regex("^\\(?[£$€−-]?\\d[\\d,.]*%?$")
 
+    /**
+     * "Module 2: Core", "Lesson 3: Pivot": a numbered part and the first word of its name, held whole (walk-through
+     * 2026-11-15, A15, g4b 9: Study's next line read "Next: Pivot tables · Module 2: / Core skills").
+     */
+    private val NUMBERED = Regex("\\b(?:Module|Lesson|Unit|Part|Chapter|Session|Step|Week) \\d+:? [^ ·–—→]+((?: [^ ·–—→]+)*)(?= [·–—→]|$)")
+
+    /**
+     * [s] with each numbered part ([NUMBERED]) held to its name: the whole name while that stays within [PAIR_MAX]
+     * ("Module 2: Core skills"), else the label and the name's first word ("Module 2: Core").
+     */
+    private fun numberedHeld(s: String): String = NUMBERED.replace(s) { m ->
+        if (m.value.length <= PAIR_MAX) m.value.replace(' ', NBSP)
+        else m.value.split(' ').let { w -> w.take(3).joinToString(NBSP.toString()) + w.drop(3).joinToString("") { " $it" } }
+    }
+
     /** "a month", "per week": the period a price or count is for, held to it ("£10.99 a / month", A15). */
     private val PERIOD = Regex("\\b(?:a|an|per|each|every) (?:day|night|week|fortnight|month|year)\\b")
 
@@ -275,7 +296,7 @@ object LoneWordGlue {
     fun figuresHeld(s: String): String {
         // The period is held on its own, not to the figure: "£10.99 · a month · Subscription" as one run was too long for
         // the last words to go down together (CI run 43988773613, Needs you's mail card left "Subscription" alone).
-        val tokens = PERIOD.replace(s) { it.value.replace(' ', NBSP) }.split(' ')
+        val tokens = numberedHeld(PERIOD.replace(s) { it.value.replace(' ', NBSP) }).split(' ')
         val runs = mutableListOf<String>()
         var i = 0
         while (i < tokens.size) {

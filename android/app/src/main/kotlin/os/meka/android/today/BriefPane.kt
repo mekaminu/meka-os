@@ -404,8 +404,8 @@ internal fun BriefDayRow(r: BriefDayLine, modifier: Modifier = Modifier, onCompl
         }
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
-            Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            r.caption?.let { Text(it, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textTertiary) }
+            Text(LoneWordGlue.kept(r.title), style = MekaType.body, color = Meka.colors.textPrimary)
+            r.caption?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textTertiary) }
         }
     }
 }
@@ -413,7 +413,7 @@ internal fun BriefDayRow(r: BriefDayLine, modifier: Modifier = Modifier, onCompl
 @Composable
 private fun WaitingLine(w: WaitingItem, modifier: Modifier) {
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs)) {
-        Text(w.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(LoneWordGlue.kept(w.title), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text(LoneWordGlue.kept(w.meta), style = MekaType.caption, color = if (w.state == DueState.DUE) Meka.colors.accent else Meka.colors.textTertiary)
     }
 }
@@ -427,7 +427,7 @@ private fun HeadlineLine(h: BriefHeadline, modifier: Modifier, open: (String) ->
             .then(if (url != null) Modifier.clickable(role = Role.Button, onClickLabel = "Open in browser") { open(url) } else Modifier)
             .padding(vertical = MekaSpace.xs),
     ) {
-        Text(h.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(LoneWordGlue.kept(h.title), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text(LoneWordGlue.kept(h.meta), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
@@ -440,7 +440,7 @@ private fun NewsNote(text: String) {
 @Composable
 private fun AttentionLine(a: BriefLine, modifier: Modifier) {
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs)) {
-        Text(a.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Text(LoneWordGlue.kept(a.title), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         a.detail?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent) }
     }
 }
@@ -500,12 +500,12 @@ internal fun BriefCard(v: MorningBriefView, onOpen: () -> Unit, modifier: Modifi
         // "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30" (Fold review 2026-10-09 07:26, item 4);
         // it cross-fades as the weather or the day changes.
         Crossfade(v.cardLine, Modifier.padding(top = MekaSpace.xxs), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "brief-card-line") { line ->
-            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         // Slice 3: the first task the spoken brief names: "Focus · Renew passport · overdue · + 2 more".
         v.focusCardLine?.let { focus ->
             Crossfade(focus, Modifier.padding(top = MekaSpace.xxs), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "brief-card-focus") { line ->
-                Text(line, style = MekaType.caption, color = Meka.colors.accent)
+                Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.accent)
             }
         }
     }

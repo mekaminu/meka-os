@@ -232,7 +232,11 @@ class BriefScreensTest {
             listOfNotNull(v.dateLabel, v.workLine).joinToString(" · "), v.protectedLine, v.weatherLine, v.school?.text,
             v.focusMore, v.needsYouLine, v.daySummary, v.planLine, v.pressureLine, v.waitingLine, v.habitsLine, v.fastingLine,
             "“${v.oneLiner}”",
-        ) + v.asks.map { it.line } + v.waiting.map { it.meta } + v.headlines.map { it.meta } + v.attention.mapNotNull { it.detail }
+        ) + v.asks.map { it.line } + v.waiting.map { it.meta } + v.headlines.map { it.meta } + v.attention.mapNotNull { it.detail } +
+            // Walk-through 2026-11-15, A15 (g3a 15): the Focus task's "…football run with / Sam" and headlines ending on a
+            // lone "fund" or "weekend": titles and captions go down whole too.
+            (v.focusLines + v.dayLines).flatMap { listOfNotNull(it.title, it.caption) } + v.headlines.map { it.title } +
+            v.attention.map { it.title } + v.waiting.map { it.title }
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertNoDotEndingALine(compose, name, lines)

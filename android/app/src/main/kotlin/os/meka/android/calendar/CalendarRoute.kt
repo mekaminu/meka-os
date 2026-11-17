@@ -65,6 +65,7 @@ import os.meka.android.designsystem.minTouch
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import os.meka.core.domain.BoardOpenFoldRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.MekaRadius
@@ -576,16 +577,18 @@ private fun EventRow(r: TimelineRow, past: Boolean, tone: Int?, modifier: Modifi
         TimeColumn(r.time, past)
         DotColumn(tone, past)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.eventTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
+            // Walk-through 2026-11-15, A15 (g4a 14): "Quarterly planning with the / design and engineering / leads" on the
+            // cover's Agenda; titles and their lines go down whole.
+            Text(LoneWordGlue.kept(r.title), style = MekaType.eventTitle, color = if (past) Meka.colors.textTertiary else Meka.colors.textPrimary)
             val line = listOfNotNull(if (r.running) "Now" else null, r.detail).joinToString(" · ")
             if (line.isNotEmpty()) {
                 Text(
-                    line, style = MekaType.caption,
+                    LoneWordGlue.kept(line), style = MekaType.caption,
                     color = if (!past && (r.running || fixture)) Meka.colors.accent else Meka.colors.textTertiary,
                 )
             }
             // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in the accent.
-            r.clash?.let { Text(it, style = MekaType.caption, color = if (past) Meka.colors.textTertiary else Meka.colors.accent) }
+            r.clash?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = if (past) Meka.colors.textTertiary else Meka.colors.accent) }
         }
     }
 }
@@ -614,8 +617,8 @@ private fun AgendaAllDayRow(item: AllDayItem, tone: Int, modifier: Modifier, onO
         Spacer(Modifier.width(os.meka.android.today.TIME_COLUMN))
         DotColumn(tone)
         Column(Modifier.weight(1f)) {
-            Text(item.event.title, style = MekaType.eventTitle, color = Meka.colors.textPrimary)
-            item.line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            Text(LoneWordGlue.kept(item.event.title), style = MekaType.eventTitle, color = Meka.colors.textPrimary)
+            item.line?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }
 }
@@ -646,8 +649,8 @@ private fun TaskRow(r: TimelineRow, modifier: Modifier) {
         TimeColumn(r.time, past = false)
         DotColumn(null)
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.taskTitle, color = Meka.colors.textPrimary)
-            r.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            Text(LoneWordGlue.kept(r.title), style = MekaType.taskTitle, color = Meka.colors.textPrimary)
+            r.detail?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }
 }

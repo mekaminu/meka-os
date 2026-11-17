@@ -129,7 +129,7 @@ struct BriefSheet: View {
                             Text(LoneWordGlue.shared.kept(line: waitingLine)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(2)
                             ForEach(v.waiting, id: \.id) { w in
                                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                    Text(w.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                                    Text(LoneWordGlue.shared.kept(line: w.title)).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                                     Text(LoneWordGlue.shared.kept(line: w.meta)).font(MekaType.caption)
                                         .foregroundStyle(w.state == .due ? palette.accent : palette.textTertiary)
                                 }
@@ -146,7 +146,7 @@ struct BriefSheet: View {
                             SectionLabel("On your lists", palette).padding(.top, MekaSpace.l).staggeredAppear(3)
                             ForEach(v.attention, id: \.id) { a in
                                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                    Text(a.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                                    Text(LoneWordGlue.shared.kept(line: a.title)).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                                     if let d = a.detail { Text(LoneWordGlue.shared.kept(line: d)).font(MekaType.caption).foregroundStyle(palette.accent) }
                                 }
                                 .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
@@ -307,7 +307,7 @@ private struct HeadlineRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(headline.title).font(MekaType.itemTitle)
+            Text(LoneWordGlue.shared.kept(line: headline.title)).font(MekaType.itemTitle)
                 .foregroundStyle(hovering && url != nil ? palette.accent : palette.textPrimary)
             Text(LoneWordGlue.shared.kept(line: headline.meta)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
         }
@@ -354,12 +354,12 @@ struct BriefCard: View {
                 Text("Morning brief").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 // "16° · drizzle from 15:00 · 2 tasks · Barça v Getafe tomorrow 17:30" (Fold review 2026-10-09 07:26, item 4);
                 // it cross-fades as the weather or the day changes.
-                Text(brief.cardLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: brief.cardLine)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: brief.cardLine)
                 // Slice 3: "Focus · Renew passport · overdue · + 2 more".
                 if let focus = brief.focusCardLine {
-                    Text(focus).font(MekaType.caption).foregroundStyle(palette.accent)
+                    Text(LoneWordGlue.shared.kept(line: focus)).font(MekaType.caption).foregroundStyle(palette.accent)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: focus)
                 }
@@ -393,9 +393,9 @@ struct BriefDayRow: View {
             }
             .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 5 }
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(line.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(LoneWordGlue.shared.kept(line: line.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let c = line.caption {
-                    Text(c).font(MekaType.caption).foregroundStyle(line.lit ? palette.accent : palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: c)).font(MekaType.caption).foregroundStyle(line.lit ? palette.accent : palette.textTertiary)
                 }
             }
             .accessibilityElement(children: .combine)

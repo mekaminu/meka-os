@@ -481,9 +481,9 @@ private struct AgendaAllDayRow: View {
             Spacer().frame(width: TimelineMetrics.timeColumn)
             CalendarDot(tone: tone, palette: palette).frame(width: dotColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(item.event.title).font(MekaType.eventTitle).foregroundStyle(palette.textPrimary)
+                Text(LoneWordGlue.shared.kept(line: item.event.title)).font(MekaType.eventTitle).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
-                    Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
             }
             Spacer()
@@ -514,15 +514,16 @@ private struct AgendaEventRow: View {
             }
             .frame(width: dotColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.eventTitle).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
+                // Walk-through 2026-11-15, A15 (g4a 14): a long title goes down whole ("… design and / engineering leads").
+                Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.eventTitle).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
                 let line = [row.running ? "Now" : nil, row.detail].compactMap { $0 }.joined(separator: " · ")
                 if !line.isEmpty {
-                    Text(line).font(MekaType.caption)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption)
                         .foregroundStyle(!past && (row.running || fixture) ? palette.accent : palette.textTertiary)
                 }
                 // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in the accent.
                 if let clash = row.clash {
-                    Text(clash).font(MekaType.caption).foregroundStyle(past ? palette.textTertiary : palette.accent)
+                    Text(LoneWordGlue.shared.kept(line: clash)).font(MekaType.caption).foregroundStyle(past ? palette.textTertiary : palette.accent)
                 }
             }
             Spacer()
@@ -544,8 +545,8 @@ private struct AgendaTaskRow: View {
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             Spacer().frame(width: dotColumn)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary)
-                if let d = row.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+                Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary)
+                if let d = row.detail { Text(LoneWordGlue.shared.kept(line: d)).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             }
             Spacer()
         }
