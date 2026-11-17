@@ -155,4 +155,35 @@ class DayListBoardTest {
         assertEquals(true, DayListSpreadRules.leftColumn(zones, 150f, 200f, today))
         assertEquals(true, DayListSpreadRules.leftColumn(zones, 50f, 20f, today))
     }
+
+    @Test
+    fun anEmptyDaySaysItOnceAndNamesNoHandle() {
+        // A18 (walk-through 2026-11-15, g4a 4): no "Nothing yet" total, no "0 of 0 done" bar, no drag hint.
+        val empty = DayListRules.view(board.weeks[0].days[2], 0, true)
+        assertEquals(false, DayListHints.showsCounts(empty))
+        assertNull(DayListHints.hint(empty, DayListPlace.SPREAD))
+        assertNull(DayListHints.hint(empty, DayListPlace.FOLDED_BOARD))
+        // On its own the Day list keeps its typing tip (it names no handle).
+        assertEquals(DayListRules.HINT, DayListHints.hint(empty, DayListPlace.ALONE))
+        assertEquals(true, DayListHints.showsCounts(DayListRules.view(board.weeks[0].days[1], 0, true)))
+    }
+
+    @Test
+    fun aHintNamesTheHandleOnlyWhenARowHasOne() {
+        // A18 (g4a 15): a lone open task has no ≡ on the folded board, so the hint offers the tap alone.
+        val lone = day(mon + 4, today, listOf(card(task("e", 45)), card(task("f", 15, done = true))))
+        val v = DayListRules.view(lone, 0, false)
+        assertEquals(false, DayListHints.hasGrip(v, v.rows[0], acrossDays = false))
+        assertEquals(DayListHints.TAP_ONLY, DayListHints.hint(v, DayListPlace.FOLDED_BOARD))
+        // In the spread the same task drags to another day, so its ≡ and the hint stay.
+        assertEquals(true, DayListHints.hasGrip(v, v.rows[0], acrossDays = true))
+        assertEquals(DayListSpreadRules.HINT, DayListHints.hint(v, DayListPlace.SPREAD))
+        // Two open tasks: the folded board's ≡ reorders them.
+        val two = DayListRules.view(board.weeks[0].days[1], 0, false)
+        assertEquals(DayListBoardRules.HINT, DayListHints.hint(two, DayListPlace.FOLDED_BOARD))
+        // Only done tasks: nothing to drag or move, so no hint at all.
+        val allDone = DayListRules.view(day(mon + 5, today, listOf(card(task("g", 15, done = true)))), 0, false)
+        assertNull(DayListHints.hint(allDone, DayListPlace.FOLDED_BOARD))
+        assertNull(DayListHints.hint(allDone, DayListPlace.SPREAD))
+    }
 }

@@ -247,9 +247,14 @@ private struct SpreadColumn: View {
                     Text(column.title).font(MekaType.itemTitle).lineLimit(1)
                         .foregroundStyle(column.isToday ? palette.accent : palette.textPrimary)
                     Spacer(minLength: MekaSpace.xxs)
-                    Text(v.total).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).monospacedDigit().lineLimit(1)
+                    // A18: an empty day says it once (no total, no done bar), in its one line below.
+                    if DayListHints.shared.showsCounts(view: v) {
+                        Text(v.total).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).monospacedDigit().lineLimit(1)
+                    }
                 }
-                DayListBar(progress: Double(v.progress), line: [v.doneLine, v.endsLine].compactMap { $0 }.joined(separator: " · "), palette: palette)
+                if DayListHints.shared.showsCounts(view: v) {
+                    DayListBar(progress: Double(v.progress), line: [v.doneLine, v.endsLine].compactMap { $0 }.joined(separator: " · "), palette: palette)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         if v.isEmpty {
@@ -273,8 +278,10 @@ private struct SpreadColumn: View {
                             }
                             .transition(reduceMotion ? .opacity : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
                         }
-                        Text(LoneWordGlue.shared.kept(line: DayListSpreadRules.shared.HINT)).font(MekaType.micro).foregroundStyle(palette.textTertiary)
-                            .padding(.top, MekaSpace.xs)
+                        if let hint = DayListHints.shared.hint(view: v, place: .spread) {
+                            Text(LoneWordGlue.shared.kept(line: hint)).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                                .padding(.top, MekaSpace.xs)
+                        }
                     }
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.rows.map(\.id))
                     .animation(MekaMotion.expand(reduced: reduceMotion), value: openID)

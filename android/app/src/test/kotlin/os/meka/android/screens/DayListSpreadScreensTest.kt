@@ -50,6 +50,7 @@ import os.meka.android.today.DAY_TASK_SHEET_TAG
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import os.meka.core.domain.DayListBoardRules
+import os.meka.core.domain.DayListSpreadRules
 import os.meka.core.domain.DayListRules
 import os.meka.core.domain.BoardArea
 import os.meka.core.domain.BoardAreaRules
@@ -189,6 +190,16 @@ class DayListSpreadScreensTest {
         assertTrue(title.size.width / compose.density.density > 80f, "$name: a task's title is squeezed (${title.size.width / compose.density.density} dp)")
         assertTouchTargets(name)
         assertChipsWhole(name)
+        // A18 (walk-through 2026-11-15, g4a 4): Thursday, empty, says so once: no "Nothing yet" pill, no "0 of 0 done"
+        // over an empty bar, and no "Drag a task's ≡" with nothing to drag (only the columns with a ≡ carry the hint).
+        assertTrue(!shows("Nothing yet") && !shows("0 of 0"), "$name: the empty day still says nothing more than once")
+        assertEquals(1, compose.onAllNodes(hasText(DayListRules.EMPTY), useUnmergedTree = true).fetchSemanticsNodes().size,
+            "$name: the empty day's one line isn't shown once")
+        val hints = compose.onAllNodes(hasText(LoneWordGlue.kept(DayListSpreadRules.HINT)), useUnmergedTree = true).fetchSemanticsNodes().size
+        val grips = compose.onAllNodes(SemanticsMatcher("a ≡") { n ->
+            n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("day-list-grip-") == true
+        }, useUnmergedTree = true).fetchSemanticsNodes().size
+        assertTrue(hints in 1..2 && grips > 0, "$name: $hints drag hints for 3 columns, one of them empty ($grips ≡)")
 
         // Drag across days (slice 4b): hold "Call the school"'s ≡ and drag it into Thursday's list: a card follows the
         // finger once it leaves Wednesday, Thursday wears a gold ring, and on letting go the task lands on Thursday.

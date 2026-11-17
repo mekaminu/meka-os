@@ -196,3 +196,44 @@ data class DayDropZone(
 ) {
     fun contains(x: Float, y: Float): Boolean = x >= left && x <= right && y >= top && y <= bottom
 }
+
+/** Where a Day list is drawn: on its own (Today's Day list), as the folded Week board's day, or as a column of the spread. */
+enum class DayListPlace { ALONE, FOLDED_BOARD, SPREAD }
+
+/**
+ * Walk-through 2026-11-15, A18 (g4a 4 and 15): an empty column of the open Fold's spread said "nothing" three times
+ * ("Nothing yet" pill, "0 of 0 done" over an empty bar, "Nothing planned yet…") and then "Drag a task's ≡ to another day"
+ * with nothing to drag; and Friday's lone task, which has no ≡, sat over "hold its ≡ to reorder". Now an empty day says it
+ * once ([DayListRules.EMPTY]: no total, no done bar), and a hint that names ≡ shows only when a row has one ([hasGrip]).
+ * Non-AI and pure, the same on the Fold and the Mac.
+ */
+object DayListHints {
+    /** The folded board's hint when no row has a ≡ (a lone task, or only timed ones): tapping still moves it. */
+    const val TAP_ONLY = "Tap a task to move it to another day"
+
+    /** Whether [view] shows its total and done bar: an empty day shows neither (its one line says it). */
+    fun showsCounts(view: DayListView): Boolean = !view.isEmpty
+
+    /**
+     * Whether [row] has a ≡: open, not placed by its own time, and with somewhere to go: another open row to swap with,
+     * or (in the spread, [acrossDays]) another day's column.
+     */
+    fun hasGrip(view: DayListView, row: DayListRow, acrossDays: Boolean): Boolean =
+        DayListRules.canDrag(row, view.timesOn) && (acrossDays || view.rows.count { !it.done } > 1)
+
+    /** The line under the rows, or null when it would name a ≡ no row has or there's nothing on the day. */
+    fun hint(view: DayListView, place: DayListPlace): String? {
+        if (place == DayListPlace.ALONE) return DayListRules.HINT
+        if (view.isEmpty) return null
+        val across = place == DayListPlace.SPREAD
+        val grip = view.rows.any { hasGrip(view, it, across) }
+        return when (place) {
+            DayListPlace.SPREAD -> if (grip) DayListSpreadRules.HINT else null
+            else -> when {
+                grip -> DayListBoardRules.HINT
+                view.rows.any { !it.done } -> TAP_ONLY
+                else -> null
+            }
+        }
+    }
+}

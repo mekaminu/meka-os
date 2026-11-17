@@ -70,15 +70,19 @@ struct DayListSheet: View {
                         MekaHaptics.tick()
                         timesOn.toggle()
                     }
-                    Text(v.total).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).monospacedDigit()
+                    if DayListHints.shared.showsCounts(view: v) {
+                        Text(v.total).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).monospacedDigit()
+                    }
                 }
                 if v.isToday {
                     Text(dayPart(v.title, first: false)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 }
             }
             .staggeredAppear(0)
-            DayListBar(progress: Double(v.progress), line: [v.doneLine, v.endsLine].compactMap { $0 }.joined(separator: " · "), palette: palette)
-                .staggeredAppear(1)
+            if DayListHints.shared.showsCounts(view: v) {
+                DayListBar(progress: Double(v.progress), line: [v.doneLine, v.endsLine].compactMap { $0 }.joined(separator: " · "), palette: palette)
+                    .staggeredAppear(1)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     if v.isEmpty {

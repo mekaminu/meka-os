@@ -241,7 +241,8 @@ fun DayListPane(
                 if (inBoard != null) item(key = "head") {
                     Row(Modifier.appear(rememberAppearance(0)), verticalAlignment = Alignment.CenterVertically) {
                         Text(inBoard.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                        Text(
+                        // A18: an empty day says it once, in its one line under the heading (no "Nothing yet" pill).
+                        if (os.meka.core.domain.DayListHints.showsCounts(v)) Text(
                             v.total, style = MekaType.metaStrong, color = Meka.colors.accent,
                             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.accent.copy(alpha = 0.14f))
                                 .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
@@ -252,12 +253,12 @@ fun DayListPane(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(v.title.substringBefore(" · "), style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                             DayChip(if (timesOn) "Times on" else "Times off", selected = timesOn) { haptics.tick(); timesOn = !timesOn }
-                            Text(v.total, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.padding(start = MekaSpace.xs))
+                            if (os.meka.core.domain.DayListHints.showsCounts(v)) Text(v.total, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.padding(start = MekaSpace.xs))
                         }
                         if (v.isToday) Text(v.title.substringAfter(" · "), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }
-                item(key = "bar") { DayProgressBar(v.progress, listOfNotNull(v.doneLine, v.endsLine).joinToString(" · "), Modifier.appear(rememberAppearance(1))) }
+                if (os.meka.core.domain.DayListHints.showsCounts(v)) item(key = "bar") { DayProgressBar(v.progress, listOfNotNull(v.doneLine, v.endsLine).joinToString(" · "), Modifier.appear(rememberAppearance(1))) }
                 if (v.isEmpty) {
                     item(key = "empty") {
                         Text(DayListRules.EMPTY, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
@@ -278,7 +279,7 @@ fun DayListPane(
                     val slide = remember { Animatable(0f) }
                     LaunchedEffect(shift, dragId == null) { if (dragId == null) slide.snapTo(0f) else slide.animateTo(shift, MekaMotion.replan(reduced)) }
                     // In the spread a lone task can still be dragged, to another day.
-                    val grip = if (DayListRules.canDrag(r, v.timesOn) && (openRows > 1 || across != null)) Grip(
+                    val grip = if (os.meka.core.domain.DayListHints.hasGrip(v, r, acrossDays = across != null)) Grip(
                         label = StudyRules.gripLabel(r.title),
                         dy = if (held && !crossing) dragDy else 0f, lifted = held,
                         onStart = { haptics.light(); sheetId = null; overlays?.close(); dragDy = 0f; crossing = false; lastAt[0] = null; dragId = r.id },
@@ -300,8 +301,15 @@ fun DayListPane(
                             .graphicsLayer { translationY = if (held) 0f else slide.value },
                         grip = grip, onMeasured = { if (it > 0f) rowPx = it + gapPx })
                 }
-                item(key = "hint") {
-                    Text(LoneWordGlue.kept(if (across != null) os.meka.core.domain.DayListSpreadRules.HINT else inBoard?.hint ?: DayListRules.HINT), style = MekaType.micro, color = Meka.colors.textTertiary,
+                // A18: the hint names a ≡ only when a row has one, and an empty day has none.
+                val place = when {
+                    across != null -> os.meka.core.domain.DayListPlace.SPREAD
+                    inBoard != null -> os.meka.core.domain.DayListPlace.FOLDED_BOARD
+                    else -> os.meka.core.domain.DayListPlace.ALONE
+                }
+                val hint = os.meka.core.domain.DayListHints.hint(v, place)
+                if (hint != null) item(key = "hint") {
+                    Text(LoneWordGlue.kept(hint), style = MekaType.micro, color = Meka.colors.textTertiary,
                         modifier = Modifier.padding(top = MekaSpace.xs).animateItem())
                 }
             }

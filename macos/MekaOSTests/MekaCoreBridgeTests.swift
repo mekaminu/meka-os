@@ -1723,6 +1723,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(spread.macCountOrDefault(count: KotlinInt(value: 7)), 7)
         XCTAssertEqual(spread.countLabel(count: 5), "5 days")
         XCTAssertEqual(spread.HINT, "Drag a task's ≡ to another day")
+        // A18 (walk-through 2026-11-15): the hints and the empty day's one line reach Swift.
+        XCTAssertEqual(DayListHints.shared.TAP_ONLY, "Tap a task to move it to another day")
+        XCTAssertEqual(DayListPlace.spread.name, "SPREAD")
     }
 
     /// The Day list, slice 1b: the rules the Mac's sheet draws from reach Swift.
