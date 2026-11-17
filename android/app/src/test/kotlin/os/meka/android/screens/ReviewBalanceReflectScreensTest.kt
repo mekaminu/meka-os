@@ -453,6 +453,11 @@ class ReviewBalanceReflectScreensTest {
         if (onScreen("Week of 5 Oct")) fail("$name: the journal's weeks show before a tap")
         clickNode(hasText(journal), "$name: $journal")
         if (!onScreen("Week of 5 Oct")) fail("$name: the journal didn't open")
+        // Walk-through 2026-11-15 A19: the week's two went-well lines are a list under their question, so "Three runs"
+        // never reads as an answer with its question missing.
+        if (!onScreen("• Shipped the release notes a day early") || !onScreen("• Three runs")) {
+            fail("$name: a two-line answer isn't shown as a list")
+        }
         shoot("cover-dark-many-journal-open")
         assertLines("$name-journal-open", Fill.MANY)
         clickNode(hasContentDescription("Remove Week of 5 Oct's reflection"), "$name: Remove")

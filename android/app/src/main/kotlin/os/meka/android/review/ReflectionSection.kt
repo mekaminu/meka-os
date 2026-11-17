@@ -256,10 +256,11 @@ private fun Prompt(label: String, value: String, onValue: (String) -> Unit, hint
 
 @Composable
 private fun Answer(label: String, text: String) {
-    if (text.isEmpty()) return
+    val shown = ReflectionRules.answerShown(text)
+    if (shown.isEmpty()) return
     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(label, style = MekaType.caption, color = Meka.colors.textTertiary)
-        Text(text, style = MekaType.body, color = Meka.colors.textPrimary)
+        Text(shown, style = MekaType.body, color = Meka.colors.textPrimary)
     }
 }
 
@@ -277,7 +278,8 @@ private fun TextAction(label: String, onClick: () -> Unit) {
 private fun Journal(r: ReflectionView, removed: ReflectionEntry?, modifier: Modifier, act: ReflectionActions) {
     var open by rememberSaveable { mutableStateOf(false) }
     val reduced = Meka.reducedMotion
-    val turn by animateFloatAsState(if (open) 90f else 0f, if (reduced) MekaMotion.appear<Float>(true) else MekaMotion.expand<Float>(false), label = "journal-chevron")
+    // Open, the › turns to point up (^), as the other folding cards' chevrons do; closed it points right.
+    val turn by animateFloatAsState(if (open) -90f else 0f, if (reduced) MekaMotion.appear<Float>(true) else MekaMotion.expand<Float>(false), label = "journal-chevron")
     Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs)) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
@@ -310,10 +312,14 @@ private fun Journal(r: ReflectionView, removed: ReflectionEntry?, modifier: Modi
                                     .minTouch().padding(horizontal = MekaSpace.xs),
                             )
                         }
-                        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = e.spoken }) {
+                        // A19: each question keeps a gap above it, so its label sits with its own answer.
+                        Column(
+                            Modifier.semantics(mergeDescendants = true) { contentDescription = e.spoken },
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                        ) {
                             Answer(ReflectionRules.WENT_WELL, e.wentWell)
                             Answer(ReflectionRules.DROP_PROMPT, e.drop)
-                            Answer("The one thing", e.matters)
+                            Answer(ReflectionRules.ONE_THING, e.matters)
                         }
                     }
                 }

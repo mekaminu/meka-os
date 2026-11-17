@@ -225,10 +225,11 @@ struct ReflectionSection: View {
 
     @ViewBuilder
     private func answer(_ label: String, _ text: String) -> some View {
-        if !text.isEmpty {
+        let shown = ReflectionRules.shared.answerShown(text: text)
+        if !shown.isEmpty {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                Text(text).font(MekaType.body).foregroundStyle(palette.textPrimary).textSelection(.enabled)
+                Text(shown).font(MekaType.body).foregroundStyle(palette.textPrimary).textSelection(.enabled)
             }
             .accessibilityElement(children: .combine)
         }
@@ -244,7 +245,7 @@ struct ReflectionSection: View {
                 Text(r.journalTitle).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                 Spacer()
                 Image(systemName: "chevron.right").foregroundStyle(palette.accent)
-                    .rotationEffect(.degrees(journalOpen ? 90 : 0))
+                    .rotationEffect(.degrees(journalOpen ? -90 : 0))
             }
             .contentShape(Rectangle())
         }
@@ -275,10 +276,10 @@ struct ReflectionSection: View {
                             .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                             .accessibilityLabel("Remove \(e.label)'s reflection")
                         }
-                        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        VStack(alignment: .leading, spacing: MekaSpace.s) {
                             answer(ReflectionRules.shared.WENT_WELL, e.wentWell)
                             answer(ReflectionRules.shared.DROP_PROMPT, e.drop)
-                            answer("The one thing", e.matters)
+                            answer(ReflectionRules.shared.ONE_THING, e.matters)
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(e.spoken)

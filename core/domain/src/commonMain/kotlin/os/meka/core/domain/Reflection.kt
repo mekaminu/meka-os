@@ -122,6 +122,18 @@ object ReflectionRules {
     const val EMPTY_REFUSED = "Write a line in any of the three · one is enough"
     const val SKIPPED_LINE = "Skipped this week · Reflect now brings it back"
     const val JOURNAL = "Your reflections"
+    /** The journal's label over a past week's one thing. */
+    const val ONE_THING = "The one thing"
+
+    /**
+     * Walk-through 2026-11-15 A19 (g4b 12): an answer of several lines is drawn as a list, one "• " line each, so the
+     * second line ("Three runs" under "Shipped the release notes a day early") never reads as an answer to a question
+     * whose label is missing. One line stays as typed; blank lines go.
+     */
+    fun answerShown(text: String): String {
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        return if (lines.size <= 1) lines.firstOrNull().orEmpty() else lines.joinToString("\n") { "• $it" }
+    }
     const val MAX_FIELD = 600
     const val MAX_LINES = 6
     const val MAX_HINTS = 4

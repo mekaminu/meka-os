@@ -103,4 +103,16 @@ class ReflectionTest {
         assertEquals(listOf(mon12), rFold.all().map { it.weekStart })
         assertFalse(rFold.remove(mon12 - 21, true))
     }
+
+    /** Walk-through 2026-11-15 A19: a two-line answer is a list, so its second line never reads as an unlabelled answer. */
+    @Test
+    fun anAnswerOfSeveralLinesIsShownAsAList() {
+        assertEquals("Three runs", ReflectionRules.answerShown("Three runs"))
+        assertEquals("Three runs", ReflectionRules.answerShown("  Three runs \n\n"))
+        assertEquals(
+            "• Shipped the release notes a day early\n• Three runs",
+            ReflectionRules.answerShown("Shipped the release notes a day early\n\nThree runs"),
+        )
+        assertEquals("", ReflectionRules.answerShown(" \n "))
+    }
 }
