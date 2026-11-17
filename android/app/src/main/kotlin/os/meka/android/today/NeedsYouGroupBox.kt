@@ -36,6 +36,20 @@ internal fun Modifier.groupBoxFill(fill: Color): Modifier = drawBehind {
     drawRect(fill, topLeft = Offset(0f, -up), size = Size(size.width, size.height + up))
 }
 
+/**
+ * A row in a box whose rows share the box's colour (Messages, FYI): the box's [fill] behind it and across the gap above,
+ * with the mockup's 1 dp [line] through the middle of that gap, so the rows part as in `needs-you-grouped.dc.html`.
+ * [first] leaves the line out under the head or a lead line.
+ */
+internal fun Modifier.groupBoxRow(fill: Color, line: Color, first: Boolean): Modifier = drawBehind {
+    val up = NEEDS_YOU_BOX_GAP.toPx()
+    drawRect(fill, topLeft = Offset(0f, -up), size = Size(size.width, size.height + up))
+    if (!first) {
+        val inset = MekaSpace.m.toPx()
+        drawRect(line, topLeft = Offset(inset, -up / 2f - 0.5f), size = Size((size.width - 2 * inset).coerceAtLeast(0f), 1f))
+    }
+}
+
 /** The foot of a group's box: its rounded bottom corners, joined across the gap to the last row. Decoration only. */
 @Composable
 internal fun NeedsYouGroupBoxEnd(modifier: Modifier = Modifier) {

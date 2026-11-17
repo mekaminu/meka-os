@@ -183,27 +183,43 @@ class NeedsYouScreensTest {
      * list's gap between them. Open, the box is one surface: a point in the gap under the head (in its left inset, clear
      * of any words) is the head's own colour, not the screen's, and the box's rounded foot is under it, as wide as the head.
      */
-    private fun assertDecideOneBox(name: String) {
-        val head = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG) and hasContentDescription(NeedsYouGroup.DECIDE.title, substring = true),
-            useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: fail("$name: no To decide box")
+    private fun assertDecideOneBox(name: String) = assertOneBox(name, NeedsYouGroup.DECIDE, "decide-box-end")
+
+    /**
+     * The same for any open group (A17's leftover, 2026-11-17: Messages, FYI, Group chats and the mail boxes): its head,
+     * the gap under it and its rounded foot are one surface. [endKey] is the foot's key in the list.
+     */
+    private fun assertOneBox(name: String, group: NeedsYouGroup, endKey: String) {
+        val title = group.title
+        if (group != NeedsYouGroup.DECIDE) {
+            compose.onAllNodes(hasTestTag(NEEDS_YOU_LIST_TAG)).onFirst().performScrollToKey("group-${group.id}")
+            compose.mainClock.advanceTimeBy(SETTLE_MS)
+            compose.waitForIdle()
+        }
+        val head = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG) and hasContentDescription(title, substring = true),
+            useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: fail("$name: no $title box")
         val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
         val dp = compose.density.density
         val x = (head.left + 4 * dp).toInt()
         val inHead = shot.getPixel(x, ((head.top + head.bottom) / 2f).toInt())
         val inGap = shot.getPixel(x, (head.bottom + 4 * dp).toInt())
         val screen = shot.getPixel((head.left / 2f).toInt().coerceAtLeast(0), ((head.top + head.bottom) / 2f).toInt())
-        if (inHead == screen) fail("$name: To decide's head is the screen's colour, so the check can't tell")
-        if (inGap != inHead) fail("$name: the screen shows through between To decide's head and what's in it")
+        if (inHead == screen) fail("$name: $title's head is the screen's colour, so the check can't tell")
+        if (inGap != inHead) fail("$name: the screen shows through between $title's head and what's in it")
         // The foot may sit below the screen's edge: scroll to it, look, and scroll back for the rest of the test.
         val list = compose.onAllNodes(hasTestTag(NEEDS_YOU_LIST_TAG)).onFirst()
-        list.performScrollToKey("decide-box-end")
+        list.performScrollToKey(endKey)
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
+        // The foot nearest below this group's head is its own (a later group's foot sits further down).
+        val headNow = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG) and hasContentDescription(title, substring = true),
+            useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
         val ends = compose.onAllNodes(hasTestTag(NEEDS_YOU_BOX_END_TAG), useUnmergedTree = true).fetchSemanticsNodes()
-        if (ends.isEmpty()) fail("$name: To decide's box has no foot")
-        val end = ends.first().boundsInRoot
+            .map { it.boundsInRoot }.filter { headNow == null || it.top > headNow.bottom }.sortedBy { it.top }
+        if (ends.isEmpty()) fail("$name: $title's box has no foot")
+        val end = ends.first()
         if (kotlin.math.abs(end.left - head.left) > 1f || kotlin.math.abs(end.right - head.right) > 1f)
-            fail("$name: To decide's foot isn't as wide as its head")
+            fail("$name: $title's foot isn't as wide as its head")
         list.performScrollToIndex(0)
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
@@ -316,7 +332,11 @@ class NeedsYouScreensTest {
     fun coverOne() { shoot("cover-dark-one", Fill.ONE) }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverMany() { shoot("cover-dark-many", Fill.MANY); assertDecideOneBox("cover-dark-many") }
+    fun coverMany() {
+        shoot("cover-dark-many", Fill.MANY)
+        assertDecideOneBox("cover-dark-many")
+        assertOneBox("cover-dark-many", NeedsYouGroup.MESSAGES, "msgs-box-end")
+    }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverManyLight() { shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
