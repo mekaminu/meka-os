@@ -315,7 +315,7 @@ private fun Journal(r: ReflectionView, removed: ReflectionEntry?, modifier: Modi
                         // A19: each question keeps a gap above it, so its label sits with its own answer.
                         Column(
                             Modifier.semantics(mergeDescendants = true) { contentDescription = e.spoken },
-                            verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
                         ) {
                             Answer(ReflectionRules.WENT_WELL, e.wentWell)
                             Answer(ReflectionRules.DROP_PROMPT, e.drop)

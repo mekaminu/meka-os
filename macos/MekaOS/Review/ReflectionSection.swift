@@ -276,7 +276,7 @@ struct ReflectionSection: View {
                             .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                             .accessibilityLabel("Remove \(e.label)'s reflection")
                         }
-                        VStack(alignment: .leading, spacing: MekaSpace.s) {
+                        VStack(alignment: .leading, spacing: MekaSpace.m) {
                             answer(ReflectionRules.shared.WENT_WELL, e.wentWell)
                             answer(ReflectionRules.shared.DROP_PROMPT, e.drop)
                             answer(ReflectionRules.shared.ONE_THING, e.matters)
