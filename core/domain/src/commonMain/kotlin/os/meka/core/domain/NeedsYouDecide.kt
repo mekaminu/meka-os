@@ -57,7 +57,13 @@ data class NeedsYouDecideCard(
     val urgent: Boolean = false,
     /** A quiet note under the taps ("Approving needs your fingerprint"); null for none. */
     val note: String? = null,
-)
+) {
+    /**
+     * [what] as drawn: no line ends on its "·" or leaves its last word alone (walk-through 2026-11-15, A15 part 3: the
+     * cover read "Task: Check the algorithm · / Today"). Spoken and compared lines keep [what].
+     */
+    val whatShown: String get() = LoneWordGlue.kept(what)
+}
 
 object NeedsYouDecideRules {
     const val NO = "No"

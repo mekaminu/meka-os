@@ -113,7 +113,7 @@ struct NeedsYouGroupLeadView: View {
 
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
-            Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
             if let second {
                 Button {

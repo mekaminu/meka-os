@@ -138,7 +138,7 @@ object LoneWordGlue {
      * held together while that leaves the line somewhere to break.
      */
     fun kept(line: String): String {
-        val s = dotsHeld(leadsHeld(figuresHeld(PhraseGlue.kept(line.trimEnd()))))
+        val s = dotsHeld(leadsHeld(figuresHeld(phrasesHeld(PhraseGlue.kept(line.trimEnd())))))
         val starts = wordStarts(s)
         if (starts.size < 3) return s
         val base = starts.size - 2
@@ -234,6 +234,15 @@ object LoneWordGlue {
         }
         return runs.joinToString(" ")
     }
+
+    /**
+     * Phrases that read as one and go down whole (walk-through 2026-11-15, A15 part 3: Needs you's hint ended a line on
+     * "‹ ›" over "for the next ·", and the ten-minute inbox's lead read "one / at a time").
+     */
+    private val PHRASES = listOf("‹ › for the next", "one at a time")
+
+    /** [s] with each of [PHRASES] held whole. */
+    fun phrasesHeld(s: String): String = PHRASES.fold(s) { acc, p -> acc.replace(p, p.replace(' ', NBSP)) }
 
     /** A figure on its own: "2", "£10.99", "45%", "1,200" (a time like "17:30" isn't one: it reads whole alone). */
     private val FIGURE = Regex("^[£$€−-]?\\d[\\d,.]*%?$")

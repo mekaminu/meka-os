@@ -33,7 +33,7 @@ struct NeedsYouDecideCardView: View {
                     .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(card.what).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
+                    Text(card.whatShown).font(MekaType.taskTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
                     Text(card.from).font(MekaType.caption)
                         .foregroundStyle(card.urgent ? palette.critical : palette.textSecondary)
                         .lineLimit(3).truncationMode(.tail)

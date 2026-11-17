@@ -104,6 +104,8 @@ class NeedsYouDecideScreensTest {
         if (compose.onAllNodesWithTag(NEEDS_YOU_DECIDE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 2) fail("$name: not two cards")
         ScreenShots.assertEachOneLine(compose, name, listOf("Add", "Change", "No") +
             (if (wide) listOf("Work from home · Wed 16 Dec", "Task: Check the algorithm · Today") else emptyList()))
+        // Walk-through 2026-11-15, A15 part 3: the cover read "Task: Check the algorithm · / Today".
+        ScreenShots.assertNoLoneWords(compose, name, listOf("Work from home · Wed 16 Dec", "Task: Check the algorithm · Today"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 

@@ -913,7 +913,7 @@ internal fun NeedsYouColumn(
                     BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
                     Column {
                         Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, mailCount + renewalCount), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
-                        if (!compact) Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                        if (!compact) Text(needsShown(NeedsYouStackRules.EMPTY_CAPTION), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }
             }
@@ -1328,7 +1328,7 @@ internal fun NeedsYouColumn(
                     BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
                     Column {
                         Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, mailCount + renewalCount), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
-                        if (!compact) Text(NeedsYouStackRules.EMPTY_CAPTION, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                        if (!compact) Text(needsShown(NeedsYouStackRules.EMPTY_CAPTION), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }
             }

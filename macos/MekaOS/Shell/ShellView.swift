@@ -254,7 +254,7 @@ struct NeedsYouView: View {
                     // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
                     if NeedsYouGroupRules.shared.shows(filter: filter, group: .messages) { ScamTextsView(palette: palette) }
                     if !present.isEmpty {
-                        Text(NeedsYouGroupRules.shared.HINT_MAC)
+                        Text(LoneWordGlue.shared.measured(line: NeedsYouGroupRules.shared.HINT_MAC))
                             .font(MekaType.micro).foregroundStyle(palette.textTertiary)
                             .padding(.top, MekaSpace.xs).padding(.leading, MekaSpace.xxs)
                     }
@@ -376,7 +376,7 @@ struct NeedsYouView: View {
                     Text(NeedsYouStackRules.shared.emptyLineBeside(toCatchUp: model.afterWork?.toCatchUp ?? 0,
                                                                   waitingElsewhere: model.mailWaitingElsewhere))
                         .font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text(NeedsYouStackRules.shared.EMPTY_CAPTION)
+                    Text(LoneWordGlue.shared.measured(line: NeedsYouStackRules.shared.EMPTY_CAPTION))
                         .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 }
             }

@@ -34,6 +34,9 @@ class NeedsYouDecideTest {
             RequestProposal(RequestKind.TASK, "Check the algorithm", day, null)))
         assertEquals(NeedsYouDecideIcon.TASK, c.icon)
         assertEquals("Task: Check the algorithm · Today", c.what)
+        // A15 part 3: drawn, "algorithm · Today" goes down whole (the cover read "algorithm · / Today").
+        val g = LifeTileRules.GLUE
+        assertEquals("Task: Check the algorithm${g}·${g}Today", c.whatShown)
         assertEquals("Change", c.changeLabel)
         assertTrue(c.spoken.contains("Add, Change, Not a task."))
     }

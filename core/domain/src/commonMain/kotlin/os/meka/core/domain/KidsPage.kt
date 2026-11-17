@@ -41,7 +41,8 @@ object KidsPageRules {
         "${ADD_CHOICES.firstOrNull { it.key == choice }?.label ?: ADD_CHOICES.first().label}, for example ${hint(choice)}"
 
     const val WEEK_EMPTY = "Nothing they need in the next 7 days"
-    const val CHILDREN_EMPTY = "Add the children in Ask → Settings → About you first"
+    /** The header already says to add them in About you, so the card doesn't say it again (A15/A16: "you first" alone). */
+    const val CHILDREN_EMPTY = "No children yet"
     const val FEES_EMPTY = "No club fees · + Add → A club fee"
     const val MONEY_EMPTY = "No chores or pocket money · + Add → A chore"
     /** A child's row on the right once their sizes are three months old. */
