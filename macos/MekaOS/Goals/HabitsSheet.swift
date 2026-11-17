@@ -419,8 +419,11 @@ private struct HabitBoardRowView: View {
                         Text(row.meta).font(MekaType.micro).foregroundStyle(palette.textSecondary)
                         HStack(spacing: 3) { // rhythm: ok, the mockup's 3 px gap between the week's dots
                             ForEach(Array(row.week.enumerated()), id: \.offset) { i, m in
+                                // A19 (walk-through 2026-11-15): the picked day's ring sits outside the dot with a
+                                // gap (the mockup's outline-offset), so a kept day shows its whole green dot.
                                 Circle().fill(dot(m)).frame(width: 6, height: 6)
-                                    .overlay(Circle().stroke(i == Int(row.selectedIndex) ? palette.textTertiary : .clear, lineWidth: 1))
+                                    .overlay(Circle().stroke(i == Int(row.selectedIndex) ? palette.textTertiary : .clear, lineWidth: 1)
+                                        .frame(width: 10, height: 10))
                             }
                         }
                     }

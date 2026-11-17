@@ -27,6 +27,9 @@ import os.meka.android.goals.HabitsPage
 import os.meka.core.domain.HabitMark
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.fail
@@ -117,6 +120,11 @@ class HabitsScreensTest {
             // A19: with habits counted, the summary and today's day carry their bars.
             compose.onNodeWithTag("habits-summary-bar", useUnmergedTree = true).assertExists()
             compose.onNodeWithTag("habits-day-bar-6-true", useUnmergedTree = true).assertExists()
+            // A19 (walk-through 2026-11-15): today's ring sat over today's dot, so a 7 day streak showed 6 green dots and
+            // Drink water's one kept day showed none. Today's dot is as green at its centre as yesterday's.
+            val teeth = ids.getValue("Brush teeth")
+            assertEquals(dotCentre(teeth, 5), dotCentre(teeth, 6), "$name: today's dot is the same green as yesterday's")
+            assertEquals(dotCentre(teeth, 6), dotCentre(ids.getValue("Drink water"), 6), "$name: Drink water's kept day is green")
         } else {
             ScreenShots.assertShows(compose, name, "Add a habit to do")
             ScreenShots.assertShows(compose, name, "No habits yet")
@@ -124,6 +132,12 @@ class HabitsScreensTest {
             compose.onNodeWithTag("habits-summary-bar", useUnmergedTree = true).assertDoesNotExist()
             (0 until 7).forEach { compose.onNodeWithTag("habits-day-bar-$it-false", useUnmergedTree = true).assertExists() }
         }
+    }
+
+    /** The colour at the centre of a habit's dot [i] (0–6, 6 = today), as ARGB. */
+    private fun dotCentre(id: String, i: Int): Int {
+        val px = compose.onNodeWithTag("habits-dot-$id-$i", useUnmergedTree = true).captureToImage().toPixelMap()
+        return px[px.width / 2, px.height / 2].toArgb()
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

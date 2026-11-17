@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -413,9 +414,19 @@ private fun HabitRow(r: HabitBoardRow, onOpen: () -> Unit, onMark: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { // rhythm: ok, the mockup's 3 px gap between the week's dots
                     r.week.forEachIndexed { i, m ->
                         val c = when (m) { HabitMark.DONE -> green; HabitMark.MISSED -> red; HabitMark.CLEAR -> Meka.colors.surfaceRaised }
+                        // A19 (walk-through 2026-11-15): the picked day's ring sits outside the dot with a 1 dp gap (the
+                        // mockup's outline-offset), so a day kept still shows its whole green dot; it was a border laid
+                        // over the dot, which read as a grey dot and made a 7 day streak look like 6.
+                        val ring = Meka.colors.textTertiary
                         Box(
-                            Modifier.size(6.dp).let { if (i == r.selectedIndex) it.border(1.dp, Meka.colors.textTertiary, CircleShape) else it }
-                                .clip(CircleShape).background(c),
+                            Modifier.size(6.dp)
+                                .let { mod ->
+                                    if (i != r.selectedIndex) mod else mod.drawBehind {
+                                        drawCircle(ring, radius = size.minDimension / 2 + 1.5.dp.toPx(), style = Stroke(1.dp.toPx()))
+                                    }
+                                }
+                                .clip(CircleShape).background(c)
+                                .testTag("habits-dot-${r.id}-$i"),
                         )
                     }
                 }
