@@ -689,7 +689,7 @@ class WeekBoardFacadeTest {
     }
 
     @Test
-    fun calendarsWeekGridHoldsTodaysOpenTasksInItsStripOnBothApps() = runTest {
+    fun calendarsWeekGridHoldsTodaysTimedTaskOnTheGridOnBothApps() = runTest {
         val fold = core("android"); val mac = core("mac")
         val t = fold.addTask("Cancel a subscription")
         fold.tick()
@@ -699,9 +699,12 @@ class WeekBoardFacadeTest {
         assertEquals(5, g.days.size)
         val day = g.days.first { it.epochDay == today }
         assertTrue(day.isToday)
-        assertTrue(day.chips.any { it.text == "19:00 Cancel a subscription" && it.kind == os.meka.core.domain.WeekChipKind.TASK })
+        // A timed task inside the grid's hours sits on the grid, not in the strip (walk-through A18, week 4).
+        assertEquals(listOf("Cancel a subscription" to "19:00"), day.taskBlocks.map { it.title to it.time.substringBefore("–") })
+        assertTrue(day.chips.none { it.kind == os.meka.core.domain.WeekChipKind.TASK })
         fold.syncNow(); mac.syncNow(); mac.tick()
         val onMac = mac.calendarWeek(mac.weekBoard.value, os.meka.core.domain.CalendarWeekRules.start(today, 3), 3)
-        assertEquals(listOf("19:00 Cancel a subscription"), onMac.days[0].chips.map { it.text })
+        assertEquals(listOf("Cancel a subscription"), onMac.days[0].taskBlocks.map { it.title })
+        assertTrue(onMac.days[0].chips.isEmpty())
     }
 }
