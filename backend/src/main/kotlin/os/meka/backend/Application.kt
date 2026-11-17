@@ -742,6 +742,7 @@ fun Application.mekaSync(
             // Ask MEKA: a question with the device's picture of today; words and proposed actions back. Nothing is kept.
             // Voice completeness, slice 3: a spoken answer brings its first piece's clip in the chosen voice.
             // Obi's face, slice 2: for a device drawing the face, each piece comes with its mouth sounds.
+            val tflOnDemand = TflOnDemand(os.meka.backend.integrations.TflLineStatus())
             fun clips(sp: SpeechService, marked: Boolean) = { text: String, voice: String? ->
                 val said = sp.say(SpeechCodec.Request(text, voice, visemes = marked))
                 said.mp3?.takeIf { said.response.state == SpeechCodec.Response.SPOKEN }?.let { AskService.FirstClip(it, said.response.voice, said.visemes) }
@@ -750,6 +751,9 @@ fun Application.mekaSync(
                 ai.provider, speech?.let { clips(it, false) },
                 budgetLevel = { ai.budget?.state()?.level }, live = liveFacts?.let { lf -> { q: String -> lf.look(q) } },
                 markedClip = speech?.let { clips(it, true) },
+                // Obi answers live status: the safety net's search, and TfL asked on demand for lines off his route.
+                retryLive = liveFacts?.let { lf -> { q: String -> lf.retry(q) } },
+                tfl = tflOnDemand.let { t -> { ids: List<String> -> t.statuses(ids) } },
             )
             post("/v1/ai/ask") {
                 val body = call.boundedBody()

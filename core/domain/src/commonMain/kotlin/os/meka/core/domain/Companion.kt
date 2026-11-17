@@ -131,7 +131,7 @@ object LiveFactsRules {
         if (words.isEmpty()) return null
         if (personal(q, words)) return null
         val flat = " " + words.joinToString(" ") + " "
-        if (LIVE.none { " $it " in flat } && !elsewhereWeather(flat)) return null
+        if (LIVE.none { " $it " in flat } && !elsewhereWeather(flat) && !nowAboutTheWorld(flat, words)) return null
         val cleaned = question.replace(Regex("""^\s*(?:(?:hey|ok|okay|hi)\b[\s,]*)?""", RegexOption.IGNORE_CASE), "").replace(Regex("""\s+"""), " ").trim()
         return cleaned.take(MAX_QUERY).trim().takeIf { it.length >= 3 }
     }
@@ -150,6 +150,37 @@ object LiveFactsRules {
         if (words.any { it in names }) return null
         return query.replace(Regex("""\s+"""), " ").trim().take(MAX_QUERY).trim().takeIf { it.length >= 3 }
     }
+
+    /**
+     * Obi answers live status (Meka 2026-11-17): the weaker words that ask about the world as it is now ("can you check
+     * the Elizabeth line is ok now?", "is the M25 ok now?", "any delays at Heathrow?", "is Tesco open tonight?"). They
+     * only count when the question isn't about him ("I", "I'm": "can you check I'm free?") or one of Navilife's own
+     * lists ("check the shopping list"), doesn't open like a look-up of his day ("what's on today?"), and isn't the home
+     * weather the <today> block already has.
+     */
+    private fun nowAboutTheWorld(flat: String, words: List<String>): Boolean {
+        if (words.any { it in SELF || it in OWN }) return false
+        if (OWN_DAY_STARTS.any { flat.startsWith(" $it") }) return false
+        if (WEATHER.any { it in words } && !elsewhereWeather(flat)) return false
+        return NOW.any { " $it " in flat } || IS_OK.containsMatchIn(flat)
+    }
+
+    private val NOW = listOf(
+        "check", "now", "status", "delay", "delays", "delayed", "disruption", "disruptions", "cancelled", "canceled", "running",
+        "today", "tonight", "this morning", "this afternoon", "this evening", "traffic", "roadworks", "closed", "closure",
+    )
+    private val IS_OK = Regex(""" (is|are) (?:[a-z0-9'ç]+ ){0,8}(ok|okay|running|open|working|closed|down|delayed) """)
+    private val SELF = setOf("i", "i'm", "im", "i've", "ive", "i'd", "i'll")
+    private val OWN = setOf(
+        "shopping", "list", "lists", "task", "tasks", "calendar", "diary", "reminder", "reminders", "timer", "bin", "bins",
+        "study", "habit", "habits", "brief", "inbox", "email", "emails", "mail", "spending", "budget", "fast", "school",
+        "appointment", "appointments", "errand", "errands", "countdown", "countdowns", "goal", "goals",
+    )
+    private val OWN_DAY_STARTS = listOf(
+        "what's on", "whats on", "what is on", "what's next", "whats next", "what time", "when's", "whens", "when is",
+        "when do", "add ", "remind ", "move ", "set ", "start ", "plan ", "show ", "open ",
+    )
+    private val WEATHER = setOf("weather", "forecast", "temperature", "rain", "raining", "snow", "snowing", "sunny", "cold", "warm", "hot", "umbrella", "coat")
 
     private fun personal(q: String, words: List<String>): Boolean =
         words.any { it in PERSONAL } || '@' in q || Regex("""\d{5,}""").containsMatchIn(q.replace(" ", "")) || POSTCODE.containsMatchIn(q)

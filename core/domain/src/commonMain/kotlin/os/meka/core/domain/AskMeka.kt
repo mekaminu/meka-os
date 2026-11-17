@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days"), STUDY("study"), BOARD("board"), DECISIONS("decisions"), READING("reading"), EMERGENCY("emergency"), NEWS("news"), VOICE_NOTES("voice_notes"), HEALTH("health"), VAULT("vault"), WORKING_ON("working_on"), TEAM("team"), COUNTDOWNS("countdowns") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days"), STUDY("study"), BOARD("board"), DECISIONS("decisions"), READING("reading"), EMERGENCY("emergency"), NEWS("news"), VOICE_NOTES("voice_notes"), HEALTH("health"), VAULT("vault"), WORKING_ON("working_on"), TEAM("team"), COUNTDOWNS("countdowns"), TRAINS("trains") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -286,6 +286,8 @@ object AskRules {
     /** Lines kept for today's tasks, Needs you and calendar however much else goes with a question. */
     const val TODAY_ROOM = 16
     const val MAX_LINE = 160
+    /** Today's trains lines one question carries ([TrainNowAskRules]): status, plans, the board, leave-by, the fallback. */
+    const val MAX_TRAIN_LINES = 6
     const val MAX_ANSWER = 1200
     const val MAX_CARDS = 3
     const val MAX_TITLE = 120
@@ -327,7 +329,8 @@ object AskRules {
                 emergency: List<String> = emptyList(), news: List<String> = emptyList(), voiceNotes: List<String> = emptyList(),
                 health: List<String> = emptyList(), vault: List<String> = emptyList(), workingOn: List<String> = emptyList(), workingOnFromWeb: Boolean = false, team: List<String> = emptyList(), countdowns: List<String> = emptyList(),
                 days: AskDays? = null, dayLines: List<String> = emptyList(), dayEvents: List<CalendarEvent> = emptyList(), dayTasks: List<Task> = emptyList(),
-                movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList()): AskContext {
+                movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList(),
+                trains: List<String> = emptyList(), trainsAsked: Boolean = false): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -474,7 +477,11 @@ object AskRules {
                     if (t.lifecycle == Lifecycle.DONE) AskItem("", AskItemKind.DONE, line(t.title, DayAskRules.taskWhen(t, day, cal)))
                     else AskItem(ref(t), AskItemKind.TASK, line(t.title, DayAskRules.taskWhen(t, day, cal)))
                 }
-        val tail = dayItems + helpLines + notifyLines + mailLines + (if (studyLines.size > 1) studyLines else emptyList()) + moreFull + barcaLines + (if (kidLines.size > 1) kidLines else emptyList()) + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + (if (studyLines.size == 1) studyLines else emptyList()) + (if (kidLines.size == 1) kidLines else emptyList()) + moreCounts + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // Obi answers live train status ([TrainNowAskRules]): today's trains on his route (TfL's status and the live
+        // board, in Navilife's words, never untrusted), first in the tail for a question about trains, else just before
+        // the forecast, so a full context no longer cuts them before anything else.
+        val trainLines = trains.take(MAX_TRAIN_LINES).map { AskItem("", AskItemKind.TRAINS, it.replace(Regex("""\s+"""), " ").trim().take(MAX_LINE)) }
+        val tail = (if (trainsAsked) trainLines else emptyList()) + dayItems + helpLines + notifyLines + mailLines + (if (studyLines.size > 1) studyLines else emptyList()) + moreFull + barcaLines + (if (kidLines.size > 1) kidLines else emptyList()) + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + (if (studyLines.size == 1) studyLines else emptyList()) + (if (kidLines.size == 1) kidLines else emptyList()) + moreCounts + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + (if (trainsAsked) emptyList() else trainLines) + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))

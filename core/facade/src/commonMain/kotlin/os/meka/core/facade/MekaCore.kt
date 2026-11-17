@@ -11621,8 +11621,12 @@ class MekaCore(
             val workLines = os.meka.core.domain.PlacesRules.workAskLines(workWeather.forecast(), nowMs(), cal)
             // Where Meka is (Places item 3): only for a question about "here", from a fix taken in the last 30 minutes.
             val hereLines = os.meka.core.domain.HereRules.askLinesFor(q, hereFix, nowMs(), cal)
-            // The route's train lines (Places item 4): one line while TfL's status is fresh.
-            val routeLines = os.meka.core.domain.RouteRules.askLines(lineStatus.snapshot(), nowMs(), cal, officeToday())
+            // The route's train lines (Places item 4): one line while TfL's status is fresh. Obi answers live train
+            // status: they go as their own trains lines (first for a question about trains), with how old the status is
+            // when it isn't fresh and TfL's plans for this morning, so "is the Elizabeth line ok now?" is answered.
+            val trainsAsked = os.meka.core.domain.TrainNowAskRules.isAbout(q)
+            val trainLines = os.meka.core.domain.RouteRules.askLines(lineStatus.snapshot(), nowMs(), cal, officeToday()) +
+                (if (trainsAsked) os.meka.core.domain.TrainNowAskRules.statusLines(lineStatus.snapshot(), nowMs(), cal) else emptyList())
             // Travel mode completeness, slice 3: the trip destination's days, while away there or the day before.
             val tripLines = os.meka.core.domain.TripWeatherRules.askLines(tripWeather.forecast(), trips.items(), cal.epochDayOf(nowMs()), tripClocks)
             // The companion, slice 4: the days the question names, with their events and tasks.
@@ -11633,8 +11637,8 @@ class MekaCore(
             fun seen(area: os.meka.core.domain.ObiArea) = obiSeesLines(area, q, cal)
             os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
-                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size - tripLines.size) +
-                    hereLines + workLines + routeLines + tripLines,
+                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - tripLines.size) +
+                    hereLines + workLines + tripLines,
                 shopping.view(),
                 // School rhythm, slice 2b: the school year, so "when's half term?" has an answer.
                 seen(os.meka.core.domain.ObiArea.SCHOOL),
@@ -11721,7 +11725,7 @@ class MekaCore(
                 // whether each is an office day and TfL's planned status for that morning when it's been read.
                 days = askDays, dayLines = askDays?.let { r -> os.meka.core.domain.DayAskRules.askLines(r, askDayEvents, askDayTasks, cal.epochDayOf(nowMs()), cal) +
                     (if (os.meka.core.domain.TrainDayAskRules.isAbout(q)) os.meka.core.domain.TrainDayAskRules.askLines(r, lineStatus.snapshot(), hoursOf(_workMode.value, cal.epochDayOf(nowMs())), nowMs(), cal) else emptyList()) }.orEmpty(),
-                dayEvents = askDayEvents, dayTasks = askDayTasks)
+                dayEvents = askDayEvents, dayTasks = askDayTasks, trains = trainLines, trainsAsked = trainsAsked)
                 // The companion, slice 3: "sir" when he chose it in Settings → Voice.
                 // The companion, slice 5: the notes of earlier chats, only with an open question or one about an earlier chat.
                 // One name everywhere, slice 2: the companion calls him what Today and the orb do (About you → Your name).
@@ -13257,8 +13261,11 @@ class MekaCore(
         val context = os.meka.core.domain.AskRules.context(
             _today.value, now, cal,
             os.meka.core.domain.WeatherRules.askLines(weather.forecast(), now, cal)
-                .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - routeLines.size) + workLines + routeLines,
+                .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size) + workLines,
             shopping.view(),
+            // Obi answers live train status: the route's trains as their own lines in Live too, ahead of everything
+            // in the tail, so "is the line ok now?" is answered from them.
+            trains = routeLines, trainsAsked = true,
             commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, today), cal, now, currentWake()),
             // Slice 5: events Navilife may move get a handle, as in Ask, so "move the dentist to four" can be offered.
             movable = { e -> os.meka.core.domain.EventAskRules.movable(e, now, cal, ::accountEditable) },

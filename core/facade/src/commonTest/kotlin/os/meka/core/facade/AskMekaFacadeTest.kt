@@ -350,7 +350,10 @@ class AskMekaFacadeTest {
             .none { it.source == os.meka.core.domain.NoticeSource.TRAINS })
 
         c.askMeka("are the trains ok?")
-        val lines = server.asked.single().second.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
+        // Obi answers live train status: today's trains are their own lines, first for a train question.
+        val items = server.asked.single().second.items
+        val lines = items.filter { it.kind == os.meka.core.domain.AskItemKind.TRAINS }.map { it.line }
+        assertTrue(items.none { it.kind == os.meka.core.domain.AskItemKind.WEATHER && "train" in it.line })
         assertTrue("train lines on Meka's route (TfL status, checked 07:00): South Rail severe delays; North Rail good service; Metro line good service" in lines,
             lines.toString())
     }
