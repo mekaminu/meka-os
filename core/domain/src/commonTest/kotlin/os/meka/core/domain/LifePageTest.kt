@@ -120,7 +120,7 @@ class LifePageTest {
         val two = CarsView(listOf(car(CarRules.ENTITY_ID, "the Golf", row("mot", "MOT", day + 4)), car("car2", "Car 2", row("tax", "Car tax", day + 2))), true)
         assertEquals("to Car 2's tax", CarPageRules.page(two, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal).tiles[0].label)
         val ranOut = CarsView(listOf(car(CarRules.ENTITY_ID, "The Golf", row("mot", "MOT", day - 2), lapses = listOf("MOT ran out · book it")), car("car2", "Car 2")), true)
-        assertEquals(PageTile("Ran out", "the Golf's MOT · book it", true), CarPageRules.page(ranOut, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal).tiles[0])
+        assertEquals(PageTile("Ran out", "The Golf's MOT · book it", true), CarPageRules.page(ranOut, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal).tiles[0])
         assertEquals("the Golf's", CarPageRules.owner("The Golf"))
         assertEquals("Car 2's", CarPageRules.owner("Car 2"))
         p.tiles.forEach { t -> assertFalse("·" in t.label, "a dot in \"${t.label}\"") }

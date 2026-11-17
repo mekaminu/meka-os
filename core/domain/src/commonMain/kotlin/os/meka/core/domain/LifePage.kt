@@ -188,7 +188,7 @@ object CarPageRules {
 
     private fun timerTile(timers: TimersView, many: Boolean): PageTile? =
         timers.rows.firstOrNull { !it.ended }?.let { running ->
-            PageTile(running.endText, if (many) "${owner(running.title).dropLast(2)}, paid until" else "paid until", running.lit)
+            PageTile(running.endText, if (many) "${ParkingRules.heading(running.title)}, paid until" else "paid until", running.lit)
         }
 
     /**
@@ -294,7 +294,8 @@ object CarPageRules {
     private fun lapseTile(lapse: String, car: String?): PageTile {
         val what = lapse.substringBefore(" ran out")
         return if (lapse.startsWith("Untaxed")) PageTile("Untaxed", "tax ${car?.let { owner(it).dropLast(2) } ?: "it"} before you drive", true)
-        else PageTile("Ran out", "${car?.let { "${owner(it)} ${if (what == "MOT") what else what.lowercase()}" } ?: what} · ${lapse.substringAfter(" · ", "book it")}", true)
+        // A car's name starting the words is capitalised, as everywhere else ("The Golf's MOT", Car slice 22).
+        else PageTile("Ran out", "${car?.let { ParkingRules.heading("${owner(it)} ${if (what == "MOT") what else what.lowercase()}") } ?: what} · ${lapse.substringAfter(" · ", "book it")}", true)
     }
 
     /**
