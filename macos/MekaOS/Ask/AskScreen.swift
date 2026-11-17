@@ -133,7 +133,7 @@ struct AskScreen: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             // Ask polish, slice 1: on the first run one welcome line; tiles still to set up sink under "To set up".
             if let lines = model.lifeLines, let welcome = LifeTileRules.shared.welcome(lines: lines) {
-                Text(welcome).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LifeTileRules.shared.shown(text: welcome)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .padding(.bottom, MekaSpace.xxs)
                     .staggeredAppear(ShellNav.tileStep(0))
             }
@@ -448,7 +448,8 @@ private struct LifeTileView: View {
                         // About one line of the name (19 pt), stepped down to centre on the icon's box.
                         .padding(.top, item.symbol == nil ? 0 : CGFloat(LifeTileRules.shared.nameInset(lineHeight: 19)))
                 }
-                Text(text)
+                // A15 part 5: the line's last words go down together ("Christmas in 65 days", never "65 / days").
+                Text(LifeTileRules.shared.shown(text: text))
                     .font(MekaType.caption)
                     .foregroundStyle(lit ? palette.accent : palette.textSecondary)
                     // Two lines at most, space kept for both, so every tile is the same height.

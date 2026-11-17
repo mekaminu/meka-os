@@ -146,7 +146,7 @@ class AskScreensTest {
                 ScreenShots.assertShows(compose, name, "3 to buy")
                 // Slice 8 (the Ask re-shot's findings): the errand counts, and a two-line name keeps its icon on top.
                 // The Ask hub pages the tiles: Errands may be on the next page folded.
-                val errands = hasText("1 errand at", substring = true)
+                val errands = hasText("1 errand at", substring = true) or ScreenShots.plainText("1 errand at", substring = true)
                 if (!shows(errands)) {
                     val next = hasContentDescription(os.meka.android.ask.ASK_NEXT_PAGE) and hasClickAction()
                     if (!shows(next)) fail("$name: Errands isn't on the first page and there's no next page")

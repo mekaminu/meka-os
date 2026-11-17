@@ -76,6 +76,19 @@ class LoneWordGlueTest {
     }
 
     @Test
+    fun setupsCountAndAsksTilesKeepTheirLastWords() {
+        // A15 part 5: Setup's head read "… 3 come later · 1 / couldn't be checked"; the count goes down with its phrase.
+        val setup = LoneWordGlue.kept(SetupRules.summaryLine(done = 20, left = 0, later = 3, unknown = 1))
+        assertTrue(setup.endsWith("1${nb}couldn't${nb}be${nb}checked"), setup)
+        // Ask's welcome "each takes a / minute", Countdowns' "Christmas in 65 / days", People's "waiting for / 1 · +1".
+        assertTrue(LifeTileRules.shown(LifeTileRules.WELCOME).endsWith("takes${nb}a${nb}minute"))
+        assertTrue(LifeTileRules.shown("Christmas in 65 days").endsWith("in${nb}65${nb}days"))
+        assertTrue(LifeTileRules.shown("Alex · waiting for 1" + LifeTileRules.more(1)).endsWith("for${nb}1${nb}·${nb}+1"))
+        // The words themselves never change.
+        assertEquals("Christmas in 65 days", DateGlue.plain(LifeTileRules.shown("Christmas in 65 days")))
+    }
+
+    @Test
     fun monthsAsMoStayWithTheirNumber() {
         // A15: Clear my cards' Debt-free tile "Dec 2027 · 14 / mo".
         assertEquals("Dec${nb}2027 · 14${nb}mo", PhraseGlue.kept("Dec 2027 · 14 mo"))

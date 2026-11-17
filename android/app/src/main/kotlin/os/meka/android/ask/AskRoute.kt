@@ -371,7 +371,7 @@ fun AskRoute(
                     val welcome = os.meka.core.domain.LifeTileRules.welcome(lifeLines)
                     if (welcome != null) {
                         item(key = "life-welcome") {
-                            Text(welcome, style = MekaType.caption, color = Meka.colors.textSecondary,
+                            Text(os.meka.core.domain.LifeTileRules.shown(welcome), style = MekaType.caption, color = Meka.colors.textSecondary,
                                 modifier = Modifier.padding(bottom = MekaSpace.xxs).animateItem().appear(rememberAppearance(ShellNav.tileStep(0))))
                         }
                     }
@@ -655,7 +655,8 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
             label = "tile-text",
         ) { t ->
             // Two lines at most on every tile, so the rows keep one height.
-            Text(t, style = MekaType.caption, color = lineColor, maxLines = os.meka.core.domain.LifeTileRules.MAX_LINES,
+            // A15 part 5: the line's last words go down together ("Christmas in 65 days", never "65 / days").
+            Text(os.meka.core.domain.LifeTileRules.shown(t), style = MekaType.caption, color = lineColor, maxLines = os.meka.core.domain.LifeTileRules.MAX_LINES,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }

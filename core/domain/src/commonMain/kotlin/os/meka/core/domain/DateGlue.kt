@@ -242,9 +242,10 @@ object LoneWordGlue {
 
     /**
      * Phrases that read as one and go down whole (walk-through 2026-11-15, A15 part 3: Needs you's hint ended a line on
-     * "‹ ›" over "for the next ·", now "‹ › for more", which goes down with its dot; the inbox lead read "one / at a time").
+     * "‹ ›" over "for the next ·", now "‹ › for more", which goes down with its dot; the inbox lead read "one / at a time";
+     * part 5: Setup's head read "… 1 / couldn't be checked", and a figure before a phrase takes it whole).
      */
-    private val PHRASES = listOf("‹ › for more", "one at a time")
+    private val PHRASES = listOf("‹ › for more", "one at a time", "couldn't be checked")
 
     /** [s] with each of [PHRASES] held whole. */
     fun phrasesHeld(s: String): String = PHRASES.fold(s) { acc, p -> acc.replace(p, p.replace(' ', NBSP)) }

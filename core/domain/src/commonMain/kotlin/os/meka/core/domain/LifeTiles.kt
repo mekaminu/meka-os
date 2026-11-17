@@ -239,6 +239,13 @@ object LifeTileRules {
     /** The longest place [placeKept] holds on one line. */
     const val PLACE_KEPT = 20
 
+    /**
+     * A tile's line, or the welcome above the tiles, as drawn: through [LoneWordGlue.kept] (walk-through 2026-11-15, A15
+     * part 5: on the cover screen the welcome read "each takes a / minute", Countdowns "Christmas in 65 / days" and People
+     * "waiting for / 1 · +1"). Spoken and compared lines keep [LifeTileLine.text].
+     */
+    fun shown(text: String): String = LoneWordGlue.kept(text)
+
     /** A no-break space: Compose and SwiftUI never break a line there. */
     const val GLUE = "\u00A0"
 

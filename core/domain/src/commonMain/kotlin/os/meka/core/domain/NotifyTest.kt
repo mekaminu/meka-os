@@ -146,16 +146,19 @@ object NotifyTraceReportRules {
 
 /** Health's Instant updates row: what the server says about its last push to this device. */
 object LastPushRules {
-    /** " · last push 20:41 · sent" or "" when the server doesn't say (none since it started, or an older server). */
+    /**
+     * " · last push sent 20:41" or "" when the server doesn't say (none since it started, or an older server). What
+     * happened leads the time (walk-through 2026-11-15, A15: "· last push 16:55 · sent" ended the row on a bare "sent").
+     */
     fun suffix(atMs: Long?, result: String?, nowMs: Long, cal: LocalCalendar): String {
         atMs ?: return ""
-        val what = when (result) {
-            "sent" -> "sent"
-            "gone" -> "address out of date"
-            "off" -> "push off"
-            else -> "failed"
+        val at = HealthRules.at(atMs, nowMs, cal)
+        return when (result) {
+            "sent" -> " · last push sent $at"
+            "gone" -> " · last push $at went to an old address"
+            "off" -> " · last push $at not sent, push is off"
+            else -> " · last push failed $at"
         }
-        return " · last push ${HealthRules.at(atMs, nowMs, cal)} · $what"
     }
 
     /** A last push that failed (or found a stale address) is worth a look. */

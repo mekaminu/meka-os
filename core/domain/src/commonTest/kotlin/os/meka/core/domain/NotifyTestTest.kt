@@ -94,10 +94,10 @@ class NotifyTestTest {
         val on = ServerHealth(ServerHealth.PUSH_ON, calls = true, speech = true, atMs = now)
         assertEquals("On · changes from the Mac arrive in seconds", row(on).line)
         val sent = row(on.copy(lastPushAtMs = now - 3 * HealthRules.MIN, lastPushResult = "sent"))
-        assertEquals("On · changes from the Mac arrive in seconds · last push 20:38 · sent", sent.line)
+        assertEquals("On · changes from the Mac arrive in seconds · last push sent 20:38", sent.line)
         assertEquals(HealthState.OK, sent.state)
         val failed = row(on.copy(lastPushAtMs = now - 3 * HealthRules.MIN, lastPushResult = "failed"))
-        assertEquals("On · last push 20:38 · failed · changes arrive within 15 min until it works", failed.line)
+        assertEquals("On · last push failed 20:38 · changes arrive within 15 min until it works", failed.line)
         assertEquals(HealthState.WARN, failed.state)
     }
 
