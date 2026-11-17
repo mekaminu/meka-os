@@ -189,6 +189,27 @@ class LoneWordGlueTest {
         assertFalse(LoneWordGlue.kept("Read the not financial advice").contains("not$nb"))
     }
 
+    // A15 part 4: Obi on calls read "Obi can ring businesses after / your tap"; a pair led by "your" takes the word before.
+    @Test
+    fun aPairLedByYourTakesTheWordBefore() {
+        val sub = LoneWordGlue.kept(CallsSettingsRules.BOOKING_SUB)
+        assertTrue(sub.endsWith("after${nb}your${nb}tap"), sub)
+        assertEquals(CallsSettingsRules.BOOKING_SUB, DateGlue.plain(sub))
+        assertTrue(LoneWordGlue.kept("Cap a category for the month").endsWith("for${nb}the${nb}month"))
+        // Not when the held run would be too long.
+        assertFalse(LoneWordGlue.kept("Ask before extraordinarily the questions").contains("extraordinarily$nb"))
+        // No determiner: the last two words only, as before.
+        assertFalse(LoneWordGlue.kept("Pick something nice today").contains("something$nb"))
+    }
+
+    // A15 part 4: the card sheet's APR hint ended on "on Plan)" alone on the cover; it now ends on Clear my cards.
+    @Test
+    fun theAprHintEndsOnClearMyCards() {
+        val hint = LoneWordGlue.measured("APR, e.g. 24.9% (for Clear my cards)")
+        assertTrue(hint.endsWith("my${nb}cards)"), hint)
+        assertFalse(hint.contains("Plan"))
+    }
+
     @Test
     fun noChipIsLeftAloneOnItsRow() {
         // Three of four fit: two and two, not three and one.

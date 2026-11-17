@@ -259,7 +259,7 @@ object MoneyCards {
         MoneyCardField(LIMIT, "Credit limit", if (c.charge) "Spending limit, if it has one" else "Credit limit, e.g. £2,000", c.limitPence?.let(::fmt).orEmpty()),
         MoneyCardField(PROMO, "0% ends", "0% ends, e.g. 1 Feb 2027 (if it has one)", c.promoEndDay?.let { MoneyRules.dayMonth(it) }.orEmpty()),
     ) + if (c.charge) emptyList() else listOf(
-        MoneyCardField(APR, "APR", "APR, e.g. 24.9% (for Clear my cards on Plan)", c.aprBp?.let(::aprText).orEmpty()),
+        MoneyCardField(APR, "APR", "APR, e.g. 24.9% (for Clear my cards)", c.aprBp?.let(::aprText).orEmpty()),
     )
 
     fun ordinal(n: Int): String = "$n" + when {

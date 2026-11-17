@@ -2402,7 +2402,7 @@ private fun CardDetails(
         SheetSaid(said)
         c.fields.forEach { f ->
             val hint = if (f.value.isEmpty()) f.hint else "${f.label} · now ${f.value}"
-            // Walk-through A28: a hint wraps whole ("(if it has one)", "(for Clear my cards on Plan)" never leave a word alone).
+            // Walk-through A28: a hint wraps whole ("(if it has one)", "(for Clear my cards)" never leave a word alone).
             Field(moneyShown(hint), description = hint, value = texts[f.key] ?: "", onValue = { t -> texts = texts + (f.key to t) }) { t ->
                 texts = texts - f.key
                 onField(f.key, t)
