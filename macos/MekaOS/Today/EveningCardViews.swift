@@ -68,7 +68,7 @@ private struct MacEveningStepRow: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(step.title).font(MekaType.body)
                         .foregroundStyle(step.done ? palette.textSecondary : palette.textPrimary).lineLimit(1)
-                    Text(step.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    Text(LoneWordGlue.shared.kept(line: step.line)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(1...2) // A15: wraps whole, never cut
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)

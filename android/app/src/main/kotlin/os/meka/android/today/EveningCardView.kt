@@ -31,6 +31,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.EveningCard
 import os.meka.core.domain.EveningCardRules
 import os.meka.core.domain.EveningStep
@@ -95,7 +96,9 @@ private fun EveningStepRow(index: Int, step: EveningStep, onOpen: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(step.title, style = MekaType.body, color = if (step.done) Meka.colors.textSecondary else Meka.colors.textPrimary, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
-            Text(step.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1,
+            // Walk-through 2026-11-15, A15 (g3a 15): "Plan tomorrow · Thu 22 Oct · 1 event · first 1…" was cut on the
+            // cover with room below; the line wraps to a second line, its last words going down whole.
+            Text(LoneWordGlue.kept(step.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2,
                 overflow = TextOverflow.Ellipsis)
         }
         Text("›", style = MekaType.body, color = Meka.colors.textTertiary)

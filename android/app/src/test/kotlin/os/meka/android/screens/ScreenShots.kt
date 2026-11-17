@@ -467,6 +467,30 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-15, A15 (g4a 14): fails when the chips of one row group wrap and the last sits alone on its
+     * row ("No estimate", "21 Dec · 8 wks", "Select several"). The chips are the nodes tagged with [tagPrefix], or the
+     * nodes whose text is one of [labels]; returns how many were on screen.
+     */
+    fun assertNoChipAlone(
+        compose: ComposeContentTestRule, name: String, tagPrefix: String? = null, labels: Collection<String> = emptyList(), underTag: String? = null,
+    ): Int {
+        val tops = mutableListOf<Pair<Int, Int>>() // top, left
+        fun walk(n: SemanticsNode) {
+            val tag = n.config.getOrNull(SemanticsProperties.TestTag)
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val hit = (tagPrefix != null && tag != null && tag.startsWith(tagPrefix)) || (text != null && DateGlue.plain(text) in labels)
+            if (hit && n.size.width > 0) tops += n.boundsInRoot.top.toInt() to n.boundsInRoot.left.toInt()
+            else n.children.forEach { walk(it) }
+        }
+        walk(if (underTag != null) compose.onNodeWithTag(underTag, useUnmergedTree = true).fetchSemanticsNode() else compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        val rows = tops.groupBy { it.first }.toSortedMap()
+        if (rows.size > 1 && rows.values.last().size == 1) {
+            fail("$name: the last chip sits alone on its row (rows ${rows.values.map { it.size }})")
+        }
+        return tops.size
+    }
+
+    /**
      * The quality gate's "no word left alone" (Settings' shots, slice 25: "…out loud on her / own"): fails, naming
      * each, when one of [texts] (plain words; drawn plain or kept) wraps and its last line holds a single word.
      */

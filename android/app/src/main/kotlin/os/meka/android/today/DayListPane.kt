@@ -648,19 +648,20 @@ private fun DayTaskSheet(
                 Box(Modifier.align(Alignment.CenterHorizontally).width(MekaSpace.xl).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline))
                 Text(r.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 3)
                 if (!r.done) {
+                    // Walk-through 2026-11-15, A15 (g4a 14): "No estimate" sat alone on a second row; the chips share out.
                     SheetLabel("LENGTH")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    os.meka.android.ask.EvenChipRows(MekaSpace.xs) {
                         card.estimateChoices.forEach { c -> DayChip(TaskEstimateRules.label(c.minutes), selected = c.selected) { if (!c.selected) onLength(r.id, c.minutes) } }
                         if (card.task.estimateMinutes != null) DayChip(TaskEstimateRules.CLEAR) { onLength(r.id, null) }
                     }
                     SheetLabel(BoardAreaRules.MENU_TITLE)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    os.meka.android.ask.EvenChipRows(MekaSpace.xs) {
                         BoardAreaRules.choices(card).forEach { c ->
                             DayChip(c.label.removePrefix("✓ "), selected = c.selected) { if (!c.selected) onArea(r.id, c.area) }
                         }
                     }
                     SheetLabel("MOVE TO")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    os.meka.android.ask.EvenChipRows(MekaSpace.xs) {
                         (board.todayEpochDay until board.todayEpochDay + 7).filter { it != day }.forEach { d ->
                             val label = when (d) {
                                 board.todayEpochDay -> "Today"

@@ -39,9 +39,11 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.DayListPane
 import os.meka.android.today.DAY_LIST_UNDO_TAG
+import os.meka.android.today.DAY_TASK_SHEET_TAG
 import os.meka.core.domain.BoardArea
 import os.meka.core.domain.BoardAreaRules
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.TaskEstimateRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 
@@ -152,6 +154,9 @@ class DayListScreensTest {
         until { shows("LENGTH") && shows("MOVE TO") }
         assertTrue(shows("LENGTH") && shows("MOVE TO") && shows("Tomorrow"), "$name: the sheet didn't open")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("day-list", "$name-sheet"))
+        // Walk-through 2026-11-15, A15 (g4a 14): "No estimate" sat alone on a second row; the length chips share out.
+        val lengths = TaskEstimateRules.CHOICES.map { TaskEstimateRules.label(it) } + TaskEstimateRules.CLEAR
+        assertTrue(ScreenShots.assertNoChipAlone(compose, "$name-sheet", labels = lengths, underTag = DAY_TASK_SHEET_TAG) >= 4, "$name-sheet: no length chips")
         compose.onAllNodes(hasText("1h") and hasClickAction(), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
         val id = day.cards.single { it.title == "Complete feedbacks" }.id
         until { core.weekBoard.value.day(day.epochDay)?.cards?.single { it.id == id }?.task?.estimateMinutes == 60 }

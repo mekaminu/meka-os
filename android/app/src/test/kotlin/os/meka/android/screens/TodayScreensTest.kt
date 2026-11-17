@@ -523,6 +523,9 @@ class TodayScreensTest {
         ScreenShots.assertShows(compose, "evening", EveningCardRules.LABEL.uppercase())
         ScreenShots.assertShows(compose, "evening", EveningCardRules.SHUT_DOWN)
         ScreenShots.assertShows(compose, "evening", EveningCardRules.PLAN_TOMORROW)
+        // Walk-through 2026-11-15, A15 (g3a 15): "Plan tomorrow · Thu 22 Oct · 1 event · first 1…" was cut on the cover;
+        // each step's line wraps whole instead.
+        ScreenShots.assertNothingCutUnder(compose, "evening", EVENING_CARD_TAG)
     }
 
     /** The Today rebuild, slice 2b: TASKS · NEXT · MAIL under the greeting, with what the core says (no mail counted yet: two). */

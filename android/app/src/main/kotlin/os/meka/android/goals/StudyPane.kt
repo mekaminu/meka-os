@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -762,7 +761,7 @@ private fun SelectBar(n: Int, chips: List<StudyChip>, onChip: (StudyChip) -> Uni
                     .semantics { contentDescription = "Stop selecting" }.minTouch().padding(MekaSpace.xs).testTag("study-select-cancel"))
         }
         Text(if (n == 0) StudyRules.SELECT_HINT else StudyRules.PLAN_SELECTED, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        os.meka.android.ask.EvenChipRows(MekaSpace.xs, rowGap = MekaSpace.xs) {
             for (chip in chips) TripPill(chip.label, on = false, tag = "study-select-plan-${chip.label}", description = "${chip.spoken}, $n lessons") { onChip(chip) }
         }
     }
@@ -790,7 +789,8 @@ private fun WeekCard(
             val state = taps[row.key]?.first ?: row.state
             val note = if (state == StudyWeekState.ON) row.note ?: "On now" else null
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("study-week-${row.day}")
+                // A15 (g4b 9): "Evening" sat jammed under a two-line row; each row gets a little air above and below.
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = MekaSpace.xxs).testTag("study-week-${row.day}")
                     .semantics(mergeDescendants = true) { contentDescription = row.spoken + if (state == StudyWeekState.DONE && row.state != StudyWeekState.DONE) ", done" else "" },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
@@ -802,7 +802,8 @@ private fun WeekCard(
                 Column(Modifier.weight(1f)) {
                     Text(
                         // Walk-through 2026-11-08 A9: "Welcome and se…" cut the lesson's name; it wraps to a second line.
-                        row.lessons, style = MekaType.body, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        // A15 (g4b 9): "Welcome and / setup · 30 min" goes down whole ("Welcome / and setup · 30 min").
+                        studyShown(row.lessons), style = MekaType.body, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         color = if (row.catchUp) Meka.colors.textTertiary else Meka.colors.textPrimary,
                     )
                     Crossfade(note ?: row.place, animationSpec = MekaMotion.appear(reduced), label = "study-week-where") { line ->
@@ -964,7 +965,8 @@ private fun PlanCard(
 private fun ChipGroup(label: String, chips: List<StudyChip>, tag: String, onTap: (StudyChip) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(label, style = MekaType.caption, color = Meka.colors.textSecondary)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        // Walk-through 2026-11-15, A15 (g4a 14): "21 Dec · 8 wks" sat alone on a second row; the chips share out.
+        os.meka.android.ask.EvenChipRows(MekaSpace.xs) {
             chips.forEach { chip -> PlanChip(chip, Modifier.testTag("$tag-${chip.key}")) { onTap(chip) } }
         }
     }
@@ -1253,7 +1255,8 @@ private fun LessonSheet(
     ) {
         // Plan a lesson for a day: Today, Tomorrow or a day this week; it then shows on Today and in the Tomorrow sheet.
         Text(StudyRules.PLAN_FOR, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        // A15 (g4a 14): "Select several" sat alone on a second row; the chips share out.
+        os.meka.android.ask.EvenChipRows(MekaSpace.xs, rowGap = MekaSpace.xs) {
             for (chip in planChips) TripPill(chip.label, on = chip.on, tag = "study-lesson-plan-${chip.label}", description = chip.spoken) { if (!chip.on) onPlan(chip) }
             TripPill(StudyRules.SELECT, tag = "study-lesson-select", description = "Select several lessons to plan together") { onSelect() }
         }
@@ -1261,7 +1264,7 @@ private fun LessonSheet(
         Field(row.title, description = "Rename ${row.title}", modifier = Modifier.testTag("study-lesson-name")) { onName(it) }
         if (modules.size > 1) {
             Text(StudyRules.MOVE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            os.meka.android.ask.EvenChipRows(MekaSpace.xs, rowGap = MekaSpace.xs) {
                 for (name in modules) TripPill(name, on = name == module, tag = "study-lesson-module-$name", description = "Move to $name") { if (name != module) onModule(name) }
             }
         }

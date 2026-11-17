@@ -144,10 +144,11 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
 
 /**
  * Chips in rows like a FlowRow, but never one left alone on the last row ([EvenRows]: three and one become two and two).
- * The chips keep their own sizes; rows are [gap] apart side to side and stack with no gap (each chip is a 48 dp target).
+ * The chips keep their own sizes; rows are [gap] apart side to side and stack [rowGap] apart (none by default: each chip
+ * is a 48 dp target).
  */
 @Composable
-internal fun EvenChipRows(gap: Dp, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun EvenChipRows(gap: Dp, modifier: Modifier = Modifier, rowGap: Dp = 0.dp, content: @Composable () -> Unit) {
     Layout(content, modifier) { measurables, constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val placeables = measurables.map { it.measure(loose) }
@@ -157,13 +158,14 @@ internal fun EvenChipRows(gap: Dp, modifier: Modifier = Modifier, content: @Comp
         var at = 0
         for (n in EvenRows.sizes(placeables.map { it.width }, g, max)) { rows += placeables.subList(at, at + n); at += n }
         val width = rows.maxOfOrNull { r -> r.sumOf { it.width } + g * (r.size - 1) }?.coerceAtMost(max) ?: 0
-        val height = rows.sumOf { r -> r.maxOf { it.height } }
+        val rg = rowGap.roundToPx()
+        val height = rows.sumOf { r -> r.maxOf { it.height } } + rg * (rows.size - 1).coerceAtLeast(0)
         layout(width.coerceAtLeast(constraints.minWidth), height.coerceAtLeast(constraints.minHeight)) {
             var y = 0
             rows.forEach { r ->
                 var x = 0
                 r.forEach { p -> p.placeRelative(x, y); x += p.width + g }
-                y += r.maxOf { it.height }
+                y += r.maxOf { it.height } + rg
             }
         }
     }
