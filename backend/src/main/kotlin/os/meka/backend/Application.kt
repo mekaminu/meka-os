@@ -1509,7 +1509,8 @@ fun main(args: Array<String>) {
                 onWritten = { hh -> push?.serverChanged(hh) },
             )
             // Obi's Live mode, slice 1: Gemini Live tokens and their £15 meter; "off" until the Gemini key is in.
-            val live = liveFromEnv(ds, liveFacts)
+            // Obi answers live train status, slice 2: Live's search asks TfL for the lines it names (keyless, its own cap).
+            val live = liveFromEnv(ds, liveFacts, TflOnDemand(os.meka.backend.integrations.TflLineStatus()))
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,

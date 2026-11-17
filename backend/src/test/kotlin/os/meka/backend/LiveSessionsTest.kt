@@ -218,6 +218,47 @@ class LiveSessionsTest {
     }
 
     @Test
+    fun trainStatusSlice2LiveAsksTflForALineItsSearchNames() {
+        val searched = mutableListOf<String>()
+        val asked = mutableListOf<List<String>>()
+        var tflUp = true
+        val svc = LiveSessions(
+            Tokens(key), InMemoryLiveSessionStore(), capPence = 1_500, model = "gemini-3.8-live", gbpPerUsd = { 800_000 }, nowMs = { now },
+            webSearch = { q -> searched += q; LiveFacts.Found(q, listOf(os.meka.core.domain.WebHit("https://www.bbc.co.uk/news/1", "Strike on Friday", "Walkout planned"))) },
+            tfl = { ids -> asked += ids; if (tflUp) ids.map { os.meka.core.domain.LineState(it, if (it == "jubilee") 9 else 10) } else null },
+        )
+        val id = svc.session("hh", LiveCodec.SessionRequest("Kore")).sessionId!!
+        // A line's status now: TfL's answer alone, first, with the time it was read; no web search spent.
+        val now1 = svc.search("hh", LiveCodec.SearchRequest(id, "Jubilee line status now"))
+        assertEquals(LiveCodec.SearchResult.FOUND, now1.state)
+        val hit = now1.hits.single()
+        assertTrue(hit.title.startsWith("TfL line status, read at "), hit.title)
+        assertEquals(LiveSessions.TFL_STATUS_URL, hit.url)
+        assertEquals("Jubilee line: minor delays", hit.text)
+        assertEquals(listOf(listOf("jubilee")), asked)
+        assertTrue(searched.isEmpty())
+        // About later (a strike): TfL's status first, then the web's results.
+        val later = svc.search("hh", LiveCodec.SearchRequest(id, "Elizabeth line strike Friday"))
+        assertEquals(2, later.hits.size)
+        assertTrue(later.hits.first().title.startsWith("TfL"))
+        assertEquals("Strike on Friday", later.hits.last().title)
+        assertEquals("Elizabeth line: good service", later.hits.first().text)
+        assertEquals(listOf("Elizabeth line strike Friday"), searched)
+        // No line named: the web search as before, TfL never asked.
+        svc.search("hh", LiveCodec.SearchRequest(id, "is the M25 ok now"))
+        assertEquals(2, asked.size)
+        assertEquals("is the M25 ok now", searched.last())
+        // TfL down: the web search answers instead.
+        tflUp = false
+        val down = svc.search("hh", LiveCodec.SearchRequest(id, "Jubilee line status now"))
+        assertEquals("Strike on Friday", down.hits.single().title)
+        // His own life is still refused before TfL or the web is asked.
+        assertEquals(LiveCodec.SearchResult.REFUSED, svc.search("hh", LiveCodec.SearchRequest(id, "my train to my dentist on the Jubilee line")).state)
+        // Obi's instruction tells him to search a line off his route by name.
+        assertTrue("Jubilee line status now" in LivePrompt.PERSONA)
+    }
+
+    @Test
     fun slice4ALiveSearchRunsOnlyForThisHouseholdsOpenSessionAndNeverAboutHisLife() {
         val searched = mutableListOf<String>()
         var clock = now

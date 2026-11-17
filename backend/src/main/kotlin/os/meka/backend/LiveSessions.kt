@@ -92,6 +92,11 @@ class LiveSessions(
     private val onLevel: (LiveModeRules.Level, String) -> Unit = { _, _ -> },
     /** Slice 4: the web search Obi's search tool uses (Ask's live answers' [LiveFacts.lookQuery]); null: none. */
     private val webSearch: ((String) -> LiveFacts.Found?)? = null,
+    /**
+     * Obi answers live train status, slice 2: TfL's status now for the lines a search names ([TflOnDemand], the same
+     * free, keyless API Ask asks); null when it can't be read; null: never asked.
+     */
+    private val tfl: ((ids: List<String>) -> List<os.meka.core.domain.LineState>?)? = null,
 ) {
     private val told = mutableSetOf<Pair<String, LiveModeRules.Level>>()
 
@@ -175,10 +180,32 @@ class LiveSessions(
         val row = runCatching { store.get(r.sessionId) }.getOrNull() ?: return failed
         if (row.householdId != householdId || nowMs() - row.mintedAtMs > LiveModeRules.TOKEN_MS + SEARCH_GRACE_MS) return failed
         if (os.meka.core.domain.LiveFactsRules.searchable(r.query) == null) return LiveCodec.SearchResult(LiveCodec.SearchResult.REFUSED)
-        val found = webSearch?.let { s -> runCatching { s(r.query) }.getOrNull() } ?: return failed
+        val line = tflHit(r.query)
+        // A line's status now is TfL's answer alone; a question about later (a strike, the weekend, tomorrow) searches too.
+        if (line != null && !LATER.containsMatchIn(r.query.lowercase())) return LiveCodec.SearchResult(LiveCodec.SearchResult.FOUND, listOf(line))
+        val found = webSearch?.let { s -> runCatching { s(r.query) }.getOrNull() }
+            ?: return line?.let { LiveCodec.SearchResult(LiveCodec.SearchResult.FOUND, listOf(it)) } ?: failed
         return LiveCodec.SearchResult(
             LiveCodec.SearchResult.FOUND,
-            found.hits.take(LiveCodec.MAX_HITS).map { LiveCodec.SearchHit(it.title.take(200), it.url, it.text.take(os.meka.core.domain.LiveFactsRules.MAX_SNIPPET)) },
+            (listOfNotNull(line) + found.hits.map { LiveCodec.SearchHit(it.title.take(200), it.url, it.text.take(os.meka.core.domain.LiveFactsRules.MAX_SNIPPET)) })
+                .take(LiveCodec.MAX_HITS),
+        )
+    }
+
+    /**
+     * Obi answers live train status, slice 2: when Obi's search names TfL lines ("Elizabeth line status now"), TfL's
+     * status for them read now, as the first result ("Elizabeth line: good service; Jubilee line: minor delays"), so
+     * Live answers a line off his route as Ask does; null when it names none or TfL can't be read.
+     */
+    private fun tflHit(query: String): LiveCodec.SearchHit? {
+        val ask = tfl ?: return null
+        val named = os.meka.core.domain.TrainNowAskRules.namedLines(query).takeIf { it.isNotEmpty() } ?: return null
+        val states = runCatching { ask(named) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+        val at = Instant.ofEpochMilli(nowMs()).atZone(java.time.ZoneId.of("Europe/London")).let { "%02d:%02d".format(it.hour, it.minute) }
+        return LiveCodec.SearchHit(
+            "TfL line status, read at $at",
+            TFL_STATUS_URL,
+            os.meka.core.domain.TrainNowAskRules.lineWords(states).joinToString("; ").take(os.meka.core.domain.LiveFactsRules.MAX_SNIPPET),
         )
     }
 
@@ -197,6 +224,12 @@ class LiveSessions(
 
         /** A key that didn't work (or no key) is tried again on a status ask after this long. */
         const val RECHECK_FAILED_MS = 60_000L
+
+        /** TfL's own status page, the link a TfL answer carries. */
+        const val TFL_STATUS_URL = "https://tfl.gov.uk/tube-dlr-overground/status/"
+
+        /** Words that ask about later than now, when TfL's status now isn't the whole answer. */
+        val LATER = Regex("""\b(tomorrow|tonight|weekend|strikes?|next week|planned|engineering|closures?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b""")
 
         /** A search may come a little after the token's window (the turn that asked is still finishing). */
         const val SEARCH_GRACE_MS = 60_000L
@@ -318,7 +351,7 @@ class GeminiLiveTokens(
                 more.forEach { add(it) }
                 add(buildJsonObject {
                     put("name", os.meka.core.domain.LiveTalkRules.SEARCH_TOOL)
-                    put("description", "Search the web for something current about the world (news, sport, prices, opening times, travel disruption, the weather somewhere other than home). Never for anything about his own life, family, plans or the <today> block. Returns a few numbered results.")
+                    put("description", "Search the web for something current about the world (news, sport, prices, opening times, travel disruption, a TfL line's status, which Navilife asks TfL for, the weather somewhere other than home). Never for anything about his own life, family, plans or the <today> block. Returns a few numbered results.")
                     putJsonObject("parameters") {
                         put("type", "OBJECT")
                         putJsonObject("properties") {
@@ -565,7 +598,7 @@ class PostgresLiveSessionStore(private val ds: DataSource) : LiveSessionStore {
 }
 
 /** Null unless the deployment names the Gemini secret; the key itself may still be unset (Live then says "off"). */
-fun liveFromEnv(ds: DataSource, liveFacts: LiveFacts? = null): LiveSessions? {
+fun liveFromEnv(ds: DataSource, liveFacts: LiveFacts? = null, tfl: TflOnDemand? = null): LiveSessions? {
     val secret = System.getenv("MEKA_GEMINI_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val rate = os.meka.backend.integrations.EcbDollarRate.network()
     val tokens = GeminiLiveTokens.fromSecret(secret)
@@ -579,6 +612,7 @@ fun liveFromEnv(ds: DataSource, liveFacts: LiveFacts? = null): LiveSessions? {
     return LiveSessions(
         tokens, PostgresLiveSessionStore(ds), gbpPerUsd = { rate.read()?.gbpPerUsdMicros },
         webSearch = liveFacts?.let { lf -> { q: String -> lf.lookQuery(q) } },
+        tfl = tfl?.let { t -> { ids: List<String> -> t.statuses(ids) } },
         onLevel = { level, month ->
             System.err.println("live: ${if (level == LiveModeRules.Level.OVER) "this month's cap is used up, Live off until the 1st" else "80 % of this month's cap used"} ($month)")
         },
