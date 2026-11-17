@@ -43,6 +43,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.EmergencyAdded
 import os.meka.core.domain.EmergencyPageRules
 import os.meka.core.domain.EmergencyRules
+import os.meka.core.domain.LifePageRules
 import os.meka.core.facade.MekaCore
 
 /** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
@@ -112,7 +113,8 @@ fun EmergencyPane(core: MekaCore, onClose: () -> Unit) {
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "emergency-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        // g7 7: "… on their family / page" goes down whole.
+                        Text(LifePageRules.shown(s), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                     // What the last add or change said, while no sheet is open.
                     val line = if (addOpen || rowKey != null) null else said?.line

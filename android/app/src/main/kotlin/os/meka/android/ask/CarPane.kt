@@ -83,6 +83,7 @@ import os.meka.android.today.SectionLabel
 import os.meka.core.domain.CarBluetoothRules
 import os.meka.core.domain.CarLink
 import os.meka.core.domain.CarPageRules
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.DeviceChoice
 import os.meka.core.domain.FindView
 import os.meka.core.domain.FuelKind
@@ -427,7 +428,8 @@ fun CarPane(
     LifeSheet(fuelSheet, CarPageRules.FUEL, CAR_FUEL_SHEET_TAG, onClose = { fuelSheet = false }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Crossfade(fuel.line, animationSpec = MekaMotion.appear(reduced), modifier = Modifier.weight(1f), label = "fuel-line") { l ->
-                Text(l, style = MekaType.caption,
+                // g7 7: drawn through the glue, so "… about 1 km is / sent" goes down whole.
+                Text(LifePageRules.shown(l), style = MekaType.caption,
                     color = if (fuel.state == FuelRules.OK || fuel.state == FuelRules.LOOKING) Meka.colors.textSecondary else Meka.colors.accent,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }

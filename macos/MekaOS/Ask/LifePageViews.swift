@@ -67,7 +67,7 @@ struct LifeNumberTiles: View {
                 let t = page.tileAt(index: Int32(i))
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(t.number).font(MekaType.nowTitle).foregroundStyle(t.lit ? palette.accent : palette.textPrimary).lineLimit(1)
-                    Text(t.label).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(2)
+                    Text(LifePageRules.shared.tileLabel(label: t.label)).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(2)
                 }
                 .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -102,7 +102,7 @@ struct LifePageCardView: View {
             }
             .padding(.vertical, MekaSpace.xs)
             if card.rowCount == 0, let empty = card.empty {
-                Text(empty).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LifePageRules.shared.shown(text: empty)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, MekaSpace.xs)
             }

@@ -102,9 +102,30 @@ class LifePageTest {
             true,
         )
         val p = CarPageRules.page(cars, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal)
-        assertEquals(PageTile("Untaxed", "tax it before you drive · Car 2", true), p.tiles[0])
+        assertEquals(PageTile("Untaxed", "tax Car 2 before you drive", true), p.tiles[0])
         assertEquals("Car 2 · note for Car insurance", p.cards[0].rows[0].line)
         assertEquals("date:car2:insurance", p.cards[0].rows[0].key)
+    }
+
+    // Walk-through 2026-11-15, g7 7: with two cars a tile names the car in its words, never after a dot ("to the MOT · /
+    // The Golf", "paid until · / The Golf" ended the tile's first line on the dot).
+    @Test
+    fun twoCarsTilesNameTheCarWithNoDot() {
+        val cars = CarsView(
+            listOf(car(CarRules.ENTITY_ID, "the Golf", row("mot", "MOT", day + 4)), car("car2", "Car 2", row("tax", "Car tax", day + 30))),
+            true,
+        )
+        val p = CarPageRules.page(cars, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal)
+        assertEquals(PageTile("4 days", "to the Golf's MOT", true), p.tiles[0])
+        val two = CarsView(listOf(car(CarRules.ENTITY_ID, "the Golf", row("mot", "MOT", day + 4)), car("car2", "Car 2", row("tax", "Car tax", day + 2))), true)
+        assertEquals("to Car 2's tax", CarPageRules.page(two, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal).tiles[0].label)
+        val ranOut = CarsView(listOf(car(CarRules.ENTITY_ID, "The Golf", row("mot", "MOT", day - 2), lapses = listOf("MOT ran out · book it")), car("car2", "Car 2")), true)
+        assertEquals(PageTile("Ran out", "the Golf's MOT · book it", true), CarPageRules.page(ranOut, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal).tiles[0])
+        assertEquals("the Golf's", CarPageRules.owner("The Golf"))
+        assertEquals("Car 2's", CarPageRules.owner("Car 2"))
+        p.tiles.forEach { t -> assertFalse("·" in t.label, "a dot in \"${t.label}\"") }
+        // The closed Fold's tile holds "Golf's MOT" together, so the words break "to the / Golf's MOT".
+        assertTrue(LifePageRules.tileLabel("to the Golf's MOT").endsWith("Golf's${nb}MOT"))
     }
 
     @Test

@@ -75,7 +75,7 @@ object BinsPageRules {
         }
         val oneOffs = view.oneOffs.map { r -> PageRow(moveKey(r.id), r.name, r.line, "", false) }
         val settings = listOf(
-            PageRow(KEY_REMIND, REMINDER, view.remindLine, LocalClock.formatMinute(view.remindMinute), false),
+            PageRow(KEY_REMIND, REMINDER, remindRowLine(), LocalClock.formatMinute(view.remindMinute), false),
             PageRow(KEY_COUNCIL, COUNCIL, view.councilLine ?: OWN_DAYS, if (view.councilLine != null) "In use" else "", false),
         )
         return LifePageView(
@@ -89,6 +89,13 @@ object BinsPageRules {
             ADD_TITLE, ADD_CHOICES,
         )
     }
+
+    /**
+     * The Reminder row's grey line (walk-through 2026-11-15, g7 7: the sheet's "Reminder the evening before at 19:00 · Today
+     * says it from 16:00" was cut to "… at 19:00 · …" under the row's own name and time): the time is on the right and
+     * the name says Reminder, so the line says only when.
+     */
+    fun remindRowLine(): String = "The evening before · Today says it from ${LocalClock.formatMinute(BinRules.EVE_FROM_MIN)}"
 
     /** The bin behind a row's key, or null when it's gone (removed while the sheet was opening). */
     fun bin(view: BinsView, key: String): BinRow? = binId(key)?.let { id -> view.rows.firstOrNull { it.id == id } }

@@ -48,6 +48,7 @@ import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.MealRules
 import os.meka.core.domain.MealsPageRules
 import os.meka.core.domain.MealsShopped
@@ -118,7 +119,8 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Crossfade(MealsPageRules.summary(v), animationSpec = MekaMotion.appear(reduced), label = "meals-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        // g7 7: "+ Add one with its / ingredients" goes down whole.
+                        Text(LifePageRules.shown(s), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                     // What the last add or Add to shopping said, while no sheet is open.
                     val line = if (addOpen || rowKey != null) null else said ?: shopped?.line

@@ -70,7 +70,8 @@ struct EmergencySheet: View {
                 .staggeredAppear(0)
                 if adding { addForm(page) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    // g7 7: "… on their family / page" goes down whole.
+                    Text(LifePageRules.shared.shown(text: v.summary)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)

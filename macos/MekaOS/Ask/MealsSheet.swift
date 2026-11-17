@@ -67,7 +67,8 @@ struct MealsSheet: View {
                 if adding { addForm(page) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     let summary = rules.summary(view: v)
-                    Text(summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    // g7 7: "+ Add one with its / ingredients" goes down whole.
+                    Text(LifePageRules.shared.shown(text: summary)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: summary)

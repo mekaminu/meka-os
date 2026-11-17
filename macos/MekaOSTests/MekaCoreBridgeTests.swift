@@ -4510,6 +4510,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(LoneWordGlue.shared.kept(line: "Renews Tue 3 Nov · £10.99 a month · Subscription").hasSuffix("a\(nb)month\(nb)·\(nb)Subscription"))
         XCTAssertTrue(ActivityExportRules.shared.keptLine(count: 1).contains("Undo lasts \(ActivityRules.shared.UNDO_DAYS) days"))
     }
+    /// Walk-through 2026-11-15, g7 7: Car's two-car tiles name the car with no dot, Dinners' and Emergency's lines go down
+    /// whole, and Bins' Reminder row says only when.
+    func testLifePagesLinesWrapWholeOnTheMac() {
+        let nb = LifeTileRules.shared.GLUE
+        XCTAssertEqual(CarPageRules.shared.owner(title: "The Golf"), "the Golf's")
+        XCTAssertTrue(LifePageRules.shared.tileLabel(label: "to the Golf's MOT").hasSuffix("Golf's\(nb)MOT"))
+        XCTAssertTrue(LifePageRules.shared.shown(text: MealsPageRules.shared.EMPTY_SUMMARY).hasSuffix("with\(nb)its\(nb)ingredients"))
+        XCTAssertEqual(BinsPageRules.shared.remindRowLine(), "The evening before · Today says it from 16:00")
+    }
     /// Walk-through 2026-11-15, A15: Money's lines reach the Mac held whole ("14 mo", "imported Wed 21 Oct").
     func testMoneyLinesWrapWholeOnTheMac() {
         let nb = LifeTileRules.shared.GLUE

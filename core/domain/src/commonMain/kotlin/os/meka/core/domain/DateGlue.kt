@@ -323,8 +323,11 @@ object LoneWordGlue {
     /** The longest word of a "short last pair" ([kept], A15: "or two", "just now"). */
     const val SHORT = 4
 
-    /** Words that lead the last word as a pair ("your tap", "the month"), which then takes the word before it ([kept]). */
-    private val DETERMINERS = setOf("your", "my", "his", "her", "their", "our", "the", "a", "an", "this", "that")
+    /**
+     * Words that lead the last word as a pair ("your tap", "the month"), which then takes the word before it ([kept]);
+     * "its" too (walk-through 2026-11-15, g7 7: Dinners' empty line read "+ Add one with its / ingredients").
+     */
+    private val DETERMINERS = setOf("your", "my", "his", "her", "its", "their", "our", "the", "a", "an", "this", "that")
 
     /** The [i]th word of [s] given its [starts], without the spaces around it. */
     private fun word(s: String, starts: List<Int>, i: Int): String =

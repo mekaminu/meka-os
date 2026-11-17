@@ -73,6 +73,8 @@ class BinsPageTest {
         val settings = p.cardAt(2)
         assertEquals(listOf(BinsPageRules.KEY_REMIND, BinsPageRules.KEY_COUNCIL), settings.rows.map { it.key })
         assertEquals("19:00", settings.rowAt(0).whenText)
+        // g7 7: the row's line says only when, never the time again ("… at 19:00 · …" was cut under it).
+        assertEquals("The evening before · Today says it from 16:00", settings.rowAt(0).line)
         assertEquals(BinsPageRules.OWN_DAYS, settings.rowAt(1).line)
     }
 

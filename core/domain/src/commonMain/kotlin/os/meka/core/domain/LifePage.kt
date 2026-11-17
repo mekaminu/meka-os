@@ -167,7 +167,9 @@ object CarPageRules {
         val lapsed = cars.cars.firstOrNull { it.isLapsed }
         return when {
             lapsed != null -> lapseTile(lapsed.lapses.first(), if (many) ParkingRules.heading(lapsed.title) else null)
-            next != null -> PageTile(LifePageRules.until(next.day, today), "to the ${shortName(next.row)}${if (many) " · ${ParkingRules.heading(next.car.title)}" else ""}", next.day - today <= SOON_DAYS)
+            // Walk-through 2026-11-15, g7 7: with two cars the car is named in the words, never after a dot ("to the MOT · /
+            // The Golf" ended a tile's line on the dot): "to the Golf's MOT".
+            next != null -> PageTile(LifePageRules.until(next.day, today), "to ${if (many) "${owner(next.car.title)} " else "the "}${shortName(next.row)}", next.day - today <= SOON_DAYS)
             else -> PageTile("No dates", "added yet", false)
         }
     }
@@ -186,7 +188,7 @@ object CarPageRules {
 
     private fun timerTile(timers: TimersView, many: Boolean): PageTile? =
         timers.rows.firstOrNull { !it.ended }?.let { running ->
-            PageTile(running.endText, "paid until${if (many) " · ${ParkingRules.heading(running.title)}" else ""}", running.lit)
+            PageTile(running.endText, if (many) "${owner(running.title).dropLast(2)}, paid until" else "paid until", running.lit)
         }
 
     /**
@@ -290,9 +292,18 @@ object CarPageRules {
 
     /** Something has run out: "Untaxed" / "tax it before you drive", or "Ran out" / "MOT · book one before you drive". */
     private fun lapseTile(lapse: String, car: String?): PageTile {
-        val suffix = car?.let { " · $it" } ?: ""
-        return if (lapse.startsWith("Untaxed")) PageTile("Untaxed", "tax it before you drive$suffix", true)
-        else PageTile("Ran out", "${lapse.substringBefore(" ran out")}$suffix · ${lapse.substringAfter(" · ", "book it")}", true)
+        val what = lapse.substringBefore(" ran out")
+        return if (lapse.startsWith("Untaxed")) PageTile("Untaxed", "tax ${car?.let { owner(it).dropLast(2) } ?: "it"} before you drive", true)
+        else PageTile("Ran out", "${car?.let { "${owner(it)} ${if (what == "MOT") what else what.lowercase()}" } ?: what} · ${lapse.substringAfter(" · ", "book it")}", true)
+    }
+
+    /**
+     * A car named as the owner of a date ("the Golf's", "Car 2's"), for a tile's words with two cars (g7 7): "the" stays
+     * lower case, as in "to the MOT".
+     */
+    fun owner(title: String): String {
+        val t = title.trim()
+        return (if (t.startsWith("The ")) "the " + t.drop(4) else t) + "'s"
     }
 
     /** "MOT", "tax", "insurance", "service" for the tile's "to the …". */
