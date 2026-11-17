@@ -484,8 +484,7 @@ object ScreenShots {
         }
         walk(if (underTag != null) compose.onNodeWithTag(underTag, useUnmergedTree = true).fetchSemanticsNode() else compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
         val rows = tops.groupBy { it.first }.toSortedMap()
-        // One a row all the way down is a short list of choices (EvenRows: three where two fit), not one left alone.
-        if (rows.size > 1 && rows.values.last().size == 1 && rows.values.any { it.size > 1 }) {
+        if (rows.size > 1 && rows.values.last().size == 1) {
             fail("$name: the last chip sits alone on its row (rows ${rows.values.map { it.size }})")
         }
         return tops.size

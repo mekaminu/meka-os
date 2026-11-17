@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -802,8 +803,9 @@ private fun WeekCard(
                 Column(Modifier.weight(1f)) {
                     Text(
                         // Walk-through 2026-11-08 A9: "Welcome and se…" cut the lesson's name; it wraps to a second line.
-                        // A15 (g4b 9): "Welcome and / setup · 30 min" goes down whole ("Welcome / and setup · 30 min").
-                        studyShown(row.lessons), style = MekaType.body, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                        // A15 (g4b 9): held whole, "and setup · 30 min" is wider than this narrow column and broke
+                        // mid-word (CI run 44027724729), so the lesson's name wraps as it is.
+                        row.lessons, style = MekaType.body, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         color = if (row.catchUp) Meka.colors.textTertiary else Meka.colors.textPrimary,
                     )
                     Crossfade(note ?: row.place, animationSpec = MekaMotion.appear(reduced), label = "study-week-where") { line ->
@@ -965,8 +967,8 @@ private fun PlanCard(
 private fun ChipGroup(label: String, chips: List<StudyChip>, tag: String, onTap: (StudyChip) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(label, style = MekaType.caption, color = Meka.colors.textSecondary)
-        // Walk-through 2026-11-15, A15 (g4a 14): "21 Dec · 8 wks" sat alone on a second row; the chips share out.
-        os.meka.android.ask.EvenChipRows(MekaSpace.xs) {
+        // FINISH BY's dates sit two to a row as in the approved mockup (StudyBesideRules), so these stay a plain flow.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             chips.forEach { chip -> PlanChip(chip, Modifier.testTag("$tag-${chip.key}")) { onTap(chip) } }
         }
     }

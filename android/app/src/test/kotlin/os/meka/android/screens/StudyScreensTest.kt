@@ -109,8 +109,6 @@ class StudyScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Data analytics certificate")
         ScreenShots.assertShows(compose, name, "3 of 8 lessons · about 4½ h left")
-        // Walk-through 2026-11-15, A15 (g4a 14): "21 Dec · 8 wks" sat alone on a second row; FINISH BY's chips share out.
-        ScreenShots.assertNoChipAlone(compose, name, tagPrefix = "study-end-")
         // Slice 2a: YOUR PLAN sits between the header and the lessons, so the modules are further down.
         scrollTo(hasTestTag("study-module-${core.studyView.value.course(id)!!.modules[1].key}"))
         ScreenShots.assertShows(compose, name, "2 · Core skills")
@@ -390,10 +388,9 @@ class StudyScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-this-week")
         ScreenShots.assertShows(compose, "cover-dark-this-week", "THIS WEEK")
         ScreenShots.assertShows(compose, "cover-dark-this-week", "Welcome and setup · 30 min")
-        // A15 (g4b 9): "Welcome and / setup · 30 min" goes down whole, and each row's place line is never cut.
+        // A15 (g4b 9): each row's lesson and place lines are never cut.
         val week = core.studyView.value.course(id)!!.week
-        ScreenShots.assertNoLoneWords(compose, "cover-dark-this-week", week.map { it.lessons })
-        ScreenShots.assertNotEllipsized(compose, "cover-dark-this-week", week.map { os.meka.core.domain.LoneWordGlue.measured(it.lessons) } + week.map { it.place })
+        ScreenShots.assertNotEllipsized(compose, "cover-dark-this-week", week.map { it.lessons } + week.map { it.place })
         compose.onNodeWithTag("study-week-button-$today").performClick()
         compose.mainClock.advanceTimeBy(16L)
         compose.onNode(hasContentDescription("Done, tick 1 lessons"), useUnmergedTree = true).assertExists()
