@@ -36,7 +36,9 @@ class AiSpendTest {
         val month = listOf(AiMonthUse("ask.talk", 40, 120), AiMonthUse("ask", 10, 85))
         val on = AskRules.statusView("on", null, 205, 2000, "ok", month)
         assertEquals("On · $2.05 of $20 this month", on.line)
-        assertEquals("This month by feature · $2.05 in all", on.spendHeading)
+        // A16: the line above already says $2.05, so the heading doesn't again.
+        assertEquals("This month by feature", on.spendHeading)
+        assertEquals("This month by feature · $2.05 in all", AiSpendRules.heading(on.spend, 205))
         assertEquals(listOf("Talk", "Ask"), on.spend.map { it.label })
         assertFalse(on.refused)
 
@@ -69,7 +71,10 @@ class AiSpendTest {
         // Walk-through A5: "$18.30 in all" over rows worth $2.82.
         val month = listOf(AiMonthUse("ask.talk", 40, 182), AiMonthUse("mail.sort", 300, 100))
         val view = AskRules.statusView("on", null, 1830, 2000, "ok", month)
-        assertEquals("This month by feature · $18.30 in all", view.spendHeading)
+        assertEquals("This month by feature", view.spendHeading)
+        assertEquals("This month by feature · $18.30 in all", AiSpendRules.heading(view.spend, 1830))
+        // A refused key's line doesn't say the spend, so its heading does.
+        assertEquals("This month by feature · $18.30 in all", AskRules.statusView("failing", "x", 1830, 2000, "ok", month, keyRefused = true).spendHeading)
         assertEquals(listOf("Talk", "Mail", AiSpendRules.UNSPLIT), view.spend.map { it.label })
         assertEquals("$15.48", view.spend.last().detail)
         assertEquals(1548f / 1830f, view.spend.last().share)

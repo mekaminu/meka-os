@@ -27,6 +27,12 @@ object MoneyTotal {
     const val EMPTY = "Add each account's balance to see one total"
     const val NONE = "Your money"
 
+    /**
+     * Found and fixing week 4, A16: with no account at all, "Add each account's balance" spoke about accounts that
+     * don't exist; it says what fills the card instead.
+     */
+    const val NO_ACCOUNTS = "Import a statement or connect your banks, and one total shows here"
+
     /** "Across 6 accounts and trading", "Across 1 account", "Across trading" (only trading followed). */
     fun head(accounts: Int, trading: Int): String = when {
         accounts == 0 && trading == 0 -> NONE
@@ -69,6 +75,9 @@ object MoneyTotal {
         return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
     }
 
+    /** The line while nothing is counted: [EMPTY] with accounts to fill in, [NO_ACCOUNTS] with none. */
+    fun emptyLine(w: MoneyWorthView): String = if (w.accountCount == 0 && w.tradingCount == 0) NO_ACCOUNTS else EMPTY
+
     /** The card; null before Money has a net worth block at all. */
     fun card(w: MoneyWorthView?): MoneyTotalCard? {
         w ?: return null
@@ -76,7 +85,7 @@ object MoneyTotal {
         val line = breakdown(w)
         val spoken = if (w.total != null) {
             "Total ${w.total}, ${head.replaceFirstChar { it.lowercase() }}." + (line?.let { " $it." } ?: "") + (w.missingLine?.let { " $it." } ?: "")
-        } else "$head. $EMPTY."
-        return MoneyTotalCard(head, w.total, w.totalNegative, line, if (w.total == null) EMPTY else null, spoken)
+        } else "$head. ${emptyLine(w)}."
+        return MoneyTotalCard(head, w.total, w.totalNegative, line, if (w.total == null) emptyLine(w) else null, spoken)
     }
 }

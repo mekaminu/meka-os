@@ -106,9 +106,13 @@ object AiSpendRules {
         else -> AskRules.dollars(cents)
     }
 
-    /** The unfolded row's heading line: "This month by feature · $2.05 in all"; with [lines] built from the same total, the rows add up to it. */
-    fun heading(lines: List<AiSpendLine>, spentCents: Long?): String? {
+    /**
+     * The unfolded row's heading line: "This month by feature · $2.05 in all"; with [lines] built from the same total, the
+     * rows add up to it. Found and fixing week 4, A16: when the status line over it already says the month's spend
+     * ("On · $2.05 of $20 this month", [said]), the heading is "This month by feature" alone, so $2.05 isn't said twice.
+     */
+    fun heading(lines: List<AiSpendLine>, spentCents: Long?, said: Boolean = false): String? {
         if (lines.isEmpty()) return null
-        return listOfNotNull("This month by feature", spentCents?.let { "${cost(it)} in all" }).joinToString(" · ")
+        return listOfNotNull("This month by feature", spentCents?.takeIf { !said }?.let { "${cost(it)} in all" }).joinToString(" · ")
     }
 }

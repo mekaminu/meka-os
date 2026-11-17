@@ -61,6 +61,13 @@ class MoneyTotalTest {
         assertNull(c.breakdown)
         assertEquals(MoneyTotal.EMPTY, c.empty)
         assertEquals("Across 1 account", c.head)
+        // Found and fixing week 4, A16: said once, not again as "Partial · 1 account has no balance yet" under it.
+        assertNull(MoneyWorth.view(listOf(MoneyAccount("a", "Current account", "csv", 1L)), emptyList(), emptyList(), emptyList(), today).missingLine)
+        // No account at all: it doesn't speak of "each account's balance".
+        val none = MoneyTotal.card(MoneyWorth.view(emptyList(), emptyList(), emptyList(), emptyList(), today))!!
+        assertEquals(MoneyTotal.NONE, none.head)
+        assertEquals(MoneyTotal.NO_ACCOUNTS, none.empty)
+        assertTrue("each account" !in none.spoken, none.spoken)
         assertNull(MoneyTotal.card(null))
         assertEquals("Across trading", MoneyTotal.head(0, 1))
         assertEquals(MoneyTotal.NONE, MoneyTotal.head(0, 0))

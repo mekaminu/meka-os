@@ -633,7 +633,8 @@ object AskRules {
     ): AiStatusView {
         val base = statusLine(state, reason, spentCents, budgetCents, level)
         val lines = AiSpendRules.lines(month, spentCents)
-        val heading = AiSpendRules.heading(lines, spentCents)
+        val said = !keyRefused && spentCents != null && dollars(spentCents) in base.line
+        val heading = AiSpendRules.heading(lines, spentCents, said)
         val view = when {
             keyRefused && state != "off" -> AiStatusView(AiSpendRules.REFUSED_LINE, lit = true, canAsk = true, refused = true, spend = lines, spendHeading = heading)
             else -> base.copy(spend = lines, spendHeading = heading)

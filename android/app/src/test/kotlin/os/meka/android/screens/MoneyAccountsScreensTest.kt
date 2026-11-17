@@ -262,6 +262,8 @@ class MoneyAccountsScreensTest {
         pick(MoneyTab.ACCOUNTS)
         assertTrue(shows("money-total"), "no total card on Accounts")
         assertTrue(showsText(MoneyTotal.EMPTY), "the empty total card doesn't say what to do")
+        // Found and fixing week 4, A16: said once, not again as "Partial · … have no balance yet" under it.
+        if (showsText("have no balance yet") || showsText("has no balance yet")) fail("the empty total card says it twice")
         if (showsText(MoneyWorth.EMPTY)) fail("the old set-up sentence still shows")
         val v0 = core.moneyView.value
         val current = v0.accounts.first { it.name == "Current account" }

@@ -34,6 +34,7 @@ import kotlinx.datetime.TimeZone
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -205,7 +206,9 @@ class MoneyChatScreensTest {
         val question = drawn("money-chat-try-0")
         tap("money-chat-try-0")
         until(core) { shows("money-chat-answer-0") }
-        assertTrue(showsText("a month for 6 months puts by"), "the what-if wasn't answered")
+        assertTrue(showsText("a month for 6 months adds up to"), "the what-if wasn't answered")
+        // Found and fixing week 4, A16: the foot says "Not financial advice."; the answer above it doesn't say it again.
+        assertFalse(drawn("money-chat-answer-0").contains("financial advice", ignoreCase = true), "the answer repeats the foot's not financial advice")
         assertTrue(shows("money-chat-act-goal-0"), "no Make it a goal under the answer")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-answer"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-answer")

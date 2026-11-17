@@ -131,11 +131,15 @@ object MoneySave {
         val bars = bal.mapIndexed { i, b ->
             MoneySaveBar(if (total > 0) b.toDouble() / total else 0.0, i == bal.lastIndex, "${monthShort(base.thisMonth + 1 + i)}: ${fmt(b)}")
         }
+        // Found and fixing week 4, A16: with no interest "You put in £2,400" under "£2,400 by Oct 2027" said the figure
+        // twice; what he puts in is said only when interest makes the total differ from it.
         val split = buildList {
-            add("You put in ${fmt(paidIn)}")
-            if (interest >= 50) add("interest about ${fmt(MoneyForecast.roundTen(interest).coerceAtLeast(100))}")
+            if (interest >= 50) {
+                add("You put in ${fmt(paidIn)}")
+                add("interest about ${fmt(MoneyForecast.roundTen(interest).coerceAtLeast(100))}")
+            }
             base.leftPence?.takeIf { it >= 1_000 }?.let { add("$LEFT_AFTER ${fmt(spareAfter(amt, it))}") }
-        }.joinToString(" · ")
+        }.joinToString(" · ").replaceFirstChar { it.uppercaseChar() }
         val (obi, lit) = obi(amt, base.leftPence)
         val monthChips = MONTHS.map { m ->
             MoneySaveChip(m, "$m months", m == n, "$m months" + if (m == n) ", selected" else "")
@@ -147,7 +151,7 @@ object MoneySave {
         return MoneySaveView(
             HEAD, EACH, fmt(amt), amt, monthChips, rateChips, bars, totalText, total, end, split, obi, lit,
             goalTitle = "Save $totalText ${end}", goalTarget = totalText, basis = BASIS,
-            spoken = "Save ${fmt(amt)} a month for $n months, ${rateLabel(bp).lowercase()}: $totalText $end. $split. $obi",
+            spoken = "Save ${fmt(amt)} a month for $n months, ${rateLabel(bp).lowercase()}: $totalText $end. ${if (split.isEmpty()) "" else "$split. "}$obi",
         )
     }
 

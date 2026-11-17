@@ -64,14 +64,30 @@ class MoneyChatTest {
     @Test
     fun whatIfISave() {
         val t = MoneyChat.answer("What if I save £300 a month for 6 months?", data())
-        assertTrue(t.text.startsWith("Saving £300 a month for 6 months puts by £1,800 by Apr 2027."), t.text)
+        assertTrue(t.text.startsWith("Saving £300 a month for 6 months adds up to £1,800 by Apr 2027."), t.text)
         assertTrue("leaves about" in t.text || "Doable" in t.text, t.text)
-        assertTrue(t.text.endsWith(MoneyAskRules.NOT_ADVICE))
+        // A16: the sheet's foot says "Not financial advice."; the answer says where its figures are from, once.
+        assertTrue(t.text.endsWith(" From your own statements."), t.text)
+        assertFalse("financial advice" in t.text, t.text)
         assertEquals(listOf(MoneyChat.ACT_GOAL, MoneyChat.ACT_PLAN), t.actions.map { it.kind })
         assertEquals(30_000L, t.actions[0].amountPence)
         assertEquals(6, t.actions[0].months)
         // No months said: the slider's 6.
         assertEquals(6, MoneyChat.answer("what if I put aside £100 a month", data()).actions[0].months)
+    }
+
+    @Test
+    fun anAnswerInTheChatNeverRepeatsTheFootsAdviceLine() {
+        // Found and fixing week 4, A16: an answer ended "· not financial advice." straight above the foot's "Not financial advice."
+        assertTrue("Not financial advice." in MoneyChat.FOOT)
+        for (q in listOf("What if I save £300 a month for 6 months?", "Can I afford a £1,200 holiday in July?", "Save £1,200 by July")) {
+            val t = MoneyChat.answer(q, data())
+            assertFalse("financial advice" in t.text, "$q → ${t.text}")
+            assertFalse(" by £" in t.text && "puts by" in t.text, t.text)
+        }
+        assertEquals(" From your banks through Lunch Flow.", MoneySource.BANK.said)
+        assertEquals("Spent £40. From your own statements.", MoneySource.FILES.once("Spent £40." + MoneyAskRules.NOT_ADVICE))
+        assertEquals("Hello", MoneySource.FILES.once("Hello"))
     }
 
     @Test

@@ -265,7 +265,13 @@ object MoneyWorth {
             }
         } else null
         val anyAccountCounted = rows.any { (it.kind == ACCOUNT || it.kind == CARD) && it.amount.isNotEmpty() }
-        val missingLine = if (counted && !anyAccountCounted) noneCountedLine(missing) else partialLine(missing)
+        // Found and fixing week 4, A16: before anything is counted the total card already says to add each balance, so
+        // "Partial · 2 accounts have no balance yet" under it said the same twice; it shows once something is counted.
+        val missingLine = when {
+            !counted -> null
+            !anyAccountCounted -> noneCountedLine(missing)
+            else -> partialLine(missing)
+        }
         val split = if (counted) "You have ${fmt(have)} · you owe ${fmt(owe)}" else null
         val chartLine = when {
             !counted -> null

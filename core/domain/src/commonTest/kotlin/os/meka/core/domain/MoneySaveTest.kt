@@ -22,8 +22,12 @@ class MoneySaveTest {
         assertTrue(v.bars.last().last && !v.bars.first().last)
         assertEquals(1.0, v.bars.last().share)
         assertEquals("Nov 2026: £300", v.bars.first().label)
-        assertTrue(v.split.startsWith("You put in £1,800"))
+        // A16: with no interest "You put in £1,800" under "£1,800 by Apr 2027" said it twice; what's left is said instead.
+        assertFalse("You put in" in v.split, v.split)
+        assertTrue(v.split.startsWith("Left each month after saving this"), v.split)
         assertFalse("interest" in v.split)
+        assertEquals("", MoneySave.view(30_000, 6, 0, base(null)).split)
+        assertFalse(". ." in MoneySave.view(30_000, 6, 0, base(null)).spoken)
         assertEquals("Save £1,800 by Apr 2027", v.goalTitle)
         assertEquals("£1,800", v.goalTarget)
     }
@@ -36,6 +40,7 @@ class MoneySaveTest {
         assertTrue(b.last() in 122_100..122_300, "got ${b.last()}")
         val v = MoneySave.view(10_000, 12, 400, base(null))
         assertTrue("interest about £20" in v.split, v.split)
+        assertTrue(v.split.startsWith("You put in £1,200"), v.split)
         assertEquals("At 4%", v.rates.single { it.on }.label)
         assertEquals("At 4% a year, selected", v.rates.single { it.on }.spoken)
     }
@@ -64,7 +69,7 @@ class MoneySaveTest {
         val fits = MoneySave.view(30_000, 6, 0, base(95_000))
         assertTrue(fits.obi.startsWith("£300 a month still leaves about £650 spare"), fits.obi)
         assertFalse(fits.obiLit)
-        assertTrue("left each month after saving this and your usual spending: about £650" in fits.split, fits.split)
+        assertTrue(fits.split.contains("left each month after saving this and your usual spending: about £650", ignoreCase = true), fits.split)
         val doable = MoneySave.view(70_000, 6, 0, base(95_000))
         assertTrue(doable.obi.startsWith("Doable"), doable.obi)
         val tight = MoneySave.view(90_000, 6, 0, base(95_000))
@@ -118,7 +123,7 @@ class MoneySaveTest {
     fun whatIsLeftIsTheForecastsMonthLessTheSaving() {
         // Walk-through 2026-11-02 A2: the forecast says "About £2,220 a month left over"; saving £1,100 leaves £1,120.
         val v = MoneySave.view(110_000, 6, 0, base(221_730))
-        assertTrue("left each month after saving this and your usual spending: about £1,120" in v.split, v.split)
+        assertTrue(v.split.contains("left each month after saving this and your usual spending: about £1,120", ignoreCase = true), v.split)
     }
 
     /** Walk-through A21: "About £2,230 left over" less £1,125 is £1,105 in the split, in Obi's line and in Ask Obi's answer. */

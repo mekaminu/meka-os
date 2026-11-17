@@ -36,6 +36,15 @@ enum class MoneySource {
     /** The end of a money answer: " From your own statements · not financial advice." or where the lines really came from. */
     val notAdvice: String get() = if (this == FILES) MoneyAskRules.NOT_ADVICE else " $from · not financial advice."
 
+    /**
+     * The end of an answer in Money's own chat (Found and fixing week 4, A16): its sheet's foot already says "Not financial
+     * advice.", so an answer there ends " From your own statements." and the advice line is said once.
+     */
+    val said: String get() = if (this == FILES) " From your own statements." else " $from."
+
+    /** [text] with its [notAdvice] ending swapped for [said]; anything else unchanged. */
+    fun once(text: String): String = if (text.endsWith(notAdvice)) text.removeSuffix(notAdvice) + said else text
+
     /** How the figures were worked out: on this device, and for statement files alone, nothing sent. */
     val worked: String get() = if (this == FILES) "Worked out on this device, nothing sent." else "Worked out on this device."
 

@@ -136,7 +136,9 @@ class AiScreensTest {
             }
             Fill.ONE -> {
                 if (!onScreen("On · \$2.05 of \$20 this month")) fail("$name: the line doesn't read the month's spend")
-                if (!onScreen("This month by feature · \$2.05 in all")) fail("$name: the month by feature doesn't open")
+                if (!onScreen("This month by feature")) fail("$name: the month by feature doesn't open")
+                // Found and fixing week 4, A16: the line above says $2.05; the heading doesn't say it again.
+                if (onScreen("\$2.05 in all")) fail("$name: the month's spend is said twice")
                 if (!onScreen("Talk")) fail("$name: Talk's row isn't shown")
                 if (onScreen("While it's off")) fail("$name: fallbacks listed while the AI answers")
             }

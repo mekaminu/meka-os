@@ -116,7 +116,7 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
             }
             Text(moneyShown(v.end), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs))
         }
-        Text(moneyShown(v.split), style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (v.split.isNotEmpty()) Text(moneyShown(v.split), style = MekaType.caption, color = Meka.colors.textTertiary)
         val obiColor by animateColorAsState(if (v.obiLit) Meka.colors.money3 else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-save-obi")
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.xs),

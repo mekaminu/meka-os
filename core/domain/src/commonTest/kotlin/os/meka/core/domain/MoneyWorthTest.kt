@@ -111,7 +111,8 @@ class MoneyWorthTest {
         // An unmarked card with no balance can have one typed.
         val bare = MoneyWorth.view(listOf(MoneyAccount("a-premier", "Oakbank Premier Card", "bank", 1L)), emptyList(), emptyList(), emptyList(), today)
         assertTrue(bare.rows.single().needsBalance)
-        assertEquals("Partial · 1 account has no balance yet", bare.missingLine)
+        // A16: with nothing counted the total card's "Add each account's balance…" says it; no "Partial" under it.
+        assertNull(bare.missingLine)
     }
 
     @Test

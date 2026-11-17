@@ -1192,7 +1192,7 @@ class AskMekaFacadeTest {
         ))
         val spend = c.aiStatus()
         assertEquals(listOf("Talk", "Mail"), spend.spend.map { it.label })
-        assertEquals("This month by feature · $2.05 in all", spend.spendHeading)
+        assertEquals("This month by feature", spend.spendHeading)
         server.status = AiStatusReply("failing", "Anthropic refused the key", 205, 2000, "ok", keyRefused = true)
         assertTrue(c.aiStatus().refused)
         server.status = null

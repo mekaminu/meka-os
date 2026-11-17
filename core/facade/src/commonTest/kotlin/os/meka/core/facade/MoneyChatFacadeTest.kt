@@ -49,7 +49,7 @@ class MoneyChatFacadeTest {
 
         val t = fold.moneyChat("What if I save £300 a month for 6 months?")
         assertFalse(t.refused)
-        assertTrue(t.text.startsWith("Saving £300 a month for 6 months puts by £1,800 by Apr 2027."), t.text)
+        assertTrue(t.text.startsWith("Saving £300 a month for 6 months adds up to £1,800 by Apr 2027."), t.text)
         val goal = t.actions.single { it.kind == MoneyChat.ACT_GOAL }
         val made = fold.moneyChatGoal(goal.amountPence, goal.months)
         assertFalse(made.refused)

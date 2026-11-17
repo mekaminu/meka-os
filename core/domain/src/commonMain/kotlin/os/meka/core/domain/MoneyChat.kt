@@ -140,14 +140,14 @@ object MoneyChat {
             CARDS.containsMatchIn(q) && !isSave(q) -> cards(q, d)
             isSave(q) -> save(q, d)
             AFFORD.containsMatchIn(q) && MoneyAskRules.amount(q) != null && monthAhead(q, MoneyRules.monthOf(a.today)) != null -> affordLater(q, d)
-            MoneyAskRules.isAbout(q) -> MoneyChatTurn(q, MoneyAskRules.answer(q, a))
+            MoneyAskRules.isAbout(q) -> MoneyChatTurn(q, a.source.once(MoneyAskRules.answer(q, a)))
             else -> MoneyChatTurn(q, HELLO)
         }
     }
 
     private fun thisMonth(d: MoneyChatData): Int = d.save?.thisMonth ?: MoneyRules.monthOf(d.ask.today)
 
-    /** "Saving £300 a month for 6 months puts by £1,800 by Apr 2027." + whether it fits, and the cards with what's left. */
+    /** "Saving £300 a month for 6 months adds up to £1,800 by Apr 2027." + whether it fits, and the cards with what's left. */
     fun save(q: String, d: MoneyChatData): MoneyChatTurn {
         val amount = MoneyAskRules.amount(q) ?: return MoneyChatTurn(q, HELLO)
         val monthly = A_MONTH.containsMatchIn(q) || monthsIn(q) != null
@@ -160,7 +160,7 @@ object MoneyChat {
         }
         val n = monthsIn(q) ?: MoneySave.DEFAULT_MONTHS
         val total = MoneySave.balances(amount, n, 0).last()
-        val parts = mutableListOf("Saving ${fmt(amount)} a month for $n month${if (n == 1) "" else "s"} puts by ${fmt(MoneySave.roundPound(total))} by ${monthShort(now + n)}.")
+        val parts = mutableListOf("Saving ${fmt(amount)} a month for $n month${if (n == 1) "" else "s"} adds up to ${fmt(MoneySave.roundPound(total))} by ${monthShort(now + n)}.")
         parts += MoneySave.obi(amount, left).first
         val c = d.clear
         if (c != null && Regex("""\bcards?\b""", RegexOption.IGNORE_CASE).containsMatchIn(q)) {
@@ -174,7 +174,7 @@ object MoneyChat {
                     ?: "The other ${fmt(pay)} a month on the cards only keeps up with their interest."
             }
         }
-        return MoneyChatTurn(q, parts.joinToString(" ") + d.ask.source.notAdvice, listOf(
+        return MoneyChatTurn(q, parts.joinToString(" ") + d.ask.source.said, listOf(
             MoneyChatAction(ACT_GOAL, MAKE_GOAL, amountPence = amount, months = n),
             MoneyChatAction(ACT_PLAN, SHOW),
         ))
@@ -188,7 +188,7 @@ object MoneyChat {
         val head = if (kind == "afford") "If you start now: put aside about ${fmt(each)} a month from $from and you'd have ${fmt(total)} by ${monthLong(by)} ($n month${if (n == 1) "" else "s"})."
         else "To have ${fmt(total)} by ${monthLong(by)}, put aside about ${fmt(each)} a month from $from ($n month${if (n == 1) "" else "s"})."
         val fit = MoneySave.obi(each, left).first
-        return MoneyChatTurn(q, "$head $fit${source.notAdvice}", listOf(
+        return MoneyChatTurn(q, "$head $fit${source.said}", listOf(
             MoneyChatAction(ACT_GOAL, MAKE_GOAL, amountPence = each, months = n),
             MoneyChatAction(ACT_PLAN, SHOW),
         ))

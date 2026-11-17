@@ -75,7 +75,9 @@ struct MoneySaveCardView: View {
                 Text(v.total).font(MekaType.greeting).foregroundStyle(palette.accent).contentTransition(.numericText())
                 Text(v.end).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
-            Text(v.split).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            if !v.split.isEmpty {
+                Text(v.split).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            }
             HStack(alignment: .top, spacing: MekaSpace.xs) {
                 Circle()
                     .fill(RadialGradient(colors: [palette.accent, palette.accent.opacity(0.35)], center: .topLeading, startRadius: 1, endRadius: 14))
