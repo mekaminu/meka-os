@@ -98,4 +98,64 @@ class MoneyColumnsTest {
         val t = trading(positions = 3, wallets = 2)
         assertEquals(MoneyColumns.tradingFlow(t, kestrel = true), MoneyColumns.tradingFlow(t, kestrel = true))
     }
+
+    private fun plan(check: Boolean, clearCards: Int, goals: Int) = MoneyView(
+        locked = false, summary = "", empty = null,
+        month = MoneyMonth(0, "October so far", "Spent £100", null, false, emptyList(), emptyList(), 0),
+        accounts = emptyList(), earlier = false, later = false,
+        check = if (check) MoneyCheckView(null, "from 0 ideas", emptyList(), "Nothing to look at just now", null) else null,
+        save = MoneySaveBase(null, 10, 5_000),
+        clear = if (clearCards > 0) MoneyClearBase((1..clearCards).map { MoneyClearCard("c$it", "Card $it", 10_000, 2_290, false) }, null, 10, 1_000, 50_000, 10_000) else null,
+        goals = MoneyGoalsView("GOALS", (1..goals).map { MoneyGoalRow("g$it", "Goal $it", "£10 of £100", 10, null, emptyList(), "Goal $it") }, null, ""),
+    )
+
+    @Test
+    fun plansPartsGoUnderTheOtherColumnWhenTheirsIsMuchLonger() {
+        // Walk-through 2026-11-15 A17: no money check, so What if I save, Clear my cards and the goals all sat on the
+        // right beside an empty left. With none of the left's own, What if I save starts the left, Clear my cards and
+        // the goals keep the right, and Spending plans goes left once the right is well ahead.
+        val bare = MoneyColumns.flow(MoneyTab.PLAN, plan(check = false, clearCards = 2, goals = 2))
+        assertEquals(MoneyColumn.START, bare["save"])
+        assertEquals(MoneyColumn.START, MoneyColumns.of("save-head", bare))
+        assertEquals(MoneyColumn.END, bare["clear"])
+        assertEquals(MoneyColumn.END, MoneyColumns.of("goals-head", bare))
+        assertEquals(MoneyColumn.START, bare["spend-plans"])
+        // Every part's head follows it, and the rest keep their mockup column while the two are close.
+        val left = bare.filterValues { it == MoneyColumn.START }.keys
+        val right = bare.filterValues { it == MoneyColumn.END }.keys
+        assertTrue(left.isNotEmpty() && right.isNotEmpty())
+        // The money check leads the left, and with it in place the mockup's split holds for save and clear.
+        val full = MoneyColumns.flow(MoneyTab.PLAN, plan(check = true, clearCards = 1, goals = 0))
+        assertEquals(MoneyColumn.START, full["check"])
+        assertEquals(MoneyColumn.END, full["save"])
+        // Same view, same split.
+        assertEquals(full, MoneyColumns.flow(MoneyTab.PLAN, plan(check = true, clearCards = 1, goals = 0)))
+        // Other tabs and a locked Money move nothing.
+        assertEquals(emptyMap(), MoneyColumns.flow(MoneyTab.SPENDING, plan(check = true, clearCards = 1, goals = 0)))
+        assertEquals(emptyMap(), MoneyColumns.flow(MoneyTab.PLAN, plan(true, 1, 0).copy(locked = true)))
+    }
+
+    @Test
+    fun balanceKeepsTheMockupWhileTheColumnsAreClose() {
+        val L = MoneyColumn.START
+        val R = MoneyColumn.END
+        fun p(stem: String, home: MoneyColumn, lines: Int) = MoneyColumns.FlowPart(stem, home, lines)
+        assertEquals(mapOf("a" to L, "b" to R, "c" to L, "d" to R), MoneyColumns.balance(listOf(p("a", L, 5), p("b", R, 6), p("c", L, 5), p("d", R, 6))))
+        // The right runs well ahead: the next right part goes left.
+        assertEquals(L, MoneyColumns.balance(listOf(p("a", L, 2), p("b", R, 12), p("c", R, 4)))["c"])
+        // Nothing of the left's own: the first part starts it, the rest keep the right.
+        assertEquals(mapOf("x" to L, "y" to R), MoneyColumns.balance(listOf(p("x", R, 3), p("y", R, 10))))
+        assertEquals(emptyMap(), MoneyColumns.balance(emptyList()))
+    }
+
+    @Test
+    fun billsListStartsLevelWithTheCardOnlyAtTheTopOfTheRightColumn() {
+        val split = mapOf("bills-card" to MoneyColumn.START, "bills-list" to MoneyColumn.END)
+        assertTrue(MoneyColumns.billsListLevel(true, split))
+        assertFalse(MoneyColumns.billsListLevel(false, split))
+        assertFalse(MoneyColumns.billsListLevel(true, split + ("bills-list" to MoneyColumn.START)))
+        // A regular payment's own row follows its part.
+        assertEquals(MoneyColumn.START, MoneyColumns.of("regular-sky", mapOf("regular" to MoneyColumn.START)))
+        assertEquals(MoneyColumn.FULL, MoneyColumns.of("bills-foot", split))
+    }
 }

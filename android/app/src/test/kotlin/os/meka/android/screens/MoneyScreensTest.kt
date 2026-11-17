@@ -354,6 +354,13 @@ class MoneyScreensTest {
         if (compose.onAllNodes(ScreenShots.plainText(line, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
             fail("the Bills card should say \"$line\"")
         }
+        // Walk-through 2026-11-15 A17: the bills list at the top of the right column starts level with the card on the
+        // left (it sat ~40 px higher).
+        val cardY = compose.onNodeWithTag("money-bills-card", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        val listY = compose.onNodeWithTag("money-bills-list", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        val cardX = compose.onNodeWithTag("money-bills-card", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
+        val listX = compose.onNodeWithTag("money-bills-list", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
+        if (listX > cardX + 2f && kotlin.math.abs(cardY - listY) > 2f) fail("the bills list should start level with the Bills card (card y $cardY, list y $listY)")
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)

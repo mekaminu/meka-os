@@ -276,7 +276,15 @@ struct MoneySheet: View {
     }
 
     /// Whether the part keyed [key] (the Fold list's key, so both apps split alike) belongs in column [col].
-    private func on(_ key: String, _ col: MoneyColumn) -> Bool { MoneyColumns.shared.of(key: key) == col }
+    /// Walk-through A17: Trading's, Plan's and Bills' parts go under the other column when theirs is already much longer
+    /// (MoneyColumns.flow, the same split as the Fold).
+    private func on(_ key: String, _ col: MoneyColumn) -> Bool { MoneyColumns.shared.of(key: key, flow: flow) == col }
+
+    /// Where the chosen tab's movable parts sit (worked out from the shown view, so it never jumps on a redraw).
+    private var flow: [String: MoneyColumn] {
+        guard let v = model.money else { return [:] }
+        return MoneyColumns.shared.flow(tab: tab, v: v, kestrel: model.tradingKestrel != nil)
+    }
 
     /// The chosen tab's parts that sit in column [col]: the left or right column, or (FULL) what spans both under them.
     private func parts(_ v: MoneyView, _ col: MoneyColumn) -> some View {
@@ -394,6 +402,8 @@ struct MoneySheet: View {
                         }
                     }
                     .moneyCard(palette)
+                    // Walk-through A17: at the top of the right column it starts level with the card on the left.
+                    .padding(.top, col == .end ? MekaSpace.xs : 0)
                 }
             }
             if let p = v.payday, has(.payday, v), on("payday", col) { paydayRow(p, withRows: MoneyTabs.shared.paydayRows(v: v)).transition(.opacity) }
@@ -2436,8 +2446,6 @@ struct MoneySheet: View {
     /// and Kestrel on the right; the rest under the shorter column; the foot under both (MoneyColumns, as the Fold).
     private func trading(_ t: TradingView, _ col: MoneyColumn) -> some View {
         // Walk-through A17: the trades, the review, the addresses, alerts and the export go under the shorter column.
-        let flow = MoneyColumns.shared.tradingFlow(t: t, kestrel: model.tradingKestrel != nil)
-        func on(_ key: String, _ col: MoneyColumn) -> Bool { MoneyColumns.shared.of(key: key, flow: flow) == col }
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
             // The equity card as the mockup carries its own label: TRADING · HYPERLIQUID only before the first read.
             if MoneyTradingLayout.shared.showHead(t: t), on("trading-head", col) {

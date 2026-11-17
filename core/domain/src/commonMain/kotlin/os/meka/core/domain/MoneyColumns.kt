@@ -13,9 +13,9 @@ enum class MoneyColumn { FULL, START, END }
  *  - Spending: the month switcher, the ring and its tiles, the review and Worth a look on the left; WHERE IT WENT (the
  *    category rows, "Sort them") and the latest payments on the right.
  *  - Bills: the still-to-go-out card, Until payday and the cards on the left; the month's bills by date, refunds and the
- *    regular payments on the right.
+ *    regular payments on the right; balanced like Plan ([flow]).
  *  - Plan: Obi's money check, the forecast, challenges and paying abroad on the left; What if I save…, Clear my cards
- *    and the goals on the right.
+ *    and the goals on the right; a part goes under the other column when its own is already much longer ([flow]).
  *  - Trading: equity, the month's tiles, Obi's risk line and the P&L line on the left; open positions and Kestrel on the
  *    right; then the trades, the month in review, the addresses, alerts and the tax export each go under whichever
  *    column is shorter so far ([tradingFlow], walk-through 2026-11-15 A17: the right ran on alone below an empty left).
@@ -106,8 +106,89 @@ object MoneyColumns {
         }
     }
 
-    /** The column the part keyed [key] sits in, once Trading's lower parts are placed by [flow] ([tradingFlow]). */
-    fun of(key: String, flow: Map<String, MoneyColumn>): MoneyColumn = flow[key.removeSuffix("-head")] ?: of(key)
+    /**
+     * The column the part keyed [key] sits in, once a tab's movable parts are placed by [flow] ([flow], [tradingFlow]):
+     * a part's head and its rows go with it ("regular-head", "regular-sky" follow "regular").
+     */
+    fun of(key: String, flow: Map<String, MoneyColumn>): MoneyColumn =
+        flow[key] ?: flow[key.removeSuffix("-head")] ?: flow.entries.firstOrNull { key.startsWith("${it.key}-") }?.value ?: of(key)
+
+    /** A part of a tab that may change column: its key's stem, the column the mockup gives it, and its rough height in lines. */
+    data class FlowPart(val stem: String, val home: MoneyColumn, val lines: Int)
+
+    /**
+     * How far (in rough lines) a column may run on past the other before the next part goes to the other side. Below
+     * it every part keeps the mockup's column.
+     */
+    const val SLACK_LINES = 4
+
+    /**
+     * Places [parts] (in the list's order) in their mockup column unless that column is already more than [SLACK_LINES]
+     * longer than the other, when the part goes under the other instead (and when none of the left's own parts show, the
+     * first part starts the left) (walk-through 2026-11-15 A17: Plan's left
+     * column empty beside Clear my cards and the goals, Bills' right run on alone). The same on every redraw and both apps.
+     */
+    fun balance(parts: List<FlowPart>): Map<String, MoneyColumn> {
+        var left = 0
+        var right = 0
+        val out = linkedMapOf<String, MoneyColumn>()
+        // Nothing of the left's own shows (Bills with only refunds and regular payments): the first part starts it.
+        val allRight = parts.isNotEmpty() && parts.all { it.home == MoneyColumn.END }
+        parts.forEachIndexed { i, p ->
+            val homeLeft = p.home != MoneyColumn.END || (allRight && i == 0)
+            val (home, other) = if (homeLeft) left to right else right to left
+            val toLeft = if (home - other > SLACK_LINES) !homeLeft else homeLeft
+            if (toLeft) left += p.lines else right += p.lines
+            out[p.stem] = if (toLeft) MoneyColumn.START else MoneyColumn.END
+        }
+        return out
+    }
+
+    /**
+     * Where the movable parts of [tab] go on a wide screen, from what [v] shows (Kestrel's card counts on Trading when
+     * [kestrel]): Trading by [tradingFlow]; Plan's and Bills' parts by [balance] with rough heights; nothing moves on
+     * the other tabs. Layout only.
+     */
+    fun flow(tab: MoneyTab, v: MoneyView, kestrel: Boolean = false): Map<String, MoneyColumn> {
+        if (v.locked || v.skeleton) return emptyMap()
+        fun has(s: MoneySection) = MoneyTabs.shows(tab, s, v)
+        val L = MoneyColumn.START
+        val R = MoneyColumn.END
+        return when (tab) {
+            MoneyTab.TRADING -> if (has(MoneySection.TRADING)) v.trading?.let { tradingFlow(it, kestrel) } ?: emptyMap() else emptyMap()
+            MoneyTab.PLAN -> balance(listOfNotNull(
+                v.check?.takeIf { has(MoneySection.TIPS) }?.let { c ->
+                    FlowPart("check", L, 4 + if (c.ideas.isEmpty()) 1 else 6 + (c.ideas.size - 1).coerceIn(0, 3))
+                },
+                v.save?.takeIf { has(MoneySection.SAVE) }?.let { FlowPart("save", R, 1 + 9) },
+                v.clear?.takeIf { has(MoneySection.CLEAR) }?.let { b -> FlowPart("clear", R, 1 + 6 + 2 * b.cards.size) },
+                v.goals?.takeIf { has(MoneySection.GOALS) }?.let { g -> FlowPart("goals", R, 1 + maxOf(4, 3 * g.rows.size)) },
+                v.forecast?.takeIf { has(MoneySection.FORECAST) }?.let { f -> FlowPart("forecast", L, 1 + if (f.notReady != null) 2 else 10) },
+                v.challenges?.takeIf { has(MoneySection.CHALLENGES) }?.let { ch -> FlowPart("challenges", L, 1 + 6 + 2 * ch.caps.size) },
+                v.travel?.takeIf { has(MoneySection.TRAVEL) }?.let { t -> FlowPart("travel", L, 1 + if (t.rows.isEmpty()) 3 else 4 + 2 * t.rows.size) },
+                FlowPart("spend-plans", R, 2),
+            ))
+            MoneyTab.BILLS -> balance(listOfNotNull(
+                v.bills?.takeIf { has(MoneySection.BILLS) }?.let { FlowPart("bills-card", L, 5) },
+                v.bills?.takeIf { has(MoneySection.BILLS) && it.rows.isNotEmpty() }?.let { b ->
+                    FlowPart("bills-list", R, 2 * minOf(b.rows.size, MoneyBills.FOLDED) + (if (b.rows.size > MoneyBills.FOLDED) 1 else 0))
+                },
+                v.payday?.takeIf { has(MoneySection.PAYDAY) }?.let { FlowPart("payday", L, 1 + 2) },
+                v.cards?.takeIf { has(MoneySection.CARDS) }?.let { c -> FlowPart("cards", L, 1 + 2 * (c.rows.size + c.offers.size).coerceAtLeast(1)) },
+                v.refunds?.takeIf { has(MoneySection.REFUNDS) }?.let { r ->
+                    FlowPart("refunds", R, 1 + 2 * minOf(r.rows.size, MoneyRefunds.SHOWN) + (if (r.rows.size > MoneyRefunds.SHOWN) 1 else 0))
+                },
+                v.regular?.takeIf { has(MoneySection.REGULAR) }?.let { r -> FlowPart("regular", R, 2 + 2 * r.rows.size) },
+            ))
+            else -> emptyMap()
+        }
+    }
+
+    /**
+     * Whether the bills list (Bills' first part on the right, no label of its own as the mockup) needs the card's top gap so
+     * the two cards start level (walk-through 2026-11-15 C g2: its top sat ~40 px above the left card's).
+     */
+    fun billsListLevel(wide: Boolean, flow: Map<String, MoneyColumn>): Boolean = wide && of("bills-list", flow) == MoneyColumn.END
 
     /** Whether the full-width part [key] comes after the columns (the said line and the tab's foot) rather than above. */
     fun below(key: String): Boolean = key == "said" || key == "foot" || key.endsWith("-foot")

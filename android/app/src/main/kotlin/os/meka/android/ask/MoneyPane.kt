@@ -570,6 +570,9 @@ fun MoneyPane(
 
     // Money on the open Fold (MoneyColumns, the mockup at Fold size): the list is written once; on a wide pane its body
     // sits in two columns under the full-width title, pills and Ask Obi bar, with the said line and the foot below.
+    // Walk-through A17: on a wide pane Trading's, Plan's and Bills' parts go under the other column when theirs is
+    // already much longer, so neither half sits empty (the same split as the Mac).
+    val flow = remember(tab, v, kestrel != null) { MoneyColumns.flow(tab, v, kestrel != null) }
     val body: MoneyItems.() -> Unit = body@{
         // Money's top as the mockup (MoneyHeader): "Money" with the Updated pill on its right (a tap asks the banks for a
         // sync) and Close; the line under the title only when locked or nothing is in yet.
@@ -751,8 +754,10 @@ fun MoneyPane(
                 // Layout rules (a) and (d): the month's bills in one card, five then "See all N ›"; where they're found from
                 // is behind the tab's ⓘ at the foot.
                 if (b.rows.isNotEmpty()) item(key = "bills-list") {
+                    // Walk-through A17: at the top of the right column it starts level with the card on the left.
+                    val level = if (MoneyColumns.billsListLevel(wideNow, flow)) Modifier.padding(top = MekaSpace.m) else Modifier
                     MoneyBillsListCard(MoneyBills.shownRows(b, allBills), MoneyBills.allLabel(b.rows.size, allBills),
-                        Modifier.animateItem().appear(rememberAppearance(4))) { haptics.tick(); allBills = !allBills }
+                        Modifier.animateItem().then(level).appear(rememberAppearance(4))) { haptics.tick(); allBills = !allBills }
                 }
             }
             // Slice 6: payday and what's safe to spend (this month only). Money review (Meka 2026-10-26 22:12): one row on
@@ -1165,8 +1170,6 @@ fun MoneyPane(
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val wide = MoneyColumns.wide(maxWidth.value.toInt())
     SideEffect { wideNow = wide }
-    // Walk-through A17: Trading's lower parts go under whichever column is shorter, so neither half sits empty.
-    val flow = v.trading?.let { MoneyColumns.tradingFlow(it, kestrel != null) } ?: emptyMap()
     LazyColumn(
         Modifier.fillMaxSize(),
         state = listState,
