@@ -1055,7 +1055,8 @@ struct StudySheet: View {
         } label: {
             HStack(spacing: MekaSpace.xs) {
                 if let picked {
-                    Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                    // Walk-through 2026-11-15 A19: a picked lesson is a square box, never the round done ring.
+                    Image(systemName: picked ? "checkmark.square.fill" : "square")
                         .foregroundStyle(picked ? palette.accent : palette.textTertiary)
                         .frame(width: 18, height: 18)
                 } else {

@@ -44,6 +44,7 @@ import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Study plan, slice 1: a course's page on the Fold's cover and inner screens (Dark, and Light on the cover), read for
@@ -326,6 +327,12 @@ class StudyScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-lessons-selected"))
         ScreenShots.assertSensible(compose, "cover-dark-lessons-selected")
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-lessons-selected")
+        // Walk-through 2026-11-15 A19 (g4b 6): the bar sits under the list, never over a module's card.
+        val list = compose.onNodeWithTag("study-pane").fetchSemanticsNode().boundsInRoot
+        val bar = compose.onNodeWithTag("study-select-bar").fetchSemanticsNode().boundsInRoot
+        assertTrue(bar.top >= list.bottom - 1f, "the selection bar (top ${bar.top}) covers the lessons (list ends ${list.bottom})")
+        // A picked lesson's mark is the square box, not the round done ring.
+        compose.onAllNodesWithTag("study-select-on", useUnmergedTree = true).assertCountEquals(2)
         compose.onNodeWithTag("study-select-plan-Tomorrow").performClick()
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.modules[1].lessons.take(2).all { it.plannedDay == StudyFixture.TODAY + 1 } }
         compose.waitForIdle()

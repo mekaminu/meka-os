@@ -13,8 +13,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -440,10 +438,13 @@ internal fun StudyPane(
     )
 
     // Unfolded, the course keeps a phone-like column (the design is drawn at phone width) centred on the page.
+    // Walk-through 2026-11-15 A19 (g4b 6): the selection bar rose over the list and hid the foot of a module's card; it
+    // now sits under the list in the same column, so the list ends where the bar begins and nothing is covered.
     Box(Modifier.fillMaxSize().background(Meka.colors.background), contentAlignment = Alignment.TopCenter) {
+    Column(Modifier.widthIn(max = 600.dp).fillMaxHeight()) {
     LazyColumn(
-        Modifier.widthIn(max = 600.dp).fillMaxHeight().testTag("study-pane"),
-        contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.l, bottom = if (selecting != null) 220.dp else MekaSpace.l),
+        Modifier.fillMaxWidth().weight(1f).testTag("study-pane"),
+        contentPadding = PaddingValues(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.l, bottom = MekaSpace.l),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         item(key = "back") {
@@ -710,12 +711,12 @@ internal fun StudyPane(
             }
         }
     }
-    // Study fixes (3) slice 3: the selection bar slides up from the foot while lessons are being picked.
+    // Study fixes (3) slice 3: the selection bar slides up from the foot while lessons are being picked (A19: under
+    // the list, which gives up the room as the bar unfolds).
     AnimatedVisibility(
         visible = selecting != null && c != null,
-        modifier = Modifier.align(Alignment.BottomCenter),
-        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else fadeIn() + slideInVertically { it },
-        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else fadeOut() + slideOutVertically { it },
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else fadeIn() + expandVertically(expandFrom = Alignment.Top),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
     ) {
         val picked = selecting.orEmpty()
         SelectBar(
@@ -729,6 +730,7 @@ internal fun StudyPane(
             },
             onCancel = { haptics.tick(); selecting = null },
         )
+    }
     }
     }
     pickFor?.let { ids ->
@@ -749,8 +751,11 @@ internal fun StudyPane(
 private fun SelectBar(n: Int, chips: List<StudyChip>, onChip: (StudyChip) -> Unit, onCancel: () -> Unit) {
     val reduced = Meka.reducedMotion
     Column(
-        Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(MekaSpace.m).clip(RoundedCornerShape(MekaRadius.l))
-            .background(Meka.colors.surfaceRaised).padding(MekaSpace.m).testTag("study-select-bar"),
+        // A19 (g4b 6): the bar was the pills' own raised grey, so Today, Tomorrow… read as bare text; the bar is a card
+        // (surface, with a hairline edge) and the pills keep their raised fill.
+        Modifier.fillMaxWidth().padding(MekaSpace.m).clip(RoundedCornerShape(MekaRadius.l))
+            .background(Meka.colors.surface).border(1.dp, Meka.colors.surfaceRaised, RoundedCornerShape(MekaRadius.l))
+            .padding(MekaSpace.m).testTag("study-select-bar"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1209,17 +1214,25 @@ internal object StudyOrder {
     }
 }
 
-/** A selection mark in place of the tick ring while selecting: an outlined circle, filled in the accent with a check once picked. */
+/**
+ * A selection mark in place of the tick ring while selecting: an outlined square box, filled in the accent with a check
+ * once picked. A19 (g4b 6): it was a round gold tick, the same as a done lesson's, so picked lessons read as done; a
+ * square is a pick, a ring is done.
+ */
 @Composable
 private fun SelectDot(on: Boolean) {
     val fill by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.background, MekaMotion.appear(Meka.reducedMotion), label = "study-select-dot")
+    val box = RoundedCornerShape(SELECT_BOX_RADIUS)
     Box(
-        Modifier.size(22.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-            .border(1.5.dp, if (on) Meka.colors.accent else Meka.colors.textTertiary, RoundedCornerShape(MekaRadius.pill))
+        Modifier.size(22.dp).clip(box).background(fill)
+            .border(1.5.dp, if (on) Meka.colors.accent else Meka.colors.textTertiary, box)
             .testTag(if (on) "study-select-on" else "study-select-off"),
         contentAlignment = Alignment.Center,
     ) { if (on) Text("✓", style = MekaType.caption, color = Meka.colors.onAccent) }
 }
+
+/** A19: the selection box's corner, square enough never to be read as the round done ring. */
+internal val SELECT_BOX_RADIUS = 5.dp
 
 /** "Delete “Welcome”?" with [yes] (in the critical colour) and Cancel: nothing is deleted without it. */
 @Composable
