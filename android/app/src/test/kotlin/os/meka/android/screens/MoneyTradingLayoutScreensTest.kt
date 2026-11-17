@@ -273,13 +273,13 @@ class MoneyTradingLayoutScreensTest {
         // doesn't sit empty beside them; each card sits in the column the core's split names.
         val flow = MoneyColumns.tradingFlow(core.moneyView.value.trading!!, core.tradingKestrel.value != null)
         assertTrue(flow.values.any { it == MoneyColumn.START }, "some of Trading's lower parts should fill the left: $flow")
-        val leftX = compose.onNodeWithTag("money-column-start", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
-        val rightX = compose.onNodeWithTag("money-column-end", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+        val leftX = compose.onNodeWithTag("money-column-start", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
+        val rightX = compose.onNodeWithTag("money-column-end", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
         val cards = mapOf("trading-addresses" to "money-addresses-card", "trading-alerts" to "money-trading-alerts-card",
             "trading-export" to "money-trading-export-card", "trading-trades" to "money-trades-card", "trading-review" to "money-trading-review-card")
         flow.forEach { (key, col) ->
             val tag = cards.getValue(key)
-            val x = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+            val x = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
             val want = if (col == MoneyColumn.START) leftX else rightX
             assertTrue(kotlin.math.abs(x - want) < 2f, "$key should sit in the ${col.name.lowercase()} column (x $x, column at $want)")
         }
