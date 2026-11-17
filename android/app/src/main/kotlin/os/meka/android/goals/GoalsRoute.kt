@@ -25,12 +25,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -101,6 +103,12 @@ import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
 import os.meka.android.designsystem.sharedPlace
 
+/** The Goals list (its width is checked on the open Fold). */
+internal const val GOALS_LIST_TAG = "goals-list"
+
+/** Goals' column on a wide screen: the same 600 dp as Study, Habits and Fasting. */
+internal val GOALS_COLUMN_MAX = 600.dp
+
 /**
  * GOALS (build plan M1): fasting (a small [FastingTile] opening the Fasting screen, [FastingPane]), habits with this week's pace and streaks, and goals with progress. A habit's circle pops with
  * a spring when ticked and its streak number rolls (light haptic); goal progress bars fill on appear. Tapping a row
@@ -150,9 +158,11 @@ fun GoalsRoute(core: MekaCore) {
         val t = importText ?: return@LaunchedEffect
         importOffer = runCatching { core.studyImportOffer(t) }.getOrNull()
     }
-    Box(Modifier.fillMaxSize()) {
+    // Walk-through 2026-11-15 A17: on the open Fold Goals sits in the same centred 600 dp column as Study, Habits and
+    // Fasting (it ran edge to edge, the fasting card's › ~1,700 px from its words); folded it fills the width as before.
+    Box(Modifier.fillMaxSize().background(Meka.colors.background), contentAlignment = Alignment.TopCenter) {
     LazyColumn(
-        Modifier.fillMaxSize().background(Meka.colors.background),
+        Modifier.widthIn(max = GOALS_COLUMN_MAX).fillMaxHeight().testTag(GOALS_LIST_TAG),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

@@ -7,7 +7,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.test.assertTrue
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
@@ -23,6 +27,8 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.goals.GOALS_COLUMN_MAX
+import os.meka.android.goals.GOALS_LIST_TAG
 import os.meka.android.goals.GoalsRoute
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.HabitTiming
@@ -120,6 +126,11 @@ class GoalsScreensTest {
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Goals")
+        // Walk-through 2026-11-15 A17: never wider than Study's, Habits' and Fasting's column; centred on the open Fold.
+        val list = compose.onNodeWithTag(GOALS_LIST_TAG).getUnclippedBoundsInRoot()
+        val screen = compose.onNodeWithTag("screen").getUnclippedBoundsInRoot()
+        assertTrue(list.right - list.left <= GOALS_COLUMN_MAX + 1.dp, "$name: Goals runs ${list.right - list.left} wide")
+        assertTrue(abs(((list.left - screen.left) - (screen.right - list.right)).value) <= 2f, "$name: Goals isn't centred")
         // No fast runs in any fill: the small Fasting tile (Fasting rebuild slice 2) says so and when the next begins.
         ScreenShots.assertShows(compose, name, "Not fasting")
         ScreenShots.assertShows(compose, name, "Next fast from")

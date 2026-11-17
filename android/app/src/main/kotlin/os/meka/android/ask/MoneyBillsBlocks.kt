@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -55,6 +56,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.MoneyBillRow
+import os.meka.core.domain.MoneyColumns
 import os.meka.core.domain.MoneyBillsView
 import os.meka.core.domain.MoneyCardBrief
 import os.meka.core.domain.MoneyPaydayBrief
@@ -207,7 +209,12 @@ internal fun <T : Any> MoneyDetailSheet(
         @Suppress("UNCHECKED_CAST")
         val it = item ?: (shown[0] as T?) ?: return@AnimatedVisibility
         val name = title(it)
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            // Walk-through 2026-11-15 A17: on the open Fold (Money's wide layout) the sheet floats, every corner round,
+            // with the same gap under it as above, so it never runs off the bottom edge with the page showing beside it.
+            val floats = MoneyColumns.wide(maxWidth.value.toInt())
+            val shape = if (floats) RoundedCornerShape(MekaRadius.l)
+                else RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l)
             Box(
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = MotionMath.scrimAlpha(1f)))
                     .pointerInput(Unit) { detectTapGestures { onClose() } }
@@ -221,12 +228,14 @@ internal fun <T : Any> MoneyDetailSheet(
                         enter = if (reduced) fadeIn(MekaMotion.expand(true)) else slideInVertically(MekaMotion.expand(false)) { h -> h / 3 },
                         exit = if (reduced) fadeOut(MekaMotion.expand(true)) else slideOutVertically(MekaMotion.expand(false)) { h -> h / 3 },
                     )
-                    .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                    .then(if (floats) Modifier.navigationBarsPadding().padding(bottom = MekaSpace.xl) else Modifier)
+                    .clip(shape)
                     .background(Meka.colors.surface)
+                    .testTag("$tag-card")
                     .pointerInput(Unit) { detectTapGestures { } }
                     .heightIn(max = 680.dp)
                     .verticalScroll(rememberScrollState())
-                    .navigationBarsPadding()
+                    .then(if (floats) Modifier else Modifier.navigationBarsPadding())
                     .padding(MekaSpace.m)
                     .testTag(tag),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),

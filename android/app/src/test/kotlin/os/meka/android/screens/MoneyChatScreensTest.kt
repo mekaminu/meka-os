@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -234,6 +235,13 @@ class MoneyChatScreensTest {
         until(core) { shows("money-chat-answer-0") }
         assertTrue(shows("money-chat-answer-0"), "Can I afford wasn't answered")
         assertFullSizeMic("money-chat-mic")
+        // Walk-through 2026-11-15 A17: on the open Fold the sheet floats with a gap under it, never running off the bottom.
+        settle()
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        val sheet = compose.onNodeWithTag("money-chat-sheet-card").getUnclippedBoundsInRoot()
+        assertTrue(root.bottom - sheet.bottom >= MekaSpace.xl - 1.dp,
+            "the Ask Obi sheet runs to the bottom edge on the open Fold (gap ${root.bottom - sheet.bottom})")
+        assertTrue(sheet.top >= root.top, "the Ask Obi sheet runs off the top")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-ask-obi"))
         ScreenShots.assertNoBrokenWords(compose, "inner-dark-ask-obi")
     }
