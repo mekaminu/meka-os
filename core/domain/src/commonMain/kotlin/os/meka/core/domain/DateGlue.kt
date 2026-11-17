@@ -247,6 +247,8 @@ object LoneWordGlue {
      * "Say nothing for 6 / seconds", "This week: 1 / reminder", "£10.99 a / month"). Not before a joiner.
      */
     fun figuresHeld(s: String): String {
+        // The period is held on its own, not to the figure: "£10.99 · a month · Subscription" as one run was too long for
+        // the last words to go down together (CI run 43988773613, Needs you's mail card left "Subscription" alone).
         val tokens = PERIOD.replace(s) { it.value.replace(' ', NBSP) }.split(' ')
         val runs = mutableListOf<String>()
         var i = 0
@@ -254,6 +256,7 @@ object LoneWordGlue {
             val t = tokens[i]
             val next = tokens.getOrNull(i + 1)
             if (FIGURE.matches(t) && next != null && next.isNotEmpty() && next !in JOINERS && next.first() !in JOINERS.map { it[0] } &&
+                !PERIOD.containsMatchIn(next.replace(NBSP, ' ')) &&
                 t.length + 1 + next.length <= PAIR_RUN_MAX
             ) {
                 runs += t + NBSP + next

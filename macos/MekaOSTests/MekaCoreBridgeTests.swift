@@ -4507,7 +4507,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testFiguresHoldTheirWordOnTheMac() {
         let nb = LifeTileRules.shared.GLUE
         XCTAssertTrue(LoneWordGlue.shared.kept(line: "Schedule · at work until 17:30 · 2 events").hasSuffix("17:30\(nb)·\(nb)2\(nb)events"))
-        XCTAssertTrue(LoneWordGlue.shared.kept(line: "Renews Tue 3 Nov · £10.99 a month · Subscription").contains("£10.99\(nb)a\(nb)month"))
+        XCTAssertTrue(LoneWordGlue.shared.kept(line: "Renews Tue 3 Nov · £10.99 a month · Subscription").hasSuffix("a\(nb)month\(nb)·\(nb)Subscription"))
         XCTAssertTrue(ActivityExportRules.shared.keptLine(count: 1).contains("Undo lasts \(ActivityRules.shared.UNDO_DAYS) days"))
     }
     /// Walk-through 2026-11-15, A15: Money's lines reach the Mac held whole ("14 mo", "imported Wed 21 Oct").

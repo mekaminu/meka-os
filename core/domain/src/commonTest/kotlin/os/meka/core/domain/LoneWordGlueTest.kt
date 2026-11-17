@@ -48,7 +48,8 @@ class LoneWordGlueTest {
         val act = LoneWordGlue.kept("This week: 1 reminder (1 digest) · 3 changes · 2 calls stopped.")
         assertTrue(act.contains("1${nb}reminder") && act.contains("2${nb}calls"), act)
         // A price and its period go down together.
-        assertTrue(LoneWordGlue.kept("Renews Tue 3 Nov · £10.99 a month · Subscription").contains("£10.99${nb}a${nb}month"))
+        val renews = LoneWordGlue.kept("Renews Tue 3 Nov · £10.99 a month · Subscription")
+        assertTrue(renews.contains("a${nb}month") && renews.endsWith("month${nb}·${nb}Subscription"), renews)
         // A figure before a joiner stays free.
         assertEquals("Spent 12 · then more", LoneWordGlue.dotsHeld(LoneWordGlue.figuresHeld("Spent 12 · then more")).replace(nb, " "))
         assertFalse(LoneWordGlue.figuresHeld("Spent 12 · then").contains("12$nb·"))
