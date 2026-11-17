@@ -716,7 +716,7 @@ internal fun NeedsYouColumn(
     val boxFill = Meka.colors.surface
     val inBox = if (boxed) Modifier.groupBoxFill(boxFill) else Modifier
     val inBoxLine = if (boxed) Modifier.fillMaxWidth().groupBoxFill(boxFill).padding(horizontal = MekaSpace.m) else Modifier
-    val inBoxLead = if (boxed) Modifier.groupBoxFill(boxFill).padding(horizontal = MekaSpace.s) else Modifier
+    val inBoxLead = if (boxed) Modifier.groupBoxFill(boxFill).padding(horizontal = MekaSpace.xs) else Modifier
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
         modifier.footFade().testTag(if (part == NeedsYouPart.RIGHT) NEEDS_YOU_RIGHT_TAG else NEEDS_YOU_LIST_TAG),
