@@ -400,6 +400,8 @@ class TodayScreensTest {
         val label = hasText(EveningCardRules.SCHEDULE.uppercase(), substring = true)
         if (name.startsWith("cover")) {
             compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(label)
+            // A15 slice 49: the evening card's step lines may take two lines, so the last event can sit just below.
+            compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(ScreenShots.plainText(SCHEDULE_TITLES[3], substring = true))
             settle()
         }
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))

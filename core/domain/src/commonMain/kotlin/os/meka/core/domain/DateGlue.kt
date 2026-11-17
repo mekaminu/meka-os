@@ -384,7 +384,8 @@ object EvenRows {
     /**
      * How many chips go on each row, given each chip's [widths], the [gap] between them and the row's [max] width: one
      * row when all fit; otherwise as many rows as wrapping needs, with the chips shared out evenly (the earlier rows
-     * taking any extra) when every row then fits, else plain wrapping.
+     * taking any extra) when every row then fits, else plain wrapping; when sharing out would still leave one alone (three
+     * where two fit), one a row.
      */
     fun sizes(widths: List<Int>, gap: Int, max: Int): List<Int> {
         if (widths.isEmpty()) return emptyList()
@@ -402,6 +403,9 @@ object EvenRows {
         val base = widths.size / rows
         val extra = widths.size % rows
         val even = List(rows) { r -> base + if (r < extra) 1 else 0 }
+        // Walk-through 2026-11-15, A15 (g4a 14): three chips where two fit can't share out ("21 Dec · 8 wks" alone under
+        // the other two), so they stand one under another, a short list of choices rather than a pair and one left over.
+        if (even.last() == 1) return List(widths.size) { 1 }
         var at = 0
         for (n in even) {
             val row = widths.subList(at, at + n)

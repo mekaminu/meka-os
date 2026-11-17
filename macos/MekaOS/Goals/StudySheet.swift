@@ -645,7 +645,7 @@ struct StudySheet: View {
                     }
                     .frame(width: 52, alignment: .leading)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(LoneWordGlue.shared.measured(line: row.lessons)).font(MekaType.body).lineLimit(1...2) // A9 wraps, A15 whole
+                        Text(LoneWordGlue.shared.measured(line: row.lessons)).font(MekaType.body).lineLimit(1...3) // A9 wraps, A15 whole
                             .foregroundStyle(row.catchUp ? palette.textTertiary : palette.textPrimary)
                         Text(note ?? row.place).font(MekaType.caption).lineLimit(1)
                             .foregroundStyle(note != nil ? palette.accent : palette.textSecondary)

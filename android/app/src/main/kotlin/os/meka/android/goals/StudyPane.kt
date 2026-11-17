@@ -803,7 +803,7 @@ private fun WeekCard(
                     Text(
                         // Walk-through 2026-11-08 A9: "Welcome and se…" cut the lesson's name; it wraps to a second line.
                         // A15 (g4b 9): "Welcome and / setup · 30 min" goes down whole ("Welcome / and setup · 30 min").
-                        studyShown(row.lessons), style = MekaType.body, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        studyShown(row.lessons), style = MekaType.body, maxLines = 3, overflow = TextOverflow.Ellipsis,
                         color = if (row.catchUp) Meka.colors.textTertiary else Meka.colors.textPrimary,
                     )
                     Crossfade(note ?: row.place, animationSpec = MekaMotion.appear(reduced), label = "study-week-where") { line ->

@@ -288,5 +288,8 @@ class LoneWordGlueTest {
         // A wide chip that can't share a row keeps plain wrapping.
         assertEquals(listOf(1, 1), EvenRows.sizes(listOf(200, 200), 8, 250))
         assertEquals(emptyList(), EvenRows.sizes(emptyList(), 8, 100))
+        // A15: three where two fit stand one a row, not two and one left over (Study's FINISH BY).
+        assertEquals(listOf(1, 1, 1), EvenRows.sizes(listOf(100, 100, 100), 8, 220))
+        assertEquals(listOf(3), EvenRows.sizes(listOf(60, 60, 60), 8, 220))
     }
 }
