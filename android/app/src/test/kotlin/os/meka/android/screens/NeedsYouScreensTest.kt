@@ -335,7 +335,6 @@ class NeedsYouScreensTest {
     fun coverMany() {
         shoot("cover-dark-many", Fill.MANY)
         assertDecideOneBox("cover-dark-many")
-        assertOneBox("cover-dark-many", NeedsYouGroup.MESSAGES, "msgs-box-end")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

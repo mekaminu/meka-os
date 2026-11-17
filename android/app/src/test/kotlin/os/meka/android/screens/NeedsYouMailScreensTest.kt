@@ -19,6 +19,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToKey
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.onFirst
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -34,6 +39,8 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_LIST_TAG
+import os.meka.android.today.NEEDS_YOU_GROUP_TAG
+import os.meka.android.today.NEEDS_YOU_BOX_END_TAG
 import os.meka.android.today.NEEDS_YOU_CHIPS_TAG
 import os.meka.android.today.NEEDS_YOU_HEADER_ACTION_TAG
 import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
@@ -171,6 +178,7 @@ class NeedsYouMailScreensTest {
         if (showing(NeedsYouStackRules.EMPTY_LINE)) fail("$name: \"${NeedsYouStackRules.EMPTY_LINE}\" beside mail to answer and renewals")
         if (name.startsWith("inner") && !showing("2 mail · 2 renewals")) fail("$name: the header doesn't count the renewals with the mail")
         assertEdges(name)
+        if (name.startsWith("cover")) assertMailOneBox(name)
         assertWrapsWhole(name, core)
         openRow(name, football)
         reach(name, hasContentDescription(spokenDone(core, football)), "Done on \"Football on Saturday\"")
@@ -218,6 +226,34 @@ class NeedsYouMailScreensTest {
             if (action.right < screen.right - 40f * dp) fail("$name: Close all ends ${((screen.right - action.right) / dp).toInt()} dp from the page's right edge")
             if (action.top > left("Needs you").bottom) fail("$name: Close all isn't level with \"Needs you\"")
         }
+    }
+
+    /**
+     * Walk-through A17's leftover (2026-11-17): Mail to answer is one box like To decide: the gap under its head is the
+     * head's own colour, not the screen's, and its rounded foot closes the box as wide as the head.
+     */
+    private fun assertMailOneBox(name: String) {
+        val list = compose.onAllNodes(hasTestTag(NEEDS_YOU_LIST_TAG)).onFirst()
+        list.performScrollToKey("group-${NeedsYouGroup.MAIL.id}")
+        turns()
+        fun head() = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG) and hasContentDescription(NeedsYouGroup.MAIL.title, substring = true),
+            useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        val h = head() ?: fail("$name: no Mail to answer box")
+        val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
+        val dp = compose.density.density
+        val x = (h.left + 4 * dp).toInt()
+        val inHead = shot.getPixel(x, ((h.top + h.bottom) / 2f).toInt())
+        val inGap = shot.getPixel(x, (h.bottom + 4 * dp).toInt())
+        if (inGap != inHead) fail("$name: the screen shows through between Mail to answer's head and what's in it")
+        list.performScrollToKey("${NeedsYouGroup.MAIL.id}-box-end")
+        turns()
+        val top = head()?.bottom ?: Float.NEGATIVE_INFINITY
+        val end = compose.onAllNodes(hasTestTag(NEEDS_YOU_BOX_END_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.boundsInRoot }.filter { it.top > top }.minByOrNull { it.top } ?: fail("$name: Mail to answer's box has no foot")
+        if (kotlin.math.abs(end.left - h.left) > 1f || kotlin.math.abs(end.right - h.right) > 1f)
+            fail("$name: Mail to answer's foot isn't as wide as its head")
+        list.performScrollToIndex(0)
+        turns()
     }
 
     /** Runs the main looper and the frames by turns (a tap's change reaches the recomposer through the looper). */

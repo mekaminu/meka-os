@@ -1253,7 +1253,7 @@ internal fun NeedsYouColumn(
             item(key = "mail-lead") {
                 NeedsYouGroupLead(mailLead, NeedsYouGroupRules.MAIL_START, {
                     mailScope.launch { runCatching { core.startMailMoment() } }
-                }, Modifier.animateItem().then(inBoxLead).testTag(NEEDS_YOU_MAIL_LEAD_TAG).padding(bottom = MekaSpace.xs),
+                }, Modifier.animateItem().then(inBox).testTag(NEEDS_YOU_MAIL_LEAD_TAG).padding(bottom = MekaSpace.xs),
                     second = os.meka.core.domain.MailMomentRules.NOT_TODAY, onSecond = {
                         mailScope.launch {
                             val said = runCatching { core.notTodayMailMoment() }.getOrNull() ?: return@launch
