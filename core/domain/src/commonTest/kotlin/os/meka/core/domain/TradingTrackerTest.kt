@@ -150,6 +150,14 @@ class TradingTrackerTest {
         assertEquals("Equity across 2 accounts", v.totalLine)
         assertEquals("−$20.00", v.pnl.single().amount)
         assertEquals("No open positions", v.unrealisedLine)
+        // Walk-through 2026-11-15 A16: one position's amount is on its row, so the line above only counts it (said in full).
+        r.commitLocal(EntityTypes.TRADING_WALLET, TradingTracker.walletId(a1), mapOf(
+            TradingWalletFields.POSITIONS to TradingTracker.encode(listOf(TradingPosition("BTC", "0.1", "60000", "59900", null, -1_000, 5))).fv(),
+        ))
+        val one = TradingTracker.view(store.wallets(), now, cal)
+        assertEquals("1 open position", one.unrealisedLine)
+        assertEquals("−$10.00", one.positions.single().amount)
+        assertTrue(one.spoken.contains("1 open position, −$10.00 not yet taken"))
         val bot = v.wallets.first { it.name == "Bot" }
         assertTrue(bot.lit)
         assertTrue(bot.line.contains("couldn't read it from Hyperliquid at 13:55"))

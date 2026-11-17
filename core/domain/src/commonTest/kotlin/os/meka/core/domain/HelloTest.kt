@@ -175,6 +175,9 @@ class HelloTest {
         assertEquals(false, HelloWakeRules.heard("Obi")) // the short name alone isn't enough
         assertEquals("Say “Hey Obi”", HelloWakeRules.LABEL)
         assertEquals("Listening for “Hey Obi”", HelloWakeRules.LISTENING_LINE)
+        // Walk-through 2026-11-15 A16: Talk's setup step quotes it without quotes inside quotes.
+        val step = HelloWakeRules.section(on = true, mac = false).steps.first { it.startsWith("While it listens") }
+        assertEquals("While it listens the orb shows Listening for “Hey Obi”.", step)
         assertEquals("Obi", HelloEntrance.LABEL)
     }
 

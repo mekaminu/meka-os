@@ -124,6 +124,15 @@ object MoneyCheck {
                 spoken = "$title, ${fmt(save)} a year. $why")
         }
 
+    /** A habit's two sentences with the yearly saving said, as Obi is given them to reword ([MoneyIdea.ruleWhy]). */
+    fun habitWhy(total: Long, save: Long): String = "${fmt(total)} in the last 30 days. Halving it saves about ${fmt(save)} a year."
+
+    /**
+     * A habit's why as shown: walk-through 2026-11-15 A16, the yearly saving is already the idea's figure and the card's
+     * total, so it isn't said a third time ("£350 a year" · "~£350/yr" · "saves about £350 a year").
+     */
+    fun habitShown(total: Long): String = "${fmt(total)} in the last 30 days. Halving it is where the yearly saving comes from."
+
     /** Coffee, takeaways or eating out often: what halving it saves a year. */
     fun habits(lines: List<MoneyLine>, today: Long): List<MoneyIdea> {
         val from = today - 29
@@ -133,9 +142,9 @@ object MoneyCheck {
             if (ls.size < MoneyTips.HABIT_MIN_COUNT || total < MoneyTips.HABIT_MIN_PENCE) return@mapNotNull null
             val save = roundTen(total * 12 / 2)
             val title = "${c.label} ${ls.size}× in 30 days"
-            val why = "${fmt(total)} in the last 30 days. Halving it saves about ${fmt(save)} a year."
-            MoneyIdea("habit-${c.key}", MoneyIdeaKind.HABIT.key, title, yearly(save), save, why, behind(ls), ACT_CAP_LABEL, ACT_CAP,
-                lit = false, behindMore = more(ls.size), spoken = "$title, about ${fmt(save)} a year. $why")
+            val why = habitWhy(total, save)
+            MoneyIdea("habit-${c.key}", MoneyIdeaKind.HABIT.key, title, yearly(save), save, habitShown(total), behind(ls), ACT_CAP_LABEL, ACT_CAP,
+                lit = false, behindMore = more(ls.size), spoken = "$title, about ${fmt(save)} a year. ${habitShown(total)}", ruleWhy = why)
         }.sortedByDescending { it.savePence }.take(MoneyTips.MAX_PER_KIND)
     }
 
@@ -186,9 +195,10 @@ object MoneyCheck {
             if (ls.size < MoneyTips.HABIT_MIN_COUNT || total < MoneyTips.HABIT_MIN_PENCE) return@mapNotNull null
             val save = roundTen(total * 12 / 2)
             val title = "${c.name} ${ls.size}× in 30 days"
-            val why = "${fmt(total)} in the last 30 days. Halving it saves about ${fmt(save)} a year."
-            MoneyIdea("habit-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.HABIT.key, title, yearly(save), save, why, behind(ls),
-                ACT_CAP_LABEL, ACT_CAP, lit = false, behindMore = more(ls.size), spoken = "$title, about ${fmt(save)} a year. $why")
+            val why = habitWhy(total, save)
+            MoneyIdea("habit-" + MoneyOwnPlan.ideaKey(c), MoneyIdeaKind.HABIT.key, title, yearly(save), save, habitShown(total), behind(ls),
+                ACT_CAP_LABEL, ACT_CAP, lit = false, behindMore = more(ls.size), spoken = "$title, about ${fmt(save)} a year. ${habitShown(total)}",
+                ruleWhy = why)
         }.sortedByDescending { it.savePence }.take(MoneyTips.MAX_PER_KIND)
     }
 

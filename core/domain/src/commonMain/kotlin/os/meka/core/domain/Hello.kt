@@ -756,7 +756,7 @@ object HelloWakeRules {
             if (mac) "It listens only while Navilife is in front, never in the background, and stops while you talk to it."
             else "It listens only on the stand while charging, never in your pocket, and not in quiet hours.",
             "Your words are recognised on this ${if (mac) "Mac" else "phone"} only: never sent anywhere, never kept.",
-            "While it listens the orb shows “$LISTENING_LINE”.",
+            "While it listens the orb shows $LISTENING_LINE.", // walk-through A16: no quotes inside quotes
             if (mac) "Allow the microphone once by clicking the orb." else "Allow the microphone once by tapping the orb.",
         ),
         action = if (!available) null else if (on) TURN_OFF else TURN_ON,

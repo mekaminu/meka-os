@@ -79,6 +79,14 @@ class MoneyCheckTest {
         assertEquals("£908 a year", v.total)
         assertEquals("from 4 ideas", v.from)
         assertNull(v.away)
+        // Walk-through 2026-11-15 A16: the habit's yearly saving is its figure, so why doesn't say it a third time; Obi
+        // still gets the sentence with the sum to reword, and the spoken line says it once.
+        val coffee = v.ideas.first { it.id == "habit-coffee" }
+        assertEquals("~£290/yr", coffee.figure)
+        assertFalse(coffee.why.contains("£290"))
+        assertTrue(coffee.why.endsWith("Halving it is where the yearly saving comes from."))
+        assertTrue(coffee.ruleWhy.endsWith("Halving it saves about £290 a year."))
+        assertEquals(1, Regex("£290").findAll(coffee.spoken).count())
         // Not for me on the coffee, Remind me on interest until 30 Oct.
         val away = MoneyIdeaState(notFor = setOf("habit-coffee"), until = mapOf("interest" to oct16 + 14))
         val w = assertNotNull(MoneyCheck.view(lines, oct16, regular, away))

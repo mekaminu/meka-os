@@ -630,7 +630,9 @@ object TradingTracker {
         val unrealisedLine = when {
             open.isEmpty() && equity != null -> "No open positions"
             open.isEmpty() -> null
-            else -> "${open.size} open position${if (open.size == 1) "" else "s"} · ${ccy.signed(unrealised ?: 0L)} not yet taken"
+            // Walk-through 2026-11-15 A16: one position's amount is on its own row, so the line only counts it.
+            open.size == 1 -> "1 open position"
+            else -> "${open.size} open positions · ${ccy.signed(unrealised ?: 0L)} not yet taken"
         }
         val walletRows = wallets.map { w ->
             // Slice 3: how far below this month's high, lit at his drop alert's level.
@@ -651,7 +653,8 @@ object TradingTracker {
         val spoken = listOfNotNull(
             total?.let { "Trading equity $it" },
             pnl.joinToString(", ") { "${it.label.lowercase()} ${it.amount}" }.takeIf { it.isNotEmpty() },
-            unrealisedLine,
+            // Said in full: a listener has no row beside it to read the one position's amount from.
+            if (open.size == 1) "1 open position, ${rows.single().amount} not yet taken" else unrealisedLine,
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
         val curve = curveView(wallets, nowMs, ccy)
