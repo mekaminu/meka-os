@@ -1165,12 +1165,14 @@ fun MoneyPane(
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val wide = MoneyColumns.wide(maxWidth.value.toInt())
     SideEffect { wideNow = wide }
+    // Walk-through A17: Trading's lower parts go under whichever column is shorter, so neither half sits empty.
+    val flow = v.trading?.let { MoneyColumns.tradingFlow(it, kestrel != null) } ?: emptyMap()
     LazyColumn(
         Modifier.fillMaxSize(),
         state = listState,
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) { moneyList(body, wide) }
+    ) { moneyList(body, wide, flow) }
     // Spending plans: slides in from the right over Money (the pane's push), and goes when Money locks.
     androidx.compose.animation.AnimatedVisibility(
         visible = plansOpen && !v.locked,
@@ -2765,14 +2767,14 @@ private object StillItems : MoneyItemScope {
 }
 
 /** One column (narrow) or, on a wide pane, the full-width parts, then both columns side by side, then the said line and foot. */
-private fun LazyListScope.moneyList(body: MoneyItems.() -> Unit, wide: Boolean) {
+private fun LazyListScope.moneyList(body: MoneyItems.() -> Unit, wide: Boolean, flow: Map<String, MoneyColumn> = emptyMap()) {
     val lazy = LazyMoneyItems(this)
     if (!wide) { lazy.body(); return }
     val parts = GatherMoneyItems().apply { body() }.parts
-    val full = parts.filter { MoneyColumns.of(it.key) == MoneyColumn.FULL }
+    val full = parts.filter { MoneyColumns.of(it.key, flow) == MoneyColumn.FULL }
     full.filterNot { MoneyColumns.below(it.key) }.forEach { lazy.item(it.key, it.content) }
-    val start = parts.filter { MoneyColumns.of(it.key) == MoneyColumn.START }
-    val end = parts.filter { MoneyColumns.of(it.key) == MoneyColumn.END }
+    val start = parts.filter { MoneyColumns.of(it.key, flow) == MoneyColumn.START }
+    val end = parts.filter { MoneyColumns.of(it.key, flow) == MoneyColumn.END }
     if (start.isNotEmpty() || end.isNotEmpty()) item(key = MoneyColumns.COLUMNS_KEY) {
         Row(Modifier.fillMaxWidth().animateItem().testTag("money-columns"),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), verticalAlignment = Alignment.Top) {

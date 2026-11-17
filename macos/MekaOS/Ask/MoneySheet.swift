@@ -2432,10 +2432,13 @@ struct MoneySheet: View {
     /// MoneyTradingLayout): cards under their labels — equity (the total, a Read-only mark, Dollars · Pounds, the P&L),
     /// OPEN POSITIONS (five, then See all), the P&L line, YOUR TRADES, the month in review, YOUR ADDRESSES, ALERTS and
     /// EXPORT FOR TAX — and one "Read-only · not trading advice" foot whose ⓘ says where the figures come from.
-    /// Trading's parts that sit in column [col]: equity, Obi's risk line, the curve and the month on the left; positions,
-    /// Kestrel, trades, addresses, alerts and the export on the right; the foot under both (MoneyColumns, as the Fold).
+    /// Trading's parts that sit in column [col]: equity, the tiles, Obi's risk line and the curve on the left; positions
+    /// and Kestrel on the right; the rest under the shorter column; the foot under both (MoneyColumns, as the Fold).
     private func trading(_ t: TradingView, _ col: MoneyColumn) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+        // Walk-through A17: the trades, the review, the addresses, alerts and the export go under the shorter column.
+        let flow = MoneyColumns.shared.tradingFlow(t: t, kestrel: model.tradingKestrel != nil)
+        func on(_ key: String, _ col: MoneyColumn) -> Bool { MoneyColumns.shared.of(key: key, flow: flow) == col }
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
             // The equity card as the mockup carries its own label: TRADING · HYPERLIQUID only before the first read.
             if MoneyTradingLayout.shared.showHead(t: t), on("trading-head", col) {
                 MoneyLabel(t.head, palette: palette)

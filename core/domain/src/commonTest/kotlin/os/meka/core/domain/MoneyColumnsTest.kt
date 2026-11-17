@@ -66,4 +66,36 @@ class MoneyColumnsTest {
         assertEquals(List(4) { MoneyColumn.START }, at("travel-banner", "review", "alerts-head", "trading-review"))
         assertEquals(List(5) { MoneyColumn.END }, at("latest-head", "txns-head", "regular", "own", "trading-kestrel"))
     }
+
+    private fun trading(positions: Int, wallets: Int) = TradingView(
+        TradingTracker.HEAD, "$1,000.00", "Equity", emptyList(), "$positions open positions",
+        (1..positions).map { TradingPositionRow("w:C$it", "C$it long", "", "+$1.00", true, null, false, "C$it") },
+        (1..wallets).map { TradingWalletRow("w$it", "Main", "0xab…", false) }, null, TradingTracker.HINT, TradingTracker.FOOT, "spoken",
+    )
+
+    @Test
+    fun tradingsLowerPartsGoUnderTheShorterColumn() {
+        // Walk-through 2026-11-15 A17: five positions and Kestrel make the right the longer, so the addresses go left
+        // instead of running on under them beside an empty left half.
+        val busy = MoneyColumns.tradingFlow(trading(positions = 5, wallets = 1), kestrel = true)
+        assertEquals(MoneyColumn.START, busy["trading-addresses"])
+        assertEquals(MoneyColumn.START, MoneyColumns.of("trading-addresses-head", busy))
+        assertEquals(MoneyColumn.START, MoneyColumns.of("trading-addresses", busy))
+        // The mockup's parts stay where they were.
+        assertEquals(MoneyColumn.END, MoneyColumns.of("trading-positions", busy))
+        assertEquals(MoneyColumn.END, MoneyColumns.of("trading-kestrel-head", busy))
+        assertEquals(MoneyColumn.START, MoneyColumns.of("trading", busy))
+        assertEquals(MoneyColumn.FULL, MoneyColumns.of("trading-foot", busy))
+        // Nothing on the right yet: the addresses start it, as before.
+        val quiet = MoneyColumns.tradingFlow(trading(positions = 0, wallets = 1).copy(unrealisedLine = null), kestrel = false)
+        assertEquals(MoneyColumn.END, quiet["trading-addresses"])
+        // Parts that don't show aren't placed.
+        assertEquals(setOf("trading-addresses"), quiet.keys)
+    }
+
+    @Test
+    fun tradingsSplitIsTheSameOnEveryRedraw() {
+        val t = trading(positions = 3, wallets = 2)
+        assertEquals(MoneyColumns.tradingFlow(t, kestrel = true), MoneyColumns.tradingFlow(t, kestrel = true))
+    }
 }

@@ -49,6 +49,8 @@ import os.meka.core.domain.TradingCurvePoint
 import os.meka.core.domain.TradingEquity
 import os.meka.core.domain.TradingPosition
 import os.meka.core.domain.TradingWalletFields
+import os.meka.core.domain.MoneyColumn
+import os.meka.core.domain.MoneyColumns
 import os.meka.core.domain.MoneyTradingLayout
 import os.meka.core.domain.TradingTiles
 import os.meka.core.domain.TradingTracker
@@ -263,10 +265,24 @@ class MoneyTradingLayoutScreensTest {
     fun tradingInCardsOnTheOpenFold() {
         // Walk-through 2026-11-08 A23: the open Fold's layout shot was only the reading line. It now has figures read
         // and shows the page's lower cards (the addresses and the foot line); its top is inner-dark-trading-risk's.
-        open(seed = true)
+        val core = open(seed = true)
         pick(MoneyTab.TRADING)
         assertTrue(shows("money-trading-card"))
         if (shows("money-trading-note")) fail("the open Fold's layout shot still shows only the reading line")
+        // Walk-through 2026-11-15 A17: the addresses, alerts and export go under the shorter column, so the left half
+        // doesn't sit empty beside them; each card sits in the column the core's split names.
+        val flow = MoneyColumns.tradingFlow(core.moneyView.value.trading!!, core.tradingKestrel.value != null)
+        assertTrue(flow.values.any { it == MoneyColumn.START }, "some of Trading's lower parts should fill the left: $flow")
+        val leftX = compose.onNodeWithTag("money-column-start", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+        val rightX = compose.onNodeWithTag("money-column-end", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+        val cards = mapOf("trading-addresses" to "money-addresses-card", "trading-alerts" to "money-trading-alerts-card",
+            "trading-export" to "money-trading-export-card", "trading-trades" to "money-trades-card", "trading-review" to "money-trading-review-card")
+        flow.forEach { (key, col) ->
+            val tag = cards.getValue(key)
+            val x = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+            val want = if (col == MoneyColumn.START) leftX else rightX
+            assertTrue(kotlin.math.abs(x - want) < 2f, "$key should sit in the ${col.name.lowercase()} column (x $x, column at $want)")
+        }
         scrollTo("money-foot-info")
         assertTrue(showsText(MoneyTradingLayout.ADDRESSES_HEAD), "the addresses card should be in the layout shot")
         assertTrue(showsText(MoneyTradingLayout.FOOT_SHORT), "Trading's foot line should be in the layout shot")
