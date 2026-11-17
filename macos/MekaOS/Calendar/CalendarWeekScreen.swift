@@ -153,6 +153,13 @@ struct CalendarWeekScreen: View {
             if let legend = model.calendar?.legend, !legend.isEmpty {
                 CalendarKey(legend: legend, palette: palette)
             }
+            // The amber dot and outline in the key, when a block in view has them (A18, g4a 11).
+            if !grid.clashKey.isEmpty {
+                HStack(spacing: MekaSpace.xxs) {
+                    Circle().fill(palette.calendar3).frame(width: 6, height: 6)
+                    Text(grid.clashKey).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                }
+            }
             Spacer(minLength: MekaSpace.xs)
             Text(CalendarWeekRules.shared.BOOKED).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             Text(grid.booked).font(MekaType.metaStrong).monospacedDigit().foregroundStyle(palette.textPrimary)

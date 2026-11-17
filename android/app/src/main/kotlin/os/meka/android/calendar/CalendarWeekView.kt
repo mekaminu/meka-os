@@ -152,6 +152,13 @@ fun CalendarWeekView(
                                 Text(c.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(start = MekaSpace.xxs), maxLines = 1)
                             }
                         }
+                        // The amber dot and outline in the key, when a block in view has them (A18, g4a 11).
+                        if (grid.clashKey.isNotEmpty()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ClashDot(Meka.colors.calendar3)
+                                Text(grid.clashKey, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(start = MekaSpace.xxs), maxLines = 1)
+                            }
+                        }
                     }
                     Text(CalendarWeekRules.BOOKED, style = MekaType.caption, color = Meka.colors.textSecondary)
                     Text(grid.booked, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.padding(start = MekaSpace.xs))

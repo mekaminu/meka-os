@@ -382,6 +382,19 @@ class CalendarScreensTest {
                 hasContentDescription("Task Pay the window cleaner", substring = true))) {
             fail("week-inner-dark-many: the 12:00 task is still in the all-day strip")
         }
+        // Clash marks follow the Agenda's rule (walk-through 2026-11-15, A18, g4a 11): at 17:15 the call still running
+        // is amber, the morning's Dentist and planning, over, are not; the key names the amber.
+        val block = androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_BLOCK_TAG)
+        if (!shows(block and hasContentDescription("Call with Priya, 17:00 to 17:45, clashes with work", substring = true))) {
+            fail("week-inner-dark-many: the running call isn't marked as a clash")
+        }
+        listOf("Dentist, ", ShotLife.PLANNING.title + ", ").forEach { t ->
+            if (!shows(block and hasContentDescription(t, substring = true))) fail("week-inner-dark-many: no $t block")
+            if (shows(block and hasContentDescription(t, substring = true) and hasContentDescription("clashes with work", substring = true))) {
+                fail("week-inner-dark-many: $t is over but still marked as a clash")
+            }
+        }
+        ScreenShots.assertShows(compose, "week-inner-dark-many", "Clashes with work")
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)

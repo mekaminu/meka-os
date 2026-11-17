@@ -171,6 +171,12 @@ data class WeekGrid(
      */
     val outOfView: String = "",
 ) {
+    /**
+     * The key's amber entry beside the calendars' ("● Clashes with work"), when a block in view carries the amber dot and
+     * outline (walk-through 2026-11-15, A18, g4a 11: the amber wasn't in the key), else "".
+     */
+    val clashKey: String get() = if (days.any { d -> d.blocks.any { it.clash } }) CalendarWeekRules.CLASH_KEY else ""
+
     /** "Booked this week 5.8 h", or "Booked this week 5 h · 1 h at the weekend" */
     val bookedLine: String get() = "${CalendarWeekRules.BOOKED} $booked" + if (outOfView.isEmpty()) "" else " · $outOfView"
 
@@ -209,6 +215,8 @@ object CalendarWeekRules {
     /** 0 → no bar, 1 → 5, 2 → 10, 3 or more → 14. */
     fun loadBarDp(load: Int): Float = minOf(LOAD_MAX_DP, load.coerceAtLeast(0) * LOAD_STEP_DP)
     const val BOOKED = "Booked this week"
+    /** The key's entry for the amber dot and outline. */
+    const val CLASH_KEY = "Clashes with work"
     const val FOLDED_DAYS = 3
     const val DEFAULT_OPEN_DAYS = 5
     val OPEN_DAYS = listOf(5, 7)
@@ -335,7 +343,9 @@ object CalendarWeekRules {
                 continue
             }
             val key = "e:${e.id}"
-            byKey[key] = e to (WorkClashRules.clash(e, workBlocks, calendar, commute = commute) != null)
+            // The Agenda's rule (WorkClashRules.markWhileAhead): once an event is over it no longer marks a clash, so the
+            // morning's Dentist doesn't keep its amber in Week while the Agenda says nothing (walk-through A18, g4a 11).
+            byKey[key] = e to (WorkClashRules.clash(e, workBlocks, calendar, commute = commute) != null && e.endAtMs > nowMs)
             raw += DayBlock(key, e.title, start, end, DayBlockKind.EVENT, event = e, tone = tone)
         }
         // A task with a time inside the grid's hours goes on the grid, sharing the width with what it overlaps (A18).

@@ -106,6 +106,31 @@ class CalendarWeekTest {
     }
 
     @Test
+    fun aClashOverIsNoLongerMarkedAsTheAgendaAndTheKeyNamesTheAmber() {
+        // Walk-through 2026-11-15, A18 (g4a 11): at 17:15 the Agenda marks only the call still to come, so Week does too.
+        val work = WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(mon))
+        val events = listOf(
+            ev("p", "Planning", mon, 10 * 60, 11 * 60 + 30),
+            ev("d", "Dentist", mon, 13 * 60 + 45, 14 * 60 + 15),
+            ev("c", "Call", mon, 17 * 60, 17 * 60 + 45),
+            ev("t", "Training", mon + 1, 16 * 60 + 55, 17 * 60 + 55),
+        )
+        val now = ms(mon, 17 * 60 + 15)
+        val g = CalendarWeekRules.build(mon, 5, events, null, work, now, cal)
+        assertEquals(listOf(false, false, true), g.days[0].blocks.map { it.clash })
+        assertEquals(listOf(true), g.days[1].blocks.map { it.clash })
+        assertEquals("Clashes with work", g.clashKey)
+        // The same rule as the Agenda's rows.
+        g.days[0].blocks.forEach { b ->
+            val agenda = WorkClashRules.markWhileAhead(WorkClashRules.clash(b.event, work.blocks(mon, cal), cal), b.event.endAtMs, now)
+            assertEquals(agenda != null, b.clash, b.title)
+        }
+        // Nothing in view clashes (still to come): no amber in the key.
+        assertEquals("", CalendarWeekRules.build(mon, 5, events.take(2), null, work, now, cal).clashKey)
+        assertEquals("", CalendarWeekRules.build(mon, 5, events, null, null, now, cal).clashKey)
+    }
+
+    @Test
     fun overlappingEventsShareTheColumnSideBySide() {
         val g = CalendarWeekRules.build(mon, 5, listOf(ev("a", "A", mon, 10 * 60, 11 * 60), ev("b", "B", mon, 10 * 60 + 30, 11 * 60 + 30)), null, null, ms(mon, 0), cal)
         assertEquals(listOf(0 to 2, 1 to 2), g.days[0].blocks.map { it.column to it.columns })
