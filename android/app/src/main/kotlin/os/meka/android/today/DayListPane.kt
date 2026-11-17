@@ -301,7 +301,7 @@ fun DayListPane(
                         grip = grip, onMeasured = { if (it > 0f) rowPx = it + gapPx })
                 }
                 item(key = "hint") {
-                    Text(if (across != null) os.meka.core.domain.DayListSpreadRules.HINT else inBoard?.hint ?: DayListRules.HINT, style = MekaType.micro, color = Meka.colors.textTertiary,
+                    Text(LoneWordGlue.kept(if (across != null) os.meka.core.domain.DayListSpreadRules.HINT else inBoard?.hint ?: DayListRules.HINT), style = MekaType.micro, color = Meka.colors.textTertiary,
                         modifier = Modifier.padding(top = MekaSpace.xs).animateItem())
                 }
             }

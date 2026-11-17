@@ -273,7 +273,7 @@ private struct SpreadColumn: View {
                             }
                             .transition(reduceMotion ? .opacity : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
                         }
-                        Text(DayListSpreadRules.shared.HINT).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                        Text(LoneWordGlue.shared.kept(line: DayListSpreadRules.shared.HINT)).font(MekaType.micro).foregroundStyle(palette.textTertiary)
                             .padding(.top, MekaSpace.xs)
                     }
                     .animation(MekaMotion.replan(reduced: reduceMotion), value: v.rows.map(\.id))

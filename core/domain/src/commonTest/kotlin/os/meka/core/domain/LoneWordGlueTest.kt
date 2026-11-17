@@ -225,6 +225,19 @@ class LoneWordGlueTest {
         assertEquals(FuelRules.NO_LOCATION_LINE, DateGlue.plain(LoneWordGlue.measured(FuelRules.NO_LOCATION_LINE)))
     }
 
+    // A15 part 7 (reviewers g5b 8, g6b 9, g4a 14): an article or "+" never ends a line mid-sentence ("+ Add a / birthday",
+    // "hold the / 🎙", "hold its / ≡"); "her", "this" and "that" stay free, and a word after a dot stays for the dot.
+    @Test
+    fun anArticleOrAPlusLeadsTheWordAfterIt() {
+        val gifts = LoneWordGlue.kept(GiftsPageRules.COMING_EMPTY)
+        assertTrue(gifts.contains("+${nb}Add a${nb}birthday"), gifts)
+        assertTrue(LoneWordGlue.kept(VoiceNoteRules.EMPTY).contains("the${nb}🎙"))
+        assertTrue(LoneWordGlue.kept(DayListBoardRules.HINT).contains("its${nb}≡"))
+        assertTrue(LoneWordGlue.kept("Ask her about the plan for next week").contains("her about"))
+        assertTrue(LoneWordGlue.kept("Off · the weather is home's and work's").startsWith("Off${nb}·${nb}the weather"))
+        assertEquals(GiftsPageRules.COMING_EMPTY, DateGlue.plain(gifts))
+    }
+
     // A15 part 4: the card sheet's APR hint ended on "on Plan)" alone on the cover; it now ends on Clear my cards.
     @Test
     fun theAprHintEndsOnClearMyCards() {

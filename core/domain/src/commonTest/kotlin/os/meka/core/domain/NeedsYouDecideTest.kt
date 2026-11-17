@@ -36,7 +36,8 @@ class NeedsYouDecideTest {
         assertEquals("Task: Check the algorithm · Today", c.what)
         // A15 part 3: drawn, "algorithm · Today" goes down whole (the cover read "algorithm · / Today").
         val g = LifeTileRules.GLUE
-        assertEquals("Task: Check the algorithm${g}·${g}Today", c.whatShown)
+        // A15 part 7: "the" leads its word, so "the algorithm" holds too.
+        assertEquals("Task: Check the${g}algorithm${g}·${g}Today", c.whatShown)
         assertEquals("Change", c.changeLabel)
         assertTrue(c.spoken.contains("Add, Change, Not a task."))
     }

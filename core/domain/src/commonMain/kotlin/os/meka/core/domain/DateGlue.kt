@@ -216,7 +216,14 @@ object LoneWordGlue {
     private val LEADS = setOf("on", "at", "by", "to", "in", "of", "for", "via")
 
     /**
-     * [s] with each small leading word ([LEADS]) held to the word after it while that run stays within [PAIR_RUN_MAX]
+     * Words that lead a noun, held to it mid-line like [LEADS] (walk-through 2026-11-15, A15 part 7: Gifts' empty line split
+     * "+ Add a / birthday", Voice notes' "hold the / 🎙", the board's hint "hold its / ≡"); "+" leads its action ("+ / Add"
+     * never). "her", "this" and "that" stay free: they often end a clause ("tell her", "do that").
+     */
+    private val ARTICLES = setOf("the", "a", "an", "your", "my", "his", "its", "their", "our", "+")
+
+    /**
+     * [s] with each small leading word ([LEADS], and [ARTICLES]) held to the word after it while that run stays within [PAIR_RUN_MAX]
      * (A28: "Obi found … on" ended the call card's line). Not before a joiner, just after a dot or at the end.
      */
     fun leadsHeld(s: String): String {
@@ -226,9 +233,9 @@ object LoneWordGlue {
         while (i < tokens.size) {
             val t = tokens[i]
             val next = tokens.getOrNull(i + 1)
-            val lead = t.lowercase().let { it in LEADS || it.substringAfterLast(NBSP) in LEADS }
+            val lead = t.lowercase().let { it in LEADS || it.substringAfterLast(NBSP) in LEADS || it in ARTICLES || it.substringAfterLast(NBSP) in ARTICLES }
             // Just after a dot the word stays free, for the dot to take (CI: "Sun 25 Oct · in 4 days" ended on the dot).
-            val afterDot = tokens.getOrNull(i - 1) in HELD
+            val afterDot = tokens.getOrNull(i - 1) in HELD && t != "+"  // "· + Add": the dot takes "+ Add" whole
             if (lead && !afterDot && next != null && next.isNotEmpty() && next !in JOINERS && t.length + 1 + next.length <= PAIR_RUN_MAX) {
                 runs += t + NBSP + next
                 i += 2

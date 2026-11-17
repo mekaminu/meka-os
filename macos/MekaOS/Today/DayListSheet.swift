@@ -102,7 +102,7 @@ struct DayListSheet: View {
                         }
                         .transition(reduceMotion ? .opacity : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
                     }
-                    Text(DayListRules.shared.HINT).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: DayListRules.shared.HINT)).font(MekaType.micro).foregroundStyle(palette.textTertiary)
                         .padding(.top, MekaSpace.xs)
                 }
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: v.rows.map(\.id))
