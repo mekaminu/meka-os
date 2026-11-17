@@ -250,15 +250,19 @@ object LoneWordGlue {
     /**
      * Phrases that read as one and go down whole (walk-through 2026-11-15, A15 part 3: Needs you's hint ended a line on
      * "‹ ›" over "for the next ·", now "‹ › for more", which goes down with its dot; the inbox lead read "one / at a time";
-     * part 5: Setup's head read "… 1 / couldn't be checked", and a figure before a phrase takes it whole).
+     * part 5: Setup's head read "… 1 / couldn't be checked", and a figure before a phrase takes it whole; part 8: Voice's
+     * memory line read "pick up where you left / off · 3 notes").
      */
-    private val PHRASES = listOf("‹ › for more", "one at a time", "couldn't be checked")
+    private val PHRASES = listOf("‹ › for more", "one at a time", "couldn't be checked", "left off")
 
     /** [s] with each of [PHRASES] held whole. */
     fun phrasesHeld(s: String): String = PHRASES.fold(s) { acc, p -> acc.replace(p, p.replace(' ', NBSP)) }
 
-    /** A figure on its own: "2", "£10.99", "45%", "1,200" (a time like "17:30" isn't one: it reads whole alone). */
-    private val FIGURE = Regex("^[£$€−-]?\\d[\\d,.]*%?$")
+    /**
+     * A figure on its own: "2", "£10.99", "45%", "1,200" (a time like "17:30" isn't one: it reads whole alone), or one
+     * opening a bracket ("(1 digest)", A15 part 8: Activity's week line could break "(1 / digest)").
+     */
+    private val FIGURE = Regex("^\\(?[£$€−-]?\\d[\\d,.]*%?$")
 
     /** "a month", "per week": the period a price or count is for, held to it ("£10.99 a / month", A15). */
     private val PERIOD = Regex("\\b(?:a|an|per|each|every) (?:day|night|week|fortnight|month|year)\\b")

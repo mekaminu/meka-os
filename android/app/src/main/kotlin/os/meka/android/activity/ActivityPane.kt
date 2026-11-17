@@ -7,7 +7,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -180,11 +179,11 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         }
         val filter = ActivityRules.chosen(view, ActivityRules.filterNamed(filterName))
         if (chips.isNotEmpty()) {
-            // The filters wrap onto a second line on the closed Fold rather than cutting the last chip (walk-through A10).
-            FlowRow(
+            // The filters wrap onto a second line on the closed Fold rather than cutting the last chip (walk-through A10),
+            // shared out so none sits alone on the second row (walk-through 2026-11-15, g5b 9: "Calls · 2" alone).
+            os.meka.android.ask.EvenChipRows(
+                MekaSpace.xs,
                 Modifier.fillMaxWidth().padding(top = MekaSpace.xs).appear(rememberAppearance(1)),
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 chips.forEach { c ->
                     Chip(c.label, c.filter == filter) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -222,6 +223,13 @@ class TalkActivityScreensTest {
         }
         ScreenShots.assertReadable(compose, name, rows.flatMap { listOfNotNull(it.summary, it.detail, it.why) }, mustShow = false)
         ScreenShots.assertEachOneLine(compose, name, ActivityRules.filters(v).map { it.label } + rows.map { it.time })
+        // Walk-through 2026-11-15, g5b 9: on the cover "Calls · 2" wrapped alone onto a second row; the chips share out.
+        val chipTops = ActivityRules.filters(v).map { c ->
+            compose.onAllNodesWithText(c.label, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot.top.toInt()
+        }
+        if (chipTops.distinct().size > 1 && chipTops.count { it == chipTops.last() } == 1) {
+            fail("$name: the last filter chip sits alone on its row: ${ActivityRules.filters(v).map { it.label }} at $chipTops")
+        }
         ScreenShots.assertNoLoneWords(compose, name, rows.flatMap { listOfNotNull(it.summary, it.why) })
         // Walk-through A28: the line under the title ("1 / reminder"), the stopped calls' line ("stopped.") and the kept
         // line (a lone "log.") wrap whole, and none starts with a dot.

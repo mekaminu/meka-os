@@ -4521,6 +4521,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // A15 part 7: an article or "+" leads the word after it ("+ Add a birthday", "hold its ≡").
         XCTAssertTrue(LifePageRules.shared.shown(text: GiftsPageRules.shared.COMING_EMPTY).contains("+\(nb)Add a\(nb)birthday"))
         XCTAssertTrue(LoneWordGlue.shared.kept(line: DayListBoardRules.shared.HINT).contains("its\(nb)≡"))
+        // A15 part 8: Activity's "(1 digest)" and Voice's "where you left off" go down whole.
+        XCTAssertTrue(LoneWordGlue.shared.measured(line: "This week: 1 reminder (1 digest) · 3 changes").contains("(1\(nb)digest)"))
+        XCTAssertTrue(LoneWordGlue.shared.kept(line: CompanionMemoryRules.shared.onLine(count: 3)).contains("left\(nb)off"))
     }
     /// Walk-through 2026-11-15, A15: Money's lines reach the Mac held whole ("14 mo", "imported Wed 21 Oct").
     func testMoneyLinesWrapWholeOnTheMac() {

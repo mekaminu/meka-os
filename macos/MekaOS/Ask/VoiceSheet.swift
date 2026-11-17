@@ -154,7 +154,7 @@ struct VoiceSheet: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(maxWidth: 260)
-            Text(model.remembersChats ? CompanionMemoryRules.shared.onLine(count: Int32(model.memoryRows.count)) : CompanionMemoryRules.shared.OFF_LINE)
+            Text(LoneWordGlue.shared.kept(line: model.remembersChats ? CompanionMemoryRules.shared.onLine(count: Int32(model.memoryRows.count)) : CompanionMemoryRules.shared.OFF_LINE))
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             if model.remembersChats && model.memoryRows.isEmpty {

@@ -116,7 +116,7 @@ struct ActivitySheet: View {
                 }
                 .frame(maxHeight: 460)
             } else {
-                Text(model.activity?.emptyLine ?? ActivityRules.shared.EMPTY_LINE)
+                Text(LoneWordGlue.shared.measured(line: model.activity?.emptyLine ?? ActivityRules.shared.EMPTY_LINE))
                     .font(MekaType.body).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .staggeredAppear(1)

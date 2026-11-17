@@ -246,6 +246,21 @@ class LoneWordGlueTest {
         assertFalse(hint.contains("Plan"))
     }
 
+    // A15 part 8 (walk-through g5b 8): Activity's week line could break "(1 / digest)", Voice's memory line "where you
+    // left / off · 3 notes".
+    @Test
+    fun aBracketedFigureAndLeftOffGoDownWhole() {
+        val week = LoneWordGlue.measured("What Navilife did and why. This week: 1 reminder (1 digest) · 3 changes · 2 calls stopped.")
+        assertTrue(week.contains("(1${nb}digest)"), week)
+        assertTrue(week.contains("2${nb}calls"), week)
+        val memory = LoneWordGlue.kept(CompanionMemoryRules.onLine(3))
+        assertTrue(memory.contains("left${nb}off"), memory)
+        assertTrue(memory.endsWith("3${nb}notes"), memory)
+        assertEquals(CompanionMemoryRules.onLine(3), DateGlue.plain(memory))
+        // A bracket alone is no figure.
+        assertFalse(LoneWordGlue.kept("Open the list (it saves) and close it").contains("(it${nb}saves)"))
+    }
+
     @Test
     fun noChipIsLeftAloneOnItsRow() {
         // Three of four fit: two and two, not three and one.
