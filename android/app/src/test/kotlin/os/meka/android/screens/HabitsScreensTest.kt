@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import kotlin.random.Random
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
@@ -215,6 +216,16 @@ class HabitsScreensTest {
         ScreenShots.assertShows(compose, "history", "Best run 7 days")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("habits", "cover-dark-open"))
         ScreenShots.assertNoBrokenWords(compose, "history")
+        // Walk-through 2026-11-15 A19: the Do · Avoid and list chip rows each have a heading above them, and the done
+        // line reads on one line (Best run drops under it rather than squeezing it to "since you / added it").
+        val kindHead = compose.onNodeWithTag("habits-row-kind-head-$teeth").assertExists().fetchSemanticsNode().boundsInRoot
+        val listHead = compose.onNodeWithTag("habits-row-list-head-$teeth").assertExists().fetchSemanticsNode().boundsInRoot
+        val doChip = compose.onNodeWithTag("habits-row-do-$teeth").fetchSemanticsNode().boundsInRoot
+        val listChip = compose.onNodeWithTag("habits-row-list-$teeth-Morning").fetchSemanticsNode().boundsInRoot
+        assertTrue(kindHead.bottom <= doChip.top + 1f, "Do or avoid sits above its chips")
+        assertTrue(listHead.bottom <= listChip.top + 1f && listHead.top >= doChip.bottom - 1f, "List sits above its chips")
+        ScreenShots.assertShows(compose, "history", os.meka.core.domain.HabitBoardRules.KIND_HEAD)
+        ScreenShots.assertOneLine(compose, "history", "Done 7 of 7 days since you added it")
         compose.onNodeWithTag("habits-row-remind-on-$teeth").performClick(); settle()
         awaitCore("the reminder on") { core.goalsView.value.habits.first { it.id == teeth }.remindAt == 7 * 60 + 30 }
         // The core holds the time before the row has recomposed with it (ci run 43521258380): settle first.

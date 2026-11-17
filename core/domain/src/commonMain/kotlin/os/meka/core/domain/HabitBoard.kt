@@ -129,6 +129,14 @@ object HabitBoardRules {
     const val HISTORY_DAYS = 28
     const val HISTORY_WEEKS = 4
     const val NO_REMINDER = "No reminder"
+
+    /**
+     * Walk-through 2026-11-15 A19: the headings over a habit's chip rows (its unfolded settings and + Add), so the
+     * Do · Avoid and Morning · All day · Night time rows say what they change.
+     */
+    const val KIND_HEAD = "Do or avoid"
+    const val LIST_HEAD = "List"
+    const val REMINDER_HEAD = "Reminder"
     /** The weekday letters over the history's columns. */
     val HISTORY_HEADS = listOf("M", "T", "W", "T", "F", "S", "S")
     const val REMINDER_TEXT_DO = "Time for it · tap to open Habits and tick it"

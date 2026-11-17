@@ -212,7 +212,7 @@ struct HabitsSheet: View {
     private func settings(_ r: HabitBoardRow, lists: [String]) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HabitHistoryGrid(history: r.history, palette: palette)
-            Text("Reminder").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            Text(HabitBoardRules.shared.REMINDER_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             HStack(spacing: MekaSpace.xxs) {
                 HabitChip(label: "Off", lit: r.remindAt == nil, palette: palette) {
                     if r.remindAt != nil { model.setHabitReminder(r.id, nil); show(HabitBoardRules.shared.NO_REMINDER) }
@@ -231,10 +231,12 @@ struct HabitsSheet: View {
                     }
                 }
             }
+            Text(HabitBoardRules.shared.KIND_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             HStack(spacing: MekaSpace.xxs) {
                 HabitChip(label: "Do", lit: !r.avoid, palette: palette) { if r.avoid { model.setHabitAvoid(r.id, false) } }
                 HabitChip(label: "Avoid", lit: r.avoid, palette: palette) { if !r.avoid { model.setHabitAvoid(r.id, true) } }
             }
+            Text(HabitBoardRules.shared.LIST_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: MekaSpace.xxs) {
                     ForEach(lists, id: \.self) { l in
@@ -324,10 +326,17 @@ private struct HabitHistoryGrid: View {
     var body: some View {
         if !history.weeks.isEmpty {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                HStack {
-                    Text(history.doneLine).font(MekaType.caption).foregroundStyle(palette.textPrimary)
-                    Spacer()
-                    if let best = history.bestLine { Text(best).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                // A19: side by side while both fit whole, else Best run goes under the done line.
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        Text(history.doneLine).font(MekaType.caption).foregroundStyle(palette.textPrimary).fixedSize()
+                        Spacer()
+                        if let best = history.bestLine { Text(best).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize() }
+                    }
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(history.doneLine).font(MekaType.caption).foregroundStyle(palette.textPrimary)
+                        if let best = history.bestLine { Text(best).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                    }
                 }
                 HStack(spacing: MekaSpace.xxs) {
                     ForEach(Array(HabitBoardRules.shared.HISTORY_HEADS.enumerated()), id: \.offset) { _, d in
@@ -565,12 +574,13 @@ private struct HabitAddForm: View {
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Habit name")
                 .onSubmit { save() }
+            Text(HabitBoardRules.shared.KIND_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             HStack(spacing: MekaSpace.xxs) {
                 HabitChip(label: "Do", lit: !avoid, palette: palette) { avoid = false }
                 HabitChip(label: "Avoid", lit: avoid, palette: palette) { avoid = true }
             }
             if !newList {
-                Text("List").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(HabitBoardRules.shared.LIST_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: MekaSpace.xxs) {
                         ForEach(lists, id: \.self) { l in HabitChip(label: l, lit: l == into, palette: palette) { into = l } }
@@ -585,7 +595,7 @@ private struct HabitAddForm: View {
                     }
                 }
             }
-            Text("Reminder").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            Text(HabitBoardRules.shared.REMINDER_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             HStack(spacing: MekaSpace.xxs) {
                 HabitChip(label: "Off", lit: remind == nil, palette: palette) { remind = nil }
                 HabitChip(label: "Every day", lit: remind != nil, palette: palette) {

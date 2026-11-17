@@ -255,12 +255,13 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
             var problem by remember(a) { mutableStateOf<String?>(null) }
             if (a.newList) Field("Name the list, like Weekend or Gym days", value = own, onValue = { own = it }, description = "List name", keep = true) { }
             Field(if (avoid) "Like No biscuits" else "Like Drink water", value = name, onValue = { name = it }, description = "Habit name", keep = true) { }
+            Text(HabitBoardRules.KIND_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary)
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 MoneyChip("Do", on = !avoid, tag = "habits-add-do") { haptics.tick(); avoid = false }
                 MoneyChip("Avoid", on = avoid, tag = "habits-add-avoid") { haptics.tick(); avoid = true }
             }
             if (!a.newList) {
-                Text("List", style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(HabitBoardRules.LIST_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     b.lists.forEach { l -> MoneyChip(l, on = l == into, tag = "habits-add-list-$l") { haptics.tick(); into = l } }
                 }
@@ -269,7 +270,7 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 GoalRules.TARGET_CHOICES.forEach { c -> MoneyChip(c.label, on = c.perWeek == perWeek, tag = "habits-add-days-${c.perWeek}") { haptics.tick(); perWeek = c.perWeek } }
             }
-            Text("Reminder", style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(HabitBoardRules.REMINDER_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary)
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 MoneyChip("Off", on = remind == null, tag = "habits-add-remind-off") { haptics.tick(); remind = null }
                 MoneyChip("Every day", on = remind != null, tag = "habits-add-remind-on") {
@@ -327,7 +328,7 @@ private fun GroupCard(
             AnimatedVisibility(open == r.id, enter = unfold(), exit = fold()) {
                 Column(Modifier.padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     HistoryGrid(r.history, r.avoid, Modifier.testTag("habits-row-history-${r.id}"))
-                    Text("Reminder", style = MekaType.caption, color = Meka.colors.textSecondary)
+                    Text(HabitBoardRules.REMINDER_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         MoneyChip("Off", on = r.remindAt == null, tag = "habits-row-remind-off-${r.id}") { if (r.remindAt != null) onRemind(r, null) }
                         MoneyChip("Every day", on = r.remindAt != null, tag = "habits-row-remind-on-${r.id}") {
@@ -335,10 +336,14 @@ private fun GroupCard(
                         }
                     }
                     r.remindAt?.let { m -> TimeStepper("Remind me at", m, Modifier.testTag("habits-row-remind-time-${r.id}")) { onRemind(r, it) } }
+                    Text(HabitBoardRules.KIND_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary,
+                        modifier = Modifier.padding(top = MekaSpace.xxs).testTag("habits-row-kind-head-${r.id}"))
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         MoneyChip("Do", on = !r.avoid, tag = "habits-row-do-${r.id}") { onAvoid(r, false) }
                         MoneyChip("Avoid", on = r.avoid, tag = "habits-row-avoid-${r.id}") { onAvoid(r, true) }
                     }
+                    Text(HabitBoardRules.LIST_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary,
+                        modifier = Modifier.padding(top = MekaSpace.xxs).testTag("habits-row-list-head-${r.id}"))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         lists.forEach { l -> MoneyChip(l, on = l == r.list, tag = "habits-row-list-${r.id}-$l") { if (l != r.list) onList(r, l) } }
                     }
@@ -364,8 +369,10 @@ private fun HistoryGrid(h: HabitHistory, avoid: Boolean, modifier: Modifier) {
     val green = Meka.colors.success
     val red = Meka.colors.critical
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(h.doneLine, style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        // A19: the two lines share a row while both fit whole; else "Best run" drops under the done line, which then
+        // never wraps early beside it ("Done 7 of 7 days since you / added it").
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(h.doneLine, style = MekaType.caption, color = Meka.colors.textPrimary, modifier = Modifier.testTag("habits-history-done"))
             h.bestLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
