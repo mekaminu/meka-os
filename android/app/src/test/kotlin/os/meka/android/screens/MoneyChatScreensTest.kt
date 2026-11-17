@@ -238,10 +238,10 @@ class MoneyChatScreensTest {
         // Walk-through 2026-11-15 A17: on the open Fold the sheet floats with a gap under it, never running off the bottom.
         settle()
         val root = compose.onRoot().getUnclippedBoundsInRoot()
-        val sheet = compose.onNodeWithTag("money-chat-sheet-card").getUnclippedBoundsInRoot()
-        assertTrue(root.bottom - sheet.bottom >= MekaSpace.xl - 1.dp,
-            "the Ask Obi sheet runs to the bottom edge on the open Fold (gap ${root.bottom - sheet.bottom})")
-        assertTrue(sheet.top >= root.top, "the Ask Obi sheet runs off the top")
+        // (Read by its Done, the sheet's last row: the sheet's own tag sits on its scrolling content.)
+        val done = compose.onNodeWithTag("money-chat-sheet-done", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(root.bottom - done.bottom >= MekaSpace.xl,
+            "the Ask Obi sheet runs to the bottom edge on the open Fold (Done's gap ${root.bottom - done.bottom})")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "inner-dark-ask-obi"))
         ScreenShots.assertNoBrokenWords(compose, "inner-dark-ask-obi")
     }

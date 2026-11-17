@@ -231,7 +231,6 @@ internal fun <T : Any> MoneyDetailSheet(
                     .then(if (floats) Modifier.navigationBarsPadding().padding(bottom = MekaSpace.xl) else Modifier)
                     .clip(shape)
                     .background(Meka.colors.surface)
-                    .testTag("$tag-card")
                     .pointerInput(Unit) { detectTapGestures { } }
                     .heightIn(max = 680.dp)
                     .verticalScroll(rememberScrollState())
