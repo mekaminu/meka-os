@@ -203,12 +203,12 @@ class SettingsScreensTest {
         // An empty field shows one short example on one line (the quality gate's rule for hints).
         ScreenShots.assertEachOneLine(compose, name, AboutField.entries.map { it.hint } + AboutYouRules.CHILD_HINT)
         ScreenShots.assertEachOneLine(compose, name, AboutField.entries.map { it.label })
-        ScreenShots.assertNoLoneWords(compose, name, v.rows.map { it.line } + listOfNotNull(v.watchLine))
+        ScreenShots.assertNoLoneWords(compose, name, v.rows.mapNotNull { it.line } + listOfNotNull(v.watchLine))
         // A field's line sits with its field, clear of the next label (slice 25's shots: they ran together).
         assertFieldsApart(name, v.rows.map { it.label })
         // Walk-through 2026-11-02 A9: Watch for requests' On pill drawn 32 dp, every target whole.
         ScreenShots.assertWholeTargets(compose, name)
-        ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.label, it.line) } +
+        ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOfNotNull(it.label, it.line) } +
             v.children.flatMap { listOf(it.name, it.line) }, mustShow = false)
         when (fill) {
             Fill.EMPTY -> {
