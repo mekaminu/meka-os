@@ -131,6 +131,27 @@ class CalendarWeekTest {
     }
 
     @Test
+    fun theNowLinePassesBehindWhatIsRunningAndTheDotSaysWhat() {
+        // Walk-through 2026-11-15, A18 (g4a 13): the gold line ran through "Call with Sam"'s title. It is drawn under the
+        // blocks now, so the dot names what it passes behind.
+        val events = listOf(
+            ev("p", "Planning", mon, 10 * 60, 11 * 60),
+            ev("c", "Call with Sam", mon, 17 * 60, 17 * 60 + 45),
+        )
+        val walk = task("w", "Walk the dog").copy(scheduledAtMs = ms(mon, 17 * 60 + 10))
+        val b = board(mon, BoardCard(walk, walk.title, "17:10", null, false, false))
+        val d = CalendarWeekRules.build(mon, 5, events, b, null, ms(mon, 17 * 60 + 15), cal).days[0]
+        assertEquals(listOf("Call with Sam", "Walk the dog"), d.nowDuring)
+        assertEquals("Now, 17:15, during Call with Sam and Walk the dog", d.nowSpoken)
+        // Between things: just the time. An event that ends at now is over.
+        val quiet = CalendarWeekRules.build(mon, 5, events, null, null, ms(mon, 11 * 60), cal).days[0]
+        assertEquals(emptyList(), quiet.nowDuring)
+        assertEquals("Now, 11:00", quiet.nowSpoken)
+        // Not today: no line, nothing to say.
+        assertNull(CalendarWeekRules.build(mon, 5, events, null, null, ms(mon, 11 * 60), cal).days[1].nowSpoken)
+    }
+
+    @Test
     fun overlappingEventsShareTheColumnSideBySide() {
         val g = CalendarWeekRules.build(mon, 5, listOf(ev("a", "A", mon, 10 * 60, 11 * 60), ev("b", "B", mon, 10 * 60 + 30, 11 * 60 + 30)), null, null, ms(mon, 0), cal)
         assertEquals(listOf(0 to 2, 1 to 2), g.days[0].blocks.map { it.column to it.columns })

@@ -395,6 +395,17 @@ class CalendarScreensTest {
             }
         }
         ScreenShots.assertShows(compose, "week-inner-dark-many", "Clashes with work")
+        // The now line passes behind the running call instead of through its title (walk-through 2026-11-15, A18, g4a 13):
+        // it is laid down before the blocks, and the dot says what it passes behind.
+        val dot = androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_NOW_DOT_TAG)
+        if (!shows(dot and hasContentDescription("during Call with Priya", substring = true))) {
+            fail("week-inner-dark-many: the now dot doesn't say it passes behind the call")
+        }
+        val line = androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_NOW_LINE_TAG)
+        val call = block and hasContentDescription("Call with Priya, ", substring = true)
+        val order = compose.onAllNodes(line or call, useUnmergedTree = true).fetchSemanticsNodes()
+            .map { if (line.matches(it)) "line" else "call" }
+        if (order != listOf("line", "call")) fail("week-inner-dark-many: the now line isn't under the call ($order)")
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)

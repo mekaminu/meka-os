@@ -333,6 +333,13 @@ private struct WeekDayColumn: View {
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
+                // The gold now line sits under the events and tasks, so it never runs through a title (A18, week 4).
+                if let now = day.nowMinute?.int32Value {
+                    Rectangle().fill(palette.accent).frame(width: colW, height: 2)
+                        .offset(y: CGFloat(rules.minuteDp(minute: now, hourDp: hourPt)))
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 ForEach(day.blocks, id: \.key) { b in
                     let w = (colW - 6) / CGFloat(max(1, b.columns))
                     let held = heldKey == b.key
@@ -358,17 +365,14 @@ private struct WeekDayColumn: View {
                         .offset(x: 3 + w * CGFloat(t.column), y: CGFloat(t.topDp(hourDp: hourPt)) + 1)
                         .transition(.opacity)
                 }
-                // The gold now line, its dot breathing.
+                // The gold now line's dot, breathing, over everything; it names what the line passes behind.
                 if let now = day.nowMinute?.int32Value {
                     let y = CGFloat(rules.minuteDp(minute: now, hourDp: hourPt))
-                    Rectangle().fill(palette.accent).frame(width: colW, height: 2)
-                        .offset(y: y)
-                        .allowsHitTesting(false)
                     Circle().fill(palette.accent).frame(width: 10, height: 10)
                         .opacity(reduceMotion ? 1 : (dim ? 0.45 : 1))
                         .offset(x: -5, y: y - 4)
                         .allowsHitTesting(false)
-                        .accessibilityLabel("Now")
+                        .accessibilityLabel(day.nowSpoken ?? "Now")
                         .onAppear {
                             guard !reduceMotion else { return }
                             withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { dim = true }
@@ -498,7 +502,8 @@ private struct WeekTaskBlockView: View {
             .padding(.horizontal, 7) // rhythm: ok (the mockup's 7 px inset)
             Spacer(minLength: 0)
         }
-        .background(Rectangle().fill(teal.opacity(0.10)))
+        // Opaque (the grid's card under the teal tint) so the now line passes behind it like an event.
+        .background(Rectangle().fill(teal.opacity(0.10)).background(palette.surface))
         .clipped()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(block.spoken)

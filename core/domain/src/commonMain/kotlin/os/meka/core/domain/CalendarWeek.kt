@@ -123,6 +123,24 @@ data class WeekGridDay(
     /** Its open tasks with a time inside the grid's hours, on the grid (A18); the rest stay chips. */
     val taskBlocks: List<WeekTaskBlock> = emptyList(),
 ) {
+    /**
+     * What the now line passes behind (A18 part 5, week 4): the events and timed tasks running at [nowMinute], in the
+     * grid's order. The line is drawn under the blocks so it never crosses a title; the dot says this instead.
+     */
+    val nowDuring: List<String> get() {
+        val now = nowMinute ?: return emptyList()
+        return blocks.filter { now >= it.startMinute && now < it.endMinute }.map { it.title } +
+            taskBlocks.filter { now >= it.startMinute && now < it.endMinute }.map { it.title }
+    }
+
+    /** The now dot for screen readers: "Now, 17:15, during Call with Sam" (null when the line isn't in this column). */
+    val nowSpoken: String? get() {
+        val now = nowMinute ?: return null
+        val at = "Now, " + (now / 60).toString().padStart(2, '0') + ":" + (now % 60).toString().padStart(2, '0')
+        val during = nowDuring
+        return if (during.isEmpty()) at else at + ", during " + during.joinToString(" and ")
+    }
+
     /** How full the day is, for the folded week strip's load bar: its timed events, timed tasks and strip's chips. */
     val load: Int get() = blocks.size + taskBlocks.size + chips.size
 

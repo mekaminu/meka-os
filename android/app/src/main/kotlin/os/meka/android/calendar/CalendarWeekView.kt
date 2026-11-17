@@ -90,6 +90,8 @@ import os.meka.core.facade.MekaCore
 internal const val CALENDAR_WEEK_TAG = "calendar-week"
 internal const val WEEK_BLOCK_TAG = "week-block"
 internal const val WEEK_TASK_BLOCK_TAG = "week-task-block"
+internal const val WEEK_NOW_LINE_TAG = "week-now-line"
+internal const val WEEK_NOW_DOT_TAG = "week-now-dot"
 internal const val WEEK_CHIP_TAG = "week-chip"
 internal const val WEEK_GRID_TAG = "week-grid"
 
@@ -405,6 +407,11 @@ private fun DayColumn(
             val bottom = CalendarWeekRules.minuteDp(d.workEndMinute!!, hourDp)
             Box(Modifier.fillMaxWidth().offset(y = top.dp).height((bottom - top).dp).background(Meka.colors.textPrimary.copy(alpha = 0.035f)).clearAndSetSemantics { })
         }
+        // The gold now line sits under the events and tasks, so it never runs through a title (A18, week 4).
+        d.nowMinute?.let { now ->
+            val y = CalendarWeekRules.minuteDp(now, hourDp)
+            Box(Modifier.fillMaxWidth().offset(y = y.dp).height(2.dp).background(Meka.colors.accent).testTag(WEEK_NOW_LINE_TAG).clearAndSetSemantics { })
+        }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val colW = maxWidth
             val colDp = colW.value
@@ -459,15 +466,17 @@ private fun DayColumn(
                 }
             }
         }
-        // The gold now line, its dot breathing.
+        // The gold now line's dot, breathing, over everything; it names what the line passes behind.
         d.nowMinute?.let { now ->
             val y = CalendarWeekRules.minuteDp(now, hourDp)
-            Box(Modifier.fillMaxWidth().offset(y = y.dp).height(2.dp).background(Meka.colors.accent).clearAndSetSemantics { })
             val pulse = if (reduced) 1f else {
                 val t = rememberInfiniteTransition(label = "now-dot")
                 t.animateFloat(1f, 1.35f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "now-dot-scale").value
             }
-            Box(Modifier.offset(x = (-5).dp, y = y.dp - 4.dp).size(10.dp).scale(pulse).clip(CircleShape).background(Meka.colors.accent))
+            Box(
+                Modifier.offset(x = (-5).dp, y = y.dp - 4.dp).size(10.dp).scale(pulse).clip(CircleShape).background(Meka.colors.accent)
+                    .testTag(WEEK_NOW_DOT_TAG).clearAndSetSemantics { contentDescription = d.nowSpoken ?: "Now" },
+            )
         }
     }
 }
@@ -525,7 +534,8 @@ private fun Block(b: WeekBlock, hourDp: Float, hint: String?, widthDp: Float, mo
 private fun TaskBlock(t: WeekTaskBlock, hourDp: Float, widthDp: Float, modifier: Modifier, onTap: () -> Unit) {
     val teal = Meka.colors.calendar1
     Row(
-        modifier.background(teal.copy(alpha = 0.10f))
+        // Opaque (the grid's card under the teal tint) so the now line passes behind it like an event.
+        modifier.background(Meka.colors.surface).background(teal.copy(alpha = 0.10f))
             .testTag(WEEK_TASK_BLOCK_TAG)
             .clickable(role = Role.Button, onClickLabel = "Open the task", onClick = onTap)
             .clearAndSetSemantics {
