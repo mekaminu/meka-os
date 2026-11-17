@@ -146,6 +146,34 @@ class CalendarWeekTest {
     }
 
     @Test
+    fun aTaskWithATimeInsideTheGridSitsOnTheGridNotInTheStrip() {
+        // Walk-through 2026-11-15, A18: "12:00 Pay the window cleaner" sat in Thursday's all-day strip while the Agenda
+        // listed it at 12:00.
+        val thu = mon + 3
+        val events = listOf(ev("p", "Planning", thu, 12 * 60 + 15, 13 * 60))
+        val noon = task("t1", "Pay the window cleaner").copy(scheduledAtMs = ms(thu, 12 * 60))
+        val early = task("t2", "Feed the cat").copy(scheduledAtMs = ms(thu, 7 * 60))
+        val long = task("t3", "Sort the loft").copy(scheduledAtMs = ms(thu, 15 * 60), estimateMinutes = 90)
+        val loose = task("t4", "Call the garage")
+        val b = board(thu, BoardCard(noon, noon.title, "12:00", null, false, false), BoardCard(early, early.title, "07:00", null, false, false),
+            BoardCard(long, long.title, "15:00", null, false, false), BoardCard(loose, loose.title, null, null, false, false))
+        val d = CalendarWeekRules.build(mon, 5, events, b, null, ms(mon, 0), cal).days[3]
+        assertEquals(listOf("Pay the window cleaner", "Sort the loft"), d.taskBlocks.map { it.title })
+        assertEquals(listOf("12:00–12:30", "15:00–16:30"), d.taskBlocks.map { it.time })
+        assertEquals("t1", d.taskBlocks[0].taskId)
+        assertEquals("Task Pay the window cleaner, 12:00 to 12:30", d.taskBlocks[0].spoken)
+        // It shares the width with the event it overlaps.
+        assertEquals(2, d.taskBlocks[0].columns)
+        assertEquals(2, d.blocks.single().columns)
+        assertEquals(1, d.taskBlocks[1].columns)
+        // Before 08:00 and with no time it stays a chip.
+        assertEquals(listOf("07:00 Feed the cat", "Call the garage"), d.chips.map { it.text })
+        assertEquals("Thursday 12 November, 1 event, 4 tasks", d.spoken)
+        assertEquals(5, d.load)
+        assertEquals(d.taskBlocks[0].topDp(40f), 160f)
+    }
+
+    @Test
     fun fiveOrSevenDaysGoAWeekAtATimeAndFoldedThreeDaysAtATime() {
         val wed = mon + 2
         assertEquals(mon, CalendarWeekRules.start(wed, 5))

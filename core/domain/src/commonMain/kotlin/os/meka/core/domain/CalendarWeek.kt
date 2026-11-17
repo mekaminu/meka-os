@@ -10,7 +10,9 @@ import kotlin.math.roundToInt
  * over its time; one under [SHORT_MIN] minutes is a single line; the commute stays off the grid; work hours are a plain
  * faint band; an event that clashes with work ([WorkClashRules]) carries a small amber dot after its title and a thin
  * amber outline. The strip above the grid holds the day's all-day events and its open tasks as square chips (tasks
- * with a teal edge), and anything wholly before 08:00 or after 21:00 as a chip with its time. Today's date sits in the
+ * with a teal edge), and anything wholly before 08:00 or after 21:00 as a chip with its time. A task with a time inside
+ * the grid's hours sits on the grid at that time as a teal-edged block ([WeekTaskBlock]; walk-through 2026-11-15, A18:
+ * "12:00 Pay the window cleaner" sat in Thursday's all-day strip while the Agenda listed it at 12:00). Today's date sits in the
  * gold pill and the gold now line crosses today's column. "Booked this week 5.8 h" counts the week's timed events.
  *
  * The open Fold and the Mac show 5 days (Monday to Friday) or 7, a week at a time; the folded phone shows 3 days from the
@@ -77,6 +79,32 @@ data class WeekBlock(
         maxOf(CalendarWeekRules.MIN_BLOCK_DP, CalendarWeekRules.minuteDp(endMinute, hourDp) - topDp(hourDp) - 2f)
 }
 
+/**
+ * A timed task on the grid (A18, week 4): from its time for its estimate (Navilife's guess, or 30 minutes), teal-edged
+ * like its strip chip; a tap opens the task. It shares the width with events it overlaps ([column] of [columns]).
+ */
+data class WeekTaskBlock(
+    val key: String,
+    val taskId: String,
+    val title: String,
+    /** "12:00–12:30" */
+    val time: String,
+    val startMinute: Int,
+    val endMinute: Int,
+    val column: Int = 0,
+    val columns: Int = 1,
+) {
+    /** "Task Pay the window cleaner, 12:00 to 12:30" */
+    val spoken: String get() = "Task $title, " + time.replace("–", " to ")
+
+    fun oneLine(hourDp: Float): Boolean = heightDp(hourDp) < CalendarWeekRules.TWO_LINE_DP
+
+    fun topDp(hourDp: Float): Float = CalendarWeekRules.minuteDp(startMinute, hourDp)
+
+    fun heightDp(hourDp: Float): Float =
+        maxOf(CalendarWeekRules.MIN_BLOCK_DP, CalendarWeekRules.minuteDp(endMinute, hourDp) - topDp(hourDp) - 2f)
+}
+
 /** One day's column. */
 data class WeekGridDay(
     val epochDay: Long,
@@ -92,16 +120,18 @@ data class WeekGridDay(
     val workEndMinute: Int?,
     /** Minutes past midnight now, on today inside the grid's hours; null otherwise. */
     val nowMinute: Int?,
+    /** Its open tasks with a time inside the grid's hours, on the grid (A18); the rest stay chips. */
+    val taskBlocks: List<WeekTaskBlock> = emptyList(),
 ) {
-    /** How full the day is, for the folded week strip's load bar: its timed events plus its strip's chips. */
-    val load: Int get() = blocks.size + chips.size
+    /** How full the day is, for the folded week strip's load bar: its timed events, timed tasks and strip's chips. */
+    val load: Int get() = blocks.size + taskBlocks.size + chips.size
 
     /** The load bar's width under the day's number in the folded strip (0 on an empty day). */
     val loadBarDp: Float get() = CalendarWeekRules.loadBarDp(load)
 
     /** Screen readers: "Monday 9 November, today, 2 events, 1 task". */
     val spoken: String get() {
-        val tasks = chips.count { it.kind == WeekChipKind.TASK }
+        val tasks = chips.count { it.kind == WeekChipKind.TASK } + taskBlocks.size
         val events = blocks.size + chips.count { it.kind != WeekChipKind.TASK }
         return listOfNotNull(
             CivilDate.longLabel(epochDay),
@@ -308,11 +338,28 @@ object CalendarWeekRules {
             byKey[key] = e to (WorkClashRules.clash(e, workBlocks, calendar, commute = commute) != null)
             raw += DayBlock(key, e.title, start, end, DayBlockKind.EVENT, event = e, tone = tone)
         }
-        val blocks = BoardTimelineRules.columns(raw).map { b ->
+        // A task with a time inside the grid's hours goes on the grid, sharing the width with what it overlaps (A18).
+        val open = board?.day(d)?.openCards.orEmpty()
+        val gridded = mutableSetOf<String>()
+        for (c in open) {
+            val at = c.task.scheduledAtMs ?: continue
+            if (calendar.epochDayOf(at) != d) continue
+            val start = calendar.minuteOfDay(at)
+            if (start < FIRST_HOUR * 60 || start >= END_HOUR * 60) continue
+            val length = c.task.estimateMinutes?.takeIf { it > 0 } ?: c.suggestedMinutes?.takeIf { it > 0 } ?: BoardTimelineRules.DEFAULT_TASK_MIN
+            val end = minOf(dayMin, start + length)
+            gridded += c.id
+            raw += DayBlock("t:${c.id}", c.title, start, end, DayBlockKind.TASK, taskId = c.id)
+        }
+        val laid = BoardTimelineRules.columns(raw)
+        val blocks = laid.filter { it.kind == DayBlockKind.EVENT }.map { b ->
             val (e, clash) = byKey.getValue(b.key)
             WeekBlock(b.key, b.title, b.label, b.startMinute, b.endMinute, b.tone, e, clash, b.column, b.columns)
         }
-        val tasks = board?.day(d)?.openCards.orEmpty().map { c ->
+        val taskBlocks = laid.filter { it.kind == DayBlockKind.TASK }.map { b ->
+            WeekTaskBlock(b.key, b.taskId!!, b.title, b.label, b.startMinute, b.endMinute, b.column, b.columns)
+        }
+        val tasks = open.filter { it.id !in gridded }.map { c ->
             val text = listOfNotNull(c.time, c.title).joinToString(" ")
             WeekChip("t:${c.id}", text, WeekChipKind.TASK, 0, taskId = c.id, spoken = "Task ${c.title}" + (c.time?.let { ", at $it" } ?: ""))
         }
@@ -331,6 +378,7 @@ object CalendarWeekRules {
             workStartMinute = band?.first?.coerceAtLeast(FIRST_HOUR * 60),
             workEndMinute = band?.second?.coerceAtMost(END_HOUR * 60),
             nowMinute = now,
+            taskBlocks = taskBlocks,
         )
     }
 

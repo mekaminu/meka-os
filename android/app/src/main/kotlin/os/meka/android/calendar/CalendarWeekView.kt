@@ -84,10 +84,12 @@ import os.meka.core.domain.WeekChipKind
 import os.meka.core.domain.WeekGridDay
 import os.meka.core.domain.WeekDrop
 import os.meka.core.domain.WeekGrid
+import os.meka.core.domain.WeekTaskBlock
 import os.meka.core.facade.MekaCore
 
 internal const val CALENDAR_WEEK_TAG = "calendar-week"
 internal const val WEEK_BLOCK_TAG = "week-block"
+internal const val WEEK_TASK_BLOCK_TAG = "week-task-block"
 internal const val WEEK_CHIP_TAG = "week-chip"
 internal const val WEEK_GRID_TAG = "week-grid"
 
@@ -438,6 +440,17 @@ private fun DayColumn(
                     ) { onEvent(b.event) }
                 }
             }
+            // Timed tasks sit on the grid at their time, teal-edged like their chips; a tap opens the task (A18, week 4).
+            d.taskBlocks.forEach { t ->
+                val w = (colW - 6.dp) / t.columns
+                androidx.compose.runtime.key(t.key) {
+                    TaskBlock(
+                        t, hourDp, w.value,
+                        Modifier.offset(x = 3.dp + w * t.column, y = t.topDp(hourDp).dp + 1.dp).width(w).height(t.heightDp(hourDp).dp)
+                            .appear(rememberAppearance(0, play = !reduced)),
+                    ) { actions.onTask(t.taskId) }
+                }
+            }
         }
         // The gold now line, its dot breathing.
         d.nowMinute?.let { now ->
@@ -495,6 +508,36 @@ private fun Block(b: WeekBlock, hourDp: Float, hint: String?, widthDp: Float, mo
                     if (b.clash) ClashDot(amber)
                 }
                 Text(hint ?: b.time, style = TIME, color = if (hint != null) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/** A timed task on the grid: the strip chip's teal edge and tint, its title over its time. */
+@Composable
+private fun TaskBlock(t: WeekTaskBlock, hourDp: Float, widthDp: Float, modifier: Modifier, onTap: () -> Unit) {
+    val teal = Meka.colors.calendar1
+    Row(
+        modifier.background(teal.copy(alpha = 0.10f))
+            .testTag(WEEK_TASK_BLOCK_TAG)
+            .clickable(role = Role.Button, onClickLabel = "Open the task", onClick = onTap)
+            .clearAndSetSemantics {
+                contentDescription = t.spoken
+                role = Role.Button
+            },
+    ) {
+        Box(Modifier.width(CalendarWeekRules.EDGE_DP.dp).fillMaxHeight().background(teal))
+        val oneLine = t.oneLine(hourDp)
+        val pad = Modifier.padding(horizontal = MekaSpace.xxs + 2.dp, vertical = if (oneLine) 0.dp else MekaSpace.xxs) // rhythm: ok (the mockup's 7 px inset)
+        if (oneLine) {
+            Row(pad.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(t.title, style = TITLE, color = teal, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (CalendarWeekRules.oneLineShowsTime(widthDp)) Text(t.time.substringBefore("–"), style = TIME, color = Meka.colors.textTertiary, maxLines = 1)
+            }
+        } else {
+            Column(pad) {
+                Text(t.title, style = TITLE, color = teal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(t.time, style = TIME, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

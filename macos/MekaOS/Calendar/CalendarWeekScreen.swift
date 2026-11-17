@@ -255,7 +255,8 @@ private struct WeekGridPanel: View {
                     .frame(width: labelWidth, height: height, alignment: .top)
                     ForEach(Array(grid.days.enumerated()), id: \.element.epochDay) { i, d in
                         WeekDayColumn(day: d, hourPt: hourPt, palette: palette,
-                                      place: WeekHeldPlace(index: Int32(i), start: grid.startEpochDay, count: Int32(grid.days.count), today: today))
+                                      place: WeekHeldPlace(index: Int32(i), start: grid.startEpochDay, count: Int32(grid.days.count), today: today),
+                                      onTask: onTask)
                             .frame(maxWidth: .infinity)
                             .frame(height: height)
                     }
@@ -289,6 +290,8 @@ private struct WeekDayColumn: View {
     let hourPt: Float
     let palette: MekaPalette
     let place: WeekHeldPlace
+    /// A timed task's block opens its task (A18, week 4).
+    let onTask: (String) -> Void
     @State private var dim = false
     /// The block being dragged and how far (points).
     @State private var heldKey: String?
@@ -337,6 +340,15 @@ private struct WeekDayColumn: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: landing?.startMinute)
                         .gesture(moveGesture(b, colW), including: model.canMoveEvent(b.event) ? .all : .subviews)
                         .help(model.moveEventNote(b.event) ?? b.spoken + " · drag to move it")
+                        .transition(.opacity)
+                }
+                // Timed tasks sit on the grid at their time, teal-edged like their chips (walk-through A18, week 4).
+                ForEach(day.taskBlocks, id: \.key) { t in
+                    let w = (colW - 6) / CGFloat(max(1, t.columns))
+                    WeekTaskBlockView(block: t, hourPt: hourPt, palette: palette)
+                        .frame(width: max(0, w - 1), height: CGFloat(t.heightDp(hourDp: hourPt)))
+                        .modifier(OpensTask(id: t.taskId, onTask: onTask))
+                        .offset(x: 3 + w * CGFloat(t.column), y: CGFloat(t.topDp(hourDp: hourPt)) + 1)
                         .transition(.opacity)
                 }
                 // The gold now line, its dot breathing.
@@ -445,6 +457,48 @@ private struct WeekBlockView: View {
 
     private var title: some View {
         Text(block.title).font(MekaType.caption).foregroundStyle(palette.textPrimary).lineLimit(1).truncationMode(.tail)
+    }
+}
+
+/// A timed task on the grid: the strip chip's teal edge and tint, its title over its time.
+private struct WeekTaskBlockView: View {
+    let block: WeekTaskBlock
+    let hourPt: Float
+    let palette: MekaPalette
+
+    var body: some View {
+        let teal = palette.calendar1
+        HStack(spacing: 0) {
+            Rectangle().fill(teal).frame(width: CGFloat(CalendarWeekRules.shared.EDGE_DP))
+            Group {
+                if block.oneLine(hourDp: hourPt) {
+                    HStack(spacing: MekaSpace.xxs) {
+                        title(teal)
+                        Spacer(minLength: 0)
+                        Text(block.time.components(separatedBy: "–").first ?? block.time)
+                            .font(MekaType.micro).monospacedDigit().foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
+                    .frame(maxHeight: .infinity)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        title(teal)
+                        Text(block.time).font(MekaType.micro).monospacedDigit().foregroundStyle(palette.textTertiary).lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, MekaSpace.xxs)
+                }
+            }
+            .padding(.horizontal, 7) // rhythm: ok (the mockup's 7 px inset)
+            Spacer(minLength: 0)
+        }
+        .background(Rectangle().fill(teal.opacity(0.10)))
+        .clipped()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(block.spoken)
+    }
+
+    private func title(_ teal: Color) -> some View {
+        Text(block.title).font(MekaType.caption).foregroundStyle(teal).lineLimit(1).truncationMode(.tail)
     }
 }
 

@@ -373,6 +373,15 @@ class CalendarScreensTest {
         // 4 h of events on the five days shown, Saturday's football training's hour said apart (walk-through 2026-11-15, A10).
         ScreenShots.assertShows(compose, "week-inner-dark-many", "5 h")
         ScreenShots.assertShows(compose, "week-inner-dark-many", "· 1 h at the weekend")
+        // Thursday's 12:00 task sits on the grid at 12:00, not in the all-day strip (walk-through 2026-11-15, A18).
+        val onGrid = androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_TASK_BLOCK_TAG) and
+            hasContentDescription("Task Pay the window cleaner, 12:00 to ", substring = true)
+        until { shows(onGrid) }
+        if (!shows(onGrid)) fail("week-inner-dark-many: the 12:00 task isn't on the grid")
+        if (shows(androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_CHIP_TAG) and
+                hasContentDescription("Task Pay the window cleaner", substring = true))) {
+            fail("week-inner-dark-many: the 12:00 task is still in the all-day strip")
+        }
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)
