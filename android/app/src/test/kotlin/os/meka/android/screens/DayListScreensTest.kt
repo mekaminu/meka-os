@@ -130,6 +130,8 @@ class DayListScreensTest {
         assertTrue(shows("1h"), "$name: the day's total isn't shown")
         assertTrue(shows("Work") && shows("Family"), "$name: the areas aren't shown")
         assertTrue(shows("Paste a list") && shows("Fit times from"), "$name: Paste a list or Fit times is missing")
+        // A18: the rows run from 19:10, so Fit times starts there too (it read the wall clock and offered 19:30).
+        assertTrue(shows("Fit times from 19:10") && shows("19:10"), "$name: Fit times doesn't start where the list does")
         assertTrue(shows("Say them"), "$name: Say them is missing")
         assertTouchTargets(name)
 

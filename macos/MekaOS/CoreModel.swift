@@ -4298,12 +4298,6 @@ final class CoreModel {
         }
     }
 
-    /// Where Fit times starts for the list on screen (today from now, never before 9:00; another day 9:00).
-    func dayListFitFrom(isToday: Bool) -> Int32 {
-        let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
-        return DayListRules.shared.fitFrom(isToday: isToday, nowMinute: Int32((c.hour ?? 0) * 60 + (c.minute ?? 0)))
-    }
-
     /// Fit times: the open tasks get starts one after another; the undo bar says so and Undo puts every time back. The
     /// fit the core returns is sent back to it once, by the Undo.
     func fitDayList(from minute: Int32, day forDay: Int64? = nil) {

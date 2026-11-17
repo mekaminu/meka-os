@@ -122,7 +122,7 @@ struct DayListSheet: View {
                 DayListChip(label: DayListRules.shared.PASTE, palette: palette) { model.pasteIntoDayList() }
                     .keyboardShortcut("v", modifiers: [.command, .shift])
                 if !v.openIds.isEmpty {
-                    let from = model.dayListFitFrom(isToday: v.isToday)
+                    let from = v.fitFrom
                     DayListChip(label: DayListRules.shared.fitLabel(fromMinute: from), palette: palette) { model.fitDayList(from: from) }
                 }
             }

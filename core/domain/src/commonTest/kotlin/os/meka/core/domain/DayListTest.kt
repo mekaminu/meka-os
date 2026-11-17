@@ -134,6 +134,24 @@ class DayListTest {
         assertTrue(DayListRules.fitLabel(DayListRules.DAY_START).startsWith(DayListRules.FIT_SHORT))
     }
 
+    /** Walk-through 2026-11-15 A18: "Fit times from 19:30" over a list already running from 19:10. */
+    @Test
+    fun fitTimesStartsWhereTheListsTimesDo() {
+        val evening = DayListRules.view(day(listOf(card(task("a", "Email", 15)), card(task("b", "Call", 15))), today = true), 19 * 60 + 6, timesOn = true)
+        assertEquals(listOf("19:10", "19:25"), evening.rows.map { it.time })
+        assertEquals(19 * 60 + 10, evening.fitFrom)
+        assertEquals("Fit times from 19:10", DayListRules.fitLabel(evening.fitFrom))
+        // Fit writes exactly the times shown.
+        assertEquals(listOf("a" to 19 * 60 + 10, "b" to 19 * 60 + 25), DayListRules.fit(evening, evening.fitFrom))
+        // Before 9:00 the open tasks show from 9:00, where Fit puts them; his own 07:30 still holds.
+        val early = DayListRules.view(day(listOf(card(task("g", "Gym", 30), time = "07:30"), card(task("e", "Email", 30))), today = true), 7 * 60 + 12, timesOn = true)
+        assertEquals(DayListRules.DAY_START, early.fitFrom)
+        assertEquals(listOf("07:30", "09:00"), early.rows.map { it.time })
+        assertEquals("ends about 09:30", early.endsLine)
+        // Another day from 9:00, as before.
+        assertEquals(DayListRules.DAY_START, DayListRules.view(day(listOf(card(task("x", "X")))), 19 * 60, timesOn = true).fitFrom)
+    }
+
     @Test
     fun dragToReorderPlacesTheTaskAfterTheNearestUntimedRowAboveAndTimedRowsKeepTheirPlace() {
         // Board order: the 10:00 meeting first (placed), then A and B; Times on reads A 9:00, B 9:30, Meeting 10:00.

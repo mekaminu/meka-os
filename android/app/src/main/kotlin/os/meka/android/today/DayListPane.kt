@@ -355,8 +355,9 @@ fun DayListPane(
                         if (text.isBlank()) said = DayListRules.COPY_FIRST else add(text)
                     }
                     if (v != null && v.openIds.isNotEmpty()) {
-                        // Today fits from now (never before 9:00); another day from 9:00.
-                        val from = DayListRules.fitFrom(v.isToday, java.time.LocalTime.now().let { it.hour * 60 + it.minute })
+                        // Today fits from now (never before 9:00); another day from 9:00. Read from the list's own clock,
+                        // so the chip names the first time the rows show (A18).
+                        val from = v.fitFrom
                         DayChip(if (short) DayListRules.FIT_SHORT else DayListRules.fitLabel(from), spoken = DayListRules.fitLabel(from).takeIf { short }) {
                             haptics.tick()
                             scope.launch {

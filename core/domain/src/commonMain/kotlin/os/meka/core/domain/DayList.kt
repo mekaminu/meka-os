@@ -46,6 +46,12 @@ data class DayListView(
     val progress: Float,
     val rows: List<DayListRow>,
     val timesOn: Boolean,
+    /**
+     * Where Fit times starts for this list ([DayListRules.fitFrom]), read from the same clock as the rows' times, so the
+     * chip says the first time the list shows (walk-through 2026-11-15 A18: the rows ran from 19:10 while the chip,
+     * reading the wall clock on its own, offered "Fit times from 19:30").
+     */
+    val fitFrom: Int = DayListRules.DAY_START,
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
     val openIds: List<String> get() = rows.filter { !it.done }.map { it.id }
@@ -207,9 +213,12 @@ object DayListRules {
 
     fun view(day: BoardDay, nowMinute: Int, timesOn: Boolean): DayListView {
         val cards = day.cards
-        // Another day keeps every planned time (a 7:00 gym is real); today, a time already gone runs from now.
-        val from = startOf(day.isToday, nowMinute)
-        val (starts, end) = flow(cards, from, holdFrom = if (day.isToday) from else 0)
+        // Another day keeps every planned time (a 7:00 gym is real); today, a time already gone runs from now. The open
+        // tasks without a time run from where Fit times would put them (today from now, never before 9:00), so the
+        // times shown are the ones Fit writes; a time of his own from now on still holds (A18).
+        val now = startOf(day.isToday, nowMinute)
+        val from = fitFrom(day.isToday, nowMinute)
+        val (starts, end) = flow(cards, from, holdFrom = if (day.isToday) now else 0)
         val built = cards.map { c ->
             val set = if (c.done) null else minuteOf(c.time)
             val time = when {
@@ -242,6 +251,7 @@ object DayListRules {
             progress = if (total > 0) doneMin.toFloat() / total else 0f,
             rows = rows,
             timesOn = timesOn,
+            fitFrom = from,
         )
     }
 
