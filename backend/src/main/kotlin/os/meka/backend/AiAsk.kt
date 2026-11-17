@@ -52,7 +52,50 @@ class AskService(
      * null when it can't be read; null: never asked.
      */
     private val tfl: ((ids: List<String>) -> List<os.meka.core.domain.LineState>?)? = null,
+    /**
+     * Obi decides when to search (Meka 2026-11-17): the search Ask's model asked for itself ([LiveFacts.decide]),
+     * within the day's cap and never his own life; null: the model is never offered one.
+     */
+    private val decideLive: ((query: String) -> LiveFacts.Look)? = null,
 ) {
+    /**
+     * Obi decides when to search: whether [r]'s model is offered a search of its own. Only with no web block already,
+     * never for his own life or a look-up of his day ([os.meka.core.domain.LiveFactsRules.mayDecide]), and not for a
+     * train question its trains lines already answer.
+     */
+    private fun offersSearch(r: AskCodec.Request, web: LiveFacts.Found?, lines: List<String>?): Boolean =
+        decideLive != null && web == null && os.meka.core.domain.LiveFactsRules.mayDecide(r.question) &&
+            !(trainsAsked(r) && (lines != null || freshTrains(r).isNotEmpty()))
+
+    /** The search [outcome]'s answer asked for, when [r] was offered one; else null. */
+    private fun searchAsked(r: AskCodec.Request, lines: List<String>?, outcome: ModelOutcome): String? {
+        if (!offersSearch(r, null, lines)) return null
+        val text = (outcome as? ModelOutcome.Answered)?.text ?: return null
+        return AskCodec.modelSearch(AskCodec.normaliseModelAnswer(text))
+    }
+
+    /**
+     * Obi decides when to search: [first] (from what he knows) asked for [query], so it is searched once, within the
+     * day's cap, and the question asked again with the results. When it can't run, [first] stands with a line saying
+     * it's from what he knows (and why: the day's searches used, the search failing); a query about his own life is
+     * never searched, and [first] stands as it was.
+     */
+    private fun decided(p: LanguageModelProvider, r: AskCodec.Request, first: AskCodec.Response, query: String, lines: List<String>?): Pair<AskCodec.Response, ModelOutcome?> {
+        val look = decideLive ?: return first to null
+        if (first.state != AskCodec.Response.ANSWERED) return first to null
+        val dated = { a: AskCodec.Response -> a.copy(answer = os.meka.core.domain.LiveFactsRules.fromMemory(a.answer.orEmpty())) }
+        return when (val l = runCatching { look(query) }.getOrNull() ?: LiveFacts.Look.Failed) {
+            is LiveFacts.Look.Hit -> {
+                val again = p.complete(request(r, l.found, lines))
+                val answer = answerOf(r, l.found, again)
+                (if (answer.state == AskCodec.Response.ANSWERED) answer else dated(first)) to again
+            }
+            LiveFacts.Look.UsedUp -> withNote(dated(first), os.meka.core.domain.CantCheckRules.USED_UP) to null
+            LiveFacts.Look.Failed -> withNote(dated(first), os.meka.core.domain.CantCheckRules.FAILED) to null
+            LiveFacts.Look.NotSearched -> first to null
+        }
+    }
+
     /**
      * Obi answers live train status: for a question about trains that names a TfL line the device's fresh trains lines
      * don't cover (not on his route, or the route's status is old), TfL's status for it in Navilife's words, read now;
@@ -114,6 +157,10 @@ class AskService(
         }
     }
 
+    /** Whether a spoken piece is the start of an answer from what Obi knows ("From what I know, …"). */
+    private fun fromMemoryPiece(piece: String): Boolean =
+        piece.trimStart().lowercase().replace('’', '\'').startsWith("from what i know")
+
     private fun withNote(a: AskCodec.Response, note: String): AskCodec.Response =
         a.copy(answer = a.answer.orEmpty().trimEnd() + " " + note)
 
@@ -140,7 +187,9 @@ class AskService(
         // The companion, slice 5: notes of earlier chats came with the question; an open turn that read no web may
         // leave one short note of its own for the device to keep.
         val recalled = if (r.recall.isNotEmpty()) sir + "\n" + RECALL else sir
-        val system = if (isOpen && web == null) recalled + "\n" + NOTE else recalled
+        val noted = if (isOpen && web == null) recalled + "\n" + NOTE else recalled
+        // Obi decides when to search: offered once, only where it may be used (never his day, never with a web block).
+        val system = if (offersSearch(r, web, lines)) noted + "\n" + SEARCH else noted
         // Talking to Obi like a conversation, slice 3: the long instructions ([SYSTEM], and [VOICE] when spoken) are the
         // same on every call and the earlier turns the same as last time, so both are marked for the model's prompt
         // cache; only what's new (his name, today, the question) is read afresh.
@@ -174,6 +223,13 @@ class AskService(
         if (web != null) watch.web(clockMs())
         val outcome = p.complete(request(r, web, lines))
         val first = answerOf(r, web, outcome)
+        // Obi decides when to search: he asked for one, so it runs once and he answers again from the results.
+        val asked = if (web == null) searchAsked(r, lines, outcome) else null
+        if (asked != null) {
+            watch.web(clockMs())
+            val (answer, again) = decided(p, r, first, asked, lines)
+            return answer.also { report(timed, watch, again ?: outcome) }
+        }
         // The safety net: "I can't check that live" is only said when the search truly couldn't run.
         if (web == null && cantCheck(first)) {
             val (answer, again) = retried(p, r, first, lines)
@@ -235,6 +291,9 @@ class AskService(
         }
         // The safety net: a first sentence saying it can't check live isn't said ahead, since it may be asked again.
         val mayRetry = web == null && retryLive != null
+        // Obi decides when to search: an answer from what he knows that asks for a search opens "From what I know",
+        // and isn't said ahead, since it will usually be asked again with the results.
+        val mayDecide = offersSearch(r, web, lines)
         val outcome = p.stream(request(r, web, lines)) { delta ->
             if (delta.isNotEmpty()) watch.firstToken(clockMs())
             written.append(delta)
@@ -243,7 +302,7 @@ class AskService(
                 os.meka.core.domain.StreamedSpeechRules.earlyPiece(written.toString())?.let { piece ->
                     if (!sentenced) { sentenced = true; watch.firstSentence(clockMs()) }
                     val speak = say
-                    if (wantsPiece && speak != null && piece.length <= SpeechCodec.MAX_TEXT && !(mayRetry && os.meka.core.domain.CantCheckRules.says(piece))) {
+                    if (wantsPiece && speak != null && piece.length <= SpeechCodec.MAX_TEXT && !(mayRetry && os.meka.core.domain.CantCheckRules.says(piece)) && !(mayDecide && fromMemoryPiece(piece))) {
                         early = piece
                         saying = java.util.concurrent.CompletableFuture.supplyAsync {
                             val clip = runCatching { speak(piece, r.speakVoice) }.getOrNull()
@@ -265,7 +324,13 @@ class AskService(
         if (sent == null) saying?.cancel(false)
         val firstAnswer = answerOf(r, web, outcome, firstAlready = sent?.text?.takeIf { it == early })
         // The safety net, as in [ask]: only when nothing of the first answer has been said yet.
-        val (answer, again) = if (web == null && sent == null && cantCheck(firstAnswer)) retried(p, r, firstAnswer, lines) else firstAnswer to null
+        val asked = if (web == null && sent == null) searchAsked(r, lines, outcome) else null
+        if (asked != null) watch.web(clockMs())
+        val (answer, again) = when {
+            asked != null -> decided(p, r, firstAnswer, asked, lines)
+            web == null && sent == null && cantCheck(firstAnswer) -> retried(p, r, firstAnswer, lines)
+            else -> firstAnswer to null
+        }
         sendAhead(answer, sent?.text?.takeIf { it == early && answer.firstAudio == null }, ahead, ::sayAhead, next)
         // A clip made after the whole answer (no early piece) is ready when the answer goes.
         if (answer.firstAudio != null) synchronized(watch) { watch.clip(clockMs()) }
@@ -441,6 +506,13 @@ class AskService(
             Don't say your own name or introduce yourself unless he asks who you are; then you're Obi, Navilife's assistant.
         """.trimIndent()
 
+        /**
+         * Obi decides when to search (Meka 2026-11-17): the offer of one web search, made only when the server would
+         * run it ([offersSearch]); the server checks the query again and never searches his own life.
+         */
+        val SEARCH = """
+            You can ask Navilife to search the web once. When a good answer needs a fact about the world that may have changed since you learned it (who holds a job, title or record now, a price, a score or result, news, a release date, opening hours, what's on, anything recent or about now), add "search":"…" to your reply (in your JSON, or in the block after your words when you are speaking): a short web query for the world fact only, never anything about his own life, family, home or the <today> block. Still write your best answer from what you know, starting with "From what I know", and say it may be out of date. Navilife then searches and asks you again with a <web> block. Don't ask for a search for things that don't change (science, history, how things work, definitions, maths), for jokes, ideas, opinions, advice or a chat, or for anything about his own life.
+        """.trimIndent()
         /** The companion, slice 3: he chose to be called "sir" (Settings → Voice). */
         val CALL_SIR = """
             He has asked to be called "sir": address him as sir now and then (not in every reply) instead of by his name, and never both in one reply.

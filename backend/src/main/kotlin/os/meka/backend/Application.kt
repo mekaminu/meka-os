@@ -754,6 +754,8 @@ fun Application.mekaSync(
                 // Obi answers live status: the safety net's search, and TfL asked on demand for lines off his route.
                 retryLive = liveFacts?.let { lf -> { q: String -> lf.retry(q) } },
                 tfl = tflOnDemand.let { t -> { ids: List<String> -> t.statuses(ids) } },
+                // Obi decides when to search: the search Ask's model asks for itself, within the same daily cap.
+                decideLive = liveFacts?.let { lf -> { q: String -> lf.decide(q) } },
             )
             post("/v1/ai/ask") {
                 val body = call.boundedBody()

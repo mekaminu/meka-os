@@ -214,4 +214,29 @@ object LiveFactsRules {
 
     /** The card's line: "bbc.co.uk · Storm Amy: what we know". */
     fun line(s: AskSource): String = if (s.title == s.site) s.site else "${s.site} · ${s.title}"
+
+    /**
+     * Obi decides when to search (Meka 2026-11-17, "What if I ask random question?"): whether Ask's model may ask for
+     * a web search itself for [question], which [query]'s word list didn't send. Never for his own life: the words
+     * [query] refuses, or a question that opens like a look-up of his day ("what's on Thursday?") or names one of
+     * Navilife's own lists, so a look-up of his day never sees the offer and never costs a second call.
+     */
+    fun mayDecide(question: String): Boolean {
+        val q = question.lowercase().replace('’', '\'')
+        val words = q.replace(Regex("[^a-z0-9'ç ]"), " ").split(' ').filter { it.isNotEmpty() }
+        if (words.isEmpty() || personal(q, words)) return false
+        val flat = " " + words.joinToString(" ") + " "
+        if (OWN_DAY_STARTS.any { flat.startsWith(" $it") }) return false
+        return words.none { it in OWN }
+    }
+
+    /** Said with a current-sounding fact answered from what Obi knows, when no search ran. */
+    const val FROM_MEMORY = "That's from what I know, so it may be out of date."
+
+    /** [answer] with [FROM_MEMORY] after it, unless it already says it's from memory or may be out of date. */
+    fun fromMemory(answer: String): String {
+        val a = answer.lowercase().replace('’', '\'')
+        if ("out of date" in a || "from what i know" in a || "may have changed" in a || "might have changed" in a) return answer
+        return answer.trimEnd() + " " + FROM_MEMORY
+    }
 }

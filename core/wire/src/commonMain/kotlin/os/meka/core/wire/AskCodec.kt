@@ -447,6 +447,22 @@ object AskCodec {
     }
 
     /**
+     * Obi decides when to search: the `"search"` in a model's answer (a short web query it asked for, since the
+     * question needs a current fact about the world), or null when there is none or it isn't a plain string. The
+     * server still checks it ([os.meka.core.domain.LiveFactsRules.searchable]) before anything is searched.
+     */
+    fun modelSearch(text: String): String? {
+        val start = text.indexOf('{')
+        val end = text.lastIndexOf('}')
+        if (start < 0 || end <= start) return null
+        val o = runCatching { json.parseToJsonElement(text.substring(start, end + 1)).jsonObject }.getOrNull() ?: return null
+        return o.optStr("search")?.replace(Regex("""\s+"""), " ")?.trim()?.takeIf { it.length >= 3 }?.take(MAX_SEARCH)
+    }
+
+    /** The longest search a model may ask for (the same as the web's own limit). */
+    const val MAX_SEARCH = 120
+
+    /**
      * The assistant becomes Obi, slice 3: the `"show"` in a model's answer (the detail for the screen, never said), as
      * lines: a string is split at its line breaks, an array's strings kept; anything else is no lines.
      */

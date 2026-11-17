@@ -26,6 +26,8 @@ class LiveFacts(
 
     private var day = -1L
     private var used = 0
+    /** Obi decides when to search: how many of today's searches Ask's model asked for itself (metered for the report). */
+    private var decided = 0
     @Volatile private var lastFailure: String? = null
 
     /** The results for [question], or null when it isn't searched (not live, no key, the day's searches used, failed, slow). */
@@ -51,13 +53,25 @@ class LiveFacts(
      */
     fun retry(question: String): Look = attempt(LiveFactsRules.searchable(question) ?: return Look.NotSearched)
 
+    /**
+     * Obi decides when to search: a search Ask's model asked for itself (its "search" field), checked by
+     * [LiveFactsRules.searchable] (never his own life); the same key, cap and wait as every other search, counted on
+     * its own in [report] so the extra calls can be watched.
+     */
+    fun decide(query: String): Look {
+        val q = LiveFactsRules.searchable(query) ?: return Look.NotSearched
+        val look = attempt(q)
+        if (look !is Look.NotSearched && look !is Look.UsedUp) synchronized(this) { decided++ }
+        return look
+    }
+
     private fun run(q: String): Found? = (attempt(q) as? Look.Hit)?.found
 
     private fun attempt(q: String): Look {
         if (!search.configured()) return Look.NotSearched
         synchronized(this) {
             val d = Math.floorDiv(now(), 86_400_000L)
-            if (d != day) { day = d; used = 0 }
+            if (d != day) { day = d; used = 0; decided = 0 }
             if (used >= LiveFactsRules.MAX_PER_DAY) return Look.UsedUp
             used++
         }
@@ -77,7 +91,8 @@ class LiveFacts(
     /** The deploy report's line: today's searches against the cap and the last failure (never a query). */
     fun report(): String = synchronized(this) {
         val today = if (day == Math.floorDiv(now(), 86_400_000L)) used else 0
-        "live answers: $today of ${LiveFactsRules.MAX_PER_DAY} searches today" + (lastFailure?.let { " · last failed: $it" } ?: "")
+        val chosen = if (day == Math.floorDiv(now(), 86_400_000L)) decided else 0
+        "live answers: $today of ${LiveFactsRules.MAX_PER_DAY} searches today ($chosen chosen by Obi)" + (lastFailure?.let { " · last failed: $it" } ?: "")
     }
 
     companion object {

@@ -128,4 +128,18 @@ class CompanionTest {
         assertTrue("sir" in CompanionRules.callLine(true))
         assertFalse("sir" in CompanionRules.callLine(false))
     }
+
+    @Test
+    fun obiMayDecideToSearchOnlyForTheWorld() {
+        assertTrue(LiveFactsRules.mayDecide("who's the Arsenal manager?"))
+        assertTrue(LiveFactsRules.mayDecide("how much is a PS5?"))
+        assertFalse(LiveFactsRules.mayDecide("what's on Thursday?"))
+        assertFalse(LiveFactsRules.mayDecide("when is my next appointment?"))
+        assertFalse(LiveFactsRules.mayDecide("add eggs to the shopping list"))
+        assertFalse(LiveFactsRules.mayDecide("what are the boys doing after school?"))
+        assertFalse(LiveFactsRules.mayDecide("   "))
+        assertEquals("It's Alex. " + LiveFactsRules.FROM_MEMORY, LiveFactsRules.fromMemory("It's Alex."))
+        assertEquals("From what I know, Alex.", LiveFactsRules.fromMemory("From what I know, Alex."))
+        assertEquals("Alex, though that may be out of date.", LiveFactsRules.fromMemory("Alex, though that may be out of date."))
+    }
 }
