@@ -159,7 +159,7 @@ object StudyAutoRules {
      * The plan card's line for one course: "5 lessons suggested for your next 3 sessions · Thu, Sat, Mon · from your
      * calendar"; null when nothing is suggested.
      */
-    fun line(courseId: String, lessons: List<StudyLesson>, fromCalendar: Boolean): String? {
+    fun line(courseId: String, lessons: List<StudyLesson>, fromCalendar: Boolean, allSessions: List<StudySession> = emptyList()): String? {
         val mine = lessons.filter { it.courseId == courseId && it.suggested && !it.done }
         if (mine.isEmpty()) return null
         val days = mine.mapNotNull { it.plannedDay }.distinct().sorted()
@@ -171,7 +171,41 @@ object StudyAutoRules {
         val n = mine.size
         val what = if (n == 1) "1 lesson suggested" else "$n lessons suggested"
         val sessions = if (days.size == 1) "your next session" else "your next ${days.size} sessions"
-        return "$what for $sessions · ${names.joinToString(", ")} · ${if (fromCalendar) FROM_CALENDAR else FROM_SLOTS}"
+        val line = "$what for $sessions · ${names.joinToString(", ")} · ${if (fromCalendar) FROM_CALENDAR else FROM_SLOTS}"
+        return over(courseId, lessons, fromCalendar, allSessions)?.let { "$line. $it" } ?: line
+    }
+
+    /**
+     * Walk-through 2026-11-15 A19 (Study's sums): "about 4½ h left" in 5 lessons beside "5 lessons suggested for your
+     * next 5 sessions" at 45 min didn't add up (five 45 min sessions are 3¾ h): a lesson longer than a whole session
+     * still takes that session on its own ([suggest]) and runs over. The line says which, and what fits them all:
+     * "Pivot tables is longer than a 45 min session: 1 h sessions fit every lesson.", "Pivot tables and 2 more are
+     * longer than a 45 min session, so they run over." From his calendar: "… longer than its session in your calendar,
+     * so it runs over." Null when every suggested lesson fits its day's session (or [sessions] are unknown).
+     */
+    fun over(courseId: String, lessons: List<StudyLesson>, fromCalendar: Boolean, sessions: List<StudySession>): String? {
+        val mine = sessions.filter { it.courseId == courseId }
+        if (mine.isEmpty()) return null
+        val room = mine.groupBy { it.day }.mapValues { (_, s) -> s.sumOf { it.mins } }
+        val course = lessons.filter { it.courseId == courseId }
+        val known = course.mapNotNull { it.mins }
+        val avg = if (known.isEmpty()) null else (known.sum() + known.size / 2) / known.size
+        val sessionMins = mine.first().mins
+        fun len(l: StudyLesson) = l.mins ?: avg ?: sessionMins
+        val long = StudyRules.courseOrder(course).flatten()
+            .filter { l -> l.suggested && !l.done && l.plannedDay?.let { room[it] }?.let { len(l) > it } == true }
+        if (long.isEmpty()) return null
+        val who = when (long.size) {
+            1 -> "${long[0].title} is"
+            2 -> "${long[0].title} and ${long[1].title} are"
+            else -> "${long[0].title} and ${long.size - 1} more are"
+        }
+        val runs = if (long.size == 1) "it runs over" else "they run over"
+        if (fromCalendar) return "$who longer than ${if (long.size == 1) "its session" else "their sessions"} in your calendar, so $runs."
+        val longest = course.filter { !it.done }.maxOf { len(it) }
+        val fitsAll = StudyRules.SESSION_CHOICES.firstOrNull { it > sessionMins && it >= longest }
+        val head = "$who longer than a ${StudyRules.minsLabel(sessionMins)} session"
+        return if (fitsAll != null) "$head: ${StudyRules.minsLabel(fitsAll)} sessions fit every lesson." else "$head, so $runs."
     }
 }
 

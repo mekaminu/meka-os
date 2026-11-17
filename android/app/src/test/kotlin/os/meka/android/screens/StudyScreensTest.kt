@@ -151,6 +151,13 @@ class StudyScreensTest {
         // Walk-through 2026-11-02 A3: the week's time says it's a week's, and the next lesson names its module in full.
         ScreenShots.assertShows(compose, name, "a week · 5 lessons left")
         ScreenShots.assertShows(compose, name, "Next: Pivot tables · Module 2: Core skills")
+        // Walk-through 2026-11-15 A19 (Study's sums): Pivot tables (1 h) takes a 45 min session on its own, so the
+        // suggestion line says it runs past it and what fits every lesson, rather than leaving 4½ h beside 3¾ h.
+        core.studyView.value.course(id)!!.suggested?.let { line ->
+            kotlin.test.assertTrue("longer than a 45 min session: 1 h sessions fit every lesson." in line, "$name: $line")
+            ScreenShots.assertShows(compose, name, "1 h sessions fit every lesson.")
+            ScreenShots.assertNoLoneWords(compose, name, listOf(line))
+        }
         assertWraps(core, id, name)
     }
 

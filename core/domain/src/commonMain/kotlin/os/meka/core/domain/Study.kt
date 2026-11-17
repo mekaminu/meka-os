@@ -532,6 +532,8 @@ object StudyRules {
         course: StudyCourse, all: List<StudyLesson>, today: Long,
         deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L, fromCalendar: Boolean = false,
         week: List<StudyWeekRow> = emptyList(),
+        /** Walk-through 2026-11-15 A19: the study sessions, so the suggestion line can say which lessons run over. */
+        sessions: List<StudySession> = emptyList(),
     ): StudyCourseView {
         val lessons = all.filter { it.courseId == course.id }
         val done = lessons.count { it.done }
@@ -576,7 +578,7 @@ object StudyRules {
             spoken = "${course.title}, $pct percent, $line" + (next?.let { ", $it" } ?: ""),
             plan = plan(input), planInput = input,
             deleted = deletedRows(course.id, deleted, nowMs),
-            suggested = StudyAutoRules.line(course.id, lessons, fromCalendar),
+            suggested = StudyAutoRules.line(course.id, lessons, fromCalendar, sessions),
             week = week,
             nudge = course.nudge,
             checkin = course.checkin,
@@ -586,8 +588,8 @@ object StudyRules {
     fun view(
         courses: List<StudyCourse>, lessons: List<StudyLesson>, today: Long,
         deleted: List<StudyDeletedLesson> = emptyList(), nowMs: Long = 0L, fromCalendar: Boolean = false,
-        week: Map<String, List<StudyWeekRow>> = emptyMap(),
-    ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs, fromCalendar, week[it.id].orEmpty()) })
+        week: Map<String, List<StudyWeekRow>> = emptyMap(), sessions: List<StudySession> = emptyList(),
+    ): StudyView = StudyView(courses.map { view(it, lessons, today, deleted, nowMs, fromCalendar, week[it.id].orEmpty(), sessions) })
 
     // ---- Plan a lesson for a day (Meka 2026-10-26 23:21) ----
 

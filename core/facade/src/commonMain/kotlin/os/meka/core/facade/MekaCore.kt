@@ -15031,7 +15031,7 @@ class MekaCore(
                     { ms -> cal.epochDayOf(ms) }, { ms -> os.meka.core.domain.LocalClock.formatMinute(cal.minuteOfDay(ms)) },
                 )
             }
-            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay, studyDeleted, nowMs(), studyFromCalendar, week)
+            os.meka.core.domain.StudyRules.view(studyCourses, studyLessons, todayDay, studyDeleted, nowMs(), studyFromCalendar, week, studySessionsList)
         } }
         val docVault = vaultName()
         _documents.value = timed("Documents") { viewMemo.keep("Documents", listOf(docItems, todayDay, docVault, timeZone())) {

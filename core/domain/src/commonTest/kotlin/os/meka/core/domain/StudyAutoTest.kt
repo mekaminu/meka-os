@@ -98,6 +98,32 @@ class StudyAutoTest {
     }
 
     @Test
+    fun theLineSaysWhichLessonsRunPastTheirSession() {
+        // Walk-through 2026-11-15 A19: five 45 min sessions are 3¾ h, but the five lessons left are 4¼ h; the 1 h ones
+        // each take a session on their own and run over, and the line says so.
+        val c = course.copy(sessionMins = 45, slots = setOf("train", "sat"))
+        val left = listOf(lesson("Pivot", 60, 1), lesson("Charts", 40, 2), lesson("Lookups", 50, 3), lesson("Project", 60, 4), lesson("Present", 45, 5))
+        val sessions = (0L..4L).map { StudySession(mon + it, 45, "c1") }
+        val out = StudyAutoRules.suggest(listOf(c), left, sessions, mon, dayOf)
+        assertEquals(
+            "5 lessons suggested for your next 5 sessions · Mon, Tue, Wed, … · from the times you picked. " +
+                "Lesson Pivot and 2 more are longer than a 45 min session: 1 h sessions fit every lesson.",
+            StudyRules.view(c, out, mon, sessions = sessions).suggested,
+        )
+        // One over, two over, from the calendar, and none that fits all the lessons.
+        val one = StudyAutoRules.suggest(listOf(c), left.take(2), sessions, mon, dayOf)
+        assertEquals("Lesson Pivot is longer than a 45 min session: 1 h sessions fit every lesson.", StudyAutoRules.over("c1", one, false, sessions))
+        val two = StudyAutoRules.suggest(listOf(c), left.take(3), sessions, mon, dayOf)
+        assertEquals("Lesson Pivot and Lesson Lookups are longer than their sessions in your calendar, so they run over.", StudyAutoRules.over("c1", two, true, sessions))
+        val long = StudyAutoRules.suggest(listOf(c), listOf(lesson("Big", 90, 1)), sessions, mon, dayOf)
+        assertEquals("Lesson Big is longer than a 45 min session, so it runs over.", StudyAutoRules.over("c1", long, false, sessions))
+        // Every lesson fits its session: the line is as before, and so it is when the sessions aren't given.
+        val fits = StudyAutoRules.suggest(listOf(c), listOf(lesson("Charts", 40, 1), lesson("Present", 45, 2)), sessions, mon, dayOf)
+        assertNull(StudyAutoRules.over("c1", fits, false, sessions))
+        assertEquals("5 lessons suggested for your next 5 sessions · Mon, Tue, Wed, … · from the times you picked", StudyAutoRules.line("c1", out, false))
+    }
+
+    @Test
     fun theCourseShowsSuggestionsQuietlyWithTheirLine() {
         val lessons = StudyAutoRules.suggest(
             listOf(course), listOf(lesson("a", 30, 1), lesson("b", 30, 2), lesson("c", 30, 3), lesson("d", 30, 4)),
