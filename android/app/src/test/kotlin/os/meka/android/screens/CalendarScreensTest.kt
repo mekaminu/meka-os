@@ -18,6 +18,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -32,6 +35,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.Shadows
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.calendar.AGENDA_COLUMN_MAX
+import os.meka.android.calendar.AGENDA_COLUMN_TAG
 import os.meka.android.calendar.AGENDA_LIST_TAG
 import os.meka.android.calendar.CalendarRoute
 import os.meka.android.designsystem.Meka
@@ -166,6 +171,13 @@ class CalendarScreensTest {
         ScreenShots.assertNoLoneWords(compose, name, titles(fill))
         ScreenShots.assertShows(compose, name, "Calendar")
         ScreenShots.assertShows(compose, name, "Today")
+        // Walk-through 2026-11-15 A17 (g4a 18): the open Fold's Agenda was the cover's layout stretched; it is never
+        // wider than Goals', Study's and Habits' column and sits centred (folded it is the screen's width).
+        val column = compose.onNodeWithTag(AGENDA_COLUMN_TAG).getUnclippedBoundsInRoot()
+        val screen = compose.onNodeWithTag("screen").getUnclippedBoundsInRoot()
+        if (column.right - column.left > AGENDA_COLUMN_MAX + 1.dp) fail("$name: the Agenda runs ${column.right - column.left} wide")
+        if (abs(((column.left - screen.left) - (screen.right - column.right)).value) > 2f) fail("$name: the Agenda isn't centred")
+        if (name.startsWith("inner") && screen.right - screen.left <= AGENDA_COLUMN_MAX) fail("$name: the inner shot isn't wider than the column")
         val today = core.calendarView.value.sections.first()
         when (fill) {
             // Nothing on: today says so in words, never a bare heading.

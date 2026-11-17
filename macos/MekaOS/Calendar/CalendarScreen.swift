@@ -28,6 +28,8 @@ struct CalendarScreen: View {
     @State private var clicked: Int64?
     /// The day pill an event is held over (completeness slice 7).
     @State private var dropDay: Int64?
+    /// The Agenda's column in a wide window (the Fold's AGENDA_COLUMN_MAX).
+    static let agendaColumnMax: CGFloat = 600
 
     var body: some View {
         Group {
@@ -123,6 +125,10 @@ struct CalendarScreen: View {
         }
         .padding(.horizontal, MekaSpace.gutterWide)
         .padding(.top, MekaSpace.xl)
+        // Walk-through 2026-11-15 A17, as the Fold: in a wide window the Agenda sits in a centred column (Goals', Study's
+        // and Habits' 600) instead of the day names far from their Work lines; the Board keeps the whole width.
+        .frame(maxWidth: model.calendarShowsBoard ? .infinity : Self.agendaColumnMax)
+        .frame(maxWidth: .infinity, alignment: .top)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.calendarShowsBoard)
         .onChange(of: topSection) { _, _ in
             // Scrolling the agenda keeps the strip on the week in view.

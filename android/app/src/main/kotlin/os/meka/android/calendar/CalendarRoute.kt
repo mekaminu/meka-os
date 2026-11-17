@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -304,8 +305,7 @@ private fun Agenda(
     // Agenda · Board switch above it left a big gap); Agenda view and New event are in its ⋯.
     val board = mode == os.meka.core.domain.CalendarMode.BOARD
     val onBoard: (Boolean) -> Unit = { b -> onMode(if (b) os.meka.core.domain.CalendarMode.BOARD else os.meka.core.domain.CalendarMode.AGENDA) }
-    Column(Modifier.fillMaxSize().background(Meka.colors.background)) {
-        if (board) {
+    if (board) Column(Modifier.fillMaxSize().background(Meka.colors.background)) {
             // The folded Week board mockup (approved 2026-10-27): no second "Calendar" header; the Board's own row is the
             // only one, and Agenda view and New event are in its ⋯ menu.
             EditLines(add.lines, Modifier.padding(horizontal = MekaSpace.gutter).padding(top = MekaSpace.xs))
@@ -327,8 +327,11 @@ private fun Agenda(
                     onPlanWeek = onPlanWeek,
                 )
             }
-            return@Column
-        }
+    } else Box(Modifier.fillMaxSize().background(Meka.colors.background), contentAlignment = Alignment.TopCenter) {
+    // Walk-through 2026-11-15 A17 (g4a 18): on the open Fold the Agenda was the cover's layout stretched, the Work and
+    // commute lines ~1,000 px right of the day names and the lit day pill ~250 px wide. It now sits in the same centred
+    // 600 dp column as Goals, Study and Habits; folded it fills the width as before.
+    Column(Modifier.widthIn(max = AGENDA_COLUMN_MAX).fillMaxHeight().testTag(AGENDA_COLUMN_TAG)) {
         Column(Modifier.padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xl)) {
             Row(Modifier.fillMaxWidth().appear(rememberAppearance(0)), verticalAlignment = Alignment.CenterVertically) {
                 Text("Calendar", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
@@ -357,7 +360,14 @@ private fun Agenda(
         Box(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).height(1.dp).background(Meka.colors.hairline))
         AgendaList(v, entries, list, handlers, showAgain, onEvent) { id -> allDayOpen = allDayOpen + id }
     }
+    }
 }
+
+/** The Agenda's column (its width is checked on the open Fold). */
+internal const val AGENDA_COLUMN_TAG = "agenda-column"
+
+/** The Agenda's column on a wide screen: the same 600 dp as Goals, Study and Habits. */
+internal val AGENDA_COLUMN_MAX = 600.dp
 
 /**
  * Springs the agenda to the item at [index] (the expand spring): from close by it glides the whole way; from far away
