@@ -42,6 +42,7 @@ import os.meka.android.today.TODAY_RIGHT_LIST_TAG
 import os.meka.android.today.SPLIT_FAST_TAG
 import os.meka.android.designsystem.MotionMath
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
 import os.meka.core.domain.TodayBesideRules
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -401,8 +402,14 @@ class TodayScreensTest {
         if (name.startsWith("cover")) {
             compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(label)
             // A15 slice 49: the evening card's step lines may take two lines, so the last event can sit just below.
-            compose.onNodeWithTag(TODAY_LIST_TAG).performScrollToNode(ScreenShots.plainText(SCHEDULE_TITLES[3], substring = true))
             settle()
+            // (performScrollToNode to the event hung this test on CI run 44027724729; small steps as the many shot does.)
+            repeat(8) {
+                if (compose.onAllNodes(ScreenShots.plainText(SCHEDULE_TITLES[3], substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+                        .any { it.boundsInRoot.bottom <= compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom }) return@repeat
+                compose.onNodeWithTag(TODAY_LIST_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 120f) }
+                settle()
+            }
         }
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
