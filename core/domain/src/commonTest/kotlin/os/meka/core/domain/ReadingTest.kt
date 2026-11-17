@@ -96,7 +96,8 @@ class ReadingTest {
         assertEquals("Page 120 of 320 · 37%", v.onTheGo[0].progress)
         assertEquals(0.375f, v.onTheGo[0].fraction)
         assertEquals("1 on the go · 1 up next", v.summary)
-        assertTrue(v.month!!.contains("1 still going · next up: The Rest Is History"))
+        // A16: the summary's counts aren't said again under it; nothing finished yet, so no month line.
+        assertNull(v.month)
         assertEquals(DailyLine("Atomic Habits · 37%", false), ReadingRules.dailyLine(rFold.items()))
         assertTrue(rFold.progress(id, "huge").refused)
 
@@ -104,7 +105,7 @@ class ReadingTest {
         v = rFold.view(cal)
         assertEquals(listOf("Atomic Habits"), v.finished.map { it.title })
         assertTrue(v.summary.contains("finished 1 this year"))
-        assertTrue(v.month!!.contains("finished 1"))
+        assertTrue(v.month!!.matches(Regex("Finished 1 in [A-Z][a-z]+")), v.month)
     }
 
     @Test
@@ -154,7 +155,7 @@ class ReadingTest {
         val v = r.view(cal)
         assertEquals(listOf("Dune", "Atomic Habits", "The Rest Is History"), v.upNext.map { it.title })
         r.progress(r.items().first { it.title == "The Rest Is History" }.id, "episode 2")
-        assertEquals("next up: Dune", r.view(cal).month!!.substringAfterLast(" · "))
-        assertTrue(r.view(cal).month!!.contains("1 still going"))
+        assertEquals("Dune", r.view(cal).upNext.first().title)
+        assertNull(r.view(cal).month, "progress alone isn't said twice under the summary")
     }
 }

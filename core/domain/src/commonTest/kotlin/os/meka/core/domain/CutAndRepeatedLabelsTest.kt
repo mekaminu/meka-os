@@ -41,7 +41,7 @@ class CutAndRepeatedLabelsTest {
         assertTrue(MailSendAllRules.barShows(2))
         assertFalse(MailSendAllRules.barShows(1))
         val off = assertNotNull(AiFeatureRules.line(AiFeature.DRAFTS, AiStatusView("off", lit = false, canAsk = false, mode = AiMode.OFF)))
-        assertTrue(off.contains("nothing is drafted"), off)
+        assertTrue(off.contains("Nothing is drafted"), off)
     }
 
     @Test

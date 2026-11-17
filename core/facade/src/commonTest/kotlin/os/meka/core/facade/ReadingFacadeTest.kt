@@ -10,6 +10,7 @@ import os.meka.core.sync.SyncService
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.assertIs
 import os.meka.core.domain.AskOutcome
@@ -43,7 +44,7 @@ class ReadingFacadeTest {
         mac.syncNow(); fold.syncNow()
         val v = fold.readingView.value
         assertEquals("Page 160 of 320 · 50%", v.onTheGo.single().progress)
-        assertEquals("October · 1 still going", v.month)
+        assertNull(v.month, "the summary already says 1 on the go")
         assertEquals("Atomic Habits · 50%", fold.dailyLines.value.of(DailyRow.READING)?.text)
 
         val finished = fold.finishReading(id)

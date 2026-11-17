@@ -126,7 +126,7 @@ data class ReadingView(
     val putDown: List<ReadingRow>,
     /** "2 on the go · 3 up next · finished 4 this year", or how to start. */
     val summary: String,
-    /** "October · finished 1 · 2 still going · next up: Atomic Habits"; null when nothing moved this month. */
+    /** "Finished 1 in October"; null when nothing finished this month ([ReadingRules.month]). */
     val month: String?,
     /** Slice 4: his goal for the year and how it's going ([ReadingGoalRules.view]); null with none set. */
     val goal: ReadingGoalView? = null,
@@ -151,8 +151,6 @@ data class ReadingParsed(val title: String, val by: String, val kind: ReadingKin
 
 object ReadingRules {
     const val TITLE = "Reading"
-    /** The month line's word for what moved on but is still being read ("2 still going"). */
-    const val STILL_GOING = "still going"
     const val ROW_LINE = "Books, podcasts and courses you want to get to"
     const val HINT = "Add a book, podcast or course…"
     // No figures in the hint (walk-through A12: "45%" in the field read as a second answer over a 37% bar).
@@ -359,26 +357,16 @@ object ReadingRules {
     }
 
     /**
-     * The month line: "October · finished 1 · 2 still going · next up: Atomic Habits". What finished this month, what
-     * else moved on (started or progress typed: [STILL_GOING], never "moved on", which reads as put down), then the
-     * first up next (the first added); null when nothing moved this month.
+     * The month line: "Finished 1 in October". Only what the summary above it doesn't say (walk-through 2026-11-15 A16:
+     * "1 on the go · 3 up next" over "October · 1 still going · next up: Dune" said both counts twice and left a bare
+     * month): what finished this calendar month, with the month named in the sentence; null when nothing finished.
      */
     fun month(items: List<ReadingItem>, nowMs: Long, cal: LocalCalendar): String? {
         val ymd = CivilDate.fromEpochDay(cal.epochDayOf(nowMs))
-        val y = ymd.year
-        val mo = ymd.month
-        fun inMonth(ms: Long) = ms > 0 && CivilDate.fromEpochDay(cal.epochDayOf(ms)).let { it.year == y && it.month == mo }
-        val live = items.filter { !it.removed }
-        val finished = live.count { it.state == ReadingState.FINISHED && inMonth(it.endedAtMs) }
-        val moved = live.count { it.state == ReadingState.READING && inMonth(it.movedAtMs) }
-        if (finished == 0 && moved == 0) return null
-        val next = live.firstOrNull { it.state == ReadingState.WANT }?.title
-        return listOfNotNull(
-            CivilDate.MONTH_LONG[mo - 1],
-            finished.takeIf { it > 0 }?.let { "finished $it" },
-            moved.takeIf { it > 0 }?.let { "$it $STILL_GOING" },
-            next?.let { "next up: $it" },
-        ).joinToString(" · ")
+        fun inMonth(ms: Long) = ms > 0 && CivilDate.fromEpochDay(cal.epochDayOf(ms)).let { it.year == ymd.year && it.month == ymd.month }
+        val finished = items.count { !it.removed && it.state == ReadingState.FINISHED && inMonth(it.endedAtMs) }
+        if (finished == 0) return null
+        return "Finished $finished in ${CivilDate.MONTH_LONG[ymd.month - 1]}"
     }
 
     /**

@@ -1211,15 +1211,15 @@ class AskMekaFacadeTest {
         server.status = AiStatusReply("off", "No AI key set", 0, 2000, "ok")
         assertNull(c.aiFeatureLine(brief))
         now += MekaCore.AI_SEEN_MS
-        assertEquals("Navilife's AI is off · read from your day as it is, in Navilife's own words", c.aiFeatureLine(brief))
+        assertEquals("Navilife's AI is off. Your brief is read from your day as it is, in Navilife's own words.", c.aiFeatureLine(brief))
         // Settings asking refreshes it at once.
         server.status = AiStatusReply("on", null, 2000, 2000, "over")
         assertEquals("Until the 1st", c.aiStatus().fallbackHeading)
-        assertTrue(c.aiFeatureLine(os.meka.core.domain.AiFeature.DRAFTS)!!.startsWith("This month's AI budget is used up till the 1st · "))
+        assertTrue(c.aiFeatureLine(os.meka.core.domain.AiFeature.DRAFTS)!!.startsWith("This month's AI budget is used up till the 1st. "))
         server.down = true
         now += MekaCore.AI_SEEN_MS
-        assertTrue(c.aiFeatureLine(brief)!!.startsWith("Can't reach Navilife's AI just now · "))
-        assertTrue(core(transport = null).aiFeatureLine(brief)!!.startsWith("Navilife's AI works once this device is connected · "))
+        assertTrue(c.aiFeatureLine(brief)!!.startsWith("Can't reach Navilife's AI just now. "))
+        assertTrue(core(transport = null).aiFeatureLine(brief)!!.startsWith("This device isn't connected to Navilife's AI yet. "))
     }
 
     @Test

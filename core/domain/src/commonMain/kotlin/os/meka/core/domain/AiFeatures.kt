@@ -9,17 +9,27 @@ enum class AiMode { ON, OFF, OVER, FAILING, OFFLINE, NOT_CONNECTED }
 /**
  * The features that ask Navilife's AI, each with what still happens without it (build plan V1, AI layer completeness:
  * "every AI feature shows a clear line when AI is off, over budget or offline, with the deterministic fallback where
- * there is one"). [fallback] is what the person gets instead, said plainly.
+ * there is one"). [fallback] is what the person gets instead, said plainly, for Settings' list; [instead] is the same as
+ * a sentence, for the line under the feature itself (walk-through 2026-11-15 A16: "… is connected · read from your day as
+ * it is …" didn't read as a sentence).
  */
-enum class AiFeature(val label: String, val fallback: String) {
-    ASK("Ask and Talk", "adding a task or shopping, your fast, money questions, help and Search still answer on this device"),
-    BRIEF("Morning brief", "read from your day as it is, in Navilife's own words"),
-    DRAFTS("Drafted replies", "nothing is drafted · write your reply in the editor and Send works as usual"),
-    CHASES("Chases", "the plain chase is offered, for you to change and send"),
-    HANDLE_THIS("Handle this", "nothing is read · share it again once the AI is back"),
-    VOICE_NOTES("Voice notes", "kept with your words · Make cards on the note once the AI is back"),
-    MESSAGES("Messages", "groups still go to the digest · no replies are drafted"),
-    CALLS("Call assistant", "messages still come with their words, without the one-line summary"),
+enum class AiFeature(val label: String, val fallback: String, val instead: String) {
+    ASK("Ask and Talk", "adding a task or shopping, your fast, money questions, help and Search still answer on this device",
+        "Adding a task or shopping, your fast, money questions, help and Search still answer on this device."),
+    BRIEF("Morning brief", "read from your day as it is, in Navilife's own words",
+        "Your brief is read from your day as it is, in Navilife's own words."),
+    DRAFTS("Drafted replies", "nothing is drafted · write your reply in the editor and Send works as usual",
+        "Nothing is drafted, so write your reply in the editor and Send works as usual."),
+    CHASES("Chases", "the plain chase is offered, for you to change and send",
+        "The plain chase is offered, for you to change and send."),
+    HANDLE_THIS("Handle this", "nothing is read · share it again once the AI is back",
+        "Nothing is read, so share it again once the AI is back."),
+    VOICE_NOTES("Voice notes", "kept with your words · Make cards on the note once the AI is back",
+        "Notes are kept with your words; tap Make cards on the note once the AI is back."),
+    MESSAGES("Messages", "groups still go to the digest · no replies are drafted",
+        "Groups still go to the digest, and no replies are drafted."),
+    CALLS("Call assistant", "messages still come with their words, without the one-line summary",
+        "Messages still come with their words, without the one-line summary."),
 }
 
 /** One row of Settings' "what still works" list: "Morning brief" · "read from your day as it is…". */
@@ -46,16 +56,17 @@ object AiFeatureRules {
         AiMode.OVER -> "This month's AI budget is used up till the 1st"
         AiMode.FAILING -> "Navilife's AI isn't answering"
         AiMode.OFFLINE -> "Can't reach Navilife's AI just now"
-        AiMode.NOT_CONNECTED -> "Navilife's AI works once this device is connected"
+        AiMode.NOT_CONNECTED -> "This device isn't connected to Navilife's AI yet"
     }
 
     /**
-     * The feature's line: "Navilife's AI is off · read from your day as it is, in Navilife's own words". Null while the
+     * The feature's line, two plain sentences: "Navilife's AI is off. Your brief is read from your day as it is, in
+     * Navilife's own words." Null while the
      * AI answers, or before the device has heard anything ([view] null): nothing is said until it knows.
      */
     fun line(feature: AiFeature, view: AiStatusView?): String? {
         val p = prefix(view?.mode ?: return null) ?: return null
-        return "$p · ${feature.fallback}"
+        return "$p. ${feature.instead}"
     }
 
     /** Over Settings' list: "While it's off" · "Until the 1st" · …; null while it answers. */

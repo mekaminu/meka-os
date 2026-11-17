@@ -2,6 +2,8 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -32,19 +34,19 @@ class AiFeatureTest {
     fun eachFeatureSaysWhyAndWhatHappensInstead() {
         val off = AskRules.statusView("off", null, 0, 2000, "ok")
         assertEquals(
-            "Navilife's AI is off · read from your day as it is, in Navilife's own words",
+            "Navilife's AI is off. Your brief is read from your day as it is, in Navilife's own words.",
             AiFeatureRules.line(AiFeature.BRIEF, off),
         )
         val over = AskRules.statusView("on", null, 2000, 2000, "over")
         assertEquals(
-            "This month's AI budget is used up till the 1st · nothing is drafted · write your reply in the editor and Send works as usual",
+            "This month's AI budget is used up till the 1st. Nothing is drafted, so write your reply in the editor and Send works as usual.",
             AiFeatureRules.line(AiFeature.DRAFTS, over),
         )
         assertEquals(
-            "Can't reach Navilife's AI just now · kept with your words · Make cards on the note once the AI is back",
+            "Can't reach Navilife's AI just now. Notes are kept with your words; tap Make cards on the note once the AI is back.",
             AiFeatureRules.line(AiFeature.VOICE_NOTES, AskRules.STATUS_UNKNOWN),
         )
-        assertTrue(AiFeatureRules.line(AiFeature.CALLS, AskRules.statusView("failing", null, 0, 2000, "ok"))!!.startsWith("Navilife's AI isn't answering · "))
+        assertTrue(AiFeatureRules.line(AiFeature.CALLS, AskRules.statusView("failing", null, 0, 2000, "ok"))!!.startsWith("Navilife's AI isn't answering. Messages still come "))
     }
 
     @Test
@@ -59,6 +61,30 @@ class AiFeatureTest {
         val month = listOf(AiMonthUse("ask.talk", 40, 120))
         assertEquals(listOf("Talk", AiSpendRules.UNSPLIT), AskRules.statusView("on", null, 2000, 2000, "over", month).spend.map { it.label })
         // Every line is short enough for one or two caption lines.
-        AiFeature.entries.forEach { f -> AiMode.entries.forEach { m -> assertTrue((AiFeatureRules.prefix(m)?.length ?: 0) + f.fallback.length < 160) } }
+        AiFeature.entries.forEach { f -> AiMode.entries.forEach { m -> assertTrue((AiFeatureRules.prefix(m)?.length ?: 0) + f.instead.length < 160) } }
+    }
+
+    @Test
+    fun eachLineReadsAsTwoSentences() {
+        // Walk-through 2026-11-15 A16: "Navilife's AI works once this device is connected · read from your day as it is…".
+        val views = listOf(
+            AskRules.statusView("off", null, 0, 2000, "ok"),
+            AskRules.statusView("on", null, 2000, 2000, "over"),
+            AskRules.statusView("failing", null, 0, 2000, "ok"),
+            AskRules.STATUS_UNKNOWN,
+            AskRules.STATUS_NOT_CONNECTED,
+        )
+        AiFeature.entries.forEach { f ->
+            views.forEach { v ->
+                val line = assertNotNull(AiFeatureRules.line(f, v))
+                assertFalse(" · " in line, line)
+                assertTrue(line.endsWith("."), line)
+                assertTrue(line.substringAfter(". ").first().isUpperCase(), line)
+            }
+        }
+        assertEquals(
+            "This device isn't connected to Navilife's AI yet. Your brief is read from your day as it is, in Navilife's own words.",
+            AiFeatureRules.line(AiFeature.BRIEF, AskRules.STATUS_NOT_CONNECTED),
+        )
     }
 }

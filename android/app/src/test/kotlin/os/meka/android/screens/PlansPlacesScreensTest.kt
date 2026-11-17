@@ -239,10 +239,13 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != ReadingRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && rows.size != 4) fail("$name: ${rows.size} rows for four things")
-                // Slice 19: nothing put down reads as "moved on", and next up is the first added.
+                // Slice 19: next up is the first added. Walk-through 2026-11-15 A16: the month line never repeats the
+                // summary's counts ("still going", "next up") and names its month in a sentence.
                 if (fill == Fill.MANY) {
-                    val month = v.month ?: fail("$name: no month line after reading this month")
-                    if ("moved on" in month || "next up: Dune" !in month) fail("$name: the month line reads \"$month\"")
+                    v.month?.let { month ->
+                        if ("still going" in month || "next up" in month || "moved on" in month || !month.startsWith("Finished "))
+                            fail("$name: the month line reads \"$month\"")
+                    }
                     if (v.upNext.firstOrNull()?.title != "Dune") fail("$name: up next starts ${v.upNext.map { it.title }}")
                 }
                 // The page shape (slice 6): the three numbers, and On the go's first row (or its empty line).
