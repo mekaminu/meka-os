@@ -950,8 +950,10 @@ internal fun NeedsYouColumn(
             }
             if (if (boxed) present.isEmpty() else (!show(NeedsYouSection.FYI) || fyiChats.isEmpty()) && (!show(NeedsYouSection.MAIL) || !mailAny)) {
                 item(key = "right-empty") {
+                    // Walk-through 2026-11-15 A17: level with the left column's first line (its header already ends
+                    // with its own gap), not a gap lower, so it no longer floats out of line mid-screen.
                     Text(NeedsYouLayoutRules.RIGHT_EMPTY, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                        modifier = Modifier.animateItem().padding(top = MekaSpace.m, start = MekaSpace.xxs).appear(rememberAppearance(1, play)))
+                        modifier = Modifier.animateItem().padding(start = MekaSpace.xxs).appear(rememberAppearance(1, play)))
                 }
             }
         } else {

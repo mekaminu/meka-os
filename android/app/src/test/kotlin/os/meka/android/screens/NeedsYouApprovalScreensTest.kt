@@ -1,13 +1,6 @@
 package os.meka.android.screens
 
 import android.os.Looper
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -22,8 +15,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import os.meka.android.designsystem.Meka
-import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_DECIDE_TAG
@@ -78,11 +69,7 @@ class NeedsYouApprovalScreensTest {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             MekaTheme {
-                Column(
-                    Modifier.fillMaxWidth().background(Meka.colors.background).testTag("screen")
-                        .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
-                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                ) {
+                NeedsYouDecideShotPage {
                     NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.DECIDE_HEAD, 2))
                     listOf(trade, payment).forEach { a ->
                         NeedsYouDecideShell(NeedsYouDecideRules.approval(a), onYes = { taps += "approve:${a.id}" }, onNo = { taps += "decline:${a.id}" })
@@ -104,6 +91,7 @@ class NeedsYouApprovalScreensTest {
         if (compose.onAllNodesWithTag(NEEDS_YOU_DECIDE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 2) fail("$name: not two cards")
         ScreenShots.assertEachOneLine(compose, name, listOf(ApprovalRules.APPROVE, ApprovalRules.DECLINE))
         ScreenShots.assertNothingCutUnder(compose, name, NEEDS_YOU_DECIDE_TAG)
+        assertDecideInLeftColumn(compose, name, NEEDS_YOU_DECIDE_TAG)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 
