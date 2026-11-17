@@ -298,8 +298,9 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
             else -> {
                 val v = current.getOrThrow()
                 v.emptyLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
-                // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓".
-                v.repliesLine?.let { line ->
+                // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓"
+                // (walk-through A16: not over the life audit's own "Nothing needs you from 60 days of mail ✓").
+                MailAutoDraftRules.shownLine(v.repliesLine, audit?.summary?.takeIf { v.rows.isNotEmpty() })?.let { line ->
                     Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-replies") { t ->
                         Text(LoneWordGlue.kept(t), style = MekaType.itemMeta,
                             color = if (t == MailAutoDraftRules.NONE_WAITING) Meka.colors.textSecondary else Meka.colors.accent,

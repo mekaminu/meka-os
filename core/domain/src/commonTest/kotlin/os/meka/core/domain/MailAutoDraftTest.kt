@@ -131,6 +131,13 @@ class MailAutoDraftTest {
         assertEquals(MailAutoDraftRules.NONE_WAITING, MailAutoDraftRules.paneLine(listOf(fyi), now, connected = true))
         assertEquals("2 emails need a reply · 1 drafted", MailAutoDraftRules.paneLine(listOf(drafted, plain, fyi), now, connected = true))
         assertNull(MailAutoDraftRules.paneLine(listOf(drafted), now, connected = false))
+        // Walk-through A16: the all-clear isn't said over the life audit's own all-clear; counts and a lone all-clear stay.
+        assertEquals("Nothing needs you from 60 days of mail ✓", LifeAuditReviewRules.summary(0, 0, 0, 0))
+        assertNull(MailAutoDraftRules.shownLine(MailAutoDraftRules.NONE_WAITING, LifeAuditReviewRules.CLEAR))
+        assertEquals(MailAutoDraftRules.NONE_WAITING, MailAutoDraftRules.shownLine(MailAutoDraftRules.NONE_WAITING, null))
+        assertEquals(MailAutoDraftRules.NONE_WAITING, MailAutoDraftRules.shownLine(MailAutoDraftRules.NONE_WAITING, "3 subscriptions"))
+        assertEquals("1 email needs a reply", MailAutoDraftRules.shownLine("1 email needs a reply", LifeAuditReviewRules.CLEAR))
+        assertNull(MailAutoDraftRules.shownLine(null, LifeAuditReviewRules.CLEAR))
         // Not needed takes it off the count.
         val away = MailNeedsRules.read("a", fieldsOf(drafted) + MailAutoDraftRules.dismissFields(now))!!
         assertEquals("1 email needs a reply", MailAutoDraftRules.todayLine(listOf(away, plain), now)!!.text)

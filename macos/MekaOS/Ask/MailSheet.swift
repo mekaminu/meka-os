@@ -35,8 +35,10 @@ struct MailSheet: View {
                     Text(LoneWordGlue.shared.kept(line: empty)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓".
-                if let line = view.repliesLine {
+                // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓"
+                // (walk-through A16: not over the life audit's own "Nothing needs you from 60 days of mail ✓").
+                if let line = MailAutoDraftRules.shared.shownLine(line: view.repliesLine,
+                                                                  auditSummary: view.rows.isEmpty ? nil : model.lifeAudit?.summary) {
                     Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta)
                         .foregroundStyle(line == MailAutoDraftRules.shared.NONE_WAITING ? palette.textSecondary : palette.accent)
                         .contentTransition(.opacity)

@@ -57,6 +57,10 @@ class AiFeatureTest {
         assertEquals(AiFallbackLine("Morning brief", "read from your day as it is, in Navilife's own words"), off.fallbacks[1])
         assertEquals("Until the 1st", AskRules.statusView("on", null, 2000, 2000, "over").fallbackHeading)
         assertEquals("While it can't be reached", AskRules.STATUS_UNKNOWN.fallbackHeading)
+        // Walk-through A16: under "Ask works once this device is connected" the heading doesn't say it again.
+        val notConnected = AskRules.STATUS_NOT_CONNECTED
+        assertEquals("Until then", notConnected.fallbackHeading)
+        assertEquals(1, listOfNotNull(notConnected.line, notConnected.fallbackHeading).count { "this device is connected" in it })
         // The spend still shows beside it.
         val month = listOf(AiMonthUse("ask.talk", 40, 120))
         assertEquals(listOf("Talk", AiSpendRules.UNSPLIT), AskRules.statusView("on", null, 2000, 2000, "over", month).spend.map { it.label })

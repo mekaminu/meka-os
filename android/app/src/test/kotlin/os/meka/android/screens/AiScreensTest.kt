@@ -130,7 +130,10 @@ class AiScreensTest {
         if (onScreen("›")) fail("$name: a bare › glyph is still drawn")
         when (fill) {
             Fill.EMPTY -> {
-                if (!onScreen("Until this device is connected")) fail("$name: doesn't say what works until it's connected")
+                if (!onScreen("Until then")) fail("$name: doesn't say what works until it's connected")
+                // Found and fixing week 4, A16: "this device is connected" is said once, in the line above.
+                val said = ScreenShots.texts(compose).count { "this device is connected" in DateGlue.plain(it) }
+                if (said != 1) fail("$name: \"this device is connected\" is said $said times")
                 AiFeature.entries.forEach { if (!onScreen(it.label)) fail("$name: ${it.label}'s fallback isn't listed") }
                 if (compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().isNotEmpty()) fail("$name: the row is a button with nothing to unfold")
             }

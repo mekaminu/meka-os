@@ -52,6 +52,14 @@ object MailAutoDraftRules {
     const val NONE_WAITING = "No emails waiting on you ✓"
     const val NEEDS_REPLY = "Needs a reply"
 
+    /**
+     * Walk-through A16 (said twice): Mail's replies line as drawn over the life audit's card, whose closed line is
+     * [auditSummary] (null while no audit card shows). "No emails waiting on you ✓" goes when the card under it already
+     * says "Nothing needs you from 60 days of mail ✓"; any count of replies, and the all-clear with no card, stay.
+     */
+    fun shownLine(line: String?, auditSummary: String?): String? =
+        if (line == NONE_WAITING && auditSummary == LifeAuditReviewRules.CLEAR) null else line
+
     /** The sort reasons that mean a person wrote (never a list, a shop, a no-reply address or a public body's system). */
     private val PERSON_REASONS = setOf(MailSortReason.PERSON, MailSortReason.KNOWN_PERSON, MailSortReason.AI_NEEDS_YOU)
 

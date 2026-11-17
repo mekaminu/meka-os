@@ -52,6 +52,8 @@ object LifeAuditReviewRules {
     const val BILL_DAYS = 30
     /** Names on the waiting-on-you line, at most. */
     const val NAMES = 2
+    /** The closed card's line when the mail turned up nothing for him ([summary] with every count 0). */
+    val CLEAR = "Nothing needs you from ${LifeAuditRules.WINDOW_DAYS} days of mail ✓"
 
     const val KEY_SUBSCRIPTIONS = "subscriptions"
     const val KEY_ON_YOU = "on-you"
@@ -199,7 +201,7 @@ object LifeAuditReviewRules {
             toAdd.takeIf { it > 0 }?.let { "$it to add" },
             bills.takeIf { it > 0 }?.let { plural(it, "bill") + " due" },
         )
-        return if (parts.isEmpty()) "Nothing needs you from ${LifeAuditRules.WINDOW_DAYS} days of mail ✓" else parts.joinToString(" · ")
+        return if (parts.isEmpty()) CLEAR else parts.joinToString(" · ")
     }
 
     /**

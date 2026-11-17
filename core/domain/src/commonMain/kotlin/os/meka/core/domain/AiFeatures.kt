@@ -76,7 +76,8 @@ object AiFeatureRules {
         AiMode.OVER -> "Until the 1st"
         AiMode.FAILING -> "Until it answers again"
         AiMode.OFFLINE -> "While it can't be reached"
-        AiMode.NOT_CONNECTED -> "Until this device is connected"
+        // Walk-through A16: the line above already says "Ask works once this device is connected".
+        AiMode.NOT_CONNECTED -> "Until then"
     }
 
     /** Settings' list of what each feature does instead; empty while the AI answers. */

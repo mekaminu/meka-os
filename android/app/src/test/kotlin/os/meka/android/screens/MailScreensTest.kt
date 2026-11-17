@@ -30,11 +30,13 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.mail.MailPane
+import os.meka.core.domain.LifeAuditReviewRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MailAccountFacts
 import os.meka.core.domain.MailAccountRules
 import os.meka.core.domain.MailAccountsView
 import os.meka.core.domain.MailAutopilotPanelRules
+import os.meka.core.domain.MailAutoDraftRules
 import os.meka.core.domain.MailProviders
 import os.meka.core.facade.AccountsApi
 import os.meka.core.facade.ConnectStart
@@ -219,6 +221,11 @@ class MailScreensTest {
         )
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
         switchesShort(name, v, cover = name.startsWith("cover"))
+        // Found and fixing week 4, A16: the all-clear is said once, not "No emails waiting on you ✓" over the life
+        // audit's "Nothing needs you from 60 days of mail ✓".
+        if (ScreenShots.anyOnScreen(compose, listOf(LifeAuditReviewRules.CLEAR)) &&
+            ScreenShots.anyOnScreen(compose, listOf(LoneWordGlue.kept(MailAutoDraftRules.NONE_WAITING), MailAutoDraftRules.NONE_WAITING))
+        ) fail("$name: says nothing waits on him twice")
         when (fill) {
             Fill.EMPTY -> {
                 if (v.rows.isNotEmpty() || v.autopilot != null) fail("$name: $v with nothing connected")
