@@ -66,8 +66,8 @@ class LoneWordGlueTest {
     fun aPhraseThatReadsAsOneGoesDownWhole() {
         // A15 part 3: Needs you's hint ended a line on "‹ ›" over "for the next ·"; the inbox lead read "one / at a time".
         val hint = LoneWordGlue.measured(NeedsYouGroupRules.HINT)
-        assertTrue(hint.contains("‹${nb}›${nb}for${nb}the${nb}next"))
-        assertTrue(LoneWordGlue.measured(NeedsYouGroupRules.HINT_MAC).contains("‹${nb}›${nb}for${nb}the${nb}next"))
+        assertTrue(hint.contains("‹${nb}›${nb}for${nb}more${nb}·${nb}"))
+        assertTrue(LoneWordGlue.measured(NeedsYouGroupRules.HINT_MAC).contains("‹${nb}›${nb}for${nb}more${nb}·${nb}"))
         assertTrue(LoneWordGlue.kept(NeedsYouGroupRules.MAIL_LEAD).contains("one${nb}at${nb}a${nb}time"))
         // A sentence's last word never ends alone: "decisions land / here." goes down as "land here.".
         assertTrue(LoneWordGlue.measured(NeedsYouStackRules.EMPTY_CAPTION).endsWith("land${nb}here."))
