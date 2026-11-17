@@ -21,8 +21,8 @@ final class MacNeedsYouDecideTests: XCTestCase {
         XCTAssertTrue(rules.compact(card: r))
         let c = rules.card(card: r)
         XCTAssertEqual(c.what, "Task: Check the algorithm · Today")
-        // A15 part 3: the card draws whatShown, where "algorithm · Today" goes down whole.
-        XCTAssertEqual(c.whatShown, "Task: Check the algorithm\u{00A0}·\u{00A0}Today")
+        // A15 part 3: the card draws whatShown, where "algorithm · Today" goes down whole (part 4: with "the" leading it).
+        XCTAssertEqual(c.whatShown, "Task: Check the\u{00A0}algorithm\u{00A0}·\u{00A0}Today")
         XCTAssertEqual(c.from, "Alex · “can you check the algorithm?”")
         XCTAssertEqual([c.yesLabel, c.changeLabel, c.noLabel], ["Add", "Change", "No"])
         XCTAssertEqual(NeedsYouDecideCardView.symbol(c.icon), "checkmark")

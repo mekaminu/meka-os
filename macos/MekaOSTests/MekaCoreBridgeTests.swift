@@ -4519,7 +4519,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let nb = LifeTileRules.shared.GLUE
         XCTAssertEqual(CarPageRules.shared.owner(title: "The Golf"), "the Golf's")
         XCTAssertTrue(LifePageRules.shared.tileLabel(label: "to the Golf's MOT").hasSuffix("Golf's\(nb)MOT"))
-        XCTAssertTrue(LifePageRules.shared.shown(text: MealsPageRules.shared.EMPTY_SUMMARY).hasSuffix("with\(nb)its\(nb)ingredients"))
+        XCTAssertTrue(LifePageRules.shared.shown(text: MealsPageRules.shared.EMPTY_SUMMARY).hasSuffix(" its\(nb)ingredients to\(nb)start"))
         XCTAssertEqual(BinsPageRules.shared.remindRowLine(), "The evening before · Today says it from 16:00")
         // A15 part 7: an article or "+" leads the word after it ("+ Add a birthday", "hold its ≡").
         XCTAssertTrue(LifePageRules.shared.shown(text: GiftsPageRules.shared.COMING_EMPTY).contains("+\(nb)Add a\(nb)birthday"))
