@@ -711,6 +711,12 @@ internal fun NeedsYouColumn(
                 needsMail?.tiles?.takeIf { it.isNotEmpty() }?.let(NeedsYouGroupRules::tidiedPeek) ?: archived?.let { "Archived for you" }.orEmpty(), open)
         }
     }
+    // Walk-through 2026-11-15 A17: a group is one box, its rows on the head's surface (NeedsYouGroupBox.kt). Cards keep
+    // their own padding; plain rows and lines take the head's inset.
+    val boxFill = Meka.colors.surface
+    val inBox = if (boxed) Modifier.groupBoxFill(boxFill) else Modifier
+    val inBoxLine = if (boxed) Modifier.fillMaxWidth().groupBoxFill(boxFill).padding(horizontal = MekaSpace.m) else Modifier
+    val inBoxLead = if (boxed) Modifier.groupBoxFill(boxFill).padding(horizontal = MekaSpace.s) else Modifier
     // The foot fades into the tabs rather than cutting a card in half; the xl bottom padding clears the fade.
     LazyColumn(
         modifier.footFade().testTag(if (part == NeedsYouPart.RIGHT) NEEDS_YOU_RIGHT_TAG else NEEDS_YOU_LIST_TAG),
@@ -994,14 +1000,14 @@ internal fun NeedsYouColumn(
         listsCard?.let { lc ->
             item(key = "lists-lead") {
                 NeedsYouGroupLead(NeedsYouGroupRules.listsLead(lc.why), lc.yesLabel, { moves.onMove(lc, DecisionMove.YES) },
-                    Modifier.animateItem().testTag(NEEDS_YOU_LISTS_LEAD_TAG).padding(bottom = MekaSpace.xs))
+                    Modifier.animateItem().then(inBoxLead).testTag(NEEDS_YOU_LISTS_LEAD_TAG).padding(bottom = MekaSpace.xs))
             }
         }
         // The approvals inbox (V1, slice 1) first: time-limited, and nothing happens until Meka answers.
         approvals.forEachIndexed { i, card ->
             item(key = "approval-${card.id}") {
                 ApprovalCardView(card, core, { line -> moves.undoLine(line, null) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)))
+                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)))
             }
         }
         }
@@ -1011,7 +1017,7 @@ internal fun NeedsYouColumn(
         covers.forEachIndexed { i, card ->
             item(key = "school-cover-${card.id}") {
                 SchoolCoverDecideView(card, { home -> moves.onSchoolCover(card, home) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + i, play)))
+                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + i, play)))
             }
         }
         nudge?.let { card ->
@@ -1026,7 +1032,7 @@ internal fun NeedsYouColumn(
                         runCatching { core.skipDateNight(card.day, true) }.getOrNull()
                             ?.let { line -> moves.undoLine(line) { core.skipDateNight(card.day, false) } }
                     }
-                }, Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + covers.size, play)))
+                }, Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + covers.size, play)))
             }
         }
         due.forEachIndexed { i, card ->
@@ -1060,7 +1066,7 @@ internal fun NeedsYouColumn(
                             moves.undoLine(os.meka.core.domain.AppointmentRules.EMAIL_COPIED, null)
                         }
                     }
-                }, modifier = Modifier.animateItem().padding(bottom = MekaSpace.xs)
+                }, modifier = Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.xs)
                     .appear(rememberAppearance(2 + triage.size + covers.size + (if (nudge != null) 1 else 0) + i, play)))
             }
         }
@@ -1070,7 +1076,7 @@ internal fun NeedsYouColumn(
         // keeps its full card so the draft shows whole.
         looseRequests.forEachIndexed { i, card ->
             item(key = "request-${card.id}") {
-                val m = Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + asks + i, play))
+                val m = Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.xs).appear(rememberAppearance(2 + triage.size + asks + i, play))
                 if (NeedsYouDecideRules.compact(card)) {
                     NeedsYouDecideCardView(remember(card) { NeedsYouDecideRules.card(card) }, { moves.onRequest(card, it) }, m)
                 } else {
@@ -1082,16 +1088,19 @@ internal fun NeedsYouColumn(
         if (inG(NeedsYouGroup.DECIDE)) {
         if (cards.isNotEmpty()) {
             if (stackCards.isNotEmpty()) item(key = "stack") {
-                DecisionStackView(stackCards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)),
+                DecisionStackView(stackCards, moves.onMove, Modifier.animateItem().then(inBox).appear(rememberAppearance(1, play)),
                     toDays = { core.needsYouFeedDays() }, onToDay = moves.onToDay)
             }
-            workingItems(stack.working, play, index = 2, open = openMail)
+            workingItems(stack.working, play, index = 2, open = openMail, wrap = inBoxLine)
             // Under the stack, the next reminders (the gate's Needs you re-shot: the page below the stack was blank).
-            meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
+            meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists,
+                openTask = moves.openTask, wrap = inBoxLine)
         }
         afterWorkFoot?.let { foot ->
-            item(key = "after-work-foot") { NeedsYouGroupFoot(foot, openAfterWork, Modifier.animateItem()) }
+            item(key = "after-work-foot") { NeedsYouGroupFoot(foot, openAfterWork, Modifier.animateItem().then(inBoxLead)) }
         }
+        // The box's rounded foot, under the last thing in it.
+        if (boxed && NeedsYouGroup.DECIDE in present) item(key = "decide-box-end") { NeedsYouGroupBoxEnd(Modifier.animateItem()) }
         }
         groupHead(boxed && NeedsYouGroup.MESSAGES in present, NeedsYouGroup.MESSAGES, ::headOf, toggleGroup, play)
         // Unboxed (the open Fold), While you were at work still sits in Messages; boxed it is To decide's foot line.

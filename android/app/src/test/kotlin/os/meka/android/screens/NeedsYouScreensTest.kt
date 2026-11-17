@@ -38,6 +38,12 @@ import os.meka.core.domain.NeedsYouLayoutRules
 import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
 import os.meka.android.today.NEEDS_YOU_COLUMNS_TAG
 import os.meka.android.today.NEEDS_YOU_GROUP_TAG
+import os.meka.android.today.NEEDS_YOU_BOX_END_TAG
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToKey
+import androidx.compose.ui.graphics.asAndroidBitmap
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.NeedsYouGroupRules
 import androidx.compose.ui.test.hasTestTag
@@ -172,6 +178,37 @@ class NeedsYouScreensTest {
         turns()
     }
 
+    /**
+     * Walk-through 2026-11-15 A17: To decide's head and its cards were two boxes with the screen showing through the
+     * list's gap between them. Open, the box is one surface: a point in the gap under the head (in its left inset, clear
+     * of any words) is the head's own colour, not the screen's, and the box's rounded foot is under it, as wide as the head.
+     */
+    private fun assertDecideOneBox(name: String) {
+        val head = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG) and hasContentDescription(NeedsYouGroup.DECIDE.title, substring = true),
+            useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: fail("$name: no To decide box")
+        val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
+        val dp = compose.density.density
+        val x = (head.left + 4 * dp).toInt()
+        val inHead = shot.getPixel(x, ((head.top + head.bottom) / 2f).toInt())
+        val inGap = shot.getPixel(x, (head.bottom + 4 * dp).toInt())
+        val screen = shot.getPixel((head.left / 2f).toInt().coerceAtLeast(0), ((head.top + head.bottom) / 2f).toInt())
+        if (inHead == screen) fail("$name: To decide's head is the screen's colour, so the check can't tell")
+        if (inGap != inHead) fail("$name: the screen shows through between To decide's head and what's in it")
+        // The foot may sit below the screen's edge: scroll to it, look, and scroll back for the rest of the test.
+        val list = compose.onAllNodes(hasTestTag(NEEDS_YOU_LIST_TAG)).onFirst()
+        list.performScrollToKey("decide-box-end")
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        compose.waitForIdle()
+        val ends = compose.onAllNodes(hasTestTag(NEEDS_YOU_BOX_END_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+        if (ends.isEmpty()) fail("$name: To decide's box has no foot")
+        val end = ends.first().boundsInRoot
+        if (kotlin.math.abs(end.left - head.left) > 1f || kotlin.math.abs(end.right - head.right) > 1f)
+            fail("$name: To decide's foot isn't as wide as its head")
+        list.performScrollToIndex(0)
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        compose.waitForIdle()
+    }
+
     private fun shows(m: SemanticsMatcher) = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
 
     /**
@@ -279,7 +316,7 @@ class NeedsYouScreensTest {
     fun coverOne() { shoot("cover-dark-one", Fill.ONE) }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun coverMany() { shoot("cover-dark-many", Fill.MANY) }
+    fun coverMany() { shoot("cover-dark-many", Fill.MANY); assertDecideOneBox("cover-dark-many") }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverManyLight() { shoot("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
@@ -355,6 +392,7 @@ class NeedsYouScreensTest {
         val decide = compose.onAllNodes(hasTestTag(NEEDS_YOU_GROUP_TAG) and hasContentDescription(NeedsYouGroup.DECIDE.title, substring = true),
             useUnmergedTree = true).fetchSemanticsNodes().firstOrNull() ?: fail("$name: no To decide box")
         if (decide.boundsInRoot.right > right.left + 1f) fail("$name: To decide's box isn't in the left column")
+        assertDecideOneBox(name)
         val top = top(core) ?: fail("$name: no card on the stack")
         ScreenShots.assertShows(compose, name, top.title)
         assertTouchTargets(name)

@@ -47,41 +47,43 @@ import os.meka.core.domain.NeedsYouMeanwhileRules
 internal fun LazyListScope.meanwhileItems(
     m: NeedsYouMeanwhile, play: Boolean, firstIndex: Int, tick: (HabitItem) -> Unit, open: () -> Unit,
     openTask: (String) -> Unit = {},
+    /** Inside a group's box (Needs you's To decide), the box's fill and inset on every row; else nothing. */
+    wrap: Modifier = Modifier,
 ) {
     var index = firstIndex
     if (m.habits.isNotEmpty()) {
         val i = index++
         item(key = "mw-habits") {
-            MeanwhileLabel(NeedsYouMeanwhileRules.HABITS_LABEL, m.habitsLine, Modifier.animateItem().appear(rememberAppearance(i, play)))
+            MeanwhileLabel(NeedsYouMeanwhileRules.HABITS_LABEL, m.habitsLine, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play)))
         }
         items(m.habits, key = { "mw-h-${it.id}" }) { h ->
-            MeanwhileHabit(h, { tick(h) }, Modifier.animateItem().appear(rememberAppearance(i, play)))
+            MeanwhileHabit(h, { tick(h) }, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play)))
         }
     }
     if (m.comingUp.isNotEmpty()) {
         val i = index++
         item(key = "mw-coming") {
-            MeanwhileLabel(NeedsYouMeanwhileRules.COMING_LABEL, null, Modifier.animateItem().appear(rememberAppearance(i, play)))
+            MeanwhileLabel(NeedsYouMeanwhileRules.COMING_LABEL, null, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play)))
         }
         items(m.comingUp, key = { "mw-c-${it.id}" }) { l ->
-            MeanwhileRow(l, { openTask(l.id) }, Modifier.animateItem().appear(rememberAppearance(i, play)), "Open the task")
+            MeanwhileRow(l, { openTask(l.id) }, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play)), "Open the task")
         }
     }
     if (m.waiting.isNotEmpty()) {
         val i = index++
         item(key = "mw-waiting") {
-            MeanwhileLabel(NeedsYouMeanwhileRules.WAITING_LABEL, null, Modifier.animateItem().appear(rememberAppearance(i, play)))
+            MeanwhileLabel(NeedsYouMeanwhileRules.WAITING_LABEL, null, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play)))
         }
-        items(m.waiting, key = { "mw-w-${it.id}" }) { l -> MeanwhileRow(l, open, Modifier.animateItem().appear(rememberAppearance(i, play))) }
-        m.waitingMore?.let { more -> item(key = "mw-w-more") { MeanwhileMore(more, open, Modifier.animateItem()) } }
+        items(m.waiting, key = { "mw-w-${it.id}" }) { l -> MeanwhileRow(l, open, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play))) }
+        m.waitingMore?.let { more -> item(key = "mw-w-more") { MeanwhileMore(more, open, Modifier.animateItem().then(wrap)) } }
     }
     if (m.renewals.isNotEmpty()) {
         val i = index
         item(key = "mw-renewals") {
-            MeanwhileLabel(NeedsYouMeanwhileRules.RENEWALS_LABEL, null, Modifier.animateItem().appear(rememberAppearance(i, play)))
+            MeanwhileLabel(NeedsYouMeanwhileRules.RENEWALS_LABEL, null, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play)))
         }
-        items(m.renewals, key = { "mw-r-${it.id}" }) { l -> MeanwhileRow(l, open, Modifier.animateItem().appear(rememberAppearance(i, play))) }
-        m.renewalsMore?.let { more -> item(key = "mw-r-more") { MeanwhileMore(more, open, Modifier.animateItem()) } }
+        items(m.renewals, key = { "mw-r-${it.id}" }) { l -> MeanwhileRow(l, open, Modifier.animateItem().then(wrap).appear(rememberAppearance(i, play))) }
+        m.renewalsMore?.let { more -> item(key = "mw-r-more") { MeanwhileMore(more, open, Modifier.animateItem().then(wrap)) } }
     }
 }
 
@@ -90,13 +92,13 @@ internal fun LazyListScope.meanwhileItems(
  * Gmail" over "500 so far · …"), counting up as the server reports. Context in the body weight; a tap opens Mail. The
  * section staggers in like the others and its rows glide as their counts change (`animateItem`).
  */
-internal fun LazyListScope.workingItems(lines: List<MeanwhileLine>, play: Boolean, index: Int, open: () -> Unit) {
+internal fun LazyListScope.workingItems(lines: List<MeanwhileLine>, play: Boolean, index: Int, open: () -> Unit, wrap: Modifier = Modifier) {
     if (lines.isEmpty()) return
     item(key = "working") {
-        MeanwhileLabel(MailWorkingRules.LABEL, null, Modifier.animateItem().appear(rememberAppearance(index, play)))
+        MeanwhileLabel(MailWorkingRules.LABEL, null, Modifier.animateItem().then(wrap).appear(rememberAppearance(index, play)))
     }
     items(lines, key = { it.id }) { l ->
-        MeanwhileRow(l, open, Modifier.animateItem().appear(rememberAppearance(index, play)), MailWorkingRules.OPEN_LABEL)
+        MeanwhileRow(l, open, Modifier.animateItem().then(wrap).appear(rememberAppearance(index, play)), MailWorkingRules.OPEN_LABEL)
     }
 }
 
