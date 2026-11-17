@@ -53,9 +53,11 @@ struct ShutdownSheet: View {
                         // Week board, item (11): how he feels; Tired or Stretched offers to lighten tomorrow.
                         FeelingSection(palette: palette).padding(.top, MekaSpace.l).staggeredAppear(2)
 
-                        SectionLabel(v.tomorrow.label, palette).padding(.top, MekaSpace.l).staggeredAppear(2)
+                        // A16: tomorrow's header says each thing once.
+                        let heading = ShutdownRules.shared.heading(p: v.tomorrow, titled: false)
+                        SectionLabel(heading.label, palette).padding(.top, MekaSpace.l).staggeredAppear(2)
                         // Done for the day: tomorrow's first commitment.
-                        if let first = v.firstLine {
+                        if let first = heading.first {
                             Text(LoneWordGlue.shared.kept(line: first)).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).staggeredAppear(2)
                         }
                         if let work = v.tomorrow.workLine {
@@ -93,10 +95,12 @@ struct ShutdownSheet: View {
                             Text(LoneWordGlue.shared.kept(line: study.text)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                                 .accessibilityLabel(study.spoken).staggeredAppear(2)
                         }
-                        Text(LoneWordGlue.shared.kept(line: v.tomorrow.summary))
-                            .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                            .contentTransition(.opacity)
-                            .staggeredAppear(2)
+                        if let counts = heading.counts {
+                            Text(LoneWordGlue.shared.kept(line: counts))
+                                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                                .contentTransition(.opacity)
+                                .staggeredAppear(2)
+                        }
                         ForEach(v.tomorrow.rows, id: \.id) { r in
                             TomorrowLine(row: r, palette: palette)
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))

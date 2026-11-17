@@ -129,7 +129,7 @@ fun TomorrowPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ 
                 Text("Tomorrow", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.xs).appear(rememberAppearance(0)))
             }
-            item(key = "header") { TomorrowHeader(v, Modifier.appear(rememberAppearance(1))) }
+            item(key = "header") { TomorrowHeader(v, Modifier.appear(rememberAppearance(1)), titled = true) }
             item(key = "said") {
                 AnimatedContent(
                     targetState = failed ?: said,

@@ -89,6 +89,9 @@ data class TomorrowPreview(
     val tasks: List<Task> = emptyList(),
 )
 
+/** Tomorrow's header lines, each said once ([ShutdownRules.heading]). */
+data class TomorrowHeading(val label: String, val first: String?, val counts: String?)
+
 data class ShutdownView(
     /** Show the "Shut down the day" card in Today: it's the evening, you're not at work and you haven't yet. */
     val offered: Boolean,
@@ -243,6 +246,29 @@ object ShutdownRules {
     fun firstLine(first: TomorrowRow?): String? = first?.let { "Tomorrow starts at ${it.time} · ${shorten(it.title)}" }
 
     fun count(n: Int, one: String, many: String = one + "s") = if (n == 1) "1 $one" else "$n $many"
+
+    /**
+     * Walk-through 2026-11-15 A16: tomorrow's header says each thing once. Under the sheet's own "Tomorrow" title
+     * ([titled]) the label is the date alone ("Thu 22 Oct"), never "Tomorrow · Thu 22 Oct" again; the first line is
+     * "Starts at 07:40 · Gym before work" (the label already says tomorrow); the counts leave out "first at 07:40",
+     * which the line above says. An empty sheet has no counts line (it says "Nothing planned for tomorrow yet." once);
+     * Done for the day keeps "Nothing planned yet" under its label.
+     */
+    fun heading(p: TomorrowPreview, titled: Boolean): TomorrowHeading {
+        val counts = listOfNotNull(
+            count(p.eventCount, "event").takeIf { p.eventCount > 0 },
+            count(p.taskCount, "task").takeIf { p.taskCount > 0 },
+        ).joinToString(" · ")
+        return TomorrowHeading(
+            label = if (titled) p.label.removePrefix("Tomorrow · ") else p.label,
+            first = p.first?.let { "Starts at ${it.time} · ${shorten(it.title)}" },
+            counts = when {
+                counts.isNotEmpty() -> counts
+                p.rows.isEmpty() && !titled -> "Nothing planned yet"
+                else -> null
+            },
+        )
+    }
 
     /** The Tomorrow peek shows on Today from 17:00 (Meka 2026-10-26), or from the evening's start when that is earlier. */
     const val PEEK_FROM_MIN = 17 * 60

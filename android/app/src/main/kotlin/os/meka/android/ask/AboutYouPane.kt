@@ -197,7 +197,7 @@ private fun AboutLine(row: AboutRow, said: AboutSaved?, onSave: (String) -> Unit
         )
     }
     if (said != null) SaidLine(said, onUndo)
-    else Text(os.meka.core.domain.LoneWordGlue.kept(row.line), style = MekaType.caption, color = Meka.colors.textTertiary)
+    else row.line?.let { Text(os.meka.core.domain.LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
 }
 
 /** What the last save said, lit in the accent when refused, with Undo after a clear or a removal. */

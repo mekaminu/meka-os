@@ -221,8 +221,9 @@ class ShutdownScreensTest {
         val v = core.shutdownView.value
         val p = v.tomorrow
         val w = core.wakeView.value
+        val h = ShutdownRules.heading(p, titled = false)
         val lines = listOfNotNull(
-            v.doneCountLine, ShutdownRules.cardLine(v.cardOff, v.onLeave), v.firstLine, p.workLine, p.summary, p.weatherLine,
+            v.doneCountLine, ShutdownRules.cardLine(v.cardOff, v.onLeave), h.first, p.workLine, h.counts, p.weatherLine,
             p.train?.text, p.school?.text, w.line, OnThisDayRules.OFFER,
         ) + v.left.mapNotNull { it.line } + p.rows.mapNotNull { it.detail }
         ScreenShots.assertNoLoneWords(compose, name, lines)

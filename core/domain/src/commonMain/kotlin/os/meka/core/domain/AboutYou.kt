@@ -219,8 +219,11 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
         "Official numbers, your police force's and bank's switchboards, for example police 01632 960000, bank 0306 999 0000"),
 }
 
-/** One row of the pane: the label, what's held (null when empty) and the line under it. */
-data class AboutRow(val field: AboutField, val label: String, val value: String?, val hint: String, val line: String, val spokenHint: String = "$label, $hint")
+/**
+ * One row of the pane: the label, what's held (null when empty) and the line under it: what to add while empty, none once
+ * filled (walk-through 2026-11-15 A16: "In your data" under every field said what the summary already says).
+ */
+data class AboutRow(val field: AboutField, val label: String, val value: String?, val hint: String, val line: String?, val spokenHint: String = "$label, $hint")
 
 /** A child's row: "Alex" and "Under 7s · Oakfield School". */
 data class AboutChildRow(val index: Int, val name: String, val line: String, val spoken: String)
@@ -647,7 +650,7 @@ object AboutYouRules {
     fun view(a: AboutYou, cal: LocalCalendar, nowMs: Long): AboutYouView {
         val rows = AboutField.entries.map { f ->
             val v = value(a, f)
-            AboutRow(f, f.label, v, f.hint, if (v == null) f.emptyLine else SAVED_LINE, f.spokenHint)
+            AboutRow(f, f.label, v, f.hint, if (v == null) f.emptyLine else null, f.spokenHint)
         }
         val kids = a.children.mapIndexed { i, c ->
             AboutChildRow(i, c.name, childLine(c), "${c.name}, ${childLine(c)}")
@@ -668,8 +671,6 @@ object AboutYouRules {
             partnerName = a.partnerName?.trim()?.takeIf { it.isNotEmpty() },
         )
     }
-
-    private const val SAVED_LINE = "In your data"
 
     /** Where it came from: the welcome when empty, "MEKA filled this in … · check it" after the copy, else [TYPED]. */
     fun summary(a: AboutYou, cal: LocalCalendar, nowMs: Long): String = when {

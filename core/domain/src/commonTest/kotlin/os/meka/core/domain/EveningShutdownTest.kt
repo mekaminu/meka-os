@@ -324,6 +324,38 @@ class EveningShutdownTest {
     }
 
     @Test
+    fun tomorrowsHeaderSaysEachThingOnce() {
+        // Walk-through 2026-11-15 A16: "Tomorrow", "TOMORROW · THU 22 OCT", "Tomorrow starts at 07:40 · …" and
+        // "… · first at 07:40" said the day and the first time two or three times.
+        val day = today()
+        ta.create(NewTask("Gym before work", scheduledAtMs = at(day + 1, 7, 40)))
+        ta.create(NewTask("Ring the school", scheduledAtMs = at(day + 1, 11)))
+        val events = listOf(event("pe", "Parents' evening", at(day + 1, 18), at(day + 1, 19)))
+        val p = view(events = events).tomorrow
+        val sheet = ShutdownRules.heading(p, titled = true)
+        assertEquals(CivilDate.shortLabel(day + 1), sheet.label)
+        assertEquals("Starts at 07:40 · Gym before work", sheet.first)
+        assertEquals("1 event · 2 tasks", sheet.counts)
+        val pane = ShutdownRules.heading(p, titled = false)
+        assertEquals("Tomorrow · ${CivilDate.shortLabel(day + 1)}", pane.label)
+        assertEquals(sheet.first, pane.first)
+        assertEquals(sheet.counts, pane.counts)
+        listOf(sheet, pane).forEach { h ->
+            val all = listOfNotNull(h.label, h.first, h.counts).joinToString(" ")
+            assertEquals(1, Regex("07:40").findAll(all).count(), all)
+            assertTrue(Regex("(?i)tomorrow").findAll(all).count() <= 1, all)
+        }
+    }
+
+    @Test
+    fun anEmptyTomorrowSaysNothingOnceOnTheSheet() {
+        val p = view().tomorrow
+        // The sheet says "Nothing planned for tomorrow yet." itself, so the header adds no counts line.
+        assertEquals(ShutdownRules.heading(p, titled = true), TomorrowHeading(CivilDate.shortLabel(today() + 1), null, null))
+        assertEquals("Nothing planned yet", ShutdownRules.heading(p, titled = false).counts)
+    }
+
+    @Test
     fun shuttingDownTurnsTheWatchFaceToNightUntilTomorrow() {
         assertFalse(view().night)
         sa.shutDown()

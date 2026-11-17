@@ -190,6 +190,12 @@ class TomorrowScreensTest {
         assertEquals("18:00", evening.time, "$name: the parents' evening's time")
         assertTrue(rows.indexOfFirst { it.title == ShotLife.GYM } < rows.indexOf(evening), "$name: the gym isn't before the evening")
         assertTrue(shows(LoneWordGlue.kept("Due tomorrow · Water bill £32.50")), "$name: tomorrow's bill isn't shown")
+        // Walk-through 2026-11-15 A16: under the "Tomorrow" title the header says the day, the first time and the counts
+        // once each: "THU 22 OCT", "Starts at 07:40 · Gym before work", "1 event · 2 tasks" (no "first at 07:40" again).
+        assertTrue(shows("THU 22 OCT") && !shows("TOMORROW · THU 22 OCT"), "$name: the date is said with Tomorrow again")
+        assertTrue(shows(LoneWordGlue.kept("Starts at 07:40 · Gym before work")) && !shows("Tomorrow starts at"),
+            "$name: the first line says Tomorrow again")
+        assertTrue(shows(LoneWordGlue.kept("1 event · 2 tasks")) && !shows("first at 07:40"), "$name: the counts say the first time again")
         assertTouchTargets(name)
 
         // Today on the school task: it leaves tomorrow and the sheet says where it went.

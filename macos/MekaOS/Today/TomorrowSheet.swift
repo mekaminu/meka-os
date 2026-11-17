@@ -78,8 +78,10 @@ struct TomorrowSheet: View {
                 let rows = model.tomorrowRows(p.rows)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                        SectionLabel(p.label, palette).staggeredAppear(1)
-                        if let first = v.firstLine {
+                        // A16: each thing said once; under the sheet's "Tomorrow" title the label is the date alone.
+                        let heading = ShutdownRules.shared.heading(p: p, titled: true)
+                        SectionLabel(heading.label, palette).staggeredAppear(1)
+                        if let first = heading.first {
                             Text(LoneWordGlue.shared.kept(line: first)).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).staggeredAppear(1)
                         }
                         if let work = p.workLine {

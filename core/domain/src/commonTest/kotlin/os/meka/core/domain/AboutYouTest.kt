@@ -102,6 +102,18 @@ class AboutYouTest {
     }
 
     @Test
+    fun aFilledFieldHasNoLineUnderIt() {
+        // Walk-through 2026-11-15 A16: "In your data" stood under every filled field; the summary says it once.
+        val s = store()
+        s.set(AboutField.PARTNER_NAME, "Sam")
+        val v = s.view(LocalCalendar.UTC)
+        assertNull(v.rows.first { it.field == AboutField.PARTNER_NAME }.line)
+        assertTrue(v.rows.filter { it.value != null }.all { it.line == null })
+        assertTrue(v.rows.filter { it.value == null }.all { !it.line.isNullOrBlank() })
+        assertTrue(v.summary.contains("your own data"))
+    }
+
+    @Test
     fun anEmptyProfileAsksOnceAndPreFillsNothing() {
         val s = store()
         val v = s.view(LocalCalendar.UTC)

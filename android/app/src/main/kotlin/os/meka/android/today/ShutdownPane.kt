@@ -276,13 +276,15 @@ private fun LeftRow(
 }
 
 @Composable
-internal fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
+internal fun TomorrowHeader(v: ShutdownView, modifier: Modifier, titled: Boolean = false) {
     val p = v.tomorrow
     val reduced = Meka.reducedMotion
+    // A16: each thing said once; under the sheet's own "Tomorrow" title ([titled]) the label is the date alone.
+    val h = ShutdownRules.heading(p, titled)
     Column(modifier) {
-        SectionLabel(p.label)
-        // Done for the day: tomorrow's first commitment, "Tomorrow starts at 09:30 · Standup".
-        v.firstLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textPrimary) }
+        SectionLabel(h.label)
+        // Tomorrow's first commitment, "Starts at 09:30 · Standup".
+        h.first?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textPrimary) }
         p.workLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         // Done for the day, the first train: "First train · the 07:42 · leave by 07:32", in the accent when it often runs late.
         p.train?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = if (it.lit) Meka.colors.accent else Meka.colors.textSecondary,
@@ -304,10 +306,10 @@ internal fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
             modifier = Modifier.semantics { contentDescription = it.spoken }) }
         // The summary rolls over to its new value as items are carried in.
         AnimatedContent(
-            targetState = p.summary,
+            targetState = h.counts,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "tomorrow-summary",
-        ) { s -> Text(LoneWordGlue.kept(s), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
+        ) { s -> if (s != null) Text(LoneWordGlue.kept(s), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
     }
 }
 
