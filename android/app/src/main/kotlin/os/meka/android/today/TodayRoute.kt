@@ -1420,7 +1420,7 @@ private fun TodayPane(
             // "All day" in the narrow time column of the first all-day row, the earlier fold, then the rows without the
             // free gaps; each row draws its slice of the card, so rows still glide in and out on their own.
             if (head != null) {
-                val scheduleLabel = EveningCardRules.scheduleLabel(tl.sectionLabel)
+                val scheduleLabel = os.meka.core.domain.LoneWordGlue.kept(EveningCardRules.scheduleLabel(tl.sectionLabel))
                 val allShown = AllDayRules.shown(tl.allDayItems, allDayOpen)
                 val allMore = AllDayRules.moreLabel(tl.allDayItems, allDayOpen)
                 val cardRows = ScheduleCardRules.rows(tl.rows)

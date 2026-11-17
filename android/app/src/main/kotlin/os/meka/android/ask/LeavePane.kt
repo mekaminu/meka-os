@@ -47,6 +47,7 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.LeavePageRules
 import os.meka.core.domain.LeaveRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 
 /** The pane's own list, for the hand tests' bounded scrolls (quality gate (3)). */
@@ -135,7 +136,7 @@ fun LeavePane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             item(key = "note") {
-                Text(LeaveRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                Text(LoneWordGlue.kept(LeaveRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.l))
             }
         }

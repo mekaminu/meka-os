@@ -172,7 +172,7 @@ object ScreenShots {
     /** Fails unless [text] is on screen (as words or as what TalkBack reads), e.g. the greeting for the core's time. */
     /** True when a node's text or description contains [text] (merged or not). */
     fun shows(compose: ComposeContentTestRule, text: String): Boolean =
-        compose.onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true), useUnmergedTree = true)
+        compose.onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true) or plainText(text, substring = true), useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
 
     /**

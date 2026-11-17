@@ -100,7 +100,7 @@ struct LeaveSheet: View {
                             })
                             .staggeredAppear(3 + i)
                         }
-                        Text(LeaveRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(LoneWordGlue.shared.kept(line: LeaveRules.shared.NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

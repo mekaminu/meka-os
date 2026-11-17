@@ -111,7 +111,7 @@ struct StudyImportCard: View {
             Text(StudyImportRules.shared.LABEL)
                 .font(MekaType.cardLabel).tracking(MekaType.cardLabelTracking)
                 .foregroundStyle(palette.textSecondary)
-            Text(offer.line)
+            Text(LoneWordGlue.shared.measured(line: offer.line))
                 .font(MekaType.body)
                 .foregroundStyle(offer.ok ? palette.textPrimary : palette.accent)
                 .fixedSize(horizontal: false, vertical: true)

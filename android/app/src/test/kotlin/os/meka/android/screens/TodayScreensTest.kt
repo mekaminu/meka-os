@@ -418,6 +418,10 @@ class TodayScreensTest {
             }
         }
         ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[2])
+        // Walk-through 2026-11-15, A15 part 2: the Schedule's label never ends a line on "·" nor leaves "2 EVENTS" alone.
+        val schedLabel = os.meka.core.domain.LoneWordGlue.kept(EveningCardRules.scheduleLabel(core.today.value.timeline.sectionLabel)).uppercase()
+        ScreenShots.assertNoDotEndingALine(compose, name, listOf(schedLabel))
+        ScreenShots.assertNoLoneWords(compose, name, listOf(schedLabel))
         // The open Fold's right column lays out what fits its screen; the late dinner is under it there.
         if (name.startsWith("cover")) ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
         // Walk-through week 4, A6 (3): on the open Fold the health line and setup card headed the right column and the

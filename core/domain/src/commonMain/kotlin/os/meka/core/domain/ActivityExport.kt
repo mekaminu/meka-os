@@ -20,7 +20,7 @@ object ActivityExportRules {
     /** The line under the days: how long things are kept and shown, and what Export saves. */
     fun keptLine(count: Int): String =
         "Kept in your data on your devices · this shows the last ${ActivityRules.DAYS_SHOWN} days and Undo lasts " +
-            "${ActivityRules.UNDO_DAYS} · Export saves " + if (count == 1) "the 1 entry" else "all $count entries"
+            "${ActivityRules.UNDO_DAYS} days · Export saves " + if (count == 1) "the 1 entry" else "all $count entries"
 
     fun kindLabel(k: ActivityKind): String = when (k) {
         ActivityKind.REMINDED -> "Reminder"

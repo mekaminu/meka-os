@@ -23,6 +23,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.StudyImportOffer
 import os.meka.core.domain.StudyImportRules
 
@@ -41,7 +42,7 @@ internal fun StudyImportCard(offer: StudyImportOffer, modifier: Modifier, onAdd:
     ) {
         Text(StudyImportRules.LABEL, style = MekaType.cardLabel, color = Meka.colors.textSecondary)
         Text(
-            offer.line, style = MekaType.body, color = if (offer.ok) Meka.colors.textPrimary else Meka.colors.accent,
+            LoneWordGlue.measured(offer.line), style = MekaType.body, color = if (offer.ok) Meka.colors.textPrimary else Meka.colors.accent,
             modifier = Modifier.semantics { contentDescription = offer.spoken; liveRegion = LiveRegionMode.Polite }.testTag("$TAG-line"),
         )
         if (offer.ok) Text(StudyImportRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)

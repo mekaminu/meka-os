@@ -86,7 +86,7 @@ class ActivityExportTest {
         assertTrue(lines[1].contains(",Done for you,Renamed,,test,Too late to undo · change it by hand"))
         assertTrue(lines.any { it.contains("Reminder,\"Reminded you: Dentist, \"\"today\"\"\",15:00") })
         assertTrue(lines.any { it.contains(",Moved,,test,Undone ") })
-        assertEquals("Kept in your data on your devices · this shows the last 30 days and Undo lasts 30 · Export saves all 3 entries",
+        assertEquals("Kept in your data on your devices · this shows the last 30 days and Undo lasts 30 days · Export saves all 3 entries",
             ActivityExportRules.keptLine(3))
     }
 

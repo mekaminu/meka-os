@@ -38,6 +38,30 @@ class LoneWordGlueTest {
     }
 
     @Test
+    fun aFigureNeverEndsALine() {
+        // Walk-through 2026-11-15, A15 part 2: the cover screen left a figure at a line's end.
+        val sched = LoneWordGlue.kept("SCHEDULE · 1 ALL DAY · AT WORK UNTIL 17:30 · 2 EVENTS")
+        assertTrue(sched.endsWith("17:30${nb}·${nb}2${nb}EVENTS"), sched)
+        assertTrue(LoneWordGlue.kept("Thu 22 Oct · 2 tasks · 1 bill due").endsWith("1${nb}bill${nb}due"))
+        assertTrue(LoneWordGlue.measured("1 h 30 a week · 5 lessons left").contains("5${nb}lessons"))
+        assertTrue(LoneWordGlue.kept("Say nothing for 6 seconds and it stops").contains("6${nb}seconds"))
+        val act = LoneWordGlue.kept("This week: 1 reminder (1 digest) · 3 changes · 2 calls stopped.")
+        assertTrue(act.contains("1${nb}reminder") && act.contains("2${nb}calls"), act)
+        // A price and its period go down together.
+        assertTrue(LoneWordGlue.kept("Renews Tue 3 Nov · £10.99 a month · Subscription").contains("£10.99${nb}a${nb}month"))
+        // A figure before a joiner stays free.
+        assertEquals("Spent 12 · then more", LoneWordGlue.dotsHeld(LoneWordGlue.figuresHeld("Spent 12 · then more")).replace(nb, " "))
+        assertFalse(LoneWordGlue.figuresHeld("Spent 12 · then").contains("12$nb·"))
+    }
+
+    @Test
+    fun aShareOfATimeGoesDownWhole() {
+        // A15 part 2: Week ahead's "family 0 h / of 8 h" and "45 min / of 8 h".
+        assertTrue(LoneWordGlue.measured("Balance · family 0 h of 8 h").endsWith("0${nb}h${nb}of${nb}8${nb}h"))
+        assertTrue(LoneWordGlue.measured("Balance · family 45 min of 8 h").contains("45${nb}min${nb}of${nb}8${nb}h"))
+    }
+
+    @Test
     fun monthsAsMoStayWithTheirNumber() {
         // A15: Clear my cards' Debt-free tile "Dec 2027 · 14 / mo".
         assertEquals("Dec${nb}2027 · 14${nb}mo", PhraseGlue.kept("Dec 2027 · 14 mo"))

@@ -55,6 +55,7 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ReadingGoalRules
 import os.meka.core.domain.ReadingPageRules
 import os.meka.core.domain.ReadingRules
@@ -260,7 +261,7 @@ private fun SaidLine(said: ReadingSaid?, color: Color, onUndo: (String) -> Unit)
     val haptics = rememberMekaHaptics()
     Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "reading-line") { s ->
         if (s != null) Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
-            Text(s.line, style = MekaType.caption, color = color, modifier = Modifier.weight(1f, fill = false))
+            Text(LoneWordGlue.kept(s.line), style = MekaType.caption, color = color, modifier = Modifier.weight(1f, fill = false))
             // Only the line being shown offers Undo: the one fading out (a command earlier) can't be tapped or found,
             // so a quick Undo always takes back the latest command, never the one before it.
             s.undo?.takeIf { s == said }?.let { token ->

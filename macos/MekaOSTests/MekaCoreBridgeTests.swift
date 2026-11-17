@@ -4503,6 +4503,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyTradingLayout.shared.ADD_TITLE, "Add an address")
         XCTAssertTrue(MoneyTradingLayout.shared.ADD_SHEET_LINE.contains("never a key"))
     }
+    /// Walk-through 2026-11-15, A15 part 2: a figure takes the word after it on the Mac too ("2 events", "£10.99 a month").
+    func testFiguresHoldTheirWordOnTheMac() {
+        let nb = LifeTileRules.shared.GLUE
+        XCTAssertTrue(LoneWordGlue.shared.kept(line: "Schedule · at work until 17:30 · 2 events").hasSuffix("17:30\(nb)·\(nb)2\(nb)events"))
+        XCTAssertTrue(LoneWordGlue.shared.kept(line: "Renews Tue 3 Nov · £10.99 a month · Subscription").contains("£10.99\(nb)a\(nb)month"))
+        XCTAssertTrue(ActivityExportRules.shared.keptLine(count: 1).contains("Undo lasts \(ActivityRules.shared.UNDO_DAYS) days"))
+    }
     /// Walk-through 2026-11-15, A15: Money's lines reach the Mac held whole ("14 mo", "imported Wed 21 Oct").
     func testMoneyLinesWrapWholeOnTheMac() {
         let nb = LifeTileRules.shared.GLUE

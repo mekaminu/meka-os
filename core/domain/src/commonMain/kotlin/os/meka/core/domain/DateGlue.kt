@@ -66,6 +66,9 @@ object DurationGlue {
     /** "1 h", "1 h 20", "45 min", "90 mins", with the following word when it's a word of four letters or more. */
     val DURATION = Regex("\\b\\d+ (?:h(?: \\d{1,2}(?! ?(?:h\\b|min|:)))?|mins?)\\b(?: ([a-z]{4,})\\b)?")
 
+    /** "0 h of 8 h", "45 min of 8 h": a share of a time goes down whole (A15 part 2: Week ahead's "0 h / of 8 h"). */
+    private val OF_DURATION = Regex("(?<=\\b(?:h|min|mins|\\d))(?: of )(?=\\d+[ \u00A0](?:h|mins?)\\b)")
+
     /** The longest run a " · " beside a duration may make with the words either side of it. */
     const val DOT_RUN_MAX = 32
 
@@ -79,7 +82,7 @@ object DurationGlue {
             val word = m.groupValues[1]
             val keep = if (word.isNotEmpty() && word in SMALL) m.value.removeSuffix(" $word") else m.value
             keep.replace(' ', NBSP) + m.value.substring(keep.length)
-        }
+        }.let { OF_DURATION.replace(it) { m -> m.value.replace(' ', NBSP) } }
         val tokens = glued.split(' ')
         val out = mutableListOf<String>()
         var i = 0
@@ -135,7 +138,7 @@ object LoneWordGlue {
      * held together while that leaves the line somewhere to break.
      */
     fun kept(line: String): String {
-        val s = dotsHeld(leadsHeld(PhraseGlue.kept(line.trimEnd())))
+        val s = dotsHeld(leadsHeld(figuresHeld(PhraseGlue.kept(line.trimEnd()))))
         val starts = wordStarts(s)
         if (starts.size < 3) return s
         val base = starts.size - 2
@@ -222,6 +225,37 @@ object LoneWordGlue {
             // Just after a dot the word stays free, for the dot to take (CI: "Sun 25 Oct · in 4 days" ended on the dot).
             val afterDot = tokens.getOrNull(i - 1) in HELD
             if (lead && !afterDot && next != null && next.isNotEmpty() && next !in JOINERS && t.length + 1 + next.length <= PAIR_RUN_MAX) {
+                runs += t + NBSP + next
+                i += 2
+            } else {
+                runs += t
+                i++
+            }
+        }
+        return runs.joinToString(" ")
+    }
+
+    /** A figure on its own: "2", "£10.99", "45%", "1,200" (a time like "17:30" isn't one: it reads whole alone). */
+    private val FIGURE = Regex("^[£$€−-]?\\d[\\d,.]*%?$")
+
+    /** "a month", "per week": the period a price or count is for, held to it ("£10.99 a / month", A15). */
+    private val PERIOD = Regex("\\b(?:a|an|per|each|every) (?:day|night|week|fortnight|month|year)\\b")
+
+    /**
+     * [s] with each figure on its own held to the word after it, and a period ("a month") made whole, while that run stays
+     * within [PAIR_RUN_MAX] (walk-through 2026-11-15, A15 part 2: "· 2 / EVENTS", "1 / bill due", "· 5 / lessons left",
+     * "Say nothing for 6 / seconds", "This week: 1 / reminder", "£10.99 a / month"). Not before a joiner.
+     */
+    fun figuresHeld(s: String): String {
+        val tokens = PERIOD.replace(s) { it.value.replace(' ', NBSP) }.split(' ')
+        val runs = mutableListOf<String>()
+        var i = 0
+        while (i < tokens.size) {
+            val t = tokens[i]
+            val next = tokens.getOrNull(i + 1)
+            if (FIGURE.matches(t) && next != null && next.isNotEmpty() && next !in JOINERS && next.first() !in JOINERS.map { it[0] } &&
+                t.length + 1 + next.length <= PAIR_RUN_MAX
+            ) {
                 runs += t + NBSP + next
                 i += 2
             } else {

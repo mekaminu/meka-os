@@ -205,7 +205,7 @@ struct ReadingSheet: View {
                         .foregroundStyle(palette.textTertiary)
                 }
                 if let said {
-                    Text(said.line).font(MekaType.caption)
+                    Text(LoneWordGlue.shared.kept(line: said.line)).font(MekaType.caption)
                         .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -237,7 +237,7 @@ struct ReadingSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { submit(choice) }
                 if let said, said.refused {
-                    Text(said.line).font(MekaType.caption).foregroundStyle(palette.accent)
+                    Text(LoneWordGlue.shared.kept(line: said.line)).font(MekaType.caption).foregroundStyle(palette.accent)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

@@ -474,7 +474,7 @@ struct TodayView: View {
             // (core ScheduleCardRules), headed SCHEDULE: "All day" in the narrow time column of the first all-day row, the
             // earlier fold, then the rows without the free gaps (the now line still says what's free from now).
             if tl.head != nil {
-                SectionLabel(EveningCardRules.shared.scheduleLabel(sectionLabel: tl.sectionLabel), palette)
+                SectionLabel(LoneWordGlue.shared.kept(line: EveningCardRules.shared.scheduleLabel(sectionLabel: tl.sectionLabel)), palette)
                     .staggeredAppear(step(.timeline), play: play)
                 ScheduleCard(palette: palette) {
                     let shown = AllDayRules.shared.shown(items: tl.allDayItems, open: allDayOpen)

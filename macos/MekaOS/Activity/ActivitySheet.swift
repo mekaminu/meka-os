@@ -102,7 +102,7 @@ struct ActivitySheet: View {
                         }
                         if let kept = keptLine {
                             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                Text(kept).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                Text(LoneWordGlue.shared.measured(line: kept)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Button(ActivityExportRules.shared.LABEL + "…") { export() }
                                     .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
