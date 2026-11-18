@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Health and Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+@keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .26s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{from{transform:translateY(100%)}to{transform:none}}
+.sheet{animation:rise .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .9s linear infinite}
+button{cursor:pointer;font-family:DM Sans,sans-serif}
+@media (prefers-reduced-motion:reduce){.in,.sheet,.spin{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;height:980px;box-sizing:border-box;padding:16px 16px 0;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden">
+
+<div style="display:flex;gap:2px;background:#111113;border-radius:999px;padding:3px;align-self:flex-start">
+<sc-for list="{{examples}}" as="e" hint-placeholder-count="2"><button type="button" onClick="{{e.go}}" style="{{e.style}}">{{e.name}}</button></sc-for>
+</div>
+
+<button type="button" style="border:0;background:transparent;color:#c9b37e;font-size:13px;text-align:left;padding:0;height:24px">{{back}}</button>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;gap:8px;align-items:center"><span style="font-size:28px;font-weight:700">{{title}}</span>
+<button type="button" onClick="{{toggleInfo}}" aria-label="What this page does" style="width:26px;height:26px;border-radius:13px;border:1px solid #c9b37e;background:transparent;color:#c9b37e;font-size:12px">i</button></div>
+<button type="button" onClick="{{headGo}}" style="border:1px solid #2a2721;background:#18181b;color:#ededed;border-radius:999px;height:36px;padding:0 14px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">
+<sc-if value="{{checking}}" hint-placeholder-val="{{false}}"><svg class="spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c9b37e" stroke-width="2.4" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/></svg></sc-if>{{headLabel}}</button>
+</div>
+<sc-if value="{{info}}" hint-placeholder-val="{{false}}"><div class="in" style="background:#18181b;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#a8a29a;line-height:1.45">{{info}}</div></sc-if>
+<span style="font-size:12.5px;color:#8f897f;margin-top:-6px">{{sub}}</span>
+
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{t.go}}" style="background:#111113;border:1px solid #1a1a1d;border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:1px;text-align:left;color:#ededed"><span style="{{t.numStyle}}">{{t.n}}</span><span style="font-size:11px;color:#8f897f">{{t.l}}</span></button></sc-for>
+</div>
+
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="2">
+<div class="in" style="background:#111113;border:1px solid #1a1a1d;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px"><span style="display:flex;gap:8px;align-items:center"><span style="font-size:15px;font-weight:600">{{c.title}}</span><span style="{{c.countStyle}}">{{c.count}}</span></span>
+<sc-if value="{{c.more}}" hint-placeholder-val="{{true}}"><button type="button" onClick="{{c.moreGo}}" style="border:0;background:transparent;color:#c9b37e;font-size:12.5px;padding:0;min-height:32px">{{c.more}} ›</button></sc-if></div>
+<div style="display:flex;flex-direction:column;padding:0 14px 4px">
+<sc-for list="{{c.rows}}" as="r" hint-placeholder-count="4">
+<div style="border-top:1px solid #1a1a1d;display:flex;align-items:center;gap:10px;min-height:54px">
+<button type="button" onClick="{{r.go}}" style="flex:1;min-width:0;border:0;background:transparent;color:#ededed;display:flex;align-items:center;gap:10px;text-align:left;padding:6px 0;min-height:54px">
+<span style="{{r.markStyle}}">{{r.mark}}</span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14px;font-weight:500">{{r.name}}</span><span style="font-size:12.5px;color:#8f897f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.line}}</span></span>
+</button>
+<sc-if value="{{r.act}}" hint-placeholder-val="{{true}}"><button type="button" onClick="{{r.actGo}}" style="{{r.actStyle}}">{{r.act}}</button></sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+
+<div style="font-size:11.5px;color:#5a5650;line-height:1.5;padding:0 2px">{{foot}}</div>
+
+<sc-if value="{{sheet}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end">
+<div class="sheet" style="width:100%;box-sizing:border-box;background:#141416;border-radius:24px 24px 0 0;padding:14px 16px 22px;display:flex;flex-direction:column;gap:10px;max-height:78%;overflow:auto">
+<span style="width:36px;height:4px;border-radius:2px;background:#3a3833;align-self:center"></span>
+<div style="display:flex;align-items:center;gap:8px"><span style="{{sheetDot}}"></span><span style="font-size:17px;font-weight:600">{{sheetTitle}}</span><span style="font-size:12.5px;color:#8f897f;margin-left:auto">{{sheetState}}</span></div>
+<sc-for list="{{sheetLines}}" as="l" hint-placeholder-count="3"><div style="{{l.style}}">{{l.t}}</div></sc-for>
+<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px"><button type="button" onClick="{{closeSheet}}" style="border:0;background:transparent;color:#a8a29a;height:44px;padding:0 14px;font-size:14px">Close</button>
+<sc-if value="{{sheetAct}}" hint-placeholder-val="{{true}}"><button type="button" onClick="{{sheetActGo}}" style="border:0;background:#c9b37e;color:#111;border-radius:999px;height:44px;padding:0 20px;font-size:14px;font-weight:600">{{sheetAct}}</button></sc-if></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}"><div class="in" style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;background:#2a2721;color:#f0e6cf;border-radius:12px;padding:10px 14px;font-size:13px;white-space:nowrap">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={ex:'Health',info:false,sheet:null,fixed:{},checking:false,voice:'Charon',allVoices:false,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var C={ok:'#5fae7d',warn:'#e0b860',bad:'#e06a5f',off:'#6f6a62'};
+var say=function(t){return function(){self.setState({toast:t,sheet:null});};};
+var dot=function(k){return 'width:9px;height:9px;border-radius:5px;flex-shrink:0;background:'+C[k];};
+var v={};
+if(s.ex==='Health'){
+ var rows=[
+  {k:'battery',name:'Battery',line:'Samsung may put Navilife to sleep',st:'warn',act:'Allow',done:'Allowed to run in the background',
+   more:['Samsung’s battery saver can stop Navilife in the background, so reminders and messages arrive late.','Allow takes you to Android’s battery page: pick Unrestricted for Navilife.']},
+  {k:'cal',name:'Calendar · Work',line:'Not updated since 07:40',st:'warn',act:'Reconnect',done:'Work · synced just now',
+   more:['The work calendar’s sign-in ran out this morning, so today’s changes there haven’t come in.','Reconnect opens the sign-in once; nothing else changes.']},
+  {k:'server',name:'Navilife’s server',line:'Connected · synced 2 min ago',st:'ok',more:['Your phone and Mac share everything through Navilife’s own server.','Last sync 2 min ago · this device’s clock is right.']},
+  {k:'push',name:'Instant updates',line:'On · changes from the Mac arrive in seconds',st:'ok',more:['Changes made on the Mac reach this phone in seconds. If this ever stops, they still arrive within 15 minutes.']},
+  {k:'msg',name:'Messages capture',line:'Listening · last read 10:42',st:'ok',more:['Navilife reads message notifications on this phone to find requests and replies. Nothing is sent by itself.']},
+  {k:'voice',name:'Obi’s voice',line:'Charon · the same as Live · Google',st:'ok',more:['Read-outs and Live use the same voice.','Last clip: 0.9 s to start · Google Gemini.']},
+  {k:'upd',name:'Updates',line:'Version 0.1.2400 · up to date',st:'ok',more:['This phone has the newest build.']},
+  {k:'ai',name:'Navilife’s AI',line:'On · 23% of this month’s budget used',st:'ok',more:['Inside the month’s AI budget. At 70% you get a heads-up; at 100% AI pauses until the 1st.']},
+  {k:'cal2',name:'Calendar · Home',line:'Google · synced 3 min ago',st:'ok',more:['Read and edit allowed.']},
+  {k:'feeds',name:'Feeds',line:'News, fixtures, weather · up to date',st:'ok',more:['Every feed read in the last hour.']},
+  {k:'calls',name:'Call assistant',line:'Off · switch it on in Work mode',st:'off',act:'Work mode',more:['Off by your choice. Work mode turns it on for work hours.']}
+ ];
+ rows=rows.map(function(r){if(s.fixed[r.k]){return Object.assign({},r,{st:'ok',line:r.done,act:''});}return r;});
+ var need=rows.filter(function(r){return r.st==='warn'||r.st==='bad';});
+ var ok=rows.filter(function(r){return r.st==='ok';});
+ var off=rows.filter(function(r){return r.st==='off';});
+ var first=true;
+ var row=function(r){var brass=first&&(r.st==='warn'||r.st==='bad');if(brass)first=false;
+  return {name:r.name,line:r.line,mark:'',markStyle:dot(r.st),go:function(){self.setState({sheet:r.k,toast:''});},
+   act:r.act||'',actGo:function(){if(r.st==='off'){self.setState({toast:'Work mode opens'});return;}var f=Object.assign({},s.fixed);f[r.k]=true;self.setState({fixed:f,toast:r.name+' · fixed',sheet:null});},
+   actStyle:'flex-shrink:0;border-radius:999px;height:34px;padding:0 14px;font-size:12.5px;font-weight:600;'+(brass?'border:0;background:#c9b37e;color:#111':'border:1px solid #2a2721;background:#18181b;color:#c9b37e')};};
+ var cards=[];
+ if(need.length)cards.push({title:'Needs a look',count:String(need.length),countStyle:'font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#2a2721;color:#e0b860',more:'',rows:need.map(row)});
+ cards.push({title:'Working',count:String(ok.length),countStyle:'font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a',more:ok.length>5?'See all':'',moreGo:say('All '+ok.length+' working rows open'),rows:ok.slice(0,5).map(row)});
+ if(off.length)cards.push({title:'Off',count:String(off.length),countStyle:'font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a',more:'',rows:off.map(row)});
+ cards.push({title:'For Claude',count:'2',countStyle:'font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a',more:'',rows:[
+  {name:'Notifications log',line:'Allowed · 9 categories · last 12 sends',mark:'',markStyle:'display:none',go:function(){self.setState({sheet:'nlog'});},act:''},
+  {name:'Fold log',line:'Open, flat · last 20 changes',mark:'',markStyle:'display:none',go:function(){self.setState({sheet:'flog'});},act:''}]});
+ var sheetR=rows.filter(function(r){return r.k===s.sheet;})[0];
+ var SS={ok:'Working',warn:'Needs a look',bad:'Not working',off:'Off'};
+ var logs={nlog:{t:'Notifications log',lines:['Allowed · 9 categories','Reminders · on · last 10:30','Heads-ups · on · last 09:12','Calls · on · last Tue','10:30 · Reminder · shown','09:12 · Heads-up · shown','08:05 · Morning brief · shown','07:58 · Heads-up · held for quiet hours']},
+  flog:{t:'Fold log',lines:['Now · open, flat','10:41 · open, flat','10:39 · half open (table)','08:02 · closed','07:31 · open, flat']}};
+ v={back:'‹ Ask · Settings',title:'Health',sub:s.checking?'Checking now…':(need.length?need.length+' need a look · checked 1 min ago':'All working · checked just now'),
+  info:'Is every part of Navilife working on this phone? Each row is one part. Tap a row for what it means; a gold button fixes it here.',
+  headLabel:s.checking?'Checking':'Check now',headGo:function(){self.setState({checking:true,toast:''});setTimeout(function(){self.setState({checking:false,toast:'Checked · nothing new'});},1100);},checking:s.checking,
+  tiles:[[String(ok.length),'working',0],[String(need.length),'need a look',need.length?1:0],[String(off.length),'off by you',0]].map(function(t){return {n:t[0],l:t[1],go:function(){},numStyle:'font-size:20px;font-weight:600;color:'+(t[2]?'#e0b860':'#ededed')};}),
+  cards:cards,
+  foot:'Health in the look: three numbers, then what needs a look first with one gold fix; the working rows fold to five; the logs sit behind a tap',
+  sheet:!!s.sheet,closeSheet:function(){self.setState({sheet:null});}};
+ if(sheetR){v.sheetTitle=sheetR.name;v.sheetState=SS[sheetR.st];v.sheetDot=dot(sheetR.st);
+  v.sheetLines=[{t:sheetR.line,style:'font-size:14px;color:#ededed'}].concat(sheetR.more.map(function(m){return {t:m,style:'font-size:13px;color:#a8a29a;line-height:1.45'};}));
+  v.sheetAct=sheetR.act||'';v.sheetActGo=function(){var f=Object.assign({},s.fixed);f[sheetR.k]=true;self.setState({fixed:f,sheet:null,toast:sheetR.name+' · fixed'});};}
+ else if(logs[s.sheet]){var L=logs[s.sheet];v.sheetTitle=L.t;v.sheetState='';v.sheetDot='display:none';v.sheetAct='Copy';v.sheetActGo=say('Copied · paste it to Claude');
+  v.sheetLines=L.lines.map(function(t,i){return {t:t,style:'font-size:12.5px;color:'+(i?'#8f897f':'#ededed')+';font-variant-numeric:tabular-nums'};});}
+}else{
+ var voices=[['Charon','Low and steady · Live’s first'],['Orus','Firm, warm'],['Puck','Bright, upbeat'],['Kore','Clear, even'],['Fenrir','Lively'],['Aoede','Light, airy'],['Leda','Young, soft']];
+ var shown=s.allVoices?voices:voices.slice(0,5);
+ var vrow=function(x){var on=s.voice===x[0];return {name:x[0],line:x[1],mark:on?'✓':'',markStyle:'width:22px;height:22px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;'+(on?'background:#c9b37e;color:#111':'border:1px solid #3a3833;color:transparent'),
+  go:function(){self.setState({voice:x[0],toast:x[0]+' · Live, read-outs and calls'});},act:'▶',actGo:say(x[0]+' says: “Morning. Two things before nine.”'),actStyle:'flex-shrink:0;width:44px;height:44px;border-radius:22px;border:1px solid #2a2721;background:#18181b;color:#c9b37e;font-size:12px'};};
+ v={back:'‹ Ask · Settings',title:'Obi’s voice',sub:'One voice for Live, read-outs and calls',
+  info:'Pick the voice Obi speaks in everywhere. Google’s voices come through your AI budget; the phone’s own voice is free and works offline.',
+  headLabel:'▶ Sample',headGo:say(s.voice+' says: “Morning. Two things before nine.”'),checking:false,
+  tiles:[[s.voice,'speaking now',1],['$0.42','this month',0],['0.9 s','to start',0]].map(function(t){return {n:t[0],l:t[1],go:function(){},numStyle:'font-size:18px;font-weight:600;color:'+(t[2]?'#e0b860':'#ededed')};}),
+  cards:[{title:'Obi’s voices',count:'12',countStyle:'font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a',more:s.allVoices?'Fewer':'See all',moreGo:function(){self.setState({allVoices:!s.allVoices});},rows:shown.map(vrow)},
+   {title:'On this phone',count:'2',countStyle:'font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;background:#18181b;color:#a8a29a',more:'',rows:[['Phone · British male','Free · works offline'],['Phone · British female','Free · works offline']].map(vrow)}],
+  foot:'Every settings page in the same shape: title, the i for help, one action, three numbers, then cards of at most five rows; the gold mark shows the pick',
+  sheet:false,closeSheet:function(){}};
+}
+v.examples=['Health','Obi’s voice'].map(function(n){var on=s.ex===n;return {name:(n==='Health'?'Example: Health':'Example: a settings page'),go:function(){self.setState({ex:n,info:false,sheet:null,toast:''});},style:'border:0;border-radius:999px;height:30px;padding:0 12px;font-size:12px;'+(on?'background:#2a2721;color:#f0e6cf;font-weight:600':'background:transparent;color:#a8a29a')};});
+v.info=s.info?v.info:'';v.toggleInfo=function(){self.setState({info:!s.info});};
+v.toast=s.toast;
+v.sheetTitle=v.sheetTitle||'';v.sheetState=v.sheetState||'';v.sheetDot=v.sheetDot||'display:none';v.sheetLines=v.sheetLines||[];v.sheetAct=v.sheetAct||'';v.sheetActGo=v.sheetActGo||function(){};
+return v;
+}
+}
+</script>
+</body>
+</html>
