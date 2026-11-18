@@ -14,7 +14,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -263,9 +262,10 @@ class TalkActivityScreensTest {
         compose.waitForIdle()
         val undos = compose.onAllNodes(hasText("Undo") and hasClickAction()).fetchSemanticsNodes().size
         if (undos == 0) fail("Activity: no Undo on screen")
-        // Walk-through 2026-11-15 A20: with Undo a whole 48 dp target, a touch injected at its centre hung this test on
-        // CI twice (2026-11-18); the tap is sent as the button's own click action, which is what a tap on it does.
-        compose.onAllNodes(hasText("Undo") and hasClickAction())[0].performScrollTo()
+        // Walk-through 2026-11-15 A20: with Undo a whole 48 dp target, performScrollTo looped for ever trying to bring it
+        // wholly into view (CI 2026-11-18, three times); the tap is sent as the button's own click action, which is what
+        // a tap on it does and needs no scrolling.
+        compose.onAllNodes(hasText("Undo") and hasClickAction())[0]
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         // The undo runs on the core's own thread; give it real time, then let the screen catch up.
         repeat(20) {
