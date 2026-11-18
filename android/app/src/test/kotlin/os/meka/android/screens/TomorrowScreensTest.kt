@@ -57,7 +57,7 @@ import os.meka.core.sync.fv
 
 /**
  * The Tomorrow peek and sheet (Meka 2026-10-26: "I asked the AI to add a task for tomorrow, it did, but on this screen how
- * do I see tomorrow's stuff?"), on the Fold at 19:10 on a Wednesday with ShotLife's Thursday (two tasks, one at 07:40, a bill
+ * do I see tomorrow's stuff?"), on the Fold at 19:10 on a Wednesday with ShotLife's Thursday (two tasks, one at 07:00, a bill
  * and the parents' evening at 18:00): the peek
  * card says what's on and the sheet lists both; **Today** moves one to today in the same frame and says so; the tick
  * ring completes the other. Every button answers a 48 dp touch. Dark and Light; saved under `tomorrow/`. Invented data.
@@ -90,7 +90,7 @@ class TomorrowScreensTest {
         context.useCoreForScreens(core)
         val ids = runBlocking {
             core.tick()
-            // Walk-through 2026-11-15 A13: the Thursday the bedside and Week ahead show (ShotLife), the gym at 07:40
+            // Walk-through 2026-11-15 A13: the Thursday the bedside and Week ahead show (ShotLife), the gym at 07:00
             // first, the school call, the water bill due (Tomorrow on Today, slice 2) and the parents' evening at 18:00.
             val made = ShotLife.addThursday(core, core.todayEpochDay() + 1)
             core.tick()
@@ -173,7 +173,7 @@ class TomorrowScreensTest {
         val (gym, school) = ids
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", name))
         val peek = assertNotNull(core.shutdownView.value.peek)
-        assertTrue(peek.line.endsWith("1 event · 2 tasks · 1 bill due · first 07:40 Gym before work"), peek.line)
+        assertTrue(peek.line.endsWith("1 event · 2 tasks · 1 bill due · first 07:00 Gym before work"), peek.line)
         // Lines are drawn through LoneWordGlue (the last words held together), so look for them as drawn.
         assertTrue(shows(LoneWordGlue.kept(peek.line)), "$name: the peek isn't shown")
         // A19: the peek stands clear of the screen's edges (Today's gutter at the sides, its top space above).
@@ -189,13 +189,16 @@ class TomorrowScreensTest {
         val evening = rows.firstOrNull { it.title == ShotLife.PARENTS_EVENING.title } ?: fail("$name: no parents' evening tomorrow ($rows)")
         assertEquals("18:00", evening.time, "$name: the parents' evening's time")
         assertTrue(rows.indexOfFirst { it.title == ShotLife.GYM } < rows.indexOf(evening), "$name: the gym isn't before the evening")
+        // A22: the gym is before he leaves at 07:40, so its row carries no "After you leave" mark.
+        val gymRow = rows.first { it.title == ShotLife.GYM }
+        assertTrue(gymRow.detail?.contains("After you leave") != true, "$name: the gym clashes with leaving (${gymRow.detail})")
         assertTrue(shows(LoneWordGlue.kept("Due tomorrow · Water bill £32.50")), "$name: tomorrow's bill isn't shown")
         // Walk-through 2026-11-15 A16: under the "Tomorrow" title the header says the day, the first time and the counts
-        // once each: "THU 22 OCT", "Starts at 07:40 · Gym before work", "1 event · 2 tasks" (no "first at 07:40" again).
+        // once each: "THU 22 OCT", "Starts at 07:00 · Gym before work", "1 event · 2 tasks" (no "first at 07:00" again).
         assertTrue(shows("THU 22 OCT") && !shows("TOMORROW · THU 22 OCT"), "$name: the date is said with Tomorrow again")
-        assertTrue(shows(LoneWordGlue.kept("Starts at 07:40 · Gym before work")) && !shows("Tomorrow starts at"),
+        assertTrue(shows(LoneWordGlue.kept("Starts at 07:00 · Gym before work")) && !shows("Tomorrow starts at"),
             "$name: the first line says Tomorrow again")
-        assertTrue(shows(LoneWordGlue.kept("1 event · 2 tasks")) && !shows("first at 07:40"), "$name: the counts say the first time again")
+        assertTrue(shows(LoneWordGlue.kept("1 event · 2 tasks")) && !shows("first at 07:00"), "$name: the counts say the first time again")
         assertTouchTargets(name)
 
         // Today on the school task: it leaves tomorrow and the sheet says where it went.
@@ -228,10 +231,10 @@ class TomorrowScreensTest {
         assertTrue(!shows("Gym before work"), "$name: the old name is still shown beside the edited detail")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-edit"))
         // Walk-through 2026-11-02 A4: the line under the title is When's own time on the core's clock (it drew 06:40,
-        // the phone's zone, while When said 07:40), and on the cover screen the Repeat row stands whole above the pills.
-        assertTrue(!shows("06:40"), "$name: a time under the title disagrees with When")
-        assertTrue(compose.onAllNodes(hasText("07:40"), useUnmergedTree = true).fetchSemanticsNodes().size >= 2,
-            "$name: the title's line doesn't say When's 07:40")
+        // the phone's zone, while When said 07:40; the gym is at 07:00 since A22), and on the cover screen the Repeat row stands whole above the pills.
+        assertTrue(!shows("06:00"), "$name: a time under the title disagrees with When")
+        assertTrue(compose.onAllNodes(hasText("07:00"), useUnmergedTree = true).fetchSemanticsNodes().size >= 2,
+            "$name: the title's line doesn't say When's 07:00")
         val repeat = compose.onAllNodes(hasText("Repeat"), useUnmergedTree = true).fetchSemanticsNodes()
         val done = compose.onAllNodes(hasText("Done") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
         assertTrue(repeat.isNotEmpty() && done.isNotEmpty(), "$name: no Repeat row or Done pill on the detail")

@@ -14591,7 +14591,12 @@ class MekaCore(
         val studyTomorrow = os.meka.core.domain.StudyRules.tomorrowLine(
             os.meka.core.domain.StudyRules.onDay(studyLessonsNow, studyCoursesNow, todayDay + 1, rollOver = false, doneDay = studyDoneDay),
         )
+        // A22: on an office day, tomorrow's tasks timed after he's left or before he's home say so (none on leave).
+        val tomorrowLeaveLine = os.meka.core.domain.LeaveRules.workLine(shutdownRaw.tomorrow.workLine, leaveDays, leaveHours, dayWindow(today.endMs).epochDay)
+        val tomorrowBands = if (tomorrowLeaveLine?.startsWith("Work ") == true)
+            os.meka.core.domain.CommuteRules.bands(hoursOf(workState, todayDay + 1), todayDay + 1, cal) else emptyList()
         val tomorrowNow = shutdownRaw.tomorrow.copy(
+            rows = os.meka.core.domain.CommuteRules.markTasks(shutdownRaw.tomorrow.rows, shutdownRaw.tomorrow.tasks, tomorrowBands),
             weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
             school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
             // Done for the day, the first train: "First train · the 07:42 · leave by 07:32" before an office day.
@@ -14599,7 +14604,7 @@ class MekaCore(
             // Annual leave, slice 2: "Annual leave · no work · back Mon 2 Nov" on the evening before leave.
             // The commute counts everywhere, slice 4: "Work 09:00–17:30 · leave 07:40 · home about 18:50" before an office day.
             workLine = os.meka.core.domain.CommuteRules.withDayLine(
-                os.meka.core.domain.LeaveRules.workLine(shutdownRaw.tomorrow.workLine, leaveDays, leaveHours, dayWindow(today.endMs).epochDay),
+                tomorrowLeaveLine,
                 hoursOf(workState, todayDay + 1), todayDay + 1, cal,
             ),
             // Tomorrow on Today, slice 2: bills and renewals due tomorrow (and last days to cancel), from Lists → Renewals.

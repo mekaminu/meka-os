@@ -272,7 +272,7 @@ class BedsideScreensTest {
             Scene.DAY -> if (v.lines.none { "Dentist" in it }) fail("$name: the dentist at 13:45 isn't what's next (${v.lines})")
             Scene.EVENING -> {
                 ScreenShots.assertShows(compose, name, "See tomorrow ›")
-                // A13: tomorrow's first thing is the one Tomorrow leads with ("first 07:40 Gym before work").
+                // A13: tomorrow's first thing is the one Tomorrow leads with ("first 07:00 Gym before work").
                 val first = "First thing ${LocalClock.formatMinute(ShotLife.GYM_MIN)} ${ShotLife.GYM}"
                 if (v.lines.none { it.startsWith(first) }) fail("$name: tomorrow doesn't start with the gym (${v.lines})")
             }

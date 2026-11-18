@@ -242,6 +242,30 @@ object CommuteRules {
         }
     }
 
+    /**
+     * The walk-through 2026-11-15, A22 (Gym at the same minute as leaving): tomorrow's timed tasks that fall after he's
+     * left for work or before he's home are marked as the events are ([WorkClash.mark]): "After you leave · about 07:40"
+     * / "Before you're home · about 18:50", ahead of the row's own detail. Rows of events, untimed tasks and tasks
+     * outside [bands] are kept as they are; with no bands (not an office day) nothing changes.
+     */
+    fun markTasks(rows: List<TomorrowRow>, tasks: List<Task>, bands: List<CommuteBand>): List<TomorrowRow> {
+        if (bands.isEmpty()) return rows
+        val at = tasks.associate { it.id to it.scheduledAtMs }
+        return rows.map { r ->
+            if (r.isEvent || !r.id.startsWith("t-")) return@map r
+            val ms = at[r.id.removePrefix("t-")] ?: return@map r
+            val mark = taskMark(ms, bands) ?: return@map r
+            r.copy(detail = listOfNotNull(mark, r.detail).joinToString(" · "))
+        }
+    }
+
+    /** [markTasks]' words for a task at [ms]: inside the morning band or the band home, else null. */
+    fun taskMark(ms: Long, bands: List<CommuteBand>): String? {
+        val b = bands.firstOrNull { it.endMs > it.startMs && ms >= it.startMs && ms < it.endMs } ?: return null
+        return if (b.toWork) "After you leave · about ${LocalClock.formatMinute(b.startMinute)}"
+        else "Before you're home · about ${LocalClock.formatMinute(b.endMinute)}"
+    }
+
     /** "Home about 18:50" */
     fun homeLine(minute: Int): String = "Home about ${LocalClock.formatMinute(minute)}"
 

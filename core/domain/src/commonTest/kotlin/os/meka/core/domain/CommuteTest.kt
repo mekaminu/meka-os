@@ -435,4 +435,29 @@ class CommuteTest {
         // Only the one space after "about" is held: "Home" and "about" may still part.
         assertEquals(1, CommuteRules.shown("Home about 18:50").count { it == '\u00A0' })
     }
+
+    /** The walk-through 2026-11-15, A22: "Gym before work · 07:40" beside "leave 07:40" said nothing about it. */
+    @Test
+    fun tomorrowsTasksInsideTheCommuteSaySo() {
+        val bands = CommuteRules.bands(work, fri, cal) // leave 07:40, work 09:00–17:30, home about 18:50
+        fun task(id: String, minute: Int?) = Task(id, id, null, Lifecycle.ACTIVE, null, minute?.let { ms(fri, it) }, null, 0, null, null, 0L, null, false)
+        val tasks = listOf(task("gym", 7 * 60 + 40), task("early", 6 * 60 + 30), task("milk", 18 * 60), task("call", 12 * 60), task("none", null))
+        val rows = listOf(
+            TomorrowRow("t-early", "06:30", "early", false, null),
+            TomorrowRow("t-gym", "07:40", "gym", false, "↻ Every Fri"),
+            TomorrowRow("e-swim", "08:00", "Swim", true, null),
+            TomorrowRow("t-call", "12:00", "call", false, null),
+            TomorrowRow("t-milk", "18:00", "milk", false, null),
+            TomorrowRow("t-none", null, "none", false, null),
+        )
+        val marked = CommuteRules.markTasks(rows, tasks, bands).associateBy { it.id }
+        assertEquals("After you leave · about 07:40 · ↻ Every Fri", marked.getValue("t-gym").detail)
+        assertEquals("Before you're home · about 18:50", marked.getValue("t-milk").detail)
+        assertNull(marked.getValue("t-early").detail)
+        assertNull(marked.getValue("t-call").detail) // work hours are his own to plan in
+        assertNull(marked.getValue("e-swim").detail) // events carry their own clash marks
+        assertNull(marked.getValue("t-none").detail)
+        // Not an office day: nothing changes.
+        assertEquals(rows, CommuteRules.markTasks(rows, tasks, CommuteRules.bands(WorkHours(WorkSchedule.DEFAULT, homeDays = setOf(fri)), fri, cal)))
+    }
 }
