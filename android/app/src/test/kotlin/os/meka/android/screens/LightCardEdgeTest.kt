@@ -109,12 +109,13 @@ class LightCardEdgeTest {
         ThemeChoice.save(context, choice)
         compose.setContent {
             MekaTheme {
-                Box(Modifier.background(Meka.colors.background).padding(16.dp).testTag("ring")) { ProgressRing(0f, 0) }
+                Box(Modifier.testTag("ring").background(Meka.colors.background).padding(16.dp)) { ProgressRing(0f, 0) }
             }
         }
         compose.waitForIdle()
         val px = compose.onNodeWithTag("ring").captureToImage().toPixelMap()
-        // The ring is 40 dp inside 16 dp of padding (72 dp across); its 4 dp stroke's middle sits 18 dp from the top.
+        // The tag is on the outer box (the tag after the padding would name only the 40 dp ring's own space): the ring is
+        // 40 dp inside 16 dp of padding (72 dp across), so its 4 dp stroke's middle sits 18 dp from the top.
         return px[px.width / 2, px.height * 18 / 72]
     }
 
