@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -181,6 +182,8 @@ class MoneyBillsTidyScreensTest {
         // Walk-through A32: Charge card and Not a card are pills inside whole 48 dp targets; Charge card says if it's on.
         listOf("money-card-charge", "money-card-not-card").forEach { t ->
             compose.onNodeWithTag(t).assertHeightIsAtLeast(48.dp)
+            // Walk-through 2026-11-15 A20: the pill itself is drawn at the settings pills' 32 dp, not ~23 dp.
+            compose.onNode(hasTestTag("touch-pill") and hasAnyAncestor(hasTestTag(t)), useUnmergedTree = true).assertHeightIsAtLeast(32.dp)
         }
         compose.onNodeWithTag("money-card-charge").assert(
             androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription,

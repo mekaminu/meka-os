@@ -744,7 +744,7 @@ object ScreenShots {
                 "\"$label\" ${(n.size.width / d).toInt()} × ${(n.size.height / d).toInt()} dp"
             }
         if (small.isNotEmpty()) fail("$name: targets under 48 dp:\n" + small.joinToString("\n") { "- $it" })
-        val flat = listOf("switch-pill", "setting-chip").flatMap { tag ->
+        val flat = listOf("switch-pill", "setting-chip", "touch-pill").flatMap { tag ->
             compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
                 .filter { inside(it) && it.size.height / d < 30f }
                 .map { "$tag ${(it.size.height / d).toInt()} dp tall" }

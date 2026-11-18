@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -2415,22 +2416,41 @@ private fun CardDetails(
         }
         // Walk-through A32: Charge card and Not a card are pills (lit while it's a charge card), each drawn inside a whole
         // 48 dp tall target, so they read as the two switches they are rather than loose words under the fields.
+        // Walk-through 2026-11-15 A20: drawn at the settings pills' 32 dp (they were ~23 dp), the word centred.
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             val chargeBg by animateColorAsState(if (c.charge) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "money-card-charge-bg-${c.id}")
             val chargeFg by animateColorAsState(if (c.charge) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-card-charge-fg-${c.id}")
-            Text(MoneyCards.CHARGE_SWITCH + if (c.charge) " ✓" else "", style = MekaType.caption, color = chargeFg,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                    .clickable(role = Role.Switch) { onKind(true, !c.charge) }.testTag("money-card-charge")
-                    .semantics { stateDescription = if (c.charge) "On" else "Off" }
-                    .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(chargeBg)
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
-            Text(MoneyCards.NOT_CARD, style = MekaType.caption, color = Meka.colors.textSecondary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                    .clickable(role = Role.Button) { onKind(false, false) }.testTag("money-card-not-card")
-                    .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs))
+            CardSheetPill(MoneyCards.CHARGE_SWITCH + if (c.charge) " ✓" else "", c.charge, chargeBg, chargeFg,
+                Modifier.clickable(role = Role.Switch) { onKind(true, !c.charge) }.testTag("money-card-charge")
+                    .semantics { stateDescription = if (c.charge) "On" else "Off" })
+            CardSheetPill(MoneyCards.NOT_CARD, false, Meka.colors.surfaceRaised, Meka.colors.textSecondary,
+                Modifier.clickable(role = Role.Button) { onKind(false, false) }.testTag("money-card-not-card"))
         }
         Text(moneyShown(MoneyCards.FOOT), style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Walk-through 2026-11-15 A20: one of the card sheet's two pills, drawn [DonePillSpec.HEIGHT_DP] (32 dp) high like every
+ * settings pill inside the whole 48 dp target [tap] makes (its clickable and tag), the word centred. The drawn pill
+ * carries `touch-pill` so the shots measure it; an off pill has Light's 1 dp edge.
+ */
+@Composable
+private fun CardSheetPill(label: String, lit: Boolean, fill: androidx.compose.ui.graphics.Color, ink: androidx.compose.ui.graphics.Color, tap: Modifier) {
+    val edge = if (lit) null else LightInk.pillEdge(Meka.colors, Meka.theme.isDark)
+    Box(
+        Modifier.clip(RoundedCornerShape(MekaRadius.pill)).then(tap)
+            .sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.testTag("touch-pill").height(os.meka.core.domain.DonePillSpec.HEIGHT_DP.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                .then(if (edge != null) Modifier.border(1.dp, edge, RoundedCornerShape(MekaRadius.pill)) else Modifier)
+                .background(fill).padding(horizontal = MekaSpace.xs),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label, style = MekaType.caption, color = ink, maxLines = 1)
+        }
     }
 }
 
