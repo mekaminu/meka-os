@@ -16,6 +16,7 @@ import org.junit.Rule
 import org.junit.Test
 import os.meka.android.designsystem.MekaTheme
 import os.meka.core.domain.BriefRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.TomorrowRow
 
 /**
@@ -44,7 +45,8 @@ class BriefDayRowTest {
         val milk = compose.onNodeWithText("Buy milk").assertIsDisplayed().getUnclippedBoundsInRoot()
         assertEquals("one left edge", standup.left, milk.left)
         assertTrue("no time column: the title starts within 48 dp", milk.left <= 48.dp)
-        compose.onNodeWithText("09:30 · Room 4").assertIsDisplayed()
+        // The row glues its caption's last words with no-break spaces (LoneWordGlue), so look for the glued text.
+        compose.onNodeWithText(LoneWordGlue.kept("09:30 · Room 4")).assertIsDisplayed()
 
         compose.onNodeWithContentDescription("Complete Buy milk").performClick()
         compose.waitUntil(2_000) { completed != null }
