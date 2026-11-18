@@ -302,7 +302,8 @@ class LightCardEdgeTest {
             }
         }
         compose.waitForIdle()
-        val px = compose.onAllNodesWithTag(tag)[0].captureToImage().toPixelMap()
+        // The unmerged tree: a tag's bounds are its own place in the chain, not a merging node's further in.
+        val px = compose.onAllNodesWithTag(tag, useUnmergedTree = true)[0].captureToImage().toPixelMap()
         val y = px.height / 2
         return (0 until minOf(3, px.width)).map { px[it, y] }
             .minBy { abs(it.red - want.red) + abs(it.green - want.green) + abs(it.blue - want.blue) }
@@ -318,10 +319,11 @@ class LightCardEdgeTest {
         )
     }
 
+    // The row's own semantics (merged, inside its padding) would give the tag the padded bounds, so the test wraps it.
     private fun watchRow(): @Composable () -> Unit = {
-        os.meka.android.ask.WatchLinkRowView(
+        Box(Modifier.testTag("watch-wrap")) { os.meka.android.ask.WatchLinkRowView(
             os.meka.core.domain.LinkedWatchRow("w1", "Galaxy Watch", "Linked today"), enabled = true, modifier = Modifier, onUnlink = {},
-        )
+        ) }
     }
 
     private fun tomorrowChip(): @Composable () -> Unit = { os.meka.android.today.TomorrowChip("Day after") {} }
@@ -347,20 +349,24 @@ class LightCardEdgeTest {
 
     @Test
     fun watchsRowsHaveAnEdgeInLight() {
-        val edge = edgeOf(ThemeChoice.LIGHT, "watch-row", MekaLightColors.track, watchRow())
+        val edge = edgeOf(ThemeChoice.LIGHT, "watch-wrap", MekaLightColors.track, watchRow())
         if (!close(edge, MekaLightColors.track)) fail("Light: Watch's row's edge is $edge, not the track ink")
     }
 
     @Test
     fun watchsRowsHaveNoEdgeInDark() {
-        val edge = edgeOf(ThemeChoice.DARK, "watch-row", MekaDarkColors.surface, watchRow())
+        val edge = edgeOf(ThemeChoice.DARK, "watch-wrap", MekaDarkColors.surface, watchRow())
         if (!close(edge, MekaDarkColors.surface)) fail("Dark: Watch's row's edge is $edge, not the surface")
     }
 
     @Test
-    fun tomorrowsAndTalksPillsHaveAnEdgeInLight() {
+    fun tomorrowsPillsHaveAnEdgeInLight() {
         val chip = edgeOf(ThemeChoice.LIGHT, "tomorrow-chip", MekaLightColors.track, tomorrowChip())
         if (!close(chip, MekaLightColors.track)) fail("Light: Tomorrow's chip's edge is $chip, not the track ink")
+    }
+
+    @Test
+    fun talksPillsHaveAnEdgeInLight() {
         val talk = edgeOf(ThemeChoice.LIGHT, "talk-action", MekaLightColors.track, talkPill())
         if (!close(talk, MekaLightColors.track)) fail("Light: Talk's pill's edge is $talk, not the track ink")
     }
