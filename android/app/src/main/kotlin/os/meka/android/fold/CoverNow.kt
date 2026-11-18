@@ -2,6 +2,7 @@ package os.meka.android.fold
 
 import androidx.compose.ui.platform.testTag
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchInPlace
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -145,22 +146,31 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
             }
         }
       }
+        val openNeedsYou = handlers.openNeedsYou
+        val needsLine = now.needsYouLine?.takeIf { openNeedsYou != null }
+        // Walk-through 2026-11-15 A20: "Then: …" and "3 need you ›" take a whole 48 dp tap (they were about 28 dp). Alone,
+        // "Then" keeps its height and its target hangs into the 24 dp under the card (the card's own edge is right
+        // above it), so the cover's Today doesn't move; with the Needs you line under it (no Today passes one today)
+        // both are plain 48 dp rows, so neither target covers the other.
+        val inPlace = needsLine == null
         now.thenLine?.let { line ->
             Text(
                 line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                modifier = Modifier.padding(top = MekaSpace.xs)
+                    .then(if (inPlace) Modifier.minTouchInPlace(Alignment.Top) else Modifier)
+                    .clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(enabled = now.thenTask != null || now.thenEvent != null, role = Role.Button) {
                         now.thenTask?.let { handlers.openTask(it.id) } ?: now.thenEvent?.let(handlers.openEvent)
                     }
-                    .padding(vertical = MekaSpace.xxs),
+                    .then(if (inPlace) Modifier.wrapContentHeight(Alignment.Top) else Modifier.minTouch())
+                    .padding(vertical = MekaSpace.xxs).testTag(NOW_THEN_TAG),
             )
         }
-        val openNeedsYou = handlers.openNeedsYou
-        if (now.needsYouLine != null && openNeedsYou != null) {
+        if (needsLine != null && openNeedsYou != null) {
             Text(
-                "${now.needsYouLine} ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+                "$needsLine ›", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { openNeedsYou() }
-                    .padding(vertical = MekaSpace.xxs),
+                    .minTouch().padding(vertical = MekaSpace.xxs),
             )
         }
     }
@@ -225,3 +235,6 @@ internal const val NOW_CHIP_TAG = "now-chip"
 
 /** The now / Up next card itself, for the quality gate's height check (Calmer Today, slice 2). */
 internal const val NOW_CARD_TAG = "now-card"
+
+/** The "Then: …" line under the cover's now card. */
+internal const val NOW_THEN_TAG = "now-then"

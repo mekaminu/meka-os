@@ -412,8 +412,10 @@ internal fun MailNeedsRowView(
         row.linkedLine?.let { line ->
             Text(
                 line, style = MekaType.itemMeta, color = Meka.colors.accent,
+                // Walk-through 2026-11-15 A20: a whole 48 dp row (it was the words plus 4 dp, about 28 dp). Only an email
+                // with linked ones under it has this line, so no other row moves.
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); showLinked = !showLinked }
-                    .padding(vertical = MekaSpace.xxs).testTag("mail-linked-${row.id}")
+                    .minTouch().padding(vertical = MekaSpace.xxs).testTag("mail-linked-${row.id}")
                     .semantics { contentDescription = if (showLinked) "$line. Hide them" else "$line. Show them" },
             )
         }

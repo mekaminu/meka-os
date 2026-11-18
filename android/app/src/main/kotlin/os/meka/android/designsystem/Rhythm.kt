@@ -29,14 +29,18 @@ fun Modifier.minTouch(): Modifier = heightIn(min = MekaSpace.touch).wrapContentH
  * there pushed the open Fold's Schedule below Health and Setup). The target bleeds evenly above and below the line
  * into the gaps round it; Compose hands a touch to a child laid out past its parent's edge unless something clips.
  * Put it before `clickable`, and `wrapContentHeight()` after it so the words stay centred in the taller target.
+ *
+ * [line] is where the line's own height sits in the target: centred by default (the target bleeds evenly), or
+ * [Alignment.Top] when only the gap below the line is free (the target hangs below it; pass the same alignment to
+ * `wrapContentHeight` after `clickable`), as under the cover's "now" card, whose own bottom edge sits right above.
  */
-fun Modifier.minTouchInPlace(): Modifier = layout { measurable, constraints ->
+fun Modifier.minTouchInPlace(line: Alignment.Vertical = Alignment.CenterVertically): Modifier = layout { measurable, constraints ->
     val width = if (constraints.hasBoundedWidth) constraints.maxWidth else Constraints.Infinity
     val natural = measurable.minIntrinsicHeight(width).coerceIn(constraints.minHeight, constraints.maxHeight)
     val target = maxOf(natural, MekaSpace.touch.roundToPx())
     val p = measurable.measure(constraints.copy(minHeight = target, maxHeight = maxOf(target, constraints.maxHeight)))
-    // Cancels wrapContentHeight's centring to the pixel, so the words sit exactly where they were.
-    layout(p.width, natural) { p.place(0, -Alignment.CenterVertically.align(natural, p.height)) }
+    // Cancels wrapContentHeight's alignment to the pixel, so the words sit exactly where they were.
+    layout(p.width, natural) { p.place(0, -line.align(natural, p.height)) }
 }
 
 /**
