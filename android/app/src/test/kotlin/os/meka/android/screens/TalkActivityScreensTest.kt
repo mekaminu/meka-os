@@ -219,6 +219,9 @@ class TalkActivityScreensTest {
                     fail("$name: the boiler service isn't Friday's task: ${rows.map { it.summary }}")
                 }
                 ScreenShots.assertShows(compose, name, v.weekLine)
+                // Walk-through 2026-11-15 A20: Undo and Unblock were bare text links about 24 dp tall to hit.
+                ScreenShots.assertTallTarget(compose, name, hasText("Undo") and hasClickAction())
+                ScreenShots.assertTallTarget(compose, name, hasText(StoppedCallRules.UNBLOCK_LABEL) and hasClickAction())
             }
         }
         ScreenShots.assertReadable(compose, name, rows.flatMap { listOfNotNull(it.summary, it.detail, it.why) }, mustShow = false)
@@ -260,7 +263,10 @@ class TalkActivityScreensTest {
         compose.waitForIdle()
         val undos = compose.onAllNodes(hasText("Undo") and hasClickAction()).fetchSemanticsNodes().size
         if (undos == 0) fail("Activity: no Undo on screen")
-        compose.onAllNodes(hasText("Undo") and hasClickAction())[0].performScrollTo().performClick()
+        // Walk-through 2026-11-15 A20: with Undo a whole 48 dp target, a touch injected at its centre hung this test on
+        // CI twice (2026-11-18); the tap is sent as the button's own click action, which is what a tap on it does.
+        compose.onAllNodes(hasText("Undo") and hasClickAction())[0].performScrollTo()
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         // The undo runs on the core's own thread; give it real time, then let the screen catch up.
         repeat(20) {
             if (core.activityView.value.days.flatMap { it.rows }.count { it.canUndo } < doneForYou.size) return@repeat
