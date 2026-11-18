@@ -131,7 +131,8 @@ fun WatchPane(core: MekaCore, onClose: () -> Unit) {
         }
         val problem = WatchLinkRules.problemShown(v?.problem, typed)
         AnimatedVisibility(problem != null, enter = enter, exit = exit) {
-            Text(os.meka.core.domain.LoneWordGlue.kept(problem.orEmpty()), style = MekaType.caption, color = Meka.colors.accent)
+            // A refused code is an error, in the critical colour, not the link gold (walk-through A22).
+            Text(os.meka.core.domain.LoneWordGlue.kept(problem.orEmpty()), style = MekaType.caption, color = Meka.colors.critical)
         }
         if (v == null) {
             SkeletonRows(1, Modifier.padding(top = MekaSpace.xs))

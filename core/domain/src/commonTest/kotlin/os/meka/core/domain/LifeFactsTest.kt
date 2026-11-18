@@ -39,7 +39,8 @@ class LifeFactsTest {
     fun aFactAddedKeptFromTheAiIsNeverSentWithAQuestion() {
         val added = fFold.add("Spare key: with the neighbour", keepFromAi = true)
         assertFalse(added.refused)
-        assertTrue(added.line.contains("kept from AI", ignoreCase = true), added.line)
+        // "AI" stays in capitals (walk-through A22: it read "kept from ai").
+        assertTrue(added.line.endsWith(" · kept from AI"), added.line)
         val fact = fFold.all().single()
         assertTrue(fact.aiOff)
         assertTrue(FactAskRules.askLines(fFold.all(), "where is the spare key?").none { it.contains("neighbour") })

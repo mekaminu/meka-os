@@ -611,10 +611,13 @@ class KeptPlacesScreensTest {
                 compose.onAllNodes(hasContentDescription(FactsPageRules.spokenHint(choice.key)) and hasSetTextAction())[0].performTextClearance()
                 turns(300)
             }
-            type(p, name, FactsPageRules.spokenHint(choice.key), "Test ${choice.key}: by hand")
+            // Lines he'd type, not test strings (walk-through A22: "Test kept / by hand" sat in the shot).
+            val kept = FactsPageRules.keepsFromAi(choice.key)
+            val (label, line) = if (kept) "Spare key" to "Spare key: in the shed, under the blue pot" else "Bin day" to "Bin day: Thursday, black and green take turns"
+            type(p, name, FactsPageRules.spokenHint(choice.key), line)
             until { rows().size > before }
             if (rows().size <= before) fail("$name: + Add → ${choice.label} added nothing")
-            if (FactsPageRules.keepsFromAi(choice.key) && rows().none { it.label.startsWith("Test") && it.keptFromAi }) {
+            if (kept && rows().none { it.label == label && it.keptFromAi }) {
                 fail("$name: + Add → ${choice.label} didn't keep it from the AI")
             }
             until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }

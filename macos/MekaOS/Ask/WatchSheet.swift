@@ -39,7 +39,8 @@ struct WatchSheet: View {
                 }
                 .staggeredAppear(2)
                 if let problem = WatchLinkRules.shared.problemShown(problem: view.problem, typed: typed) {
-                    Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.accent)
+                    // A refused code is an error: the critical colour, not the link gold (walk-through A22).
+                    Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.critical)
                         .fixedSize(horizontal: false, vertical: true)
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }

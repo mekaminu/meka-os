@@ -111,6 +111,8 @@ object FactRules {
     const val FULL = "The page is full. Remove a fact first."
     const val NOTE = "Kept in your own Navilife data only. Navilife's AI sees a fact only when a question needs it, never one kept from AI. Passwords and card, bank or ID numbers never go here."
     const val KEPT_LINE = "Kept from AI"
+    /** After "Added Spare key to Home and utilities" when + Add kept it from the AI ("ai" was lowercased, A22). */
+    const val ADDED_KEPT = "kept from AI"
     const val KEEP_BUTTON = "Keep from AI"
     const val USE_BUTTON = "Let Navilife use it"
     /** The row's button that puts the fact on the clipboard (filling forms, slice 3). */
@@ -338,7 +340,7 @@ class LifeFacts(private val replica: Replica, private val newId: () -> String, p
         writes.forEach { (id, fields) ->
             replica.commitLocal(EntityTypes.LIFE_FACT, id, if (keepFromAi) fields + (FactFields.AI_OFF to true.fv()) else fields)
         }
-        if (keepFromAi && !added.refused && writes.isNotEmpty()) return FactAdded("${added.line} · ${FactRules.KEPT_LINE.lowercase()}", false)
+        if (keepFromAi && !added.refused && writes.isNotEmpty()) return FactAdded("${added.line} · ${FactRules.ADDED_KEPT}", false)
         return added
     }
 

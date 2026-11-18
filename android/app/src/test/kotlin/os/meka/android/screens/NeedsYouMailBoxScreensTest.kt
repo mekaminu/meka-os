@@ -69,11 +69,17 @@ class NeedsYouMailBoxScreensTest {
     val compose = createComposeRule()
 
     private val senders = listOf("Sam Taylor", "PayPal", "Oakfield School", "Oakfield School", "Council", "Dentist", "Energy Co")
+    // Real-looking subjects and a morning's times, newest first (walk-through A22: "Subject 0…4" at 00:12…04:12).
+    private val subjects = listOf(
+        "Are you free for lunch on Friday?", "Your account has been limited", "Year 3 trip to the museum: consent form",
+        "Parents' evening booking is open", "Your council tax bill for 2026/27", "Time for your check-up", "Your new tariff starts next month",
+    )
+    private val times = listOf("09:41", "09:12", "08:55", "08:30", "08:02", "07:46", "07:15")
     private val every = senders.mapIndexed { i, who ->
         MailNeedsRow(
-            id = "m$i", from = who, line = "Personal · 0$i:12", subject = "Subject $i", preview = "Hi Alex, the card ending 1234",
-            business = false, spoken = "$who, Subject $i", replyLine = "To $who", scam = who == "PayPal",
-            warning = if (who == "PayPal") "⚠ Possible scam · sent from mail-x.com, not paypal.com" else null, time = "0$i:12",
+            id = "m$i", from = who, line = "Personal · ${times[i]}", subject = subjects[i], preview = "Hi Alex, the card ending 1234",
+            business = false, spoken = "$who, ${subjects[i]}", replyLine = "To $who", scam = who == "PayPal",
+            warning = if (who == "PayPal") "⚠ Possible scam · sent from mail-x.com, not paypal.com" else null, time = times[i],
         )
     }
     private var starts = 0
@@ -156,7 +162,7 @@ class NeedsYouMailBoxScreensTest {
         if (!onScreen("Reply") || !onScreen("Done") || !onScreen("Task")) fail("$name: a tapped row doesn't unfold Reply · Done · Task")
         if (!onScreen("More")) fail("$name: More is missing under a tapped row")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "mail-box-$name-open"))
-        compose.onAllNodes(hasContentDescription("archive Subject 0", substring = true))[0].performSemanticsAction(SemanticsActions.OnClick)
+        compose.onAllNodes(hasContentDescription("archive ${subjects[0]}", substring = true))[0].performSemanticsAction(SemanticsActions.OnClick)
         turns()
         assertEquals(1, done, "$name: Done under the row didn't answer that email")
         tapRow("m0")
