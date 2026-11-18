@@ -30,6 +30,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.SignInLine
 import os.meka.core.facade.ConnectStart
@@ -77,10 +78,12 @@ fun SignInLineView(line: SignInLine, core: MekaCore, modifier: Modifier = Modifi
             Column(Modifier.fillMaxWidth().padding(start = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text(line.detail, style = MekaType.caption, color = Meka.colors.textSecondary)
                 problem?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), modifier = Modifier.padding(top = MekaSpace.xxs)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
                     Text(
                         "Reconnect", style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button) { reconnect() }.padding(vertical = MekaSpace.xxs),
+                        // Walk-through 2026-11-15 A20: a whole 48 dp target (it was a caption link about 24 dp tall); it shows
+                        // only while the line is unfolded, so folded Today keeps its layout.
+                        modifier = Modifier.clickable(role = Role.Button) { reconnect() }.minTouch(),
                     )
                 }
             }

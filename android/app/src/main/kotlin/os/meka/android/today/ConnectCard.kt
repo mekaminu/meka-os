@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.collectAsState
@@ -29,6 +30,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.DeviceJoinRules
 import os.meka.core.domain.RecoveryKeyRules
 
@@ -101,22 +103,26 @@ fun ConnectCard(
             Text(
                 if (busy) "Connecting…" else "Connect", style = MekaType.itemTitle,
                 color = if (ready) Meka.colors.accent else Meka.colors.textTertiary,
-                modifier = Modifier.clickable(enabled = !busy && url.isNotBlank() && ready) {
+                // Walk-through 2026-11-15 A20: Connect, Not now and the recovery link are whole 48 dp targets (Connect and
+                // Not now were about 22 dp tall, the link about 32). The card is open only while this device isn't syncing,
+                // so Today's usual layout doesn't move.
+                modifier = Modifier.clickable(enabled = !busy && url.isNotBlank() && ready, role = Role.Button) {
                     busy = true; error = null
                     scope.launch {
                         error = if (recovering) recover?.invoke(url, words) else connect(url, code)
                         busy = false
                         if (error == null) { code = ""; words = ""; recovering = false; open = false }
                     }
-                },
+                }.minTouch(),
             )
-            Text("Not now", style = MekaType.itemTitle, color = Meka.colors.textSecondary, modifier = Modifier.clickable { words = ""; open = false })
+            Text("Not now", style = MekaType.itemTitle, color = Meka.colors.textSecondary,
+                modifier = Modifier.clickable(role = Role.Button) { words = ""; open = false }.minTouch())
         }
         if (recover != null) {
             Text(
                 if (recovering) "Use an enrolment code instead" else RecoveryKeyRules.RECOVER,
                 style = MekaType.caption, color = Meka.colors.accent,
-                modifier = Modifier.clickable(enabled = !busy) { recovering = !recovering; error = null; words = "" }.padding(vertical = MekaSpace.xs),
+                modifier = Modifier.clickable(enabled = !busy, role = Role.Button) { recovering = !recovering; error = null; words = "" }.minTouch(),
             )
         }
     }
