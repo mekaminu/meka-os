@@ -17,6 +17,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
@@ -78,10 +79,19 @@ class LifeTitleInfoTargetTest {
         // one 2 dp inside its left edge folds them (read from the ⓘ's own state, so the fold's animation doesn't count).
         val d = compose.density.density
         fun state() = compose.onNode(target).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
-        compose.onNode(target).performTouchInputClick(Offset(46f * d, 24f * d))
+        // A node's touch bounds in a test are clipped to its slot (the circle's 24 dp), so tap from the root at the
+        // target's own unclipped position: its square starts 12 dp left of the circle and ends 12 dp right of it.
+        fun tapAt(x: Float) {
+            val at = compose.onNode(target).fetchSemanticsNode().positionInRoot
+            compose.onRoot().performTouchInput { click(Offset(at.x + x * d, at.y + 24f * d)) }
+            compose.waitForIdle()
+        }
+        val size = compose.onNode(target).fetchSemanticsNode().size
+        if (size.width / d < 47.5f) fail("the ⓘ's square is ${size.width / d} dp wide")
+        tapAt(46f)
         if (state() != "Shown") fail("a tap 2 dp inside the target's right edge didn't unfold the words (state ${state()})")
         compose.onNode(hasText(LifePageRules.shown(info), substring = true)).assertExists()
-        compose.onNode(target).performTouchInputClick(Offset(2f * d, 24f * d))
+        tapAt(2f)
         if (state() != "Hidden") fail("a tap 2 dp inside the target's left edge didn't fold the words (state ${state()})")
     }
 
@@ -90,10 +100,5 @@ class LifeTitleInfoTargetTest {
         show("What Navilife knows")
         ScreenShots.assertTallTarget(compose, "Facts", hasContentDescription(LifePageRules.INFO_LABEL), square = true)
         ScreenShots.assertHeaderWhole(compose, "Facts")
-    }
-
-    private fun androidx.compose.ui.test.SemanticsNodeInteraction.performTouchInputClick(at: Offset) {
-        performTouchInput { click(at) }
-        compose.waitForIdle()
     }
 }
