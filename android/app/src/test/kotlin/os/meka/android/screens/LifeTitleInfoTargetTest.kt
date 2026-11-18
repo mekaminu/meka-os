@@ -63,7 +63,7 @@ class LifeTitleInfoTargetTest {
         val n = compose.onNode(hasText(text), useUnmergedTree = true).fetchSemanticsNode()
         val results = mutableListOf<TextLayoutResult>()
         n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
-        return results.firstOrNull()?.lineCount ?: fail("no text layout for $text")
+        return results.firstOrNull()?.lineCount ?: throw AssertionError("no text layout for $text")
     }
 
     @Test
