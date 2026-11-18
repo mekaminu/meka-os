@@ -103,7 +103,7 @@ object LeavePageRules {
             if (view.booked.any { it.nextYear }) add(LifePageRules.card(NEXT_YEAR, NEXT_YEAR, allRows(view, NEXT_YEAR, today)))
             if (view.holidays.isNotEmpty()) add(LifePageRules.card(HOLIDAYS, HOLIDAYS, allRows(view, HOLIDAYS, today)))
             if (view.taken.isNotEmpty()) add(LifePageRules.card(TAKEN, TAKEN, allRows(view, TAKEN, today)))
-            add(LifePageRules.card(ALLOWANCE, ALLOWANCE, allRows(view, ALLOWANCE, today)))
+            add(LifePageRules.settings(ALLOWANCE, ALLOWANCE, allRows(view, ALLOWANCE, today)))
         }
         return LifePageView(TITLE, INFO, tiles, cards, ADD_TITLE, ADD_CHOICES)
     }

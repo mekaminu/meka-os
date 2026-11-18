@@ -95,7 +95,7 @@ object DateNightPageRules {
     fun page(view: DateNightView, today: Long): LifePageView {
         val cards = buildList {
             add(LifePageRules.card(COMING_UP, COMING_UP, nightRows(view, today), empty = COMING_EMPTY))
-            if (view.on) add(LifePageRules.card(EVENING, EVENING, listOf(eveningRow(view))))
+            if (view.on) add(LifePageRules.settings(EVENING, EVENING, listOf(eveningRow(view))))
         }
         return LifePageView(TITLE, INFO, listOf(nextTile(view, today), bookedTile(view), timeTile(view)), cards, ADD_TITLE, addChoices(view))
     }

@@ -95,7 +95,7 @@ object BinsPageRules {
             listOf(
                 LifePageRules.card(YOURS, YOURS, yours, empty = YOURS_EMPTY),
                 LifePageRules.card(ONE_OFFS, ONE_OFFS, oneOffs, empty = ONE_OFFS_EMPTY),
-                LifePageRules.card(SETTINGS, SETTINGS, settings),
+                LifePageRules.settings(SETTINGS, SETTINGS, settings),
             ),
             ADD_TITLE, ADD_CHOICES,
         )

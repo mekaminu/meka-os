@@ -97,6 +97,14 @@ object LifePageRules {
         PageCard(key, title, count, rows.take(MAX_ROWS), more ?: if (rows.size > MAX_ROWS) SEE_ALL else null, empty)
 
     /**
+     * A card of settings rather than things (Leave's Allowance, Bins' Settings, Date night's Evening, Errands' Near me):
+     * it counts nothing, so no count pill sits beside its one row (walk-through 2026-11-15, A22: "Allowance 1" on every
+     * Leave shot).
+     */
+    fun settings(key: String, title: String, rows: List<PageRow>, more: String? = null): PageCard =
+        card(key, title, rows, more = more, count = 0)
+
+    /**
      * Words a page draws where they may wrap (the ⓘ's words, a card's empty line, a row's name, + Add's choices), with no
      * word, date or "·" left alone at a line's end (walk-through 2026-11-08, A14: "4 days ·", "Oct", "from AI" on the
      * cover screen): [LoneWordGlue.measured]. Only for drawing; what is read out or compared keeps plain spaces.

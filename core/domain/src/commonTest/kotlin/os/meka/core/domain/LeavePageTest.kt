@@ -150,6 +150,17 @@ class LeavePageTest {
     }
 
     @Test
+    fun allowanceIsASettingWithNoCountPill() {
+        // Walk-through 2026-11-15, A22: "Allowance 1" sat on every Leave shot; a setting counts nothing.
+        val cards = LeavePageRules.page(view(), sat).cards
+        val allowance = cards.single { it.key == LeavePageRules.ALLOWANCE }
+        assertEquals(1, allowance.rows.size)
+        assertEquals(0, allowance.count)
+        kotlin.test.assertFalse(allowance.showsCount)
+        kotlin.test.assertTrue(cards.first { it.key == LeavePageRules.BOOKED }.showsCount)
+    }
+
+    @Test
     fun sixStretchesShowFiveWithSeeAll() {
         val many = (0 until 6).map { i -> item("m$i", "Trip $i", d(11, 2) + i * 7, d(11, 2) + i * 7) }
         val card = LeavePageRules.page(view(many, emptyList()), sat).cards.first()

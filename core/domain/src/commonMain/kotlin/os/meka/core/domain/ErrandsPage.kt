@@ -68,7 +68,7 @@ object ErrandsPageRules {
             add(LifePageRules.card(WAITING, WAITING, allRows(view, WAITING), empty = WAITING_EMPTY))
             add(LifePageRules.card(DONE, DONE, allRows(view, DONE), empty = DONE_EMPTY))
             if (near != null) {
-                add(LifePageRules.card(NEAR, NEAR, listOf(PageRow(KEY_NEAR, NEAR, near.statusLine, if (nearOn(near)) "On" else "Off", near.lit))))
+                add(LifePageRules.settings(NEAR, NEAR, listOf(PageRow(KEY_NEAR, NEAR, near.statusLine, if (nearOn(near)) "On" else "Off", near.lit))))
             }
         }
         return LifePageView(TITLE, if (near != null) INFO_NEAR else INFO, tiles, cards, ADD_TITLE, ADD_CHOICES)
