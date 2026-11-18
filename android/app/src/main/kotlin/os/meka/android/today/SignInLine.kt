@@ -1,5 +1,7 @@
 package os.meka.android.today
 
+import androidx.compose.foundation.layout.wrapContentHeight
+import os.meka.android.designsystem.minTouchInPlace
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -66,8 +68,9 @@ fun SignInLineView(line: SignInLine, core: MekaCore, modifier: Modifier = Modifi
         Crossfade(line.text, Modifier.fillMaxWidth(), MekaMotion.appear(reduced), label = "signin-text") { text ->
             Text(
                 text, style = MekaType.caption, color = color,
-                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open = !open }
-                    .padding(vertical = MekaSpace.xs).semantics { contentDescription = line.spoken },
+                // Walk-through 2026-11-15 A20: a whole 48 dp tap that keeps the line's height, so Today's layout doesn't move.
+                modifier = Modifier.minTouchInPlace().clickable(role = Role.Button) { haptics.tick(); open = !open }
+                    .wrapContentHeight().padding(vertical = MekaSpace.xs).semantics { contentDescription = line.spoken },
             )
         }
         AnimatedVisibility(

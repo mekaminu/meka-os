@@ -1,5 +1,7 @@
 package os.meka.android.today
 
+import androidx.compose.foundation.layout.wrapContentHeight
+import os.meka.android.designsystem.minTouchInPlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +65,8 @@ fun ConnectCard(
         Text(
             "This device isn't syncing yet · Connect",
             style = MekaType.caption, color = Meka.colors.accent,
-            modifier = modifier.clickable { open = true }.padding(vertical = MekaSpace.xs),
+            // Walk-through 2026-11-15 A20: a whole 48 dp tap that keeps the line's height, so Today's layout doesn't move.
+            modifier = modifier.minTouchInPlace().clickable(role = Role.Button) { open = true }.wrapContentHeight().padding(vertical = MekaSpace.xs),
         )
     } else Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised).padding(MekaSpace.l),

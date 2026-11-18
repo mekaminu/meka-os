@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -21,6 +22,22 @@ import androidx.compose.ui.unit.dp
  * `clickable` so the whole height takes the tap.
  */
 fun Modifier.minTouch(): Modifier = heightIn(min = MekaSpace.touch).wrapContentHeight(Alignment.CenterVertically)
+
+/**
+ * Walk-through 2026-11-15 A20: a one-line link on Today (the battery line, the folded Connect line, the sign-in line)
+ * takes a whole 48 dp tap but keeps the height it had in the layout, so nothing below it moves (a plain [minTouch]
+ * there pushed the open Fold's Schedule below Health and Setup). The target bleeds evenly above and below the line
+ * into the gaps round it; Compose hands a touch to a child laid out past its parent's edge unless something clips.
+ * Put it before `clickable`, and `wrapContentHeight()` after it so the words stay centred in the taller target.
+ */
+fun Modifier.minTouchInPlace(): Modifier = layout { measurable, constraints ->
+    val width = if (constraints.hasBoundedWidth) constraints.maxWidth else Constraints.Infinity
+    val natural = measurable.minIntrinsicHeight(width).coerceIn(constraints.minHeight, constraints.maxHeight)
+    val target = maxOf(natural, MekaSpace.touch.roundToPx())
+    val p = measurable.measure(constraints.copy(minHeight = target, maxHeight = maxOf(target, constraints.maxHeight)))
+    // Cancels wrapContentHeight's centring to the pixel, so the words sit exactly where they were.
+    layout(p.width, natural) { p.place(0, -Alignment.CenterVertically.align(natural, p.height)) }
+}
 
 /**
  * A glyph button ("⋯", "⌄") is a whole 48 × 48 target with the glyph centred, never only as wide as the glyph

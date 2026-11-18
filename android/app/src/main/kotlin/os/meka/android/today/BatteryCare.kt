@@ -1,5 +1,7 @@
 package os.meka.android.today
 
+import androidx.compose.foundation.layout.wrapContentHeight
+import os.meka.android.designsystem.minTouchInPlace
 import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
@@ -128,7 +130,9 @@ fun BatteryCareLine(view: BatteryCareView, onDismiss: () -> Unit, modifier: Modi
         Crossfade(line, Modifier.fillMaxWidth(), MekaMotion.appear(reduced), label = "battery-text") { text ->
             Text(
                 text, style = MekaType.caption, color = color,
-                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open = !open }.padding(vertical = MekaSpace.xs),
+                // Walk-through 2026-11-15 A20: a whole 48 dp tap that keeps the line's height, so Today's layout doesn't move.
+                modifier = Modifier.minTouchInPlace().clickable(role = Role.Button) { haptics.tick(); open = !open }
+                    .wrapContentHeight().padding(vertical = MekaSpace.xs),
             )
         }
         AnimatedVisibility(
