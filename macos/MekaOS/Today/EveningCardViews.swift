@@ -37,6 +37,7 @@ struct MacEveningCard: View {
         .padding(.horizontal, MekaSpace.l)
         .padding(.vertical, MekaSpace.m)
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised))
+        .lightCardEdge(palette, radius: MekaRadius.l)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("evening-card")
     }

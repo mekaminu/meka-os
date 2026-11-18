@@ -45,6 +45,7 @@ struct MailMomentView: View {
                 .padding(MekaSpace.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .lightCardEdge(palette)
                 .staggeredAppear(firstIndex)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }

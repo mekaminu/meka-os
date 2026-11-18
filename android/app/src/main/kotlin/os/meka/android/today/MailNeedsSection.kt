@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -128,7 +129,7 @@ internal fun MailNeedsSection(
     val draftAll = MailSendAllRules.draftLabel(shownRows.size, aiDown = aiLine != null)
     val sendAll = MailSendAllRules.sendAll(shownRows, texts.toMap())
     Column(
-        (if (boxed) modifier.fillMaxWidth() else modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        (if (boxed) modifier.fillMaxWidth() else modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).lightCardEdge(RoundedCornerShape(MekaRadius.m))
             .padding(MekaSpace.m)).testTag("mail-needs"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
@@ -661,7 +662,7 @@ internal fun MailChaseSection(
     // Taps feel instant, slice 20: an answer that takes the row away does so in this frame.
     fun gone(id: String, what: String, work: suspend () -> String) = taps.answer(id, what, { core.undoMailChase() }, work)
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).lightCardEdge(RoundedCornerShape(MekaRadius.m))
             .padding(MekaSpace.m).testTag("mail-chases"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
@@ -831,7 +832,7 @@ internal fun MailFindSection(
     // Taps feel instant, slice 20: an answer that takes the row away does so in this frame.
     fun gone(id: String, what: String, work: suspend () -> String) = taps.answer(id, what, { core.undoMailFind() }, work)
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).lightCardEdge(RoundedCornerShape(MekaRadius.m))
             .padding(MekaSpace.m).testTag("mail-finds"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {

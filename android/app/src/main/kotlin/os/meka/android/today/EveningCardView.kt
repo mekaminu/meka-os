@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -54,7 +55,7 @@ internal fun EveningCardView(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised).lightCardEdge(RoundedCornerShape(MekaRadius.l))
             .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

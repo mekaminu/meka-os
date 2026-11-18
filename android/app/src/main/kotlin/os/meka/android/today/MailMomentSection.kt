@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -68,7 +69,7 @@ internal fun MailMomentSection(
     val scope = rememberCoroutineScope()
     val reduced = Meka.reducedMotion
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).lightCardEdge(RoundedCornerShape(MekaRadius.m))
             .padding(MekaSpace.m).animateContentSize(MekaMotion.expand(reduced)).testTag("mail-moment"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {

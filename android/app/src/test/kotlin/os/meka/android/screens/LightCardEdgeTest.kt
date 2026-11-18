@@ -34,6 +34,8 @@ import os.meka.android.goals.ProgressRing
 import os.meka.android.today.NeedsYouGroupBoxEnd
 import os.meka.android.today.NeedsYouGroupHeadView
 import os.meka.android.today.HeaderTilesRow
+import os.meka.android.today.EveningCardView
+import os.meka.core.domain.EveningCard
 import os.meka.core.domain.HeaderTile
 import os.meka.core.domain.HeaderTileKind
 import os.meka.core.domain.NeedsYouGroup
@@ -193,5 +195,22 @@ class LightCardEdgeTest {
     fun todaysTilesHaveNoEdgeInDark() {
         val edge = leftEdge(ThemeChoice.DARK, headerTile)
         if (!close(edge, MekaDarkColors.surface)) fail("Dark: Today's TASKS tile's edge is $edge, not the surface")
+    }
+
+    /** A21 part 7: Today's raised cards (the evening card, the motion card, the mail cards) on Light's page. */
+    private val eveningCard: @Composable (Modifier) -> Unit = { m ->
+        EveningCardView(EveningCard("This evening", emptyList(), 0), onStep = {}, onLater = null, modifier = m)
+    }
+
+    @Test
+    fun todaysRaisedCardsHaveAnEdgeInLight() {
+        val edge = leftEdge(ThemeChoice.LIGHT, eveningCard)
+        if (!close(edge, MekaLightColors.track)) fail("Light: Today's evening card's edge is $edge, not the track ink")
+    }
+
+    @Test
+    fun todaysRaisedCardsHaveNoEdgeInDark() {
+        val edge = leftEdge(ThemeChoice.DARK, eveningCard)
+        if (!close(edge, MekaDarkColors.surfaceRaised)) fail("Dark: Today's evening card's edge is $edge, not the raised surface")
     }
 }

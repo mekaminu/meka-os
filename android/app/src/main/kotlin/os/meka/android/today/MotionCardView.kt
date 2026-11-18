@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -32,7 +33,7 @@ import os.meka.core.domain.MotionRules
 internal fun MotionSystemCard(card: MotionCard, motion: MotionControl, modifier: Modifier = Modifier) {
     val haptics = rememberMekaHaptics()
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised).padding(MekaSpace.l)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised).lightCardEdge(RoundedCornerShape(MekaRadius.l)).padding(MekaSpace.l)
             .semantics { contentDescription = "${card.title}. ${card.line}" },
     ) {
         Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
