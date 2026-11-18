@@ -72,6 +72,7 @@ struct LifeNumberTiles: View {
                 .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.surfaceRaised))
+                .lightCardEdge(palette, radius: MekaRadius.s)
                 .accessibilityElement(children: .combine)
             }
         }
@@ -133,5 +134,6 @@ struct LifePageCardView: View {
         }
         .padding(.horizontal, MekaSpace.m).padding(.bottom, MekaSpace.xxs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .lightCardEdge(palette)
     }
 }

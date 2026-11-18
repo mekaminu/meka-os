@@ -1,5 +1,7 @@
 package os.meka.android.ask
 
+import os.meka.android.designsystem.lightCardEdge
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -166,7 +168,7 @@ internal fun LifeNumberTiles(tiles: List<PageTile>, modifier: Modifier = Modifie
 @Composable
 internal fun LifePageCard(card: PageCard, modifier: Modifier = Modifier, onMore: () -> Unit, onRow: (PageRow) -> Unit) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

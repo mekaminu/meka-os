@@ -1,5 +1,7 @@
 package os.meka.android.notify
 
+import os.meka.android.designsystem.lightCardEdge
+
 import android.Manifest
 import android.content.Intent
 import android.os.Build
@@ -289,7 +291,7 @@ private fun TimeStepper(label: String, minute: Int, onChange: (Int) -> Unit) {
 private fun PillButton(label: String, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemTitle, color = Meka.colors.accent,
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).lightCardEdge(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
     )
 }

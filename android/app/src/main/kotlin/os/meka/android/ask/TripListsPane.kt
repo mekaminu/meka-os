@@ -1,5 +1,7 @@
 package os.meka.android.ask
 
+import os.meka.android.designsystem.lightCardEdge
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -293,7 +295,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
             ) {
                 Column(
-                    Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                    Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
                         .padding(MekaSpace.m).testTag("trip-going"),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
@@ -361,7 +363,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         }
         item(key = "tabs") {
             Row(
-                Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+                Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill)).lightCardEdge(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
                     .padding(MekaSpace.xxs).appear(rememberAppearance(2)),
             ) {
                 for (t in v.tabs) {
@@ -489,7 +491,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                     ) {
                         val tpl = from.templateId
                         Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
                                 .combinedClickable(
                                     role = Role.Button,
                                     onClick = {
@@ -849,7 +851,7 @@ private fun ProgressBar(p: TripProgress, modifier: Modifier) {
     val reduced = Meka.reducedMotion
     val fill by animateFloatAsState(p.fraction, MekaMotion.appear(reduced), label = "trip-bar")
     Column(
-        modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        modifier.clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .semantics(mergeDescendants = true) { contentDescription = "${p.label}: ${p.line}" },
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -973,7 +975,7 @@ private fun TripAddField(hint: String, description: String, onDone: (String) -> 
     var text by rememberSaveable(hint) { mutableStateOf("") }
     val submit = { if (text.isNotBlank()) { onDone(text); text = "" } }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).lightCardEdge(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
             .padding(start = MekaSpace.m, end = MekaSpace.xxs).testTag("trip-add-field"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),

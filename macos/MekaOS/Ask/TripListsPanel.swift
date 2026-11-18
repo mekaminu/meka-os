@@ -126,6 +126,7 @@ struct TripListsPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(MekaSpace.m)
             .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .lightCardEdge(palette)
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
@@ -204,6 +205,7 @@ struct TripListsPanel: View {
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .lightCardEdge(palette)
     }
 
     @ViewBuilder
@@ -261,6 +263,7 @@ struct TripListsPanel: View {
         }
         .padding(MekaSpace.xxs)
         .background(palette.background, in: Capsule())
+        .lightCardEdge(palette, radius: MekaRadius.pill)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tab)
         .padding(.top, MekaSpace.xs)
         .staggeredAppear(2)
@@ -286,6 +289,7 @@ struct TripListsPanel: View {
         .padding(.trailing, MekaSpace.xxs)
         .padding(.vertical, MekaSpace.xxs)
         .background(palette.background, in: Capsule())
+        .lightCardEdge(palette, radius: MekaRadius.pill)
         Text(said?.line ?? TripListRules.shared.ADD_NOTE).font(MekaType.caption)
             .foregroundStyle(said?.refused == true ? palette.accent : (said == nil ? palette.textTertiary : palette.textSecondary))
             .fixedSize(horizontal: false, vertical: true)
@@ -605,6 +609,7 @@ struct TripListsPanel: View {
         .padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .lightCardEdge(palette)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(p.label) \(p.line)")
     }
@@ -619,6 +624,7 @@ struct TripListsPanel: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xxs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .lightCardEdge(palette)
         .padding(.top, MekaSpace.xs)
     }
 

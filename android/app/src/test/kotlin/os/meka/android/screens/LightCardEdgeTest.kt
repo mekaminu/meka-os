@@ -23,16 +23,19 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.AiSpendRow
+import os.meka.android.ask.LifePageCard
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaDarkColors
 import os.meka.android.designsystem.MekaLightColors
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.ObiCallsEntry
+import os.meka.core.domain.PageCard
+import os.meka.core.domain.PageRow
 
 /**
  * Walk-through 2026-11-15, A21 part 2 (Light contrast): the white cards on AI, Obi on calls, Setup, Health, Activity
- * and Recovery sat on Light's off-white page with no edge. In Light they now draw a 1 dp edge in the track ink (as
+ * and Recovery sat on Light's off-white page with no edge; part 3 adds every Life page's card (Trips, School, Reading…). In Light they now draw a 1 dp edge in the track ink (as
  * Money's, [MoneyLightEdgeTest]); in Dark none. Measured on the card's left edge, half way down. Invented words only.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -72,6 +75,25 @@ class LightCardEdgeTest {
     fun theAiRowHasAnEdgeInLight() {
         val edge = leftEdge(ThemeChoice.LIGHT, ai)
         if (!close(edge, MekaLightColors.track)) fail("Light: the AI row's edge is $edge, not the track ink")
+    }
+
+    private val lifeCard: @Composable (Modifier) -> Unit = { m ->
+        LifePageCard(
+            PageCard("trips", "Your trips", 1, listOf(PageRow("trip:1", "Lisbon", "3 nights", "Fri 4 Dec", false)), null),
+            m, onMore = {}, onRow = {},
+        )
+    }
+
+    @Test
+    fun aLifePageCardHasAnEdgeInLight() {
+        val edge = leftEdge(ThemeChoice.LIGHT, lifeCard)
+        if (!close(edge, MekaLightColors.track)) fail("Light: a Life page card's edge is $edge, not the track ink")
+    }
+
+    @Test
+    fun aLifePageCardHasNoEdgeInDark() {
+        val edge = leftEdge(ThemeChoice.DARK, lifeCard)
+        if (!close(edge, MekaDarkColors.surface)) fail("Dark: a Life page card's edge is $edge, not the surface")
     }
 
     @Test
