@@ -34,6 +34,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BatteryCareRules
 import os.meka.core.domain.BatteryCareView
@@ -139,7 +140,7 @@ fun BatteryCareLine(view: BatteryCareView, onDismiss: () -> Unit, modifier: Modi
                 view.steps.forEachIndexed { i, step ->
                     Text("${i + 1}. $step", style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), modifier = Modifier.padding(top = MekaSpace.xxs)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
                     if (view.allowInAndroid) {
                         Action("Allow in Android") { haptics.light(); BatteryCare.allowInAndroid(context) }
                     }
@@ -159,6 +160,6 @@ fun BatteryCareLine(view: BatteryCareView, onDismiss: () -> Unit, modifier: Modi
 private fun Action(label: String, onClick: () -> Unit) {
     Text(
         label, style = MekaType.caption, color = Meka.colors.accent,
-        modifier = Modifier.clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs),
+        modifier = Modifier.clickable(role = Role.Button) { onClick() }.minTouch(),
     )
 }
