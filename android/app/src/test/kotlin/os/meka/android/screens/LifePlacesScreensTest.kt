@@ -230,7 +230,8 @@ class LifePlacesScreensTest {
 
     /** Waits (core thread, looper and frames by turns) until [done] holds, then lets the screen settle. */
     private fun until(done: () -> Boolean) {
-        repeat(40) {
+        // 120 short turns (it stops as soon as [done] holds): 40 was too few on a busy CI runner.
+        repeat(120) {
             if (done()) return@repeat
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(50)
@@ -413,6 +414,8 @@ class LifePlacesScreensTest {
         tap(p, name, label, hasText(label) and sheet)
         until { core.listsView.value.shopping.toBuy.size > before }
         if (core.listsView.value.shopping.toBuy.size <= before) fail("$name: \"$label\" added nothing to shopping")
+        // Flaked on CI (runs 43820151613, 44004496934): the list had the items but the sheet hadn't drawn Undo yet.
+        until { shows(hasText("Undo") and hasClickAction() and sheet) }
         tap(p, name, "Undo", hasText("Undo") and sheet)
         until { core.listsView.value.shopping.toBuy.size == before }
         if (core.listsView.value.shopping.toBuy.size != before) fail("$name: Undo left ${core.listsView.value.shopping.toBuy.size - before} on shopping")

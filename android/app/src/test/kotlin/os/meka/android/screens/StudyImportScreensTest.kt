@@ -69,7 +69,7 @@ class StudyImportScreensTest {
         }
         // Flaked once on CI (run 43618122560): the card took longer than 80 turns (about 2 s) on a busy runner while
         // GoalsRoute asks the core for the offer; it stops as soon as the card shows, so more turns only cost a slow run.
-        ScreenShots.awaitShows(compose, "import", "Add ${StudyFixture.TITLE} · 3 modules · 8 lessons?", turns = 320)
+        ScreenShots.awaitShows(compose, "import", "Add ${StudyFixture.TITLE} · 3 modules · 8 lessons?", turns = 320, atLeastMs = 30_000L)
         compose.mainClock.advanceTimeBy(1_000L)
         compose.waitForIdle()
         return context to core

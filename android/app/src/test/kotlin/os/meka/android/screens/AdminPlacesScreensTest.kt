@@ -255,7 +255,8 @@ class AdminPlacesScreensTest {
 
     /** Waits (core thread, looper and frames by turns) until [done] holds, then lets the screen settle for [settle] ms. */
     private fun until(settle: Long = SETTLE_MS, done: () -> Boolean) {
-        repeat(40) {
+        // 120 short turns (it stops as soon as [done] holds): 40 was too few on a busy CI runner.
+        repeat(120) {
             if (done()) return@repeat
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(50)
@@ -287,7 +288,18 @@ class AdminPlacesScreensTest {
     }
 
     private fun tap(place: Place, name: String, what: String, matcher: SemanticsMatcher) {
-        reach(place, name, matcher and hasClickAction(), "\"$what\" to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
+        // kidsByHand flaked once more on CI (run 43889897164: "LayoutNode should be attached to an owner"): the node
+        // found was one an exit animation (a sheet folding, a row going) took off the screen before the tap reached it.
+        // Finish the frame first, and if the node found has gone by the tap, find it again once on the settled screen.
+        compose.waitForIdle()
+        val m = matcher and hasClickAction()
+        try {
+            reach(place, name, m, "\"$what\" to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
+        } catch (e: IllegalStateException) {
+            if (e.message?.contains("attached to an owner") != true) throw e
+            turns(500)
+            reach(place, name, m, "\"$what\" to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
+        }
     }
 
     /** Types [text] into the field TalkBack reads as [description] and presses Done on the keyboard. */

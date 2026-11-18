@@ -84,7 +84,8 @@ class RoutinesScreensTest {
     }
 
     private fun until(done: () -> Boolean) {
-        repeat(60) {
+        // 120 short turns (it stops as soon as [done] holds): 60 was too few on a busy CI runner.
+        repeat(120) {
             if (done()) return@repeat
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(50)
@@ -185,6 +186,8 @@ class RoutinesScreensTest {
         val name = "routines-by-hand"
         fun tap(description: String) {
             val n = compose.onAllNodes(hasContentDescription(description) and hasClickAction())
+            // byHand flaked once on CI (run 43983911999): the core had moved on but the card's next step wasn't drawn yet.
+            if (n.fetchSemanticsNodes().isEmpty()) until { n.fetchSemanticsNodes().isNotEmpty() }
             if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$description\"")
             n[0].performSemanticsAction(SemanticsActions.OnClick)
         }
@@ -275,6 +278,8 @@ class RoutinesScreensTest {
         val name = "routines-new"
         fun tap(description: String) {
             val n = compose.onAllNodes(hasContentDescription(description) and hasClickAction())
+            // byHand flaked once on CI (run 43983911999): the core had moved on but the card's next step wasn't drawn yet.
+            if (n.fetchSemanticsNodes().isEmpty()) until { n.fetchSemanticsNodes().isNotEmpty() }
             if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$description\"")
             n[0].performSemanticsAction(SemanticsActions.OnClick)
         }

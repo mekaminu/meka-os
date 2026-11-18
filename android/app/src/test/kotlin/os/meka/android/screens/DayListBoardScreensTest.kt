@@ -155,7 +155,9 @@ class DayListBoardScreensTest {
         compose.onNode(hasSetTextAction()).performTextInput("Gym 45m")
         compose.onNode(hasSetTextAction()).performImeAction()
         val fri = board.todayEpochDay + 2
-        until { core.weekBoard.value.day(fri)?.cards?.any { it.title == "Gym" } == true }
+        // Flaked once on CI (run 43991182474): the card was there before its 45m estimate (a write of its own) landed;
+        // wait for both.
+        until { core.weekBoard.value.day(fri)?.cards?.any { it.title == "Gym" && it.task.estimateMinutes != null } == true }
         assertEquals(45, core.weekBoard.value.day(fri)!!.cards.single { it.title == "Gym" }.task.estimateMinutes)
     }
 

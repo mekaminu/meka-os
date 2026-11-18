@@ -181,9 +181,12 @@ object ScreenShots {
      * real time and moves the frame clock on; it stops as soon as the text shows, and fails after [turns] turns.
      * Never a skip: a screen that never shows the text still fails.
      */
-    fun awaitShows(compose: ComposeContentTestRule, name: String, text: String, turns: Int = 80) {
+    fun awaitShows(compose: ComposeContentTestRule, name: String, text: String, turns: Int = 80, atLeastMs: Long = 0L) {
+        // [atLeastMs]: keep waiting for at least this much real time even once the turns are used (StudyImportScreensTest
+        // flaked again after 320 turns on a busy runner, ci run 43789768255: the core's thread hadn't answered yet).
+        val start = System.currentTimeMillis()
         var i = 0
-        while (!shows(compose, text) && i++ < turns) {
+        while (!shows(compose, text) && (i++ < turns || System.currentTimeMillis() - start < atLeastMs)) {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(25)
             compose.mainClock.advanceTimeBy(100)

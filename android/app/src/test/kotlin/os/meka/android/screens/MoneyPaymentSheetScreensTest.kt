@@ -128,6 +128,21 @@ class MoneyPaymentSheetScreensTest {
 
     private fun shows(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
+    /**
+     * Waits, by short turns, for a node tagged [tag], then asserts it (flaky on CI 2026-11-16/17: the core's view had
+     * the write but the sheet hadn't drawn its line or chip yet). Stops as soon as it shows; still fails when it never does.
+     */
+    private fun awaitTag(tag: String, why: String) {
+        var i = 0
+        while (!shows(tag) && i++ < 160) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(25)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        compose.waitForIdle()
+        assertTrue(shows(tag), why)
+    }
+
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun aTapOpensTheSheetAndAChipMovesEveryPaymentFromThePayee() {
         val core = open(ThemeChoice.DARK)
@@ -141,7 +156,12 @@ class MoneyPaymentSheetScreensTest {
         settle()
         // The write runs on the core's own thread; wait for it to land in the view.
         var i = 0
-        while (core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.category != "fun" && i++ < 80) {
+        fun movedAll(): Boolean {
+            val txns = core.moneyView.value.month?.txns ?: return false
+            val merchant = txns.firstOrNull { it.id == id }?.takeIf { it.category == "fun" }?.merchant ?: return false
+            return txns.count { it.merchant == merchant && it.category == "fun" } == 2
+        }
+        while (!movedAll() && i++ < 160) {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(50)
             compose.mainClock.advanceTimeBy(100)
@@ -151,8 +171,8 @@ class MoneyPaymentSheetScreensTest {
         assertEquals("fun", moved.category)
         // Every payment from the payee moved, not only the one tapped.
         assertEquals(2, core.moneyView.value.month!!.txns.count { it.merchant == moved.merchant && it.category == "fun" })
-        assertTrue(shows("money-sheet-said"), "no line after the pick")
-        assertTrue(shows("money-sheet-undo"), "no Undo after the pick")
+        awaitTag("money-sheet-said", "no line after the pick")
+        awaitTag("money-sheet-undo", "no Undo after the pick")
         compose.onNodeWithTag("money-sheet-done", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         settle()
         if (shows("money-sheet")) fail("Done didn't close the sheet")
@@ -190,7 +210,7 @@ class MoneyPaymentSheetScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-new-category")
         tap("money-new-create")
         var i = 0
-        while (core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.categoryLabel != "Treats" && i++ < 80) {
+        while (core.moneyView.value.month?.txns?.firstOrNull { it.id == id }?.categoryLabel != "Treats" && i++ < 160) {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(50)
             compose.mainClock.advanceTimeBy(100)
@@ -203,8 +223,8 @@ class MoneyPaymentSheetScreensTest {
         assertEquals("Treats", v.month!!.txns.first { it.id == id }.categoryLabel)
         // The form closed and the chips are back with his category lit.
         if (shows("money-new-category")) fail("the form stayed open after Create")
-        assertTrue(shows("money-sheet-cat-${own.key}"), "no chip for his new category")
-        assertTrue(shows("money-sheet-undo"), "no Undo after making it")
+        awaitTag("money-sheet-cat-${own.key}", "no chip for his new category")
+        awaitTag("money-sheet-undo", "no Undo after making it")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-new-category-made"))
     }
 
