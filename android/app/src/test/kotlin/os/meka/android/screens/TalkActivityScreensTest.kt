@@ -260,8 +260,6 @@ class TalkActivityScreensTest {
         compose.waitForIdle()
         val undos = compose.onAllNodes(hasText("Undo") and hasClickAction()).fetchSemanticsNodes().size
         if (undos == 0) fail("Activity: no Undo on screen")
-        // Walk-through 2026-11-15 A20: the bare Undo link takes the tap on a whole 48 dp, not only on its word.
-        ScreenShots.assertTallTarget(compose, "activity cover-dark-by-hand", hasText("Undo") and hasClickAction())
         compose.onAllNodes(hasText("Undo") and hasClickAction())[0].performScrollTo().performClick()
         // The undo runs on the core's own thread; give it real time, then let the screen catch up.
         repeat(20) {

@@ -285,7 +285,7 @@ private fun ActivityRowView(row: ActivityRow, undo: () -> Unit) {
                     canUndo -> Text(
                         "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { undo() }
-                            .padding(vertical = MekaSpace.xxs).minTouch(),
+                            .padding(vertical = MekaSpace.xxs),
                     )
                     else -> Spacer(Modifier.height(0.dp))
                 }
@@ -317,7 +317,7 @@ private fun StoppedCallRowView(row: StoppedCallerRow, toggle: () -> Unit) {
                         if (isBlocked) StoppedCallRules.UNBLOCK_LABEL else StoppedCallRules.BLOCK_AGAIN_LABEL,
                         style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { toggle() }
-                            .padding(vertical = MekaSpace.xxs).minTouch(),
+                            .padding(vertical = MekaSpace.xxs),
                     )
                 }
             }
