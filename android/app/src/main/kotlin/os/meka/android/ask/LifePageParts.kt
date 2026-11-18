@@ -43,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -59,7 +61,6 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
-import os.meka.android.designsystem.minTouchSquareInPlace
 import os.meka.android.designsystem.MotionMath
 import os.meka.core.domain.AddChoice
 import os.meka.core.domain.LifePageRules
@@ -88,29 +89,45 @@ internal fun LifePageHeader(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // The title and its ⓘ take what + Add leaves (walk-through 2026-11-15 A11: "Emergency card" and "What Navilife
             // knows" pushed + Add to "+ A" or off the closed Fold); a long title takes a second line, then steps down.
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                BasicText(
-                    title, style = MekaType.greeting.copy(color = Meka.colors.textPrimary), maxLines = 2,
-                    autoSize = TextAutoSize.StepBased(minFontSize = MekaType.itemTitle.fontSize, maxFontSize = MekaType.greeting.fontSize, stepSize = 1.sp), // type: ok (steps down to item title, then wraps)
-                    modifier = Modifier.weight(1f, fill = false).then(titleModifier).semantics { heading() },
-                )
-                // Walk-through 2026-11-15 A20: a whole 48 × 48 tap round the drawn 24 dp circle, laid out at the circle's
-                // own width so the title keeps its room ("Appointments" stays on one line on the closed Fold).
-                Box(
-                    Modifier.minTouchSquareInPlace(MekaSpace.l).clip(CircleShape).clickable(role = Role.Button, onClick = onInfo)
-                        .semantics {
-                            contentDescription = LifePageRules.INFO_LABEL
-                            stateDescription = if (infoOpen) "Shown" else "Hidden"
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
+            // Walk-through 2026-11-15 A20: the ⓘ is a whole 48 × 48 tap round its drawn 24 dp circle. The title gets the
+            // room it had beside a 24 dp ⓘ and the 8 dp gap before + Add (so "Appointments" stays on one line on the closed
+            // Fold), and the ⓘ's square is laid over the title's last 12 dp and that gap, so the circle sits where it did.
+            Layout(
+                content = {
+                    BasicText(
+                        title, style = MekaType.greeting.copy(color = Meka.colors.textPrimary), maxLines = 2,
+                        autoSize = TextAutoSize.StepBased(minFontSize = MekaType.itemTitle.fontSize, maxFontSize = MekaType.greeting.fontSize, stepSize = 1.sp), // type: ok (steps down to item title, then wraps)
+                        modifier = Modifier.then(titleModifier).semantics { heading() },
+                    )
                     Box(
-                        Modifier.size(MekaSpace.l).border(1.dp, Meka.colors.accent, CircleShape),
+                        Modifier.size(MekaSpace.touch).clip(CircleShape).clickable(role = Role.Button, onClick = onInfo)
+                            .semantics {
+                                contentDescription = LifePageRules.INFO_LABEL
+                                stateDescription = if (infoOpen) "Shown" else "Hidden"
+                            },
                         contentAlignment = Alignment.Center,
-                    ) { Text("i", style = MekaType.caption, color = Meka.colors.accent) }
+                    ) {
+                        Box(
+                            Modifier.size(MekaSpace.l).border(1.dp, Meka.colors.accent, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("i", style = MekaType.caption, color = Meka.colors.accent) }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            ) { (titleText, infoButton), constraints ->
+                val drawn = MekaSpace.l.roundToPx()
+                val gap = MekaSpace.xs.roundToPx()
+                val i = infoButton.measure(Constraints())
+                val bleed = (i.width - drawn) / 2
+                val room = if (constraints.hasBoundedWidth) constraints.maxWidth else Constraints.Infinity
+                val t = titleText.measure(Constraints(maxWidth = if (room == Constraints.Infinity) room else (room - drawn - gap).coerceAtLeast(0)))
+                val width = if (constraints.hasBoundedWidth) constraints.maxWidth else t.width + drawn + gap
+                val height = maxOf(t.height, i.height)
+                layout(width, height) {
+                    t.place(0, (height - t.height) / 2)
+                    i.place(t.width - bleed, (height - i.height) / 2)
                 }
             }
-            Box(Modifier.width(MekaSpace.xs))
             Text(
                 LifePageRules.ADD, style = MekaType.metaStrong, color = Meka.colors.onAccent, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onAdd)

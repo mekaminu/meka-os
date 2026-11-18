@@ -51,20 +51,6 @@ fun Modifier.minTouchSquare(): Modifier =
     sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch).wrapContentSize(Alignment.Center)
 
 /**
- * Walk-through 2026-11-15 A20: a small drawn glyph button ([drawn] wide, e.g. a Life page title's 24 dp ⓘ) takes a whole
- * 48 × 48 tap but keeps only its drawn width in the row, so the words beside it keep their room (a plain
- * [minTouchSquare] there took 24 dp more and broke "Appointments" across two lines on the closed Fold). The target
- * bleeds evenly left and right of the glyph; Compose hands a touch to a child laid out past its slot unless something
- * clips. Put it first, before `clip` and `clickable`, so the clip and the tap are the whole square.
- */
-fun Modifier.minTouchSquareInPlace(drawn: Dp): Modifier = layout { measurable, constraints ->
-    val touch = MekaSpace.touch.roundToPx()
-    val p = measurable.measure(Constraints.fixed(touch, maxOf(touch, constraints.minHeight)))
-    val slot = drawn.roundToPx().coerceIn(constraints.minWidth, maxOf(constraints.minWidth, constraints.maxWidth))
-    layout(slot, p.height) { p.place((slot - p.width) / 2, 0) }
-}
-
-/**
  * Calmer Today (Meka 2026-10-25 15:03: "the circle check box is too large"): a task row's tick is drawn [TickSize.DRAWN]
  * (22 dp) inside a [TickSize.TOUCH] (44 dp) tap target. In a row that starts with the tick, the target bleeds
  * [TickSize.BLEED] into the row's start so the drawn circle lines up with the section label above, and the text sits

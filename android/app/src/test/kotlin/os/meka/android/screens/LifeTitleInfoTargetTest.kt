@@ -35,7 +35,7 @@ import os.meka.core.domain.LifePageRules
 
 /**
  * Walk-through 2026-11-15 A20: a Life page title's ⓘ took the tap only on its 24 dp circle's width. It is now a whole
- * 48 × 48 target laid out at the circle's own width, so the title keeps its room ("Appointments" stays on one line on
+ * 48 × 48 target laid over the title's end and the gap before + Add, so the title keeps its room ("Appointments" stays on one line on
  * the closed Fold, which a plain 48 dp square broke), and a tap near either outer edge of the target, past the circle,
  * still unfolds or folds what the page does.
  */
@@ -79,8 +79,7 @@ class LifeTitleInfoTargetTest {
         // one 2 dp inside its left edge folds them (read from the ⓘ's own state, so the fold's animation doesn't count).
         val d = compose.density.density
         fun state() = compose.onNode(target).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
-        // A node's touch bounds in a test are clipped to its slot (the circle's 24 dp), so tap from the root at the
-        // target's own unclipped position: its square starts 12 dp left of the circle and ends 12 dp right of it.
+        // Tap from the root at the square's own position: it starts 12 dp left of the drawn circle and ends 12 dp right of it.
         fun tapAt(x: Float) {
             val at = compose.onNode(target).fetchSemanticsNode().positionInRoot
             compose.onRoot().performTouchInput { click(Offset(at.x + x * d, at.y + 24f * d)) }
