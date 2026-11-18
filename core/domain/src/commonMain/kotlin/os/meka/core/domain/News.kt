@@ -247,7 +247,7 @@ data class NewsPlace(
     /** Full news hub, slice 3: the words and names he follows, in the order he added them. */
     val follows: List<NewsFollowChoice> = emptyList(),
 ) {
-    /** "12 sources · 2 off · …" under the source switches; null with none. */
+    /** "12 sources with stories just now · 2 off · …" under the source switches; null with none. */
     val sourcesLine: String? get() = NewsRules.sourceSwitchesLine(sources)
     /** The line under Follow: what following does, or how many he follows and what a tap does. */
     val followsLine: String get() = NewsRules.followsLine(follows)
@@ -407,13 +407,15 @@ object NewsRules {
         return seen + quietOff
     }
 
-    /** "12 sources · 2 off · tap one to leave its stories out of News and the brief" / "… · all on · …"; null with none. */
+    /** "12 sources with stories just now · 2 off · tap one to leave its stories out of News and the brief" / "… · all on · …"; null with none. */
     fun sourceSwitchesLine(sources: List<NewsSourceChoice>): String? {
         if (sources.isEmpty()) return null
         val off = sources.count { !it.on }
-        val n = sources.size
+        // A22: the count is of sources with stories just now, so it never reads as every source the caption names.
+        val n = sources.count { it.on && it.stories > 0 }
         val down = sources.count { it.on && it.down }
-        return "$n source" + (if (n == 1) "" else "s") + " · " + (if (off == 0) "all on" else "$off off") +
+        return (if (n == 0) "No source with stories just now" else "$n source" + (if (n == 1) "" else "s") + " with stories just now") +
+            " · " + (if (off == 0) "all on" else "$off off") +
             (if (down > 0) " · $down not coming through" else "") +
             " · tap one to leave its stories out of News and the brief"
     }

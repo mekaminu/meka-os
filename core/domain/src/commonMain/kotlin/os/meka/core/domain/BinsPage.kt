@@ -50,6 +50,17 @@ object BinsPageRules {
     /** "Today", "Tomorrow", "Thu", "2 Dec": a collection's day on a tile or a row's right. */
     fun dayWord(day: Long, today: Long): String = PeoplePageRules.dayWord(day, today)
 
+    /**
+     * Found and fixing week 4, A22: the right column of Your bins never mixes days and dates ("Fri", "Tue", then
+     * "3 Nov"): Today and Tomorrow stay words, every later collection reads "Tue 27 Oct", so this week's Tuesday and
+     * next week's can be told apart at a glance.
+     */
+    fun rowWhen(day: Long, today: Long): String = when (day - today) {
+        0L, 1L -> dayWord(day, today)
+        else -> LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(day) - 1] + " " +
+            CivilDate.fromEpochDay(day).let { "${it.day} ${Recurrence.MONTH_SHORT[it.month - 1]}" }
+    }
+
     /** Brass: the collection is today or tomorrow (out tonight). */
     private fun soon(day: Long?, today: Long): Boolean = day != null && day - today in 0..1
 
@@ -71,7 +82,7 @@ object BinsPageRules {
 
         val yours = view.rows.sortedWith(compareBy<BinRow> { it.nextDay ?: Long.MAX_VALUE }.thenBy { it.name.lowercase() }).map { r ->
             val line = r.line + (r.shiftNote?.let { " · $it" } ?: "")
-            PageRow(binKey(r.id), r.name, line, r.nextDay?.let { dayWord(it, today) } ?: "", soon(r.nextDay, today))
+            PageRow(binKey(r.id), r.name, line, r.nextDay?.let { rowWhen(it, today) } ?: "", soon(r.nextDay, today))
         }
         val oneOffs = view.oneOffs.map { r -> PageRow(moveKey(r.id), r.name, r.line, "", false) }
         val settings = listOf(

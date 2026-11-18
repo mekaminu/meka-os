@@ -82,6 +82,18 @@ class LifePageTest {
     }
 
     @Test
+    fun theFuelTileNeverPromisesPricesTheCardDoesntShow() {
+        // Found and fixing week 4, A22: "Fuel / prices below" sat over a card asking for location.
+        fun label(state: String) = CarPageRules.page(CarsView.EMPTY, emptyList(), TimersView.EMPTY, FuelView(state, "", emptyList()), day, at(9), cal).tiles[1].label
+        assertEquals("needs location", label(FuelRules.NO_LOCATION))
+        assertEquals("prices off", label(FuelRules.OFF))
+        assertEquals("looking…", label(FuelRules.LOOKING))
+        assertEquals("no prices now", label(FuelRules.OFFLINE))
+        assertEquals("none near", label(FuelRules.OK))
+        assertEquals("near you", label(FuelRules.IDLE))
+    }
+
+    @Test
     fun anEmptyCarPageSaysSoInWordsNeverALoneDash() {
         val p = CarPageRules.page(CarsView.EMPTY, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal)
         assertEquals(listOf("No dates", "Fuel", "Not parked"), p.tiles.map { it.number })

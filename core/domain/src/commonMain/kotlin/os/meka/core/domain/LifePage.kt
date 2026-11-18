@@ -264,6 +264,19 @@ object CarPageRules {
         return LifePageRules.card(BLUETOOTH, BLUETOOTH, rows, empty = BLUETOOTH_EMPTY)
     }
 
+    /**
+     * Found and fixing week 4, A22: the Fuel tile with no cheapest price says what the Fuel card below actually shows,
+     * never "prices below" over a card asking for location or saying prices are off.
+     */
+    fun fuelTileLabel(fuel: FuelView): String = when (fuel.state) {
+        FuelRules.NO_LOCATION -> "needs location"
+        FuelRules.OFF -> "prices off"
+        FuelRules.LOOKING, FuelRules.LOADING -> "looking…"
+        FuelRules.FAILED, FuelRules.OFFLINE -> "no prices now"
+        FuelRules.IDLE -> "near you"
+        else -> if (fuel.blocks.any { it.rows.isNotEmpty() }) "prices below" else "none near"
+    }
+
     fun page(
         cars: CarsView, parked: List<ParkedRow>, timers: TimersView, fuel: FuelView, today: Long, nowMs: Long, cal: LocalCalendar,
         links: Map<String, CarLink> = emptyMap(), bluetoothAllowed: Boolean = true,
@@ -273,7 +286,7 @@ object CarPageRules {
         val dateTile = dateTile(cars, dates, today)
         val cheapest = fuel.blocks.flatMap { b -> b.rows.filter { it.cheapest }.map { b to it } }.firstOrNull()
         val fuelTile = cheapest?.let { (b, r) -> PageTile(r.price, "cheapest ${b.fuel.short} near", false) }
-            ?: PageTile("Fuel", "prices below", false)
+            ?: PageTile("Fuel", fuelTileLabel(fuel), false)
         val parkTile = timerTile(timers, many) ?: when {
             parked.size > 1 -> PageTile("${parked.size} cars", "parked", false)
             parked.size == 1 -> parked.first().let { p ->

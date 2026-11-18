@@ -28,7 +28,7 @@ class NewsFeedsDownTest {
         assertEquals("The Verge · 1 · not coming through", place.sources.first { it.name == "The Verge" }.label)
         assertTrue(place.sources.first { it.name == "The Verge" }.down)
         assertFalse(place.sources.first { it.name == "TechCrunch" }.down)
-        assertEquals("3 sources · all on · 1 not coming through · tap one to leave its stories out of News and the brief", place.sourcesLine)
+        assertEquals("3 sources with stories just now · all on · 1 not coming through · tap one to leave its stories out of News and the brief", place.sourcesLine)
     }
 
     @Test

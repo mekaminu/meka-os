@@ -41,12 +41,14 @@ class BinsPageTest {
         val yours = p.cardAt(0)
         assertEquals("Your bins", yours.title)
         assertEquals(listOf("Green bin", "Black bin"), yours.rows.map { it.name })
-        assertEquals("Fri", yours.rowAt(0).whenText)
+        assertEquals("Fri 16 Oct", yours.rowAt(0).whenText)
         assertFalse(yours.rowAt(0).lit)
         assertEquals("Every Friday", yours.rowAt(0).line)
-        assertEquals("20 Oct", yours.rowAt(1).whenText)
+        assertEquals("Tue 20 Oct", yours.rowAt(1).whenText)
         assertEquals("Every other Tuesday", yours.rowAt(1).line)
         assertEquals(PageTile("Fri", "Green bin", false), p.tileAt(0))
+        // Today and Tomorrow stay words in the column.
+        assertEquals("Tomorrow", BinsPageRules.rowWhen(mon + 1, mon))
     }
 
     @Test
@@ -57,7 +59,7 @@ class BinsPageTest {
         val row = v.rows.single()
         assertNotNull(row.nextDay)
         val p = BinsPageRules.page(v, today)
-        assertEquals(BinsPageRules.dayWord(row.nextDay!!, today), p.cardAt(0).rowAt(0).whenText)
+        assertEquals(BinsPageRules.rowWhen(row.nextDay!!, today), p.cardAt(0).rowAt(0).whenText)
         if (row.shiftNote != null) assertTrue(p.cardAt(0).rowAt(0).line.endsWith(" · ${row.shiftNote}"))
     }
 
