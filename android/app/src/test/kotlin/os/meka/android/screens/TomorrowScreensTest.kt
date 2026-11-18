@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -103,7 +105,12 @@ class TomorrowScreensTest {
                     // Walk-through 2026-11-08 A7: the peek as Today draws it, from the live view (read once, it kept
                     // "2 tasks" after a move and the old title over an edit).
                     val peek by core.shutdownView.collectAsState()
-                    Column {
+                    // Walk-through 2026-11-15 A22: the peek is Today's card and the sheet covers Today when it opens
+                    // (MekaPane), so they're never on screen together; the shot drew the peek as a banner over the
+                    // sheet, which said the header twice and left a ~70 dp gap above "‹ Today". Each is drawn alone.
+                    if (onSheet) {
+                        TomorrowPane(core, onClose = {})
+                    } else Column {
                         // Walk-through 2026-11-08 A19: inside Today's gutter and top space, as Today's list holds it
                         // (the shot drew it against the screen's top and side edges).
                         peek.peek?.let {
@@ -113,7 +120,6 @@ class TomorrowScreensTest {
                                     .testTag(PEEK_TAG),
                             )
                         }
-                        TomorrowPane(core, onClose = {})
                     }
                 }
             }
@@ -178,10 +184,18 @@ class TomorrowScreensTest {
         if (smallTicks.isNotEmpty()) fail("$name: tick circles under 48 dp to tap:\n" + smallTicks.joinToString("\n") { "- $it" })
     }
 
+    /** Today's peek card ([onSheet] false) or the Tomorrow sheet that covers Today (true). */
+    private var onSheet by mutableStateOf(false)
+
+    private fun page(sheet: Boolean) {
+        onSheet = sheet
+        turns()
+    }
+
     private fun run(theme: ThemeChoice, name: String) {
         val (core, ids) = setUp(theme)
         val (gym, school) = ids
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", name))
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-peek"))
         val peek = assertNotNull(core.shutdownView.value.peek)
         assertTrue(peek.line.endsWith("1 event · 2 tasks · 1 bill due · first 07:00 Gym before work"), peek.line)
         // Lines are drawn through LoneWordGlue (the last words held together), so look for them as drawn.
@@ -193,6 +207,15 @@ class TomorrowScreensTest {
         assertTrue((card.top - screen.top) / dp >= 31.5f, "$name: the peek sits ${((card.top - screen.top) / dp).toInt()} dp under the top edge")
         assertTrue((card.left - screen.left) / dp >= 15.5f && (screen.right - card.right) / dp >= 15.5f,
             "$name: the peek runs into the side edges")
+
+        // The sheet on its own, as it covers Today: its header is said once and "‹ Today" sits at its top.
+        page(sheet = true)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", name))
+        assertTrue(!shows(LoneWordGlue.kept(peek.line)), "$name: the peek's line is drawn over the sheet")
+        val close = compose.onAllNodes(hasText("‹ Today") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue(close.isNotEmpty(), "$name: no ‹ Today on the sheet")
+        val gap = (close.first().boundsInRoot.top - screen.top) / dp
+        assertTrue(gap <= 40f, "$name: ‹ Today sits $gap dp under the top edge (a gap above it)")
         assertTrue(shows("Gym before work") && shows("Ring the school about the trip"), "$name: tomorrow's tasks aren't listed")
         // A13: Thursday's parents' evening is in the evening, as the bedside and Week ahead show it, after the gym.
         val rows = core.shutdownView.value.tomorrow.rows
@@ -224,8 +247,12 @@ class TomorrowScreensTest {
         assertEquals(listOf("t-$gym"), core.shutdownView.value.tomorrow.rows.filter { !it.isEvent }.map { it.id })
         val afterMove = assertNotNull(core.shutdownView.value.peek).line
         assertTrue(afterMove.contains("1 task ·") && !afterMove.contains("2 tasks"), afterMove)
+        assertTrue(!shows("2 tasks"), "$name: the sheet still counts the moved task")
+        // Back on Today, the peek counts it too.
+        page(sheet = false)
         until { shows(LoneWordGlue.kept(afterMove)) }
         assertTrue(shows(LoneWordGlue.kept(afterMove)) && !shows("2 tasks"), "$name: the peek still counts the moved task")
+        page(sheet = true)
 
         // Tomorrow on Today, slice 3: Edit opens the task's full detail over the sheet; an edit shows in it at once,
         // and once the task is no longer tomorrow's (done here) the detail closes.
@@ -236,7 +263,7 @@ class TomorrowScreensTest {
         runBlocking { core.rename(gym, "Gym, legs day") }
         until { shows("Gym, legs day") }
         assertTrue(shows("Gym, legs day"), "$name: the edit isn't shown")
-        // A7: the row and the peek behind the detail say the new name too, never the old one beside it.
+        // A7: the row behind the detail says the new name too, never the old one beside it.
         until { !shows("Gym before work") }
         assertTrue(!shows("Gym before work"), "$name: the old name is still shown beside the edited detail")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-edit"))
