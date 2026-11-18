@@ -568,6 +568,10 @@ object ScreenShots {
             }
             return
         }
+        // Walk-through 2026-11-15 A20: the title's ⓘ is a whole 48 × 48 target (laid out at its circle's width).
+        if (compose.onAllNodes(androidx.compose.ui.test.hasContentDescription(LifePageRules.INFO_LABEL)).fetchSemanticsNodes().isNotEmpty()) {
+            assertTallTarget(compose, name, androidx.compose.ui.test.hasContentDescription(LifePageRules.INFO_LABEL), square = true)
+        }
         val width = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().size.width
         val padding = with(compose.density) { (MekaSpace.m * 2).toPx() }
         add.forEach { n ->

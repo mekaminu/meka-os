@@ -59,6 +59,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchSquareInPlace
 import os.meka.android.designsystem.MotionMath
 import os.meka.core.domain.AddChoice
 import os.meka.core.domain.LifePageRules
@@ -93,13 +94,14 @@ internal fun LifePageHeader(
                     autoSize = TextAutoSize.StepBased(minFontSize = MekaType.itemTitle.fontSize, maxFontSize = MekaType.greeting.fontSize, stepSize = 1.sp), // type: ok (steps down to item title, then wraps)
                     modifier = Modifier.weight(1f, fill = false).then(titleModifier).semantics { heading() },
                 )
+                // Walk-through 2026-11-15 A20: a whole 48 × 48 tap round the drawn 24 dp circle, laid out at the circle's
+                // own width so the title keeps its room ("Appointments" stays on one line on the closed Fold).
                 Box(
-                    Modifier.clip(CircleShape).clickable(role = Role.Button, onClick = onInfo)
+                    Modifier.minTouchSquareInPlace(MekaSpace.l).clip(CircleShape).clickable(role = Role.Button, onClick = onInfo)
                         .semantics {
                             contentDescription = LifePageRules.INFO_LABEL
                             stateDescription = if (infoOpen) "Shown" else "Hidden"
-                        }
-                        .minTouch(),
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(

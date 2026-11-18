@@ -1,0 +1,97 @@
+package os.meka.android.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
+import org.junit.Assert.fail
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.LifePageHeader
+import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.MekaTheme
+import os.meka.core.domain.LifePageRules
+
+/**
+ * Walk-through 2026-11-15 A20: a Life page title's ⓘ took the tap only on its 24 dp circle's width. It is now a whole
+ * 48 × 48 target laid out at the circle's own width, so the title keeps its room ("Appointments" stays on one line on
+ * the closed Fold, which a plain 48 dp square broke), and a tap near the target's outer edge, past the circle, still
+ * unfolds what the page does.
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], application = ShotApplication::class, qualifiers = ScreenShots.COVER)
+class LifeTitleInfoTargetTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val info = "Visits you keep up with: the dentist, the optician, the GP."
+
+    private fun show(title: String) {
+        compose.setContent {
+            var open by remember { mutableStateOf(false) }
+            MekaTheme {
+                // The closed Fold's page: 344 dp wide less the page's 16 dp each side.
+                Column(Modifier.width(344.dp).background(Meka.colors.background).padding(horizontal = 16.dp)) {
+                    LifePageHeader(title = title, info = info, infoOpen = open, onInfo = { open = !open }, onAdd = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    private fun lines(text: String): Int {
+        val n = compose.onNode(hasText(text), useUnmergedTree = true).fetchSemanticsNode()
+        val results = mutableListOf<TextLayoutResult>()
+        n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+        return results.firstOrNull()?.lineCount ?: fail("no text layout for $text")
+    }
+
+    @Test
+    fun theInfoIsAWholeSquareAndTheTitleKeepsItsLine() {
+        show("Appointments")
+        val target = hasContentDescription(LifePageRules.INFO_LABEL)
+        ScreenShots.assertTallTarget(compose, "Appointments", target, square = true)
+        ScreenShots.assertHeaderWhole(compose, "Appointments")
+        if (lines("Appointments") != 1) fail("Appointments breaks across ${lines("Appointments")} lines on the closed Fold")
+        // The target reaches past the drawn circle on both sides: a tap 2 dp inside its left edge unfolds the words.
+        val d = compose.density.density
+        compose.onNode(target).performTouchInputClick(Offset(2f * d, 24f * d))
+        compose.onNode(hasText(LifePageRules.shown(info), substring = true)).assertExists()
+        compose.onNode(target).performTouchInputClick(Offset(46f * d, 24f * d))
+        compose.onAllNodes(hasText(LifePageRules.shown(info), substring = true)).fetchSemanticsNodes().let {
+            if (it.isNotEmpty()) fail("a tap 2 dp inside the target's right edge didn't fold the words away")
+        }
+    }
+
+    @Test
+    fun aLongTitleStillLeavesAddWhole() {
+        show("What Navilife knows")
+        ScreenShots.assertTallTarget(compose, "Facts", hasContentDescription(LifePageRules.INFO_LABEL), square = true)
+        ScreenShots.assertHeaderWhole(compose, "Facts")
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.performTouchInputClick(at: Offset) {
+        performTouchInput { click(at) }
+        compose.waitForIdle()
+    }
+}
