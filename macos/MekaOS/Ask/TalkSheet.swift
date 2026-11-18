@@ -95,6 +95,7 @@ struct TalkSheet: View {
             .foregroundStyle(palette.accent)
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(palette.surfaceRaised, in: Capsule())
+            .lightCardEdge(palette, radius: MekaRadius.pill)
             .padding(.top, MekaSpace.xxs)
             .accessibilityLabel("\(action): \(what)")
     }

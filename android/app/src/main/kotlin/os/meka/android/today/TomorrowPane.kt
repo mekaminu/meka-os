@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import os.meka.android.designsystem.lightCardEdge
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -222,12 +224,13 @@ private fun TomorrowTaskRow(
 }
 
 @Composable
-private fun TomorrowChip(label: String, onClick: () -> Unit) {
+internal fun TomorrowChip(label: String, onClick: () -> Unit) {
     Text(
         label, style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 1,
         // The chip answers a 48 dp touch; the pill itself stays its drawn size (quality gate slice 47).
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onClick() }.minTouch()
-            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            // Walk-through 2026-11-15, A21 part 9: the pale pill gets Light's 1 dp edge on the off-white page (none in Dark).
+            .clip(RoundedCornerShape(MekaRadius.pill)).lightCardEdge(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .testTag("tomorrow-chip").padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }

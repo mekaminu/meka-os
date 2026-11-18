@@ -7,6 +7,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.ui.platform.testTag
+import os.meka.android.designsystem.lightCardEdge
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -110,7 +112,7 @@ fun WatchPane(core: MekaCore, onClose: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.pill)).lightCardEdge(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                     .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
             ) {
                 if (typed.isEmpty()) Text("Code from the watch", style = MekaType.body, color = Meka.colors.textTertiary)
@@ -153,10 +155,11 @@ fun WatchPane(core: MekaCore, onClose: () -> Unit) {
 }
 
 @Composable
-private fun WatchLinkRowView(row: LinkedWatchRow, enabled: Boolean, modifier: Modifier, onUnlink: () -> Unit) {
+internal fun WatchLinkRowView(row: LinkedWatchRow, enabled: Boolean, modifier: Modifier, onUnlink: () -> Unit) {
     val reduced = Meka.reducedMotion
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        // Walk-through 2026-11-15, A21 part 9: Light's 1 dp edge on the white row and the code field (none in Dark).
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).testTag("watch-row")
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .semantics(mergeDescendants = true) { contentDescription = "${row.title}. ${row.line}" },
         verticalAlignment = Alignment.CenterVertically,

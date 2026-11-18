@@ -130,6 +130,8 @@ private struct QueueRowView: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        // Walk-through 2026-11-15, A21 part 9: Light's 1 pt edge, so the row doesn't melt into the sheet.
+        .lightCardEdge(palette)
         .mekaHoverLift()
     }
 }

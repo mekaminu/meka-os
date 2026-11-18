@@ -15,6 +15,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.ui.platform.testTag
+import os.meka.android.designsystem.lightCardEdge
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -195,7 +197,7 @@ private fun open(context: Context, url: String) {
 }
 
 @Composable
-private fun QueueRowView(
+internal fun QueueRowView(
     row: QueueRow,
     modifier: Modifier,
     offline: String?,
@@ -206,7 +208,8 @@ private fun QueueRowView(
     onRemove: () -> Unit,
 ) {
     val ink = if (row.done) Meka.colors.textSecondary else Meka.colors.textPrimary
-    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)) {
+    // Walk-through 2026-11-15, A21 part 9: the white card gets Light's 1 dp edge on the off-white page (none in Dark).
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).testTag("queue-card")) {
         // Quality gate slice 51: on the cover screen Done · Remove beside the words squeezed them ("opens in your …", a
         // title's last word alone); below 420 dp they sit under the words, lined up with them.
         val under = QueueRules.actionsUnder((maxWidth - MekaSpace.m * 2).value)

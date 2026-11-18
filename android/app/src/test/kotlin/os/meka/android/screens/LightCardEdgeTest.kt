@@ -288,4 +288,86 @@ class LightCardEdgeTest {
         val darkest = offPillInk(ThemeChoice.LIGHT).min()
         if (darkest > 0.55f) fail("Light: the Off pill's word bottoms at $darkest, too close to its hairline fill")
     }
+
+    /**
+     * A21 part 9: Train queue's and Watch's white cards, and Tomorrow's and Talk's pale pills, on the page. Returns the
+     * pixel nearest the edge colour among the first three columns at half height (a pill's round end is antialiased).
+     */
+    private fun edgeOf(choice: ThemeChoice, tag: String, want: Color, content: @Composable () -> Unit): Color {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, choice)
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.width(360.dp).background(Meka.colors.background).padding(16.dp)) { content() }
+            }
+        }
+        compose.waitForIdle()
+        val px = compose.onAllNodesWithTag(tag)[0].captureToImage().toPixelMap()
+        val y = px.height / 2
+        return (0 until minOf(3, px.width)).map { px[it, y] }
+            .minBy { abs(it.red - want.red) + abs(it.green - want.green) + abs(it.blue - want.blue) }
+    }
+
+    private val queueRow = os.meka.core.domain.QueueRow(
+        "q1", "https://example.org/a", "Why trains run late", "example.org · Article", "article", false, "Why trains run late",
+    )
+
+    private fun queueCard(): @Composable () -> Unit = {
+        os.meka.android.ask.QueueRowView(
+            queueRow, Modifier, offline = null, onOpen = {}, primary = "Done", onPrimary = {}, onRemove = {},
+        )
+    }
+
+    private fun watchRow(): @Composable () -> Unit = {
+        os.meka.android.ask.WatchLinkRowView(
+            os.meka.core.domain.LinkedWatchRow("w1", "Galaxy Watch", "Linked today"), enabled = true, modifier = Modifier, onUnlink = {},
+        )
+    }
+
+    private fun tomorrowChip(): @Composable () -> Unit = { os.meka.android.today.TomorrowChip("Day after") {} }
+
+    private fun talkPill(): @Composable () -> Unit = {
+        os.meka.android.ask.TalkSection(
+            os.meka.core.domain.TalkSetupSection("Side key", "Not set up yet", false, listOf("Hold the side key."), "Open default apps"),
+            Modifier, onAction = {},
+        )
+    }
+
+    @Test
+    fun trainQueuesCardsHaveAnEdgeInLight() {
+        val edge = edgeOf(ThemeChoice.LIGHT, "queue-card", MekaLightColors.track, queueCard())
+        if (!close(edge, MekaLightColors.track)) fail("Light: Train queue's card's edge is $edge, not the track ink")
+    }
+
+    @Test
+    fun trainQueuesCardsHaveNoEdgeInDark() {
+        val edge = edgeOf(ThemeChoice.DARK, "queue-card", MekaDarkColors.surface, queueCard())
+        if (!close(edge, MekaDarkColors.surface)) fail("Dark: Train queue's card's edge is $edge, not the surface")
+    }
+
+    @Test
+    fun watchsRowsHaveAnEdgeInLight() {
+        val edge = edgeOf(ThemeChoice.LIGHT, "watch-row", MekaLightColors.track, watchRow())
+        if (!close(edge, MekaLightColors.track)) fail("Light: Watch's row's edge is $edge, not the track ink")
+    }
+
+    @Test
+    fun watchsRowsHaveNoEdgeInDark() {
+        val edge = edgeOf(ThemeChoice.DARK, "watch-row", MekaDarkColors.surface, watchRow())
+        if (!close(edge, MekaDarkColors.surface)) fail("Dark: Watch's row's edge is $edge, not the surface")
+    }
+
+    @Test
+    fun tomorrowsAndTalksPillsHaveAnEdgeInLight() {
+        val chip = edgeOf(ThemeChoice.LIGHT, "tomorrow-chip", MekaLightColors.track, tomorrowChip())
+        if (!close(chip, MekaLightColors.track)) fail("Light: Tomorrow's chip's edge is $chip, not the track ink")
+        val talk = edgeOf(ThemeChoice.LIGHT, "talk-action", MekaLightColors.track, talkPill())
+        if (!close(talk, MekaLightColors.track)) fail("Light: Talk's pill's edge is $talk, not the track ink")
+    }
+
+    @Test
+    fun tomorrowsPillsHaveNoEdgeInDark() {
+        val chip = edgeOf(ThemeChoice.DARK, "tomorrow-chip", MekaDarkColors.track, tomorrowChip())
+        if (close(chip, MekaDarkColors.track) && !close(MekaDarkColors.track, MekaDarkColors.surfaceRaised)) fail("Dark: Tomorrow's chip has a track edge")
+    }
 }

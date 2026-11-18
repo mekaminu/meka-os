@@ -24,6 +24,8 @@ struct TomorrowPeekView: View {
             .padding(.vertical, MekaSpace.xs)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+            // Walk-through 2026-11-15, A21 part 9: Light's 1 pt edge on the off-white page.
+            .lightCardEdge(palette)
             .contentShape(Rectangle())
             .animation(MekaMotion.appear(reduced: reduceMotion), value: peek.line)
         }

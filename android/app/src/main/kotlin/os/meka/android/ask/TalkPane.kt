@@ -10,6 +10,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import os.meka.android.designsystem.lightCardEdge
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -142,7 +144,7 @@ fun TalkPane(onClose: () -> Unit) {
 }
 
 @Composable
-private fun TalkSection(s: TalkSetupSection, modifier: Modifier, onAction: () -> Unit) {
+internal fun TalkSection(s: TalkSetupSection, modifier: Modifier, onAction: () -> Unit) {
     val reduced = Meka.reducedMotion
     val statusColor by animateColorAsState(
         if (s.lit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "talk-status",
@@ -154,8 +156,9 @@ private fun TalkSection(s: TalkSetupSection, modifier: Modifier, onAction: () ->
         s.action?.let { label ->
             Spacer(Modifier.height(MekaSpace.xs))
             Box(
-                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .clickable(role = Role.Button, onClick = onAction)
+                // Walk-through 2026-11-15, A21 part 9: the pale pill gets Light's 1 dp edge on the off-white page (none in Dark).
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).lightCardEdge(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                    .testTag("talk-action").clickable(role = Role.Button, onClick = onAction)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {
                 Text(label, style = MekaType.itemMeta, color = Meka.colors.accent)
