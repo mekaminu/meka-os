@@ -87,8 +87,17 @@ class LifeTitleInfoTargetTest {
         }
         val size = compose.onNode(target).fetchSemanticsNode().size
         if (size.width / d < 47.5f) fail("the ⓘ's square is ${size.width / d} dp wide")
-        tapAt(46f)
-        if (state() != "Shown") fail("a tap 2 dp inside the target's right edge didn't unfold the words (state ${state()})")
+        // 6 dp inside the right edge: the square's last 4 dp may lie under + Add's own target when the title fills its room.
+        tapAt(42f)
+        if (state() != "Shown") {
+            val i = compose.onNode(target).fetchSemanticsNode()
+            val add = compose.onNode(hasContentDescription("Add")).fetchSemanticsNode()
+            val t = compose.onNode(hasText("Appointments"), useUnmergedTree = true).fetchSemanticsNode()
+            fail("a tap 6 dp inside the target's right edge didn't unfold the words (state ${state()}); " +
+                "title x ${t.positionInRoot.x / d}..${(t.positionInRoot.x + t.size.width) / d} dp, " +
+                "ⓘ x ${i.positionInRoot.x / d}..${(i.positionInRoot.x + i.size.width) / d} dp, " +
+                "Add x ${add.positionInRoot.x / d}..${(add.positionInRoot.x + add.size.width) / d} dp")
+        }
         compose.onNode(hasText(LifePageRules.shown(info), substring = true)).assertExists()
         tapAt(2f)
         if (state() != "Hidden") fail("a tap 2 dp inside the target's left edge didn't fold the words (state ${state()})")
