@@ -35,7 +35,6 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.android.designsystem.minTouch
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.core.domain.MailUnopenedCard
@@ -108,7 +107,7 @@ internal fun UnopenedOfferSection(
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                             .clickable(role = Role.Button) { haptics.tick(); all = !all }
                             .semantics { contentDescription = if (all) "${MailUnopenedRules.SHOW_FEWER} senders" else card.moreLine ?: label }
-                            .padding(vertical = MekaSpace.xs).testTag("unopened-show-all").minTouch(),
+                            .padding(vertical = MekaSpace.xs).testTag("unopened-show-all"),
                     )
                 }
                 Text(card.note, style = MekaType.itemMeta, color = Meka.colors.textTertiary)

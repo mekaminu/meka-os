@@ -31,7 +31,6 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.SignInLine
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.MekaCore
@@ -67,7 +66,7 @@ fun SignInLineView(line: SignInLine, core: MekaCore, modifier: Modifier = Modifi
             Text(
                 text, style = MekaType.caption, color = color,
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open = !open }
-                    .padding(vertical = MekaSpace.xs).semantics { contentDescription = line.spoken }.minTouch(),
+                    .padding(vertical = MekaSpace.xs).semantics { contentDescription = line.spoken },
             )
         }
         AnimatedVisibility(
@@ -81,7 +80,7 @@ fun SignInLineView(line: SignInLine, core: MekaCore, modifier: Modifier = Modifi
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), modifier = Modifier.padding(top = MekaSpace.xxs)) {
                     Text(
                         "Reconnect", style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button) { reconnect() }.padding(vertical = MekaSpace.xxs).minTouch(),
+                        modifier = Modifier.clickable(role = Role.Button) { reconnect() }.padding(vertical = MekaSpace.xxs),
                     )
                 }
             }

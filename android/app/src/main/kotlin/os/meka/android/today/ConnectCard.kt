@@ -29,7 +29,6 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
-import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.DeviceJoinRules
 import os.meka.core.domain.RecoveryKeyRules
 
@@ -109,15 +108,15 @@ fun ConnectCard(
                         busy = false
                         if (error == null) { code = ""; words = ""; recovering = false; open = false }
                     }
-                }.minTouch(),
+                },
             )
-            Text("Not now", style = MekaType.itemTitle, color = Meka.colors.textSecondary, modifier = Modifier.clickable { words = ""; open = false }.minTouch())
+            Text("Not now", style = MekaType.itemTitle, color = Meka.colors.textSecondary, modifier = Modifier.clickable { words = ""; open = false })
         }
         if (recover != null) {
             Text(
                 if (recovering) "Use an enrolment code instead" else RecoveryKeyRules.RECOVER,
                 style = MekaType.caption, color = Meka.colors.accent,
-                modifier = Modifier.clickable(enabled = !busy) { recovering = !recovering; error = null; words = "" }.padding(vertical = MekaSpace.xs).minTouch(),
+                modifier = Modifier.clickable(enabled = !busy) { recovering = !recovering; error = null; words = "" }.padding(vertical = MekaSpace.xs),
             )
         }
     }
