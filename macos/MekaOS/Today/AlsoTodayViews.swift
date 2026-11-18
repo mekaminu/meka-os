@@ -37,6 +37,7 @@ struct MacAlsoTodayRow<Detail: View>: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(MekaSpace.xs)
                     .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+                    .lightCardEdge(palette)
                     .transition(reduceMotion ? AnyTransition.opacity
                                 : AnyTransition.opacity.combined(with: .move(edge: .top)))
             }
@@ -68,6 +69,7 @@ struct MacAlsoTodayRow<Detail: View>: View {
         .frame(width: Self.tileWidth, alignment: .topLeading)
         .padding(MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        .lightCardEdge(palette)
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).stroke(open ? palette.hairline : .clear, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
 

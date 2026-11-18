@@ -33,6 +33,9 @@ import os.meka.android.work.ObiCallsEntry
 import os.meka.android.goals.ProgressRing
 import os.meka.android.today.NeedsYouGroupBoxEnd
 import os.meka.android.today.NeedsYouGroupHeadView
+import os.meka.android.today.HeaderTilesRow
+import os.meka.core.domain.HeaderTile
+import os.meka.core.domain.HeaderTileKind
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.NeedsYouGroupHead
 import os.meka.core.domain.PageCard
@@ -173,5 +176,22 @@ class LightCardEdgeTest {
         val px = compose.onNodeWithTag("foot").captureToImage().toPixelMap()
         val bottom = px[px.width / 2, px.height - 1]
         if (!close(bottom, MekaLightColors.track)) fail("Light: the box's foot is $bottom along its bottom, not the track ink")
+    }
+
+    /** A21 part 6: Today's tiles (TASKS · NEXT · MAIL, Also today, the habit chips, the day tiles) are the surface on Light's page. */
+    private val headerTile: @Composable (Modifier) -> Unit = { m ->
+        HeaderTilesRow(listOf(HeaderTile(HeaderTileKind.TASKS, "TASKS", "3 left", "of 5 today", "Tasks, 3 left")), {}, m)
+    }
+
+    @Test
+    fun todaysTilesHaveAnEdgeInLight() {
+        val edge = leftEdge(ThemeChoice.LIGHT, headerTile)
+        if (!close(edge, MekaLightColors.track)) fail("Light: Today's TASKS tile's edge is $edge, not the track ink")
+    }
+
+    @Test
+    fun todaysTilesHaveNoEdgeInDark() {
+        val edge = leftEdge(ThemeChoice.DARK, headerTile)
+        if (!close(edge, MekaDarkColors.surface)) fail("Dark: Today's TASKS tile's edge is $edge, not the surface")
     }
 }

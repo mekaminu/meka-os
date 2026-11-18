@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
@@ -57,6 +58,7 @@ fun HabitChipsRow(chips: List<HabitChip>, play: Boolean, tick: (HabitChip) -> Un
                     Modifier.appear(rememberAppearance(i + 1, play))
                         .clip(RoundedCornerShape(MekaRadius.m))
                         .background(colors.surface)
+                        .lightCardEdge(RoundedCornerShape(MekaRadius.m))
                         .semantics(mergeDescendants = true) { contentDescription = chip.tickLabel }
                         .clickable(role = Role.Checkbox) { tick(chip) }
                         .padding(start = MekaSpace.xs, end = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xxs),

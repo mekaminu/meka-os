@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -90,7 +91,7 @@ internal fun AlsoTodayRow(
                         .testTag("also-tile-${tile.kind.name.lowercase()}")
                         .clip(shape)
                         .background(Meka.colors.surface)
-                        .then(if (open) Modifier.border(1.dp, Meka.colors.hairline, shape) else Modifier)
+                        .then(if (open) Modifier.border(1.dp, Meka.colors.hairline, shape) else Modifier.lightCardEdge(shape))
                         .then(if (tappable) Modifier.clickable(role = Role.Button) { haptics.light(); onOpen(tile) } else Modifier)
                         .padding(MekaSpace.xs)
                         .clearAndSetSemantics {
@@ -124,7 +125,7 @@ internal fun AlsoTodayRow(
             lastKind?.let { k ->
                 Column(
                     Modifier.fillMaxWidth().testTag(ALSO_DETAIL_TAG).clip(RoundedCornerShape(MekaRadius.m))
-                        .background(Meka.colors.surface).padding(MekaSpace.xs),
+                        .background(Meka.colors.surface).lightCardEdge(RoundedCornerShape(MekaRadius.m)).padding(MekaSpace.xs),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
                 ) { detail(k) }
             }

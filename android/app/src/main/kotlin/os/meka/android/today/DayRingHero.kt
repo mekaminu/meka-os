@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
@@ -408,6 +409,7 @@ private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier =
                     .graphicsLayer { alpha = a; translationY = (1f - a) * rise }
                     .clip(RoundedCornerShape(MekaRadius.s))
                     .background(colors.surface)
+                    .lightCardEdge(RoundedCornerShape(MekaRadius.s))
                     .padding(horizontal = MekaSpace.xs, vertical = if (slim) MekaSpace.xxs else MekaSpace.xs)
                     .clearAndSetSemantics { contentDescription = tile.spokenLine },
             ) {

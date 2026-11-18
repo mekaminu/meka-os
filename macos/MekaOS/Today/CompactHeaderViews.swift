@@ -33,6 +33,7 @@ struct MacHeaderTilesRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(MekaSpace.xs)
                     .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+                    .lightCardEdge(palette)
                     .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
                 }
                 .buttonStyle(MekaPressStyle())
@@ -66,6 +67,7 @@ struct MacWeatherChip: View {
             .padding(.horizontal, MekaSpace.xs)
             .padding(.vertical, MekaSpace.xxs)
             .background(Capsule().fill(palette.surface))
+            .lightCardEdge(palette, radius: 999)
             .contentTransition(.opacity)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: text)
             .accessibilityLabel(spoken)

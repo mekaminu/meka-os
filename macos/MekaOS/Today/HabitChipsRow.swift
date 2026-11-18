@@ -39,6 +39,7 @@ struct HabitChipsRow: View {
             .padding(.trailing, MekaSpace.m)
             .padding(.vertical, MekaSpace.xxs)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .lightCardEdge(palette)
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         }
         .buttonStyle(MekaPressStyle())

@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import os.meka.android.designsystem.Meka
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
@@ -49,6 +50,7 @@ internal fun HeaderTilesRow(tiles: List<HeaderTile>, onOpen: (HeaderTileKind) ->
                     .testTag("header-tile-${tile.kind.name.lowercase()}")
                     .clip(RoundedCornerShape(MekaRadius.m))
                     .background(Meka.colors.surface)
+                    .lightCardEdge(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button, onClickLabel = openLabel(tile.kind)) { haptics.light(); onOpen(tile.kind) }
                     .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs)
                     .clearAndSetSemantics { contentDescription = tile.spoken; role = Role.Button },
@@ -78,6 +80,7 @@ internal fun WeatherChip(text: String, spoken: String, modifier: Modifier = Modi
         Text(
             t, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+                .lightCardEdge(RoundedCornerShape(MekaRadius.pill))
                 .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs)
                 .testTag(WEATHER_CHIP_TAG).semantics { contentDescription = spoken },
         )

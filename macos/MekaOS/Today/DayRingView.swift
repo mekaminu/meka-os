@@ -364,6 +364,7 @@ struct DayTilesRow: View {
                 .padding(.horizontal, MekaSpace.xs)
                 .padding(.vertical, slim ? MekaSpace.xxs : MekaSpace.xs)
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                .lightCardEdge(palette, radius: MekaRadius.s)
                 .opacity(a)
                 .offset(y: (1 - a) * MotionMath.riseDistance(expressive: expressive) / 2)
                 .accessibilityElement(children: .ignore)
