@@ -714,13 +714,15 @@ internal fun NeedsYouColumn(
     // Walk-through 2026-11-15 A17: a group is one box, its rows on the head's surface (NeedsYouGroupBox.kt). Cards keep
     // their own padding; plain rows and lines take the head's inset.
     val boxFill = Meka.colors.surface
-    val inBox = if (boxed) Modifier.groupBoxFill(boxFill) else Modifier
-    val inBoxLine = if (boxed) Modifier.fillMaxWidth().groupBoxFill(boxFill).padding(horizontal = MekaSpace.m) else Modifier
-    val inBoxLead = if (boxed) Modifier.groupBoxFill(boxFill).padding(horizontal = MekaSpace.xs) else Modifier
+    // A21 part 5: in Light the box's sides carry the 1 dp track-ink edge (NeedsYouGroupBox.kt); none in Dark.
+    val boxEdge = os.meka.android.designsystem.LightInk.cardEdge(Meka.colors, Meka.theme.isDark)
+    val inBox = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge) else Modifier
+    val inBoxLine = if (boxed) Modifier.fillMaxWidth().groupBoxFill(boxFill, boxEdge).padding(horizontal = MekaSpace.m) else Modifier
+    val inBoxLead = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge).padding(horizontal = MekaSpace.xs) else Modifier
     // Messages and FYI rows share the box's colour, so each is parted from the one above by the mockup's hairline.
     val boxLine = Meka.colors.hairline
     fun inBoxRow(first: Boolean): Modifier =
-        if (boxed) Modifier.groupBoxRow(boxFill, boxLine, first).padding(horizontal = MekaSpace.xs) else Modifier
+        if (boxed) Modifier.groupBoxRow(boxFill, boxLine, first, boxEdge).padding(horizontal = MekaSpace.xs) else Modifier
     /** An open group's rounded foot, under the last thing in its box (To decide's has its own key). */
     fun androidx.compose.foundation.lazy.LazyListScope.boxEnd(g: NeedsYouGroup) {
         if (boxed && g in present && inG(g)) item(key = "${g.id}-box-end") { NeedsYouGroupBoxEnd(Modifier.animateItem()) }

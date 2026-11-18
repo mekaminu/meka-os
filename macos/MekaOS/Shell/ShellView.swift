@@ -292,6 +292,9 @@ struct NeedsYouView: View {
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
+        // Walk-through 2026-11-15, A21 part 5: in Light the box (head and what it holds) gets the 1 pt track-ink edge
+        // round it, as every other card; none in Dark.
+        .lightCardEdge(palette)
         .padding(.bottom, MekaSpace.xs)
     }
 

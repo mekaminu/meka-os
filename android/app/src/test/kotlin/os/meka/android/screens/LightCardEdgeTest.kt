@@ -31,6 +31,10 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.ObiCallsEntry
 import os.meka.android.goals.ProgressRing
+import os.meka.android.today.NeedsYouGroupBoxEnd
+import os.meka.android.today.NeedsYouGroupHeadView
+import os.meka.core.domain.NeedsYouGroup
+import os.meka.core.domain.NeedsYouGroupHead
 import os.meka.core.domain.PageCard
 import os.meka.core.domain.PageRow
 
@@ -129,5 +133,45 @@ class LightCardEdgeTest {
     fun goalsEmptyRingIsUnchangedInDark() {
         val top = ringTop(ThemeChoice.DARK)
         if (!close(top, MekaDarkColors.surfaceRaised)) fail("Dark: Goals' empty ring is $top, not surfaceRaised")
+    }
+
+    /** A21 part 5: Needs you's group box (head, rows, foot) is the surface on Light's page; in Light it gets the edge. */
+    private fun groupHead(open: Boolean): @Composable (Modifier) -> Unit = { m ->
+        NeedsYouGroupHeadView(NeedsYouGroupHead(NeedsYouGroup.MESSAGES, "Messages", "2", "Alex, Sam", open, "Messages, 2"), {}, m)
+    }
+
+    @Test
+    fun aClosedNeedsYouGroupHasAnEdgeInLight() {
+        val edge = leftEdge(ThemeChoice.LIGHT, groupHead(open = false))
+        if (!close(edge, MekaLightColors.track)) fail("Light: a closed Needs you group's edge is $edge, not the track ink")
+    }
+
+    @Test
+    fun anOpenNeedsYouGroupHeadKeepsItsSidesInLight() {
+        val edge = leftEdge(ThemeChoice.LIGHT, groupHead(open = true))
+        if (!close(edge, MekaLightColors.track)) fail("Light: an open Needs you group head's side is $edge, not the track ink")
+    }
+
+    @Test
+    fun aNeedsYouGroupHasNoEdgeInDark() {
+        val edge = leftEdge(ThemeChoice.DARK, groupHead(open = false))
+        if (!close(edge, MekaDarkColors.surface)) fail("Dark: a Needs you group's edge is $edge, not the surface")
+    }
+
+    @Test
+    fun theNeedsYouBoxFootClosesWithAnEdgeInLight() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.LIGHT)
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.width(320.dp).background(Meka.colors.background).padding(16.dp)) {
+                    NeedsYouGroupBoxEnd(Modifier.testTag("foot"))
+                }
+            }
+        }
+        compose.waitForIdle()
+        val px = compose.onNodeWithTag("foot").captureToImage().toPixelMap()
+        val bottom = px[px.width / 2, px.height - 1]
+        if (!close(bottom, MekaLightColors.track)) fail("Light: the box's foot is $bottom along its bottom, not the track ink")
     }
 }

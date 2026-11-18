@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -46,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -121,10 +123,17 @@ internal fun NeedsYouGroupHeadView(head: NeedsYouGroupHead, onToggle: () -> Unit
     val foot by animateDpAsState(if (head.open) 0.dp else MekaRadius.m, MekaMotion.expand(reduced), label = "ny-group-corner")
     val ink = groupInk(head.group)
     val chevInk = Meka.colors.textSecondary
+    // A21 part 5: in Light the box's top (and, while closed, its sides and foot) carries the 1 dp track-ink edge.
+    val edge = LightInk.cardEdge(Meka.colors, Meka.theme.isDark)
+    val open = head.open
     Row(
         modifier.fillMaxWidth()
             .clip(RoundedCornerShape(topStart = MekaRadius.m, topEnd = MekaRadius.m, bottomStart = foot.coerceAtLeast(0.dp), bottomEnd = foot.coerceAtLeast(0.dp)))
             .background(Meka.colors.surface)
+            .drawWithContent {
+                drawContent()
+                edge?.let { boxOutline(it, MekaRadius.m, foot, closedTop = true, closedBottom = !open, extendUp = false) }
+            }
             .clickable(role = Role.Button, onClickLabel = if (head.open) "Close" else "Open") { haptics.light(); onToggle() }
             .semantics(mergeDescendants = true) {
                 contentDescription = head.spoken; stateDescription = if (head.open) "Open" else "Closed"
