@@ -413,7 +413,7 @@ internal fun MailNeedsRowView(
                 line, style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); showLinked = !showLinked }
                     .padding(vertical = MekaSpace.xxs).testTag("mail-linked-${row.id}")
-                    .semantics { contentDescription = if (showLinked) "$line. Hide them" else "$line. Show them" },
+                    .semantics { contentDescription = if (showLinked) "$line. Hide them" else "$line. Show them" }.minTouch(),
             )
         }
         AnimatedVisibility(showLinked && row.linked.isNotEmpty(), enter = unfold(), exit = fold()) {

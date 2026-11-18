@@ -127,7 +127,7 @@ fun WatchPane(core: MekaCore, onClose: () -> Unit) {
                 )
             }
             Text("Link", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button, enabled = !busy && typed.isNotBlank()) { link() }.padding(MekaSpace.xs))
+                modifier = Modifier.clickable(role = Role.Button, enabled = !busy && typed.isNotBlank()) { link() }.padding(MekaSpace.xs).minTouch())
         }
         val problem = WatchLinkRules.problemShown(v?.problem, typed)
         AnimatedVisibility(problem != null, enter = enter, exit = exit) {

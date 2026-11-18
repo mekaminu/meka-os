@@ -81,6 +81,7 @@ import os.meka.android.designsystem.SwipeBackdrop
 import os.meka.android.designsystem.SwipeGlyph
 import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.ChecklistItem
 import os.meka.core.domain.ChecklistRules
 import os.meka.core.domain.ChecklistTemplateRules
@@ -144,7 +145,7 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
                 ShopModeRules.OPEN, style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button) { haptics.light(); shopping = true }
-                    .padding(MekaSpace.xs),
+                    .padding(MekaSpace.xs).minTouch(),
             )
         }
     }
@@ -167,7 +168,7 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
                                 ChecklistRules.UNTICK_ALL, style = MekaType.caption, color = Meka.colors.accent,
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                     .clickable(role = Role.Button) { haptics.tick(); actions.untickAll(task.id) }
-                                    .padding(MekaSpace.xs),
+                                    .padding(MekaSpace.xs).minTouch(),
                             )
                         }
                     }

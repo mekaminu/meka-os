@@ -220,7 +220,7 @@ private fun ResultRow(hit: SearchHit, unfolded: Boolean, modifier: Modifier, onT
         ) {
             Text("Reopen", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-                    .clickable(role = Role.Button) { onReopen() }.padding(vertical = MekaSpace.xxs))
+                    .clickable(role = Role.Button) { onReopen() }.padding(vertical = MekaSpace.xxs).minTouch())
         }
     }
 }

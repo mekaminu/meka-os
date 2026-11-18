@@ -152,7 +152,7 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
                     .clickable(enabled = now.thenTask != null || now.thenEvent != null, role = Role.Button) {
                         now.thenTask?.let { handlers.openTask(it.id) } ?: now.thenEvent?.let(handlers.openEvent)
                     }
-                    .padding(vertical = MekaSpace.xxs),
+                    .padding(vertical = MekaSpace.xxs).minTouch(),
             )
         }
         val openNeedsYou = handlers.openNeedsYou
@@ -160,7 +160,7 @@ internal fun NowCard(now: NowView, handlers: NowHandlers, modifier: Modifier = M
             Text(
                 "${now.needsYouLine} ›", style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { openNeedsYou() }
-                    .padding(vertical = MekaSpace.xxs),
+                    .padding(vertical = MekaSpace.xxs).minTouch(),
             )
         }
     }

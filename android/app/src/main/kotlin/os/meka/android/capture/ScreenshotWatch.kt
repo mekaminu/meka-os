@@ -51,6 +51,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.minTouch
 import os.meka.android.work.WorkAlerts
 import os.meka.core.domain.ScreenshotCandidate
 import os.meka.core.domain.ScreenshotNotice
@@ -312,7 +313,7 @@ fun ScreenshotSwitchLine(onLine: (String) -> Unit) {
                     }
                 }
                 .semantics { contentDescription = ScreenshotRules.SWITCH_LABEL + (if (on) " · on · " else " · off · ") + ScreenshotRules.SWITCH_HELP }
-                .padding(vertical = MekaSpace.xs),
+                .padding(vertical = MekaSpace.xs).minTouch(),
         )
     }
 }

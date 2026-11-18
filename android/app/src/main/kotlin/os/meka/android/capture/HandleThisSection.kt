@@ -169,7 +169,7 @@ private fun FormAnswersBlock(
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                         .clickable(role = Role.Button, onClick = onCopyAll)
                         .semantics { contentDescription = "Copy all ${view.answers.size} answers" }
-                        .padding(MekaSpace.xs),
+                        .padding(MekaSpace.xs).minTouch(),
                 )
             }
         }
@@ -193,7 +193,7 @@ private fun FormAnswersBlock(
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                             .clickable(role = Role.Button) { onCopy(a) }
                             .semantics { contentDescription = a.copySpoken }
-                            .padding(MekaSpace.xs),
+                            .padding(MekaSpace.xs).minTouch(),
                     )
                 }
             }

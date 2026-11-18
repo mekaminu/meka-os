@@ -143,6 +143,7 @@ import os.meka.android.designsystem.areaTone
 import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.BoardNudge
 import os.meka.core.domain.BoardNudgeRules
 import os.meka.core.domain.BoardNudgePlace
@@ -1455,7 +1456,7 @@ private fun PressureNote(p: DayPressure, onEase: (PressureFix) -> Unit) {
                 Text(
                     fix.label, style = MekaType.micro, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.s))
-                        .clickable(role = Role.Button) { onEase(fix) }.padding(vertical = MekaSpace.xxs),
+                        .clickable(role = Role.Button) { onEase(fix) }.padding(vertical = MekaSpace.xxs).minTouch(),
                 )
             }
         }

@@ -81,6 +81,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.minTouch
 import os.meka.android.today.RequestChoice
 import os.meka.core.domain.FormAnswersView
 import os.meka.core.domain.ParkingConfirmationRules
@@ -754,7 +755,7 @@ private fun CaptureSheet(
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                                     .clickable(role = Role.Button) { toReading() }
                                     .semantics { contentDescription = readingShare.line + ", up next in Ask, Daily, Reading" }
-                                    .padding(vertical = MekaSpace.xs),
+                                    .padding(vertical = MekaSpace.xs).minTouch(),
                             )
                         }
                         if (hasLink) {
@@ -763,7 +764,7 @@ private fun CaptureSheet(
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                                     .clickable(role = Role.Button) { forTheTrain() }
                                     .semantics { contentDescription = "Save for the train instead" }
-                                    .padding(vertical = MekaSpace.xs),
+                                    .padding(vertical = MekaSpace.xs).minTouch(),
                             )
                         }
                         if (canHandle) {
@@ -772,7 +773,7 @@ private fun CaptureSheet(
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                                     .clickable(role = Role.Button) { handleIt() }
                                     .semantics { contentDescription = "Handle this: Navilife reads it and offers what to add" }
-                                    .padding(vertical = MekaSpace.xs),
+                                    .padding(vertical = MekaSpace.xs).minTouch(),
                             )
                         }
                         if (notes != null) {
@@ -798,7 +799,7 @@ private fun CaptureSheet(
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                                     .clickable(role = Role.Button) { photographLetter() }
                                     .semantics { contentDescription = PictureTextRules.PHOTO_LABEL }
-                                    .padding(vertical = MekaSpace.xs),
+                                    .padding(vertical = MekaSpace.xs).minTouch(),
                             )
                             // Slice 2: new screenshots noticed by themselves (off until turned on here).
                             ScreenshotSwitchLine(onLine = { pictureLine = it })
@@ -896,7 +897,7 @@ private fun VaultOfferRow(offer: DocumentShareView, onTap: () -> Unit) {
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button, onClick = onTap)
                 .semantics { contentDescription = offer.line + " · only its name and date are kept, never its number or the picture" }
-                .padding(vertical = MekaSpace.xs),
+                .padding(vertical = MekaSpace.xs).minTouch(),
         )
     }
 }
@@ -918,7 +919,7 @@ private fun ParkingOfferRow(offer: ParkingShareView, picking: Boolean, onTap: ()
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button, onClick = onTap)
                     .semantics { contentDescription = "Start a parking timer: ${offer.line}" }
-                    .padding(vertical = MekaSpace.xs),
+                    .padding(vertical = MekaSpace.xs).minTouch(),
             )
         }
         AnimatedVisibility(

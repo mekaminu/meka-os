@@ -71,6 +71,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.minTouch
 import os.meka.android.calendar.CalendarRoute
 import os.meka.android.export.YourData
 import os.meka.android.lists.ListsRoute
@@ -421,7 +422,7 @@ private fun BehindAsk(go: (ShellDestination) -> Unit, body: @Composable () -> Un
                 .clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button) { go(ShellDestination.ASK) }
                 .clearAndSetSemantics { contentDescription = "Back to Ask" }
-                .padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.xxs),
+                .padding(horizontal = MekaSpace.xxs, vertical = MekaSpace.xxs).minTouch(),
         )
         Box(Modifier.weight(1f).fillMaxWidth()) { body() }
     }

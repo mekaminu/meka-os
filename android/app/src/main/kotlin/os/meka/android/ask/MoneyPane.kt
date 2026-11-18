@@ -1643,7 +1643,7 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
                     modifier = Modifier.testTag("money-trading-other").padding(bottom = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
                         .clickable(role = Role.Button) { onSwap(swap) }
                         .semantics { contentDescription = c.otherSpoken ?: other }
-                        .padding(horizontal = MekaSpace.xxs))
+                        .padding(horizontal = MekaSpace.xxs).minTouch())
             }
         }
         r.change?.let { ch ->

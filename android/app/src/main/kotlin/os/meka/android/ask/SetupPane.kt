@@ -306,13 +306,13 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
                             app.openSetup.value = true
                             app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
                         }
-                    }.padding(vertical = MekaSpace.xs))
+                    }.padding(vertical = MekaSpace.xs).minTouch())
                 Text("Not today", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                     modifier = Modifier.clickable(role = Role.Button) {
                         haptics.tick()
                         SetupDeviceFacts.hideToday(context)
                         hidden = SetupDeviceFacts.today()
-                    }.padding(vertical = MekaSpace.xs))
+                    }.padding(vertical = MekaSpace.xs).minTouch())
             }
         }
     }

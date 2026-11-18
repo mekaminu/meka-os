@@ -241,7 +241,7 @@ fun AutonomyTodayLine(core: MekaCore, modifier: Modifier = Modifier) {
                 modifier = Modifier.clickable(role = Role.Button) {
                     haptics.light()
                     scope.launch { runCatching { core.setAutonomyPaused(false) } }
-                }.padding(vertical = MekaSpace.xs).semantics { contentDescription = "Resume Navilife" },
+                }.padding(vertical = MekaSpace.xs).semantics { contentDescription = "Resume Navilife" }.minTouch(),
             )
         }
     }

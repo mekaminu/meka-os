@@ -258,7 +258,7 @@ private fun DetailContent(
                                     undo?.show(core.eventEditLine(r.id) ?: core.deletingLine(event, note.everyEvent, note.followingEvents)) { core.undoEventEdit(r.id) }
                                 }
                             }
-                        }.padding(vertical = MekaSpace.xs),
+                        }.padding(vertical = MekaSpace.xs).minTouch(),
                     )
                 }
                 // Clash chooser (slice 2c-iii): both versions of what the edit touched; Meka chooses, never MEKA.
@@ -338,7 +338,7 @@ private fun DetailContent(
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
                     }
-                },
+                }.minTouch(),
             )
         }
         val actionNote = listOfNotNull(d.prepLine, d.kitLine, d.reminderLine, if (d.hidden) "Hidden from your day" else null).joinToString(" · ")

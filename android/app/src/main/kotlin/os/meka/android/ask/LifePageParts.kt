@@ -57,6 +57,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchSquare
 import os.meka.android.designsystem.MotionMath
 import os.meka.core.domain.AddChoice
 import os.meka.core.domain.LifePageRules
@@ -97,7 +98,8 @@ internal fun LifePageHeader(
                             contentDescription = LifePageRules.INFO_LABEL
                             stateDescription = if (infoOpen) "Shown" else "Hidden"
                         }
-                        .minTouch(),
+                        // Walk-through 2026-11-15 A20/A22: a whole 48 × 48 target, so the drawn circle sits clear of the title.
+                        .minTouchSquare(),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(

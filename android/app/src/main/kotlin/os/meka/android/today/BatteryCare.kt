@@ -35,6 +35,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.minTouch
 import os.meka.core.domain.BatteryCareRules
 import os.meka.core.domain.BatteryCareView
 import os.meka.core.domain.BatteryFacts
@@ -127,7 +128,7 @@ fun BatteryCareLine(view: BatteryCareView, onDismiss: () -> Unit, modifier: Modi
         Crossfade(line, Modifier.fillMaxWidth(), MekaMotion.appear(reduced), label = "battery-text") { text ->
             Text(
                 text, style = MekaType.caption, color = color,
-                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open = !open }.padding(vertical = MekaSpace.xs),
+                modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); open = !open }.padding(vertical = MekaSpace.xs).minTouch(),
             )
         }
         AnimatedVisibility(
@@ -159,6 +160,6 @@ fun BatteryCareLine(view: BatteryCareView, onDismiss: () -> Unit, modifier: Modi
 private fun Action(label: String, onClick: () -> Unit) {
     Text(
         label, style = MekaType.caption, color = Meka.colors.accent,
-        modifier = Modifier.clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs),
+        modifier = Modifier.clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs).minTouch(),
     )
 }

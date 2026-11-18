@@ -855,7 +855,7 @@ internal fun fold() = if (Meka.reducedMotion) fadeOut(MekaMotion.expand(true)) e
 internal fun Action(label: String, critical: Boolean = false, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemTitle, color = if (critical) Meka.colors.critical else Meka.colors.accent,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs),
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onClick() }.padding(vertical = MekaSpace.xxs).minTouch(),
     )
 }
 

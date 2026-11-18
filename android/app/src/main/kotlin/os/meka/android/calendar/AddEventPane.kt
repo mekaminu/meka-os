@@ -156,7 +156,7 @@ fun AddEventPane(
                             keep, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
                             modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                                 .clickable(role = Role.Button) { haptics.tick(); set(f.keepTypedWords()) }
-                                .padding(vertical = MekaSpace.xxs),
+                                .padding(vertical = MekaSpace.xxs).minTouch(),
                         )
                     }
                 }
