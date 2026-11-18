@@ -1,5 +1,6 @@
 package os.meka.android.ask
 
+import os.meka.android.designsystem.lightCardEdge
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -320,7 +321,7 @@ private fun HealthRowView(row: HealthRow, showFix: Boolean, modifier: Modifier, 
     val reduced = Meka.reducedMotion
     val dot by animateColorAsState(healthColor(row.state), MekaMotion.appear(reduced), label = "health-dot")
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .then(if (onOpen != null) Modifier.clickable(role = Role.Button, onClick = onOpen) else Modifier)
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .semantics(mergeDescendants = true) { contentDescription = "${row.title}, ${spokenState(row.state)}. ${row.line}" + (row.detail?.let { " $it" } ?: "") },

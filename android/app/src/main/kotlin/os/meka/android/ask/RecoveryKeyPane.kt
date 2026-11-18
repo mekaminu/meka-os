@@ -1,5 +1,6 @@
 package os.meka.android.ask
 
+import os.meka.android.designsystem.lightCardEdge
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -172,7 +173,7 @@ private fun WordsSection(draft: RecoveryKeyDraft, onWritten: () -> Unit, onCance
         Text("Your 24 words", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text(LoneWordGlue.kept(RecoveryKeyRules.HOW), style = MekaType.caption, color = Meka.colors.textTertiary)
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             // Four to a row where each word reads whole, two on the cover screen (RecoveryKeyRules.columnsFor).

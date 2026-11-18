@@ -1,5 +1,6 @@
 package os.meka.android.ask
 
+import os.meka.android.designsystem.lightCardEdge
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -242,7 +243,7 @@ private fun SetupStepView(step: SetupStep, modifier: Modifier, onFix: () -> Unit
     val label = step.fixLabel
     val button = SetupRules.hasButton(step) && label != null
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .minTouch().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs, bottom = if (button) 0.dp else MekaSpace.xs),
     ) {
         Row(
@@ -290,7 +291,7 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
         exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
     ) {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
                 .padding(MekaSpace.m),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {

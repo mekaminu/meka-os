@@ -103,6 +103,7 @@ struct RecoveryKeySheet: View {
             .textSelection(.disabled)
             .padding(MekaSpace.m)
             .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .lightCardEdge(palette)
             .accessibilityElement(children: .combine)
             HStack(spacing: MekaSpace.l) {
                 pill(RecoveryKeyRules.shared.WRITE_DOWN, enabled: true) {

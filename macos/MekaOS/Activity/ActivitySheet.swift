@@ -200,6 +200,7 @@ struct ActivitySheet: View {
                 .padding(.horizontal, MekaSpace.m)
                 .padding(.vertical, MekaSpace.xs)
                 .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                .lightCardEdge(palette)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: row.blocked)
             }
         }
@@ -253,6 +254,7 @@ struct ActivitySheet: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .lightCardEdge(palette)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: row.chip)
     }
 
@@ -359,6 +361,7 @@ struct ActivitySheet: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .lightCardEdge(palette)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: row.undoneLine)
     }
 }

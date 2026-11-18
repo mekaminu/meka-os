@@ -111,6 +111,7 @@ struct ObiCallsSheet: View {
         }
         .padding(MekaSpace.m)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .lightCardEdge(palette)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: v.fraction)
     }
 
@@ -176,6 +177,7 @@ struct ObiCallsSheet: View {
             .padding(MekaSpace.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .lightCardEdge(palette)
     }
 
     private func label(_ text: String) -> some View {

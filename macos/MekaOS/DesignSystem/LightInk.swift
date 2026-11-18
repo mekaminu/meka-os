@@ -11,3 +11,25 @@ extension MekaPalette {
     /// none in Dark.
     func pillEdge(dark: Bool) -> Color? { dark ? nil : track }
 }
+
+/// Walk-through 2026-11-15, A21 part 2: a card on Light's near-same sheet gets a 1 pt edge in the track ink (the Fold's
+/// `Modifier.lightCardEdge`); none in Dark.
+struct LightCardEdge: ViewModifier {
+    let palette: MekaPalette
+    var radius: CGFloat = MekaRadius.m
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if let edge = palette.pillEdge(dark: scheme == .dark) {
+                RoundedRectangle(cornerRadius: radius).strokeBorder(edge, lineWidth: 1)
+            }
+        }
+    }
+}
+
+extension View {
+    func lightCardEdge(_ palette: MekaPalette, radius: CGFloat = MekaRadius.m) -> some View {
+        modifier(LightCardEdge(palette: palette, radius: radius))
+    }
+}

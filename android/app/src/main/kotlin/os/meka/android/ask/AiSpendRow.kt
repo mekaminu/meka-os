@@ -1,5 +1,6 @@
 package os.meka.android.ask
 
+import os.meka.android.designsystem.lightCardEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -67,7 +68,7 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
     )
     Column(
         modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(MekaRadius.m))
+            .clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
             .animateContentSize(MekaMotion.expand(reduced)),
     ) {

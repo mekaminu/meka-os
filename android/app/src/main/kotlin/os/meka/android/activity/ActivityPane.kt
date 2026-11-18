@@ -1,5 +1,6 @@
 package os.meka.android.activity
 
+import os.meka.android.designsystem.lightCardEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -264,7 +265,7 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
 private fun ActivityRowView(row: ActivityRow, undo: () -> Unit) {
     val reduced = Meka.reducedMotion
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {
@@ -299,7 +300,7 @@ private fun ActivityRowView(row: ActivityRow, undo: () -> Unit) {
 private fun StoppedCallRowView(row: StoppedCallerRow, toggle: () -> Unit) {
     val reduced = Meka.reducedMotion
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {

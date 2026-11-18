@@ -149,6 +149,7 @@ private struct SetupStepView: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .lightCardEdge(palette)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(step.title), \(spoken). \(step.line)")
     }

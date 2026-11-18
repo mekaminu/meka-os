@@ -1,5 +1,6 @@
 package os.meka.android.work
 
+import os.meka.android.designsystem.lightCardEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
@@ -68,7 +69,7 @@ const val OBI_CALLS_ENTRY_TAG = "obi-calls-entry"
 internal fun ObiCallsEntry(line: String, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     val haptics = rememberMekaHaptics()
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .clickable(role = Role.Button) { haptics.tick(); onOpen() }
             .semantics { contentDescription = CallsSettingsRules.ENTRY }
             .testTag(OBI_CALLS_ENTRY_TAG).minTouch().padding(MekaSpace.m),
@@ -186,7 +187,7 @@ private fun MonthCard(v: CallsSettingsView, modifier: Modifier, onCap: (Int) -> 
     LaunchedEffect(Unit) { shown = true }
     val share by animateFloatAsState(if (shown) v.fraction else 0f, MekaMotion.expand(reduced), label = "obi-calls-bar")
     Column(
-        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
+        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -233,7 +234,7 @@ private fun LimitTile(label: String, value: String, modifier: Modifier, raised: 
 @Composable
 private fun Card(modifier: Modifier, content: @Composable () -> Unit) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) { content() }
 }
@@ -243,7 +244,7 @@ private fun ToggleRow(t: CallsToggle, onToggle: () -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .clickable(role = Role.Switch) { haptics.tick(); onToggle() }
             .semantics { contentDescription = t.title; selected = t.on }
             .minTouch().padding(MekaSpace.m),

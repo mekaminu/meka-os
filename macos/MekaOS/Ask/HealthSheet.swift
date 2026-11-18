@@ -165,6 +165,7 @@ private struct HealthRowView: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .lightCardEdge(palette)
         .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         .onTapGesture { onOpen?() }
         .accessibilityElement(children: .combine)
