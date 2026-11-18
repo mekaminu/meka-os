@@ -79,7 +79,12 @@ fun SwitchPill(on: Boolean, fill: Color, modifier: Modifier = Modifier) {
             .background(fill).padding(horizontal = MekaSpace.m),
         contentAlignment = Alignment.Center,
     ) {
-        Text(if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent, maxLines = 1)
+        // Walk-through 2026-11-15, A21: "Off" in onAccent on the hairline fill was 1.1:1 in Dark (and white on Light's
+        // hairline no better); off, the word is the secondary ink (6:1 Dark, 5:1 Light), blending as the fill does.
+        val ink by androidx.compose.animation.animateColorAsState(
+            if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(Meka.reducedMotion), label = "switch-pill-ink",
+        )
+        Text(if (on) "On" else "Off", style = MekaType.caption, color = ink, maxLines = 1)
     }
 }
 

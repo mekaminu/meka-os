@@ -74,9 +74,13 @@ struct AutonomySheet: View {
     }
 
     private func rowView(_ row: AutonomyRow) -> some View {
-        let dot: Color = row.onItsOwn ? palette.accent : (row.locked ? palette.textTertiary : palette.surfaceRaised)
+        // Walk-through 2026-11-15, A21: off was surfaceRaised on the sheet (near-invisible); now an empty dot in a
+        // tertiary ring, as on the Fold.
+        let off = !row.onItsOwn && !row.locked
+        let dot: Color = row.onItsOwn ? palette.accent : (row.locked ? palette.textTertiary : palette.surface)
         return HStack(spacing: MekaSpace.xs) {
             Circle().fill(dot).frame(width: 10, height: 10)
+                .overlay { if off { Circle().strokeBorder(palette.textTertiary, lineWidth: 1.5) } }
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: row.onItsOwn)
             VStack(alignment: .leading, spacing: 0) {
                 Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)

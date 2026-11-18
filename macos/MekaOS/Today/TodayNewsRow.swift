@@ -171,6 +171,7 @@ private struct MacNewsCard: View {
     let palette: MekaPalette
     let open: (TodayNewsCard) -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @State private var hovering = false
 
     var body: some View {
@@ -194,7 +195,7 @@ private struct MacNewsCard: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: card.title)
                     HStack(spacing: MekaSpace.xxs) {
                         if card.barca { Circle().fill(palette.barca).frame(width: 5, height: 5) }
-                        Text(card.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                        Text(card.meta).font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark)).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
@@ -202,6 +203,7 @@ private struct MacNewsCard: View {
             .padding(MekaSpace.xs)
             .frame(width: MacNewsCards.cardWidth, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+            .lightCardEdge(palette)
             .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
         }
         .buttonStyle(MekaPressStyle())

@@ -1,5 +1,8 @@
 package os.meka.android.news
 
+import os.meka.android.designsystem.LightInk
+import os.meka.android.designsystem.lightCardEdge
+
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -253,6 +256,7 @@ private fun Card(core: MekaCore, c: TickerCard, modifier: Modifier, open: (Ticke
     Row(
         modifier.then(sem).height(STRIP_HEIGHT - 8.dp).widthIn(max = 300.dp)
             .clip(RoundedCornerShape(MekaRadius.m))
+            .lightCardEdge(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
             .clickable(role = Role.Button, onClickLabel = if (c is TickerCard.Match) "Open the match" else "Open story") { open(c) }
             .padding(horizontal = MekaSpace.xs),
@@ -275,7 +279,7 @@ private fun Card(core: MekaCore, c: TickerCard, modifier: Modifier, open: (Ticke
                         if (c.item.topic == "barca") {
                             Box(Modifier.padding(end = MekaSpace.xxs).size(5.dp).clip(CircleShape).background(Meka.colors.barca))
                         }
-                        Text(c.item.meta, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(c.item.meta, style = MekaType.caption, color = LightInk.small(Meka.colors, Meka.theme.isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

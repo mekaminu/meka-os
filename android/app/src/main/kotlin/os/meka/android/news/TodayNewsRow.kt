@@ -1,5 +1,8 @@
 package os.meka.android.news
 
+import os.meka.android.designsystem.LightInk
+import os.meka.android.designsystem.lightCardEdge
+
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -178,6 +181,7 @@ private fun NewsCard(core: MekaCore, c: TodayNewsCard, story: NewsItem?, copy: B
         Modifier.width(TodayNewsRules.CARD_WIDTH_DP.dp)
             .testTag("today-news-card")
             .clip(RoundedCornerShape(MekaRadius.m))
+            .lightCardEdge(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
             .clickable(role = Role.Button, onClickLabel = if (c.match != null) "Open the match" else "Open story", onClick = onTap)
             .padding(MekaSpace.xs)
@@ -200,7 +204,7 @@ private fun NewsCard(core: MekaCore, c: TodayNewsCard, story: NewsItem?, copy: B
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (c.barca) Box(Modifier.padding(end = MekaSpace.xxs).size(5.dp).clip(CircleShape).background(Meka.colors.barca))
-                Text(c.meta, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(c.meta, style = MekaType.caption, color = LightInk.small(Meka.colors, Meka.theme.isDark), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

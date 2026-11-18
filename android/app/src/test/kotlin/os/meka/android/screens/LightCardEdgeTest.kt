@@ -42,6 +42,15 @@ import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.NeedsYouGroupHead
 import os.meka.core.domain.PageCard
 import os.meka.core.domain.PageRow
+import androidx.compose.ui.test.onAllNodesWithTag
+import kotlinx.datetime.TimeZone
+import kotlin.random.Random
+import os.meka.android.designsystem.SwitchPill
+import os.meka.android.news.TodayNewsRow
+import os.meka.core.domain.NewsItem
+import os.meka.core.domain.NewsTicker
+import os.meka.core.facade.MekaCore
+import os.meka.core.sync.InMemoryReplicaStore
 
 /**
  * Walk-through 2026-11-15, A21 part 2 (Light contrast): the white cards on AI, Obi on calls, Setup, Health, Activity
@@ -212,5 +221,71 @@ class LightCardEdgeTest {
     fun todaysRaisedCardsHaveNoEdgeInDark() {
         val edge = leftEdge(ThemeChoice.DARK, eveningCard)
         if (!close(edge, MekaDarkColors.surfaceRaised)) fail("Dark: Today's evening card's edge is $edge, not the raised surface")
+    }
+
+    /** A21 part 8: Today's NEWS cards (and the bedside clock's headline strip, the same card ink) on Light's page. */
+    private fun newsCardEdge(choice: ThemeChoice): Color {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, choice)
+        val core = MekaCore(
+            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+            secureRandom = Random(3), timeZone = { TimeZone.of("Europe/London") }, nowMs = { 0L },
+        )
+        val ticker = NewsTicker(null, listOf(NewsItem("s1", "A town opens a new library", null, "BBC News", "top", "BBC News · 49 min ago", null, 0L)))
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.width(360.dp).background(Meka.colors.background).padding(16.dp)) {
+                    TodayNewsRow(core, ticker, openStory = {}, openMatch = {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        val px = compose.onAllNodesWithTag("today-news-card")[0].captureToImage().toPixelMap()
+        return px[0, px.height / 2]
+    }
+
+    @Test
+    fun todaysNewsCardsHaveAnEdgeInLight() {
+        val edge = newsCardEdge(ThemeChoice.LIGHT)
+        if (!close(edge, MekaLightColors.track)) fail("Light: Today's news card's edge is $edge, not the track ink")
+    }
+
+    @Test
+    fun todaysNewsCardsHaveNoEdgeInDark() {
+        val edge = newsCardEdge(ThemeChoice.DARK)
+        if (!close(edge, MekaDarkColors.surface)) fail("Dark: Today's news card's edge is $edge, not the surface")
+    }
+
+    /** A21 part 8: an Off pill's word was onAccent on the hairline fill (1.1:1 in Dark); now the secondary ink. */
+    private fun offPillInk(choice: ThemeChoice): List<Float> {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, choice)
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.background(Meka.colors.surface).padding(16.dp)) {
+                    SwitchPill(on = false, fill = Meka.colors.hairline, modifier = Modifier.testTag("card"))
+                }
+            }
+        }
+        compose.waitForIdle()
+        val px = compose.onNodeWithTag("card").captureToImage().toPixelMap()
+        val lum = ArrayList<Float>()
+        for (x in 0 until px.width) for (y in px.height / 4 until px.height * 3 / 4) {
+            val c = px[x, y]
+            lum += 0.2126f * c.red + 0.7152f * c.green + 0.0722f * c.blue
+        }
+        return lum
+    }
+
+    @Test
+    fun anOffPillsWordReadsInDark() {
+        val brightest = offPillInk(ThemeChoice.DARK).max()
+        if (brightest < 0.45f) fail("Dark: the Off pill's word peaks at $brightest, too close to its hairline fill")
+    }
+
+    @Test
+    fun anOffPillsWordReadsInLight() {
+        val darkest = offPillInk(ThemeChoice.LIGHT).min()
+        if (darkest > 0.55f) fail("Light: the Off pill's word bottoms at $darkest, too close to its hairline fill")
     }
 }

@@ -22,6 +22,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.border
+import os.meka.android.designsystem.lightCardEdge
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -151,14 +153,17 @@ private fun AutonomyRowView(row: AutonomyRow, modifier: Modifier, onAction: () -
         when {
             row.onItsOwn -> Meka.colors.accent
             row.locked -> Meka.colors.textTertiary
-            else -> Meka.colors.surfaceRaised
+            // Walk-through 2026-11-15, A21: off was surfaceRaised on the card (1.1:1, near-invisible in both themes);
+            // now the card's own fill inside a tertiary ring (drawn below), so off reads as an empty dot.
+            else -> Meka.colors.surface
         },
         MekaMotion.appear(reduced), label = "autonomy-dot",
     )
     // Quality gate slice 54: on the cover screen (below 420 dp) Ask first / Turn off / Let Navilife offer again sits
     // under the row's words, lined up with them past the dot, instead of squeezing them beside it.
     BoxWithConstraints(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).testTag("autonomy-row"),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surface).testTag("autonomy-row"),
     ) {
         val under = AutonomyRules.actionUnder((maxWidth - MekaSpace.m * 2).value)
         val action = row.action
@@ -170,7 +175,10 @@ private fun AutonomyRowView(row: AutonomyRow, modifier: Modifier, onAction: () -
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
-                Box(Modifier.size(DOT).clip(CircleShape).background(dot))
+                Box(
+                    Modifier.size(DOT).testTag("autonomy-dot").clip(CircleShape).background(dot)
+                        .then(if (!row.onItsOwn && !row.locked) Modifier.border(1.5.dp, Meka.colors.textTertiary, CircleShape) else Modifier),
+                )
                 Column(Modifier.weight(1f)) {
                     Text(LoneWordGlue.kept(row.title), style = MekaType.body, color = Meka.colors.textPrimary)
                     Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "autonomy-line") { l ->
