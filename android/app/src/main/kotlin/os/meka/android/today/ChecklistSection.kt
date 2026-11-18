@@ -1,6 +1,7 @@
 package os.meka.android.today
 
 import os.meka.android.designsystem.wordsTap
+import os.meka.android.designsystem.minTouch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -144,7 +145,7 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
                 ShopModeRules.OPEN, style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button) { haptics.light(); shopping = true }
-                    .padding(MekaSpace.xs),
+                    .minTouch().padding(horizontal = MekaSpace.xs),
             )
         }
     }
@@ -167,7 +168,7 @@ internal fun ChecklistSection(task: Task, actions: TodayActions) {
                                 ChecklistRules.UNTICK_ALL, style = MekaType.caption, color = Meka.colors.accent,
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                     .clickable(role = Role.Button) { haptics.tick(); actions.untickAll(task.id) }
-                                    .padding(MekaSpace.xs),
+                                    .minTouch().padding(horizontal = MekaSpace.xs),
                             )
                         }
                     }
