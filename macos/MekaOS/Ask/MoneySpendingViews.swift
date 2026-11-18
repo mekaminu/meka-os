@@ -245,12 +245,28 @@ struct MoneyDayHead: View {
     }
 }
 
+/// Walk-through 2026-11-15, A21 (Light contrast): in Light a Money card (the raised surface) sits on the sheet's near-same
+/// colour, so it gets a 1 pt edge in the track ink (the Fold's `lightCardEdge`); none in Dark.
+struct MoneyLightEdge: ViewModifier {
+    let palette: MekaPalette
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if let edge = palette.pillEdge(dark: scheme == .dark) {
+                RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous).strokeBorder(edge, lineWidth: 1)
+            }
+        }
+    }
+}
+
 /// Money's layout rule (a) (Meka 2026-10-26 22:18): a section is a card, rounded and raised on the sheet, 16 pt in.
 extension View {
     func moneyCard(_ palette: MekaPalette) -> some View {
         self.padding(MekaSpace.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous))
+            .modifier(MoneyLightEdge(palette: palette))
     }
 
     /// The mockup's brass-bordered card (Obi's money check, README item 6): a warm tint of the accent over the raised

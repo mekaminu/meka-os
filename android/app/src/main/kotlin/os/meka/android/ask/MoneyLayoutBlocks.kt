@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -45,7 +46,7 @@ import os.meka.core.domain.MoneyTabs
 @Composable
 internal fun MoneyCard(modifier: Modifier = Modifier, tag: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .let { m -> tag?.let { m.testTag(it) } ?: m }.padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         content = content,

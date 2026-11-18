@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -63,7 +64,7 @@ import os.meka.core.domain.MoneyWorth
 internal fun MoneyAccountsCard(items: List<MoneyAccountItem>, modifier: Modifier = Modifier, onOpen: (MoneyAccountItem) -> Unit) {
     val reduced = Meka.reducedMotion
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-accounts-card"),
     ) {
         for (r in items) {
@@ -111,7 +112,7 @@ internal fun MoneyAccountsCard(items: List<MoneyAccountItem>, modifier: Modifier
 internal fun MoneyMoreCard(rows: List<MoneyMoreRow>, modifier: Modifier = Modifier, onOpen: (MoneyMoreKind) -> Unit) {
     val reduced = Meka.reducedMotion
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-more-card"),
     ) {
         for (r in rows) {

@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -74,7 +75,7 @@ import os.meka.core.domain.MoneySaved
 @Composable
 internal fun OwnCategoriesCard(rows: List<MoneyOwnRow>, modifier: Modifier = Modifier, onOpen: (String) -> Unit) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-own-card"),
     ) {
         for (r in rows) {

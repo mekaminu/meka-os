@@ -76,6 +76,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.withFrameNanos
 import os.meka.core.domain.FeelMoment
 import kotlinx.coroutines.withContext
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -1765,7 +1766,7 @@ private fun TradingTilesBlock(v: TradingTilesView, modifier: Modifier = Modifier
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 row.forEach { t -> key(t.label) {
                     Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                        Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
                             .semantics(mergeDescendants = true) { contentDescription = "${t.label}, ${t.value}" }
                             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),

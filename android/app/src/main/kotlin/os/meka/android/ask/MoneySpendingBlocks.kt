@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -210,7 +211,7 @@ internal fun MoneyTiles(tiles: List<MoneyTile>, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             tiles.forEach { t ->
                 Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                    Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
                         .semantics(mergeDescendants = true) { contentDescription = "${t.label}, ${t.value}" }
                         .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),

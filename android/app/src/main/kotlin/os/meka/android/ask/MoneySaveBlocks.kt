@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -71,7 +72,7 @@ internal fun MoneySaveCard(base: MoneySaveBase, modifier: Modifier = Modifier, o
     var rate by rememberSaveable { mutableIntStateOf(0) }
     val v = remember(amount, months, rate, base) { MoneySave.view(amount, months, rate, base) }
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .testTag("money-save-card").padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

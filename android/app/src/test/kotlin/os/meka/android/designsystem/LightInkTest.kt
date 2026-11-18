@@ -46,6 +46,16 @@ class LightInkTest {
     }
 
     @Test
+    fun aCardHasAnEdgeOnlyInLight() {
+        // Walk-through 2026-11-15, A21: a white card or a raised tile on Light's page is ~1.0–1.1:1 alone.
+        assertTrue(contrast(light.surface, light.background) < 1.1)
+        listOf(light.background, light.surface, light.surfaceRaised).forEach { bg ->
+            assertTrue(contrast(LightInk.cardEdge(light, dark = false)!!, bg) >= 1.3, "a card's edge on $bg")
+        }
+        assertNull(LightInk.cardEdge(MekaDarkColors, dark = true))
+    }
+
+    @Test
     fun workModesOffDaysAndChipsHaveAnEdgeInLightAndTheirWordsRead() {
         // Work mode's off day circles and commute chips are surfaceRaised: alone they fade into Light's page.
         assertTrue(contrast(light.surfaceRaised, light.background) < 1.5)

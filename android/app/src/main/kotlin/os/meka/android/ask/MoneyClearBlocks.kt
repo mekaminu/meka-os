@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -59,7 +60,7 @@ internal fun MoneyClearCard(base: MoneyClearBase, modifier: Modifier = Modifier,
     var order by rememberSaveable { mutableStateOf(MoneyClear.BY_RATE) }
     val v = remember(pay, order, base) { MoneyClear.view(pay, order, base) }
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .testTag("money-clear-card").padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

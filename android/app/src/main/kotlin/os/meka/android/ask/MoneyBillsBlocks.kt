@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -138,7 +139,7 @@ internal fun MoneyBillRowView(r: MoneyBillRow, modifier: Modifier = Modifier) {
 internal fun MoneyCardsBriefCard(rows: List<MoneyCardBrief>, modifier: Modifier = Modifier, onOpen: (String) -> Unit) {
     val reduced = Meka.reducedMotion
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-cards-card"),
     ) {
         for (r in rows) {
@@ -167,7 +168,7 @@ internal fun MoneyCardsBriefCard(rows: List<MoneyCardBrief>, modifier: Modifier 
 internal fun MoneyPaydayRow(b: MoneyPaydayBrief, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     val reduced = Meka.reducedMotion
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).lightCardEdge(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface)
             .clickable(role = Role.Button, onClick = onOpen)
             .semantics(mergeDescendants = true) { contentDescription = b.spoken }
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("money-payday-row"),
