@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
@@ -34,8 +35,8 @@ import os.meka.core.domain.LifePageRules
 /**
  * Walk-through 2026-11-15 A20: a Life page title's ⓘ took the tap only on its 24 dp circle's width. It is now a whole
  * 48 × 48 target laid out at the circle's own width, so the title keeps its room ("Appointments" stays on one line on
- * the closed Fold, which a plain 48 dp square broke), and a tap near the target's outer edge, past the circle, still
- * unfolds what the page does.
+ * the closed Fold, which a plain 48 dp square broke), and a tap near either outer edge of the target, past the circle,
+ * still unfolds or folds what the page does.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -73,14 +74,15 @@ class LifeTitleInfoTargetTest {
         ScreenShots.assertTallTarget(compose, "Appointments", target, square = true)
         ScreenShots.assertHeaderWhole(compose, "Appointments")
         if (lines("Appointments") != 1) fail("Appointments breaks across ${lines("Appointments")} lines on the closed Fold")
-        // The target reaches past the drawn circle on both sides: a tap 2 dp inside its left edge unfolds the words.
+        // The target reaches past the drawn circle on both sides: a tap 2 dp inside its right edge unfolds the words and
+        // one 2 dp inside its left edge folds them (read from the ⓘ's own state, so the fold's animation doesn't count).
         val d = compose.density.density
-        compose.onNode(target).performTouchInputClick(Offset(2f * d, 24f * d))
-        compose.onNode(hasText(LifePageRules.shown(info), substring = true)).assertExists()
+        fun state() = compose.onNode(target).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
         compose.onNode(target).performTouchInputClick(Offset(46f * d, 24f * d))
-        compose.onAllNodes(hasText(LifePageRules.shown(info), substring = true)).fetchSemanticsNodes().let {
-            if (it.isNotEmpty()) fail("a tap 2 dp inside the target's right edge didn't fold the words away")
-        }
+        if (state() != "Shown") fail("a tap 2 dp inside the target's right edge didn't unfold the words (state ${state()})")
+        compose.onNode(hasText(LifePageRules.shown(info), substring = true)).assertExists()
+        compose.onNode(target).performTouchInputClick(Offset(2f * d, 24f * d))
+        if (state() != "Hidden") fail("a tap 2 dp inside the target's left edge didn't fold the words (state ${state()})")
     }
 
     @Test
