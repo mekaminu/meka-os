@@ -15,11 +15,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +49,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
+import os.meka.android.designsystem.TickSize
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
@@ -204,8 +203,10 @@ private fun TomorrowTaskRow(
     modifier: Modifier,
 ) {
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
-        CompleteButton(id, r.title, tick)
-        Spacer(Modifier.width(MekaSpace.m))
+        // Walk-through 2026-11-15 A20: the tick was a bare 28 dp circle (~27 dp to hit). Now Today's 22 dp circle inside a
+        // whole 48 dp target that bleeds into the row's start, so the circle keeps its line and the title sits the
+        // target's inset after it (no spacer).
+        CompleteButton(id, r.title, tick, size = TickSize.DRAWN, touch = MekaSpace.touch, bleed = true)
         Column(Modifier.weight(1f)) {
             // Tap the title (or its time) to edit the task (Tomorrow on Today, slice 3).
             Column(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Edit") { onEdit() }.minTouch()) {

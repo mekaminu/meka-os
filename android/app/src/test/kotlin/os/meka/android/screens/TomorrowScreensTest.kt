@@ -166,6 +166,16 @@ class TomorrowScreensTest {
             .filter { it.size.height / compose.density.density < 47.5f }
             .map { n -> (n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } ?: "?") + " ${(n.size.height / compose.density.density).toInt()} dp" }
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
+        // Walk-through 2026-11-15 A20: each task's tick circle (a checkbox, so the check above missed it) is a whole
+        // 48 × 48 target too; it was ~27 dp.
+        val dp = compose.density.density
+        val ticks = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Checkbox))
+            .fetchSemanticsNodes()
+        if (ticks.isEmpty()) fail("$name: no tick circles on tomorrow's tasks")
+        val smallTicks = ticks.filter { it.size.height / dp < 47.5f || it.size.width / dp < 47.5f }
+            .map { n -> (n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString("") ?: "?") +
+                " ${(n.size.width / dp).toInt()} × ${(n.size.height / dp).toInt()} dp" }
+        if (smallTicks.isNotEmpty()) fail("$name: tick circles under 48 dp to tap:\n" + smallTicks.joinToString("\n") { "- $it" })
     }
 
     private fun run(theme: ThemeChoice, name: String) {
