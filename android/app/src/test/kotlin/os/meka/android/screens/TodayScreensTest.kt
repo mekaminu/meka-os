@@ -441,6 +441,16 @@ class TodayScreensTest {
             compose.onAllNodesWithTag(os.meka.android.today.SIDE_HOUSEKEEPING_TAG, useUnmergedTree = true).fetchSemanticsNodes()
                 .forEach { if (it.boundsInRoot.top < sched) fail("$name: Health and Setup sit above the Schedule") }
             ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
+            // Walk-through 2026-11-15 A20: the setup card's Open Setup and Not today are whole 48 dp targets, drawn inside
+            // the card (the row is lifted into the card's old bottom inset, so the card keeps its height).
+            listOf("Open Setup", "Not today").forEach { link ->
+                val m = hasText(link) and androidx.compose.ui.test.hasClickAction()
+                ScreenShots.assertTallTarget(compose, name, m)
+                val words = compose.onAllNodes(hasText(SETUP_LABEL), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+                    ?: return fail("$name: no setup card")
+                val target = compose.onAllNodes(m).fetchSemanticsNodes().first().boundsInRoot
+                if (target.top < words.bottom) fail("$name: $link's target reaches over the card's label")
+            }
         }
         val lines = compose.onAllNodesWithTag(os.meka.android.today.SCHEDULE_BACKGROUND_TAG, useUnmergedTree = true).fetchSemanticsNodes()
         if (lines.isEmpty()) fail("$name: Work isn't one dim line in the Schedule card")

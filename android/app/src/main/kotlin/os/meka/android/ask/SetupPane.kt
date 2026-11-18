@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -292,14 +293,17 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
     ) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                .padding(MekaSpace.m),
+                .padding(start = MekaSpace.m, top = MekaSpace.m, end = MekaSpace.m, bottom = SETUP_CARD_BOTTOM),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text("Set up Navilife".uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
             Crossfade(view?.todayLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "setup-card") { t ->
                 Text(t, style = MekaType.body, color = Meka.colors.textPrimary)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            // Walk-through 2026-11-15 A20: Open Setup and Not today are whole 48 dp targets (they were ~36 dp). The row
+            // is drawn SETUP_LINKS_LIFT higher and the card's bottom inset is that much smaller, so the words sit where
+            // they did and the card keeps its height: the open Fold's Schedule stays above it (innerSchedule).
+            Row(Modifier.offset(y = -SETUP_LINKS_LIFT), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                 Text("Open Setup", style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) {
                         haptics.light()
@@ -307,14 +311,19 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
                             app.openSetup.value = true
                             app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
                         }
-                    }.padding(vertical = MekaSpace.xs))
+                    }.minTouch())
                 Text("Not today", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                     modifier = Modifier.clickable(role = Role.Button) {
                         haptics.tick()
                         SetupDeviceFacts.hideToday(context)
                         hidden = SetupDeviceFacts.today()
-                    }.padding(vertical = MekaSpace.xs))
+                    }.minTouch())
             }
         }
     }
 }
+
+/** Half the height Open Setup / Not today gained as 48 dp targets (36 → 48): the row is lifted by it ... */
+private val SETUP_LINKS_LIFT = 6.dp
+/** ... and the card's bottom inset (16) loses the whole 12, so the card is as tall as before. */
+private val SETUP_CARD_BOTTOM = 4.dp
