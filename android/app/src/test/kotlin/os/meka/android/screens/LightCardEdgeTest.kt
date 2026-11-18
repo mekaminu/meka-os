@@ -30,6 +30,7 @@ import os.meka.android.designsystem.MekaLightColors
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.ObiCallsEntry
+import os.meka.android.goals.ProgressRing
 import os.meka.core.domain.PageCard
 import os.meka.core.domain.PageRow
 
@@ -100,5 +101,32 @@ class LightCardEdgeTest {
     fun noEdgeInDark() {
         val edge = leftEdge(ThemeChoice.DARK, obiCalls)
         if (!close(edge, MekaDarkColors.surface)) fail("Dark: Obi on calls' edge is $edge, not the surface")
+    }
+
+    /** A21 part 4: Goals' empty ring drew its track in surfaceRaised (~1.1:1 on Light's page); now the bars' track ink. */
+    private fun ringTop(choice: ThemeChoice): Color {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, choice)
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.background(Meka.colors.background).padding(16.dp).testTag("ring")) { ProgressRing(0f, 0) }
+            }
+        }
+        compose.waitForIdle()
+        val px = compose.onNodeWithTag("ring").captureToImage().toPixelMap()
+        // The ring is 40 dp inside 16 dp of padding (72 dp across); its 4 dp stroke's middle sits 18 dp from the top.
+        return px[px.width / 2, px.height * 18 / 72]
+    }
+
+    @Test
+    fun goalsEmptyRingIsSeenInLight() {
+        val top = ringTop(ThemeChoice.LIGHT)
+        if (!close(top, MekaLightColors.track)) fail("Light: Goals' empty ring is $top, not the track ink")
+    }
+
+    @Test
+    fun goalsEmptyRingIsUnchangedInDark() {
+        val top = ringTop(ThemeChoice.DARK)
+        if (!close(top, MekaDarkColors.surfaceRaised)) fail("Dark: Goals' empty ring is $top, not surfaceRaised")
     }
 }

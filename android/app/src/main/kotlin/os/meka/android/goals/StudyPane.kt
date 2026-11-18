@@ -195,7 +195,8 @@ private fun CourseRing(fraction: Float, label: String, size: Dp, width: Dp, sub:
     var shown by remember { mutableStateOf(reduced) }
     LaunchedEffect(Unit) { shown = true }
     val fill by animateFloatAsState(if (shown) fraction.coerceIn(0f, 1f) else 0f, MekaMotion.appear(reduced), label = "study-ring")
-    val track = Meka.colors.surfaceRaised
+    // Walk-through 2026-11-15, A21: the empty ring's track in the bars' ink, seen in Light (surfaceRaised was ~1.1:1 there).
+    val track = os.meka.android.designsystem.LightInk.barTrack(Meka.colors, Meka.theme.isDark)
     val accent = Meka.colors.accent
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {

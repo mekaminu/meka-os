@@ -701,7 +701,9 @@ private fun TimerCard(row: TimerRow, showTitle: Boolean, modifier: Modifier, onE
         ) {
             ParkingTimerRules.EXTEND_MIN.forEach { m -> Chip(ParkingTimerRules.extendLabel(m), false) { onExtend(m) } }
             val end = ParkingTimerRules.endAction(row)
-            Text(end, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, softWrap = false,
+            // Walk-through 2026-11-15, A21: drawn in link gold like every other bare link (Undo, Show all), so it no
+            // longer reads as switched off in tertiary grey.
+            Text(end, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, softWrap = false,
                 modifier = Modifier.align(Alignment.CenterVertically).clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button, onClick = onEnd)
                     .semantics { contentDescription = "$end: ${row.title}" }.minTouch().padding(MekaSpace.xs))

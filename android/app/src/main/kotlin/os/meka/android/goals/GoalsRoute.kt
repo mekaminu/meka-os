@@ -647,8 +647,9 @@ private fun GoalRowBody(
 
 /** The goal's progress as a ring with its percentage inside; [fill] (0–1) is animated by the caller. */
 @Composable
-private fun ProgressRing(fill: Float, pct: Int) {
-    val track = Meka.colors.surfaceRaised
+internal fun ProgressRing(fill: Float, pct: Int) {
+    // Walk-through 2026-11-15, A21: the empty ring's track in the bars' ink, seen in Light (surfaceRaised was ~1.1:1 there).
+    val track = os.meka.android.designsystem.LightInk.barTrack(Meka.colors, Meka.theme.isDark)
     val accent = Meka.colors.accent
     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(40.dp)) {

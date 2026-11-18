@@ -317,6 +317,7 @@ private struct AppLinkField: View {
 private struct GoalRowView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var ringScheme
     let goal: GoalItem
     let all: [GoalItem]
     let expanded: Bool
@@ -330,7 +331,8 @@ private struct GoalRowView: View {
                 HStack(alignment: .top, spacing: MekaSpace.m) {
                     // The progress ring sweeps round on appear and glides to a new value (Goals, properly, slice 2).
                     ZStack {
-                        Circle().stroke(palette.surfaceRaised, lineWidth: 4)
+                        // Walk-through 2026-11-15, A21: the empty ring's track in the bars' ink, seen in Light.
+                        Circle().stroke(palette.barTrack(dark: ringScheme == .dark), lineWidth: 4)
                         Circle().trim(from: 0, to: shown)
                             .stroke(palette.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                             .rotationEffect(.degrees(-90))

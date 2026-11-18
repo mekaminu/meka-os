@@ -75,6 +75,7 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -333,7 +334,7 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
     val density = LocalDensity.current
     // Works by hand (quality gate): the track and the lit pill look as before (a 40 dp pill inside a 48 dp track), but
     // each tab's touch is the track's full 48 dp height, not the 40 dp pill.
-    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(horizontal = MekaSpace.xxs)) {
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).lightCardEdge(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface).padding(horizontal = MekaSpace.xxs)) {
         val slot = maxWidth / tabs.size
         val roomForCounts = slot >= 104.dp
         val shortLabels = slot < 84.dp

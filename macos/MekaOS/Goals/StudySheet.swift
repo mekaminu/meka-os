@@ -144,6 +144,7 @@ struct StudyImportCard: View {
 /// A progress ring that sweeps round from the top on appear and glides on a change; the number inside.
 struct StudyRing: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var ringScheme
     let fraction: Double
     let label: String
     let size: CGFloat
@@ -154,7 +155,8 @@ struct StudyRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(palette.surfaceRaised, lineWidth: width)
+            // Walk-through 2026-11-15, A21: the empty ring's track in the bars' ink, seen in Light.
+            Circle().stroke(palette.barTrack(dark: ringScheme == .dark), lineWidth: width)
             Circle().trim(from: 0, to: CGFloat(shown || reduceMotion ? min(max(fraction, 0), 1) : 0))
                 .stroke(palette.accent, style: StrokeStyle(lineWidth: width, lineCap: .round))
                 .rotationEffect(.degrees(-90))

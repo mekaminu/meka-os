@@ -124,7 +124,8 @@ internal fun FastingTile(core: MekaCore, modifier: Modifier = Modifier, open: ()
     val reduced = Meka.reducedMotion
     val sweep by animateFloatAsState(s.fraction, if (reduced) snap() else tween(1_000, easing = LinearEasing), label = "tile-sweep")
     val accent = Meka.colors.accent
-    val track = Meka.colors.surfaceRaised
+    // Walk-through 2026-11-15, A21: the empty ring's track in the bars' ink, seen in Light (surfaceRaised was ~1.1:1 there).
+    val track = os.meka.android.designsystem.LightInk.barTrack(Meka.colors, Meka.theme.isDark)
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .clickable(role = Role.Button) { open() }
