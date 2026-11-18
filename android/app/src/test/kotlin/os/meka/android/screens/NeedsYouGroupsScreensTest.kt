@@ -211,6 +211,8 @@ class NeedsYouGroupsScreensTest {
         assertEquals(NeedsYouGroupRules.PAGE_SIZE, fyiRows(), "$name: FYI opened shows one page of five")
         if (!onScreen("1–5 of 7")) fail("$name: FYI's page line is missing")
         if (compose.onAllNodesWithTag(NEEDS_YOU_PAGER_TAG).fetchSemanticsNodes().isEmpty()) fail("$name: no pager under FYI")
+        // Walk-through 2026-11-15 A20: the pager's ‹ › take the tap on a whole 48 × 48, not only their 32 dp circles.
+        listOf("Next page", "Previous page").forEach { ScreenShots.assertTallTarget(compose, name, hasContentDescription(it), square = true) }
         compose.onAllNodes(hasContentDescription("Next page"))[0].performSemanticsAction(SemanticsActions.OnClick)
         turns()
         assertEquals(2, fyiRows(), "$name: › shows the last two")

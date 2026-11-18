@@ -698,6 +698,17 @@ object ScreenShots {
         return field("shape") as? androidx.compose.foundation.shape.CornerBasedShape
     }
 
+    /**
+     * Walk-through 2026-11-15 A20: the first node matching [m] (merged tree) takes the tap on at least 48 dp of height
+     * (48 × 48 when [square]), not only its drawn pill: `minTouch()` goes after `clickable`, never before it.
+     */
+    fun assertTallTarget(compose: ComposeContentTestRule, name: String, m: androidx.compose.ui.test.SemanticsMatcher, square: Boolean = false) {
+        val d = compose.density.density
+        val n = compose.onAllNodes(m).fetchSemanticsNodes().firstOrNull() ?: fail("$name: no ${m.description} on screen")
+        if (n.size.height / d < 47.5f || (square && n.size.width / d < 47.5f))
+            fail("$name: ${m.description} takes taps on ${(n.size.width / d).toInt()} × ${(n.size.height / d).toInt()} dp, under 48")
+    }
+
     /** Walk-through A32: the glyph button tagged [tag] (Money's ⓘ) is a whole 48 × 48 target, not as wide as its glyph. */
     fun assertSquareTarget(compose: ComposeContentTestRule, name: String, tag: String) {
         val d = compose.density.density

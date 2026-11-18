@@ -1664,9 +1664,9 @@ private fun TradingEquityCardBlock(c: TradingEquityCard, chosen: String, onRange
                 val fill by animateColorAsState(if (ch.on) Meka.colors.accent.copy(alpha = 0.16f).compositeOver(Meka.colors.surfaceRaised) else Meka.colors.surfaceRaised,
                     MekaMotion.appear(reduced), label = "trading-range-${ch.key}")
                 val ink by animateColorAsState(if (ch.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-range-ink-${ch.key}")
-                Box(Modifier.testTag("money-trading-range-${ch.key}").minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+                Box(Modifier.testTag("money-trading-range-${ch.key}").clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.RadioButton) { if (!ch.on) onRange(ch.key) }
-                    .clearAndSetSemantics { contentDescription = ch.spoken; selected = ch.on; role = Role.RadioButton },
+                    .clearAndSetSemantics { contentDescription = ch.spoken; selected = ch.on; role = Role.RadioButton }.minTouch(),
                     contentAlignment = Alignment.Center) {
                     Text(ch.label, style = MekaType.captionStrong, color = ink,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
@@ -2200,9 +2200,9 @@ private fun YearBlock(yv: os.meka.core.domain.MoneyYearView, modifier: Modifier,
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         // Quality gate slice 13: the head above already says "2026 SO FAR", so the line is the title alone, and the row
         // isn't clipped to a rounded shape (a two-line title on the cover screen lost its first letters to the corners).
-        Row(Modifier.fillMaxWidth().minTouch()
+        Row(Modifier.fillMaxWidth()
             .clickable(role = Role.Button) { open = !open; onToggle() }
-            .semantics(mergeDescendants = true) { contentDescription = if (open) "${yv.spoken}. Fold" else "${yv.folded}. Open" },
+            .semantics(mergeDescendants = true) { contentDescription = if (open) "${yv.spoken}. Fold" else "${yv.folded}. Open" }.minTouch(),
             verticalAlignment = Alignment.CenterVertically) {
             Text(yv.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f).padding(end = MekaSpace.xs))
             Crossfade(if (open) "Fold" else "Open", animationSpec = MekaMotion.appear(reduced), label = "money-year-toggle") { l ->

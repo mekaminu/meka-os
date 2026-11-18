@@ -356,6 +356,10 @@ class MoneyTradingLayoutScreensTest {
         if (showsText("Now · ")) fail("the line's readout repeats the headline before a day is tapped")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-equity"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-equity")
+        // Walk-through 2026-11-15 A20: each range chip takes the tap on its whole 48 dp, not only its ~24 dp pill.
+        TradingEquity.chips(c, TradingEquity.MONTH).forEach { ch ->
+            ScreenShots.assertTallTarget(compose, "cover-dark-trading-equity", hasContentDescription(ch.spoken))
+        }
         compose.onNodeWithContentDescription(TradingEquity.chips(c, TradingEquity.MONTH)[1].spoken, useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         settle()

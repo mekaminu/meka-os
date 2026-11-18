@@ -261,8 +261,8 @@ internal fun NeedsYouPager(page: NeedsYouPage, onPage: (Int) -> Unit, modifier: 
 @Composable
 private fun PagerArrow(glyph: String, label: String, on: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.minTouchSquare().clip(CircleShape).clickable(enabled = on, role = Role.Button, onClickLabel = label) { onClick() }
-            .semantics { contentDescription = label },
+        Modifier.clip(CircleShape).clickable(enabled = on, role = Role.Button, onClickLabel = label) { onClick() }
+            .semantics { contentDescription = label }.minTouchSquare(),
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(Meka.colors.surfaceRaised), contentAlignment = Alignment.Center) {

@@ -480,8 +480,8 @@ private fun MarkCircle(mark: HabitMark, label: String, reduced: Boolean, onClick
         MekaMotion.appear(reduced), label = "habit-mark-fill",
     )
     Box(
-        modifier.minTouch().clip(CircleShape).clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = label },
+        modifier.clip(CircleShape).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label }.minTouch(),
         contentAlignment = Alignment.Center,
     ) {
         Box(

@@ -720,11 +720,11 @@ private fun TrustOfferRow(o: TrustOffer, onYes: () -> Unit, onNo: () -> Unit) {
 private fun HelpLinkRow(link: os.meka.core.domain.HelpLink, modifier: Modifier, onTap: () -> Unit) {
     Text(
         link.button + " ›", style = MekaType.itemMeta, color = Meka.colors.onAccent,
-        modifier = modifier.padding(top = MekaSpace.xxs).minTouch().clip(RoundedCornerShape(MekaRadius.pill))
-            .background(Meka.colors.accent)
+        modifier = modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Button, onClick = onTap)
             .testTag(ASK_HELP_TAG)
             .semantics { contentDescription = link.button }
+            .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
@@ -734,10 +734,11 @@ private fun HelpLinkRow(link: os.meka.core.domain.HelpLink, modifier: Modifier, 
 private fun StillStuckRow(label: String, modifier: Modifier, onTap: () -> Unit) {
     Text(
         "$label ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-        modifier = modifier.minTouch()
+        modifier = modifier
             .clickable(role = Role.Button, onClick = onTap)
             .testTag(ASK_STILL_STUCK_TAG)
             .semantics { contentDescription = label }
+            .minTouch()
             .padding(vertical = MekaSpace.xs),
     )
 }
@@ -753,10 +754,10 @@ private fun AskSourceRow(src: os.meka.core.domain.AskSource, modifier: Modifier,
         modifier.fillMaxWidth().padding(top = MekaSpace.xxs)
             .clip(RoundedCornerShape(MekaRadius.m))
             .background(Meka.colors.surface)
-            .minTouch()
             .clickable(role = Role.Button, onClick = onTap)
             .testTag(ASK_SOURCE_TAG)
             .semantics { contentDescription = "Source: $line" }
+            .minTouch()
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -771,11 +772,11 @@ private fun AskSourceRow(src: os.meka.core.domain.AskSource, modifier: Modifier,
 private fun UnlockMoneyRow(label: String, modifier: Modifier, onTap: () -> Unit) {
     Text(
         label, style = MekaType.itemMeta, color = Meka.colors.onAccent,
-        modifier = modifier.padding(top = MekaSpace.xxs).minTouch()
-            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+        modifier = modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Button, onClick = onTap)
             .testTag(ASK_UNLOCK_MONEY_TAG)
             .semantics { contentDescription = label }
+            .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
@@ -815,8 +816,8 @@ internal object AskUse {
 private fun ExampleChip(label: String, onClick: () -> Unit) {
     Text(
         label, style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 1,
-        modifier = Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .clickable(role = Role.Button, onClickLabel = "Ask") { onClick() }
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClickLabel = "Ask") { onClick() }
+            .minTouch().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }

@@ -48,6 +48,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchSquare
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.wordsTap
 import os.meka.android.designsystem.bleedSides
@@ -339,7 +340,7 @@ internal fun NeedsYouFyiRowView(row: NeedsYouFyiRow, onSeen: () -> Unit, modifie
         Text(row.what, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
         Box(
-            Modifier.minTouch().clip(CircleShape).clickable(onClickLabel = NeedsYouLayoutRules.SEEN) { haptics.light(); onSeen() },
+            Modifier.clip(CircleShape).clickable(onClickLabel = NeedsYouLayoutRules.SEEN) { haptics.light(); onSeen() }.minTouchSquare(),
             contentAlignment = Alignment.Center,
         ) { Text("✓", style = MekaType.captionStrong, color = Meka.colors.textTertiary) }
     }

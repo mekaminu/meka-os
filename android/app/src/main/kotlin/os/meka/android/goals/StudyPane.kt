@@ -984,8 +984,8 @@ private fun ChipGroup(label: String, chips: List<StudyChip>, tag: String, onTap:
 private fun PlanChip(chip: StudyChip, modifier: Modifier, onClick: () -> Unit) {
     val bg by animateColorAsState(if (chip.on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "study-chip")
     Box(
-        modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = chip.spoken; selected = chip.on },
+        modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = chip.spoken; selected = chip.on }.minTouch(),
         contentAlignment = Alignment.Center,
     ) {
         Text(

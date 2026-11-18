@@ -527,8 +527,8 @@ private fun ThingRow(r: SpendRow, photo: Boolean, onTick: () -> Unit, onOpen: ()
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
         Box(
-            Modifier.minTouch().clip(CircleShape).clickable(role = Role.Checkbox, onClick = onTick)
-                .semantics { contentDescription = if (r.done) "Done, tap to untick" else "Tick when done" }.testTag("spend-tick-${r.id}"),
+            Modifier.clip(CircleShape).clickable(role = Role.Checkbox, onClick = onTick)
+                .semantics { contentDescription = if (r.done) "Done, tap to untick" else "Tick when done" }.testTag("spend-tick-${r.id}").minTouch(),
             contentAlignment = Alignment.Center,
         ) {
             Box(Modifier.size(24.dp).clip(CircleShape).border(1.5.dp, if (r.done) Meka.colors.success else Meka.colors.textTertiary, CircleShape).background(fill),

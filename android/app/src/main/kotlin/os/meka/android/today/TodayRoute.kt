@@ -4,6 +4,7 @@ import os.meka.android.activity.ActivityPane
 import os.meka.android.ask.TrainQueuePane
 import os.meka.android.ask.WeekAheadPane
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.minTouchSquare
 import os.meka.android.designsystem.TickSize
 import os.meka.android.designsystem.bleedStart
 import os.meka.android.designsystem.wordsTap
@@ -1661,9 +1662,9 @@ internal fun HeaderMoreMenu(openSearch: () -> Unit, openPlan: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         Box(
-            Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+            Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button, onClickLabel = "Search or plan my day") { open = true }
-                .testTag(HEADER_MORE_TAG).semantics { contentDescription = "More: Search, Plan my day" },
+                .testTag(HEADER_MORE_TAG).semantics { contentDescription = "More: Search, Plan my day" }.minTouchSquare(),
             contentAlignment = Alignment.Center,
         ) {
             Text("⋯", style = MekaType.metaStrong, color = Meka.colors.textSecondary)
@@ -2070,8 +2071,8 @@ private fun StudyNudgeCard(
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
             val label = if (on) os.meka.core.domain.StudyWeekRules.DONE else os.meka.core.domain.StudyWeekRules.START
             Box(
-                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = if (on) onDone else onStart)
-                    .testTag("today-study-nudge-button"),
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = if (on) onDone else onStart)
+                    .testTag("today-study-nudge-button").minTouch(),
                 contentAlignment = Alignment.Center,
             ) {
                 Crossfade(label, animationSpec = MekaMotion.appear(reduced), label = "study-nudge-button") { l ->
@@ -2082,8 +2083,8 @@ private fun StudyNudgeCard(
                 }
             }
             Box(
-                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotNow)
-                    .testTag("today-study-nudge-later"),
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onNotNow)
+                    .testTag("today-study-nudge-later").minTouch(),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(os.meka.core.domain.StudyNudgeRules.NOT_NOW, style = MekaType.caption, color = Meka.colors.textSecondary,
@@ -2127,8 +2128,8 @@ internal fun StudyCheckinCard(
         Text(c.obi, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onLooksGood)
-                    .testTag("today-study-checkin-ok"),
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onLooksGood)
+                    .testTag("today-study-checkin-ok").minTouch(),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(os.meka.core.domain.StudyCheckinRules.LOOKS_GOOD, style = MekaType.captionStrong, color = Meka.colors.accent, maxLines = 1,
@@ -2136,9 +2137,9 @@ internal fun StudyCheckinCard(
                         .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
             }
             Box(
-                Modifier.minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+                Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) { c.rows.firstOrNull()?.let { onChange(it.courseId) } }
-                    .testTag("today-study-checkin-change"),
+                    .testTag("today-study-checkin-change").minTouch(),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(os.meka.core.domain.StudyCheckinRules.CHANGE, style = MekaType.caption, color = Meka.colors.textSecondary,
