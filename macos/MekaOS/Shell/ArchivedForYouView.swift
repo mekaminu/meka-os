@@ -419,7 +419,50 @@ struct ArchivedAllSheet: View {
     private var shown: [ArchivedAllRow] { paged?.all ?? [] }
     private var onPage: [ArchivedAllRow] { paged?.rows ?? [] }
 
+    /// The filter the list is read for (a new one starts on the first page and reads again).
+    private var filterKey: String { (sender ?? "") + "|" + (kind ?? "") }
+
+    /// The quiet lines under the list: more, counts only, or the empty line.
+    private func footLines(_ l: ArchivedAllList) -> [String] {
+        let empty: String? = (l.days.isEmpty && l.countsOnly == nil) ? l.empty : nil
+        let lines: [String?] = [l.more, l.countsOnly, empty]
+        return lines.compactMap { $0 }
+    }
+
+    /// Reads the list for the current filter (nightly Mac run 2026-11-19: the body's one long modifier chain, with
+    /// this inline in it, was too much for the type-checker, so the body is split and the reload named).
+    private func reload() async {
+        let read = await model.archivedAll(sender: sender, kind: kind)
+        list = read
+        reads += 1
+    }
+
     var body: some View {
+        sheetContent
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: openEmail)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: sender)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: kind)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: selecting)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: confirming)
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: page)
+            .onChange(of: filterKey) { _, _ in selected = []; confirming = false; page = 0 }
+            .animation(MekaMotion.expand(reduced: reduceMotion), value: list?.summary)
+            .onDisappear { model.archivedAllKind = nil }
+            .task(id: filterKey) {
+                if !kindRead { kindRead = true; kind = model.archivedAllKind; if kind != nil { return } }
+                // Read now, then again every 20 s while the sheet is open: asks and the server's answers arrive by sync.
+                while !Task.isCancelled {
+                    await reload()
+                    try? await Task.sleep(for: .seconds(20))
+                }
+            }
+            .onChange(of: model.eventUndo != nil) { _, _ in
+                // An ask (or its Undo) changes the rows: read again straight away.
+                Task { await reload() }
+            }
+    }
+
+    private var sheetContent: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             Text(ArchivedAllRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
             Text(list?.summary ?? " ")
@@ -466,7 +509,7 @@ struct ArchivedAllSheet: View {
                                 .padding(.top, MekaSpace.xs)
                                 .accessibilityIdentifier("archived-all-pager")
                         }
-                        ForEach([l.more, l.countsOnly, l.days.isEmpty && l.countsOnly == nil ? l.empty : nil].compactMap { $0 }, id: \.self) { line in
+                        ForEach(footLines(l), id: \.self) { line in
                             Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
                         }
                     }
@@ -488,28 +531,6 @@ struct ArchivedAllSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 600)
         .background(palette.surface)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: openEmail)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: sender)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: kind)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: selecting)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: confirming)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: page)
-        .onChange(of: (sender ?? "") + "|" + (kind ?? "")) { _, _ in selected = []; confirming = false; page = 0 }
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: list?.summary)
-        .onDisappear { model.archivedAllKind = nil }
-        .task(id: (sender ?? "") + "|" + (kind ?? "")) {
-            if !kindRead { kindRead = true; kind = model.archivedAllKind; if kind != nil { return } }
-            // Read now, then again every 20 s while the sheet is open: asks and the server's answers arrive by sync.
-            while !Task.isCancelled {
-                list = await model.archivedAll(sender: sender, kind: kind)
-                reads += 1
-                try? await Task.sleep(for: .seconds(20))
-            }
-        }
-        .onChange(of: model.eventUndo != nil) { _, _ in
-            // An ask (or its Undo) changes the rows: read again straight away.
-            Task { list = await model.archivedAll(sender: sender, kind: kind); reads += 1 }
-        }
     }
 
     private func chip(_ label: String, spoken: String, selected: Bool, action: @escaping () -> Void) -> some View {
