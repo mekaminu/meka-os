@@ -89,6 +89,31 @@ object MailTidiedBulkRules {
     fun toggled(rows: List<ArchivedAllRow>, selected: Set<String>): Set<String> =
         if (bar(rows, selected).toggleSelectsAll) selectable(rows).map { it.id }.toSet() else emptySet()
 
+    /** Tidied mail, slice 5: the toggle's words while the list runs to more than one page. */
+    const val SELECT_PAGE = "Select all on this page"
+    const val CLEAR_PAGE = "Clear this page"
+
+    /**
+     * Tidied mail, slice 5 (five a page): the bar over every row of the list ([rows], so a pick on another page still
+     * counts and moves) with the toggle acting on [page]'s rows only ("Select all on this page" / "Clear this page"
+     * when there is more than one page, else as [bar]).
+     */
+    fun pageBar(rows: List<ArchivedAllRow>, page: List<ArchivedAllRow>, selected: Set<String>): ArchivedSelectBar {
+        val whole = bar(rows, selected)
+        if (page.size >= rows.size) return whole
+        val can = selectable(page)
+        val picked = can.count { it.id in selected }
+        val selectsAll = can.isNotEmpty() && picked < can.size
+        return whole.copy(toggle = if (selectsAll || can.isEmpty()) SELECT_PAGE else CLEAR_PAGE, toggleSelectsAll = selectsAll)
+    }
+
+    /** The ids after [pageBar]'s toggle: this page's selectable rows added, or this page's taken off (others kept). */
+    fun pageToggled(rows: List<ArchivedAllRow>, page: List<ArchivedAllRow>, selected: Set<String>): Set<String> {
+        if (page.size >= rows.size) return toggled(rows, selected)
+        val ids = selectable(page).map { it.id }.toSet()
+        return if (pageBar(rows, page, selected).toggleSelectsAll) selected + ids else selected - ids
+    }
+
     /**
      * The writes for asking [action] of every email in [ids], one per tidy (batch id → fields); emails that can't be
      * asked it now (gone, asked already, too old) are left out, and a tidy with none left gets no write.

@@ -255,7 +255,7 @@ internal fun NeedsYouPager(page: NeedsYouPage, onPage: (Int) -> Unit, modifier: 
         Text(page.label, style = MekaType.micro, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clearAndSetSemantics { }) {
-            repeat(page.pages) { i ->
+            if (page.showDots) repeat(page.pages) { i ->
                 val w by animateDpAsState(if (i == page.page) 14.dp else 5.dp, MekaMotion.expand(reduced), label = "ny-dot")
                 Box(Modifier.width(w).height(5.dp).clip(CircleShape)
                     .background(if (i == page.page) Meka.colors.accent else Meka.colors.hairline))

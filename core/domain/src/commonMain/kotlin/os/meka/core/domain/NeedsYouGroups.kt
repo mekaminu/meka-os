@@ -40,6 +40,9 @@ data class NeedsYouGroupHead(
 data class NeedsYouPage(val page: Int, val pages: Int, val from: Int, val to: Int, val total: Int, val label: String) {
     val hasPrev: Boolean get() = page > 0
     val hasNext: Boolean get() = page < pages - 1
+    /** A dot per page while there are few enough to read (All tidied mail can run to 30 pages: the label says it then). */
+    val showDots: Boolean get() = pages <= MAX_DOTS
+    companion object { const val MAX_DOTS = 12 }
     fun <T> of(rows: List<T>): List<T> = rows.subList(from.coerceAtMost(rows.size), to.coerceAtMost(rows.size))
 }
 

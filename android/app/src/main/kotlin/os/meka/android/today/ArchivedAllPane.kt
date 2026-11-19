@@ -65,6 +65,7 @@ import os.meka.core.facade.MekaCore
 internal const val ARCHIVED_ALL_KINDS_TAG = "archived-all-kinds"
 internal const val ARCHIVED_ALL_SELECT_TAG = "archived-all-select"
 internal const val ARCHIVED_ALL_CONFIRM_TAG = "archived-all-confirm"
+internal const val ARCHIVED_ALL_PAGER_TAG = "archived-all-pager"
 
 /** Hosts All tidied mail over Needs you (or the command centre): it springs up as a pane and drops away on Close. */
 @Composable
@@ -88,6 +89,10 @@ internal fun ArchivedAllHost(core: MekaCore, moves: DecisionMoves) {
  * rest while picking), with a bar of "3 selected · Select all · Trash 3 · Put back 2"; on a chosen kind, **Trash all 38
  * promos** unfolds a confirm on the expand spring that says how many and that they go to Trash for 30 days. Each move
  * asks with one Undo on the bar for all of them.
+ *
+ * Slice 5: five emails a page under their days, with Needs you's pager ("6–10 of 38", the dots, ‹ ›) under them; a
+ * page's rows move in with the list's item motion; Select all picks this page's ("Select all on this page") and a pick
+ * on another page is kept and counted.
  */
 @Composable
 internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, startKind: String? = null, onClose: () -> Unit) {
@@ -102,7 +107,9 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirming by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(sender, kind) { selected = emptySet(); confirming = false }
+    // Slice 5: five a page with ‹ ›; a new filter starts on the first page.
+    var page by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(sender, kind) { selected = emptySet(); confirming = false; page = 0 }
     var list by remember { mutableStateOf<ArchivedAllList?>(null) }
     val tick by core.archivedTick.collectAsState()
     LaunchedEffect(sender, kind, tick) { list = runCatching { core.archivedAll(sender, kind) }.getOrNull() }
@@ -116,7 +123,10 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
     // Tidied mail, slice 3: swipe right = put back, left = Trash, with Undo on the bar.
     val swipe = rememberArchivedSwipe(core, undo)
     val l = list
-    val shown = l?.days?.flatMap { it.rows }.orEmpty()
+    val paged = l?.let { ArchivedAllRules.paged(it, page) }
+    // Every row of the list (a pick on another page still counts and moves) and this page's.
+    val shown = paged?.all.orEmpty()
+    val onPage = paged?.rows.orEmpty()
     val bulk: (List<String>, MailTidiedAction) -> Unit = { ids, action ->
         haptics.light()
         scope.launch {
@@ -191,13 +201,13 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                         }
                     }
                     AnimatedVisibility(selecting, enter = unfold(), exit = fold()) {
-                        val bar = MailTidiedBulkRules.bar(shown, selected)
+                        val bar = MailTidiedBulkRules.pageBar(shown, onPage, selected)
                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m)) {
                             Text(bar.line, style = MekaType.body, color = Meka.colors.textPrimary,
                                 modifier = Modifier.semantics { contentDescription = bar.spoken })
                             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                                 ArchivedPill(bar.toggle, spoken = bar.toggle, quiet = true) {
-                                    haptics.tick(); selected = MailTidiedBulkRules.toggled(shown, selected)
+                                    haptics.tick(); selected = MailTidiedBulkRules.pageToggled(shown, onPage, selected)
                                 }
                                 bar.trash?.let { t ->
                                     ArchivedPill(t, spoken = "$t, to Trash", critical = true) {
@@ -229,7 +239,7 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                 }
             }
         }
-        l?.days?.forEachIndexed { di, d ->
+        paged?.days?.forEachIndexed { di, d ->
             item(key = "day-${d.id}") {
                 SectionLabel(d.label.uppercase(), Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(3 + di)))
             }
@@ -255,6 +265,13 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                     AnimatedVisibility(openEmail == id && !selecting, enter = unfold(), exit = fold()) {
                         ArchivedEmailPreviewPanel(r.row, tick, core, ask)
                     }
+                }
+            }
+        }
+        if (paged != null && paged.page.pages > 1) {
+            item(key = "pager") {
+                Box(Modifier.animateItem().fillMaxWidth().padding(top = MekaSpace.xs).testTag(ARCHIVED_ALL_PAGER_TAG)) {
+                    NeedsYouPager(paged.page, { p -> haptics.tick(); page = p; openEmail = null })
                 }
             }
         }

@@ -177,7 +177,7 @@ struct NeedsYouPagerView: View {
             Text(page.label).font(MekaType.micro).foregroundStyle(palette.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: MekaSpace.xxs) {
-                ForEach(0..<Int(page.pages), id: \.self) { i in
+                ForEach(0..<(page.showDots ? Int(page.pages) : 0), id: \.self) { i in
                     Capsule().fill(i == Int(page.page) ? palette.accent : palette.textTertiary.opacity(0.5))
                         .frame(width: i == Int(page.page) ? 14 : 5, height: 5)
                 }

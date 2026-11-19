@@ -411,8 +411,13 @@ struct ArchivedAllSheet: View {
     @State private var selecting = false
     @State private var selected: Set<String> = []
     @State private var confirming = false
+    /// Slice 5: five a page with ‹ ›; a new filter starts on the first page.
+    @State private var page = 0
 
-    private var shown: [ArchivedAllRow] { (list?.days ?? []).flatMap { $0.rows } }
+    /// This page of the list: its days, its rows, and every row (a pick on another page still counts and moves).
+    private var paged: ArchivedAllPageView? { list.map { ArchivedAllRules.shared.paged(list: $0, page: Int32(page)) } }
+    private var shown: [ArchivedAllRow] { paged?.all ?? [] }
+    private var onPage: [ArchivedAllRow] { paged?.rows ?? [] }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -446,8 +451,8 @@ struct ArchivedAllSheet: View {
             if let l = list { bulkControls(l).staggeredAppear(1) }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    if let l = list {
-                        ForEach(Array(l.days.enumerated()), id: \.element.id) { i, d in
+                    if let l = list, let pv = paged {
+                        ForEach(Array(pv.days.enumerated()), id: \.element.id) { i, d in
                             Text(d.label.uppercased()).font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
                                 .padding(.top, MekaSpace.m)
                                 .staggeredAppear(2 + i)
@@ -455,6 +460,11 @@ struct ArchivedAllSheet: View {
                                 row(r)
                                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                             }
+                        }
+                        if pv.page.pages > 1 {
+                            NeedsYouPagerView(page: pv.page, palette: palette) { p in page = p; openEmail = nil }
+                                .padding(.top, MekaSpace.xs)
+                                .accessibilityIdentifier("archived-all-pager")
                         }
                         ForEach([l.more, l.countsOnly, l.days.isEmpty && l.countsOnly == nil ? l.empty : nil].compactMap { $0 }, id: \.self) { line in
                             Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
@@ -483,7 +493,8 @@ struct ArchivedAllSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: kind)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: selecting)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: confirming)
-        .onChange(of: (sender ?? "") + "|" + (kind ?? "")) { _, _ in selected = []; confirming = false }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: page)
+        .onChange(of: (sender ?? "") + "|" + (kind ?? "")) { _, _ in selected = []; confirming = false; page = 0 }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: list?.summary)
         .onDisappear { model.archivedAllKind = nil }
         .task(id: (sender ?? "") + "|" + (kind ?? "")) {
@@ -523,6 +534,7 @@ struct ArchivedAllSheet: View {
     @ViewBuilder
     private func bulkControls(_ l: ArchivedAllList) -> some View {
         let rows = shown
+        let pageRows = onPage
         let canPick = !MailTidiedBulkRules.shared.selectable(rows: rows).isEmpty
         if canPick || l.trashAll != nil {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -542,14 +554,14 @@ struct ArchivedAllSheet: View {
                     }
                 }
                 if selecting {
-                    let bar = MailTidiedBulkRules.shared.bar(rows: rows, selected: selected)
+                    let bar = MailTidiedBulkRules.shared.pageBar(rows: rows, page: pageRows, selected: selected)
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         Text(bar.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
                             .accessibilityLabel(bar.spoken)
                         HStack(spacing: MekaSpace.xs) {
                             ArchivedPill(label: bar.toggle, palette: palette, quiet: true, spoken: bar.toggle) {
                                 MekaHaptics.tick()
-                                selected = MailTidiedBulkRules.shared.toggled(rows: rows, selected: selected)
+                                selected = MailTidiedBulkRules.shared.pageToggled(rows: rows, page: pageRows, selected: selected)
                             }
                             if let t = bar.trash {
                                 ArchivedPill(label: t, palette: palette, critical: true, spoken: "\(t), to Trash") {

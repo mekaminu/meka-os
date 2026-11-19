@@ -75,6 +75,18 @@ data class ArchivedAllList(
     val trashAll: ArchivedTrashAll? = null,
 )
 
+/**
+ * Tidied mail, slice 5 (Meka 2026-11-18 23:34, part (4): "five a page with ‹ › as the rest of Needs you"): one page of
+ * the list. [days] holds only this page's rows under their day headings; [rows] is every row on the page; [all] is every
+ * row in the list (what a selection counts across pages); [page] is "6–10 of 38" with ‹ ›.
+ */
+data class ArchivedAllPageView(
+    val days: List<ArchivedAllDay>,
+    val rows: List<ArchivedAllRow>,
+    val all: List<ArchivedAllRow>,
+    val page: NeedsYouPage,
+)
+
 object ArchivedAllRules {
     const val TITLE = "All tidied mail"
     const val OPEN = "All tidied mail"
@@ -98,6 +110,18 @@ object ArchivedAllRules {
     /** The tidies the list reads: Autopilot's and the Junk review's from the last 30 days (not the approved clean-ups). */
     private fun inWindow(batches: List<MailTidyBatch>, nowMs: Long) = batches.filter {
         !it.backlog && it.count > 0 && it.atMs <= nowMs && nowMs - it.atMs <= MailAutopilotRules.UNDO_DAYS * DAY_MS
+    }
+
+    /** Emails a page (as Needs you's groups). */
+    const val PAGE_SIZE = NeedsYouGroupRules.PAGE_SIZE
+
+    /** Page [page] of [list], [PAGE_SIZE] emails a page, newest first; a page past the end shows the last one. */
+    fun paged(list: ArchivedAllList, page: Int): ArchivedAllPageView {
+        val all = list.days.flatMap { it.rows }
+        val p = NeedsYouGroupRules.page(all.size, page, PAGE_SIZE)
+        val ids = p.of(all).map { it.id }.toSet()
+        val days = list.days.mapNotNull { d -> d.rows.filter { it.id in ids }.takeIf { it.isNotEmpty() }?.let { d.copy(rows = it) } }
+        return ArchivedAllPageView(days, days.flatMap { it.rows }, all, p)
     }
 
     /**
