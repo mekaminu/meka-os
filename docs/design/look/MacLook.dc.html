@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Mac in the Navilife look</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{cursor:pointer;font-family:inherit}
+button:active{transform:scale(.98)}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .24s cubic-bezier(.2,.8,.2,1) both}
+.row{transition:opacity .25s}
+@media (prefers-reduced-motion:reduce){button:active{transform:none}.in{animation:none}.row{transition:none}}
+</style>
+</helmet>
+<div style="width:1280px;height:800px;box-sizing:border-box;display:flex;background:{{c.ground}};color:{{c.text}};font-family:DM Sans,system-ui,sans-serif;overflow:hidden;position:relative">
+
+<nav aria-label="Navilife" style="width:220px;flex:none;box-sizing:border-box;padding:20px 12px 16px;background:{{c.side}};border-right:1px solid {{c.hair}};display:flex;flex-direction:column;gap:2px">
+<div style="font-size:13px;font-weight:600;letter-spacing:.02em;padding:0 10px 14px;color:{{c.text2}}">Navilife</div>
+<sc-for list="{{rail}}" as="d" hint-placeholder-count="4">
+<button type="button" onClick="{{d.go}}" aria-label="{{d.aria}}" style="{{d.style}}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="{{d.fill}}" stroke="{{d.stroke}}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{d.path}}"></path></svg>
+<span style="flex:1">{{d.name}}</span>
+<sc-if value="{{d.badge}}" hint-placeholder-val="{{false}}"><span style="{{badgeStyle}}">{{d.badge}}</span></sc-if>
+</button>
+</sc-for>
+<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text3}};padding:18px 10px 6px">More</div>
+<sc-for list="{{more}}" as="d" hint-placeholder-count="4">
+<button type="button" onClick="{{d.go}}" aria-label="{{d.aria}}" style="{{d.style}}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="{{d.fill}}" stroke="{{d.stroke}}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{d.path}}"></path></svg>
+<span style="flex:1">{{d.name}}</span>
+</button>
+</sc-for>
+<div style="flex:1"></div>
+<button type="button" onClick="{{hello}}" aria-label="Talk to Obi" style="border:0;background:transparent;display:flex;align-items:center;gap:10px;padding:8px 10px;min-height:44px;border-radius:10px;color:{{c.text2}};font-size:13px">
+<span style="{{orbStyle}}"></span><span>Talk to Obi</span><span style="margin-left:auto;font-size:11px;color:{{c.text3}}">⌥ Space</span>
+</button>
+</nav>
+
+<main style="flex:1;min-width:0;box-sizing:border-box;padding:28px 32px 24px;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+<div style="display:flex;flex-direction:column;gap:4px">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:22px;font-weight:600;letter-spacing:-.01em">{{title}}</span>
+<sc-if value="{{isAsk}}" hint-placeholder-val="{{false}}"><button type="button" onClick="{{toggleInfo}}" aria-label="What this page does" style="width:22px;height:22px;border-radius:11px;border:1px solid {{c.brass}};background:transparent;color:{{c.brass}};font-size:11px;padding:0">i</button></sc-if></div>
+<span style="font-size:13px;color:{{c.text2}}">{{sub}}</span>
+</div>
+<div style="display:flex;gap:8px;align-items:center">
+<button type="button" onClick="{{search}}" style="min-height:32px;padding:0 12px;border-radius:999px;border:1px solid {{c.hair}};background:{{c.card}};color:{{c.text2}};font-size:12px;display:flex;gap:8px;align-items:center"><span>Search or ask</span><span style="color:{{c.text3}}">⌘K</span></button>
+<button type="button" onClick="{{add}}" style="min-height:32px;padding:0 14px;border-radius:999px;border:1px solid {{c.hair}};background:{{c.card}};color:{{c.text}};font-size:13px;font-weight:500">+ Add</button>
+</div>
+</div>
+<sc-if value="{{info}}" hint-placeholder-val="{{false}}"><div class="in" style="background:{{c.card}};border:1px solid {{c.hair}};border-radius:10px;padding:10px 12px;font-size:12px;color:{{c.text2}};line-height:1.45;max-width:640px;margin-top:-8px">{{info}}</div></sc-if>
+
+<sc-if value="{{isToday}}" hint-placeholder-val="{{true}}">
+<div class="in" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="4"><button type="button" onClick="{{t.go}}" style="{{tileStyle}}"><span style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums">{{t.n}}</span><span style="font-size:12px;color:{{c.text2}}">{{t.l}}</span></button></sc-for>
+</div>
+<div class="in" style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;min-height:0">
+<div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+<div style="{{cardStyle}}">
+<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text2}}">Up next · 15:00</div>
+<div style="display:flex;flex-direction:column;gap:4px"><div style="font-size:16px;font-weight:600">School pick-up</div><div style="font-size:13px;color:{{c.text2}}">Leave by 14:40 · 18 min drive</div></div>
+<div style="display:flex;gap:8px"><button type="button" onClick="{{take}}" style="min-height:32px;padding:0 16px;border-radius:999px;border:0;background:{{c.brass}};color:{{c.onBrass}};font-size:13px;font-weight:600">Take me there</button><button type="button" onClick="{{later}}" style="min-height:32px;padding:0 12px;border-radius:999px;border:0;background:transparent;color:{{c.brass}};font-size:13px">Later</button></div>
+</div>
+<div style="{{cardStyle}}">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text2}}">Today</span><span style="font-size:12px;color:{{c.text3}}">{{doneLine}}</span></div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{tasks}}" as="t" hint-placeholder-count="5">
+<div class="row" style="display:flex;align-items:center;gap:12px;min-height:44px;border-top:{{t.line}};opacity:{{t.fade}}">
+<button type="button" aria-label="{{t.label}}" onClick="{{t.toggle}}" style="{{t.check}}">{{t.mark}}</button>
+<span style="flex:1;min-width:0;font-size:13px">{{t.title}}</span><span style="font-size:12px;color:{{c.text2}}">{{t.meta}}</span>
+</div>
+</sc-for>
+</div>
+<button type="button" onClick="{{seeAll}}" style="border:0;background:transparent;padding:0;text-align:left;font-size:12px;color:{{c.brass}};min-height:24px">See all 9 ›</button>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+<div style="{{cardStyle}}">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text2}}">Needs you · 2</span><button type="button" onClick="{{openNeeds}}" style="border:0;background:transparent;padding:0;font-size:12px;color:{{c.brass}}">Open ›</button></div>
+<sc-for list="{{needs}}" as="n" hint-placeholder-count="2">
+<button type="button" onClick="{{n.go}}" style="{{n.style}}"><span style="width:7px;height:7px;border-radius:999px;background:{{c.approval}};flex:none"></span><span style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:13px">{{n.t}}</span><span style="font-size:12px;color:{{c.text2}}">{{n.m}}</span></span><span style="color:{{c.text3}}">›</span></button>
+</sc-for>
+</div>
+<div style="{{cardStyle}}">
+<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:{{c.text2}}">Also today</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+<sc-for list="{{also}}" as="a" hint-placeholder-count="4"><button type="button" onClick="{{a.go}}" style="{{alsoStyle}}"><span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:{{c.text3}}">{{a.k}}</span><span style="font-size:13px;font-weight:500">{{a.v}}</span><span style="font-size:12px;color:{{c.text2}}">{{a.m}}</span></button></sc-for>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isAsk}}" hint-placeholder-val="{{false}}">
+<div class="in" style="display:flex;gap:2px;background:{{c.card}};border:1px solid {{c.hair}};border-radius:999px;padding:3px;align-self:flex-start">
+<sc-for list="{{askTabs}}" as="a" hint-placeholder-count="3"><button type="button" onClick="{{a.go}}" style="{{a.style}}">{{a.name}}</button></sc-for>
+</div>
+<div class="in" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+<sc-for list="{{life}}" as="t" hint-placeholder-count="8">
+<button type="button" onClick="{{t.go}}" style="{{lifeStyle}}">
+<span style="{{t.icon}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{t.path}}"></path></svg></span>
+<span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14px;font-weight:600">{{t.name}}</span><span style="{{t.lineStyle}}">{{t.line}}</span></span>
+</button>
+</sc-for>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:12px;color:{{c.text3}}">{{pageLine}}</span>
+<div style="display:flex;gap:6px"><button type="button" aria-label="Previous page" onClick="{{prev}}" style="{{prevStyle}}">‹</button><button type="button" aria-label="Next page" onClick="{{next}}" style="{{nextStyle}}">›</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{isOther}}" hint-placeholder-val="{{false}}">
+<div class="in" style="{{cardStyle}}"><span style="font-size:14px;font-weight:600">{{otherTitle}}</span><span style="font-size:13px;color:{{c.text2}};line-height:1.5">{{otherLine}}</span></div>
+</sc-if>
+
+<div style="flex:1"></div>
+<div style="font-size:11px;color:{{c.text3}}">{{foot}}</div>
+</main>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{false}}">
+<div class="in" role="status" style="position:absolute;left:50%;bottom:20px;transform:translateX(-50%);background:{{c.toast}};color:{{c.text}};border:1px solid {{c.hair}};border-radius:999px;padding:8px 16px;font-size:12px">{{toast}}</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"start":{"editor":"enum","options":["Today","Ask"],"default":"Today"},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+constructor(p){super(p);this.state={dest:null,done:{},askTab:'Life',page:0,info:false,toast:''};}
+renderVals(){
+var s=this.state,self=this;
+var light=(this.props.theme||'Dark')==='Light';
+var c=light
+?{ground:'#FAFAF7',side:'#F3F2EE',card:'#FFFFFF',hair:'#E4E2DA',text:'#111113',text2:'#5B5B63',text3:'#6E6E76',brass:'#8A6F2F',brassSoft:'#EFE7D3',onBrass:'#FFFFFF',approval:'#2F5FA8',toast:'#FFFFFF',dim:'#B9B7AF',lit:'#7A5F22'}
+:{ground:'#000000',side:'#08080A',card:'#0E0E10',hair:'#1F1F23',text:'#F4F4F5',text2:'#A1A1AA',text3:'#85858D',brass:'#C9B37E',brassSoft:'#1B1810',onBrass:'#14120C',approval:'#8FB8F2',toast:'#18181B',dim:'#3A3833',lit:'#E0B860'};
+var dest=s.dest||(this.props.start||'Today');
+var say=function(t){return function(){self.setState({toast:t});};};
+var go=function(n){return function(){self.setState({dest:n,toast:'',info:false});};};
+var P={Today:'M3 18h18M7 18a5 5 0 0 1 10 0M12 4v3M4.9 9.9l2 1.4M19.1 9.9l-2 1.4',
+'Needs you':'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5v5.5M12 16.5h.01',
+Calendar:'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+Ask:'M4 5h16v11H9l-5 4z',
+Lists:'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
+Goals:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+Review:'M5 20V11M12 20V5M19 20v-6',
+Vault:'M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3'};
+var rowFor=function(n,badge){var on=dest===n;return {name:n,path:P[n],go:go(n),badge:badge||'',aria:n+(badge?', '+badge+' waiting':''),
+fill:'none',stroke:on?c.lit:c.text2,
+style:'border:0;width:100%;display:flex;align-items:center;gap:10px;padding:0 10px;min-height:32px;border-radius:8px;text-align:left;font-size:13px;'+(on?'background:'+c.brassSoft+';color:'+c.text+';font-weight:600':'background:transparent;color:'+c.text2)};};
+var list=[{id:'a',title:'Book the MOT',meta:'about 15m'},{id:'b',title:'Pay the trip form',meta:'Due today · £12'},{id:'c',title:'Study · Pivot tables',meta:'19:30 · 2 lessons'},{id:'d',title:'Bins out',meta:'Black bin and food caddy'},{id:'e',title:'Call the garage',meta:'5m'}];
+var done=s.done;
+var tasks=list.map(function(t,i){var d=!!done[t.id];return {title:t.title,meta:t.meta,mark:d?'✓':'',label:(d?'Mark not done: ':'Done: ')+t.title,fade:d?0.45:1,line:i?'1px solid '+c.hair:'0',
+check:'width:20px;height:20px;flex:none;border-radius:999px;padding:0;font-size:12px;line-height:1;color:'+c.onBrass+';border:1.5px solid '+(d?c.brass:c.text3)+';background:'+(d?c.brass:'transparent'),
+toggle:function(){var nd={};for(var k in done){nd[k]=done[k];}nd[t.id]=!d;self.setState({done:nd});}};});
+var n=0;for(var k in done){if(done[k]){n++;}}
+var needRow=function(first){return 'border:0;'+(first?'':'border-top:1px solid '+c.hair+';')+'background:transparent;color:'+c.text+';display:flex;align-items:center;gap:12px;min-height:48px;padding:0;text-align:left;width:100%';};
+var I={list:P.Lists,goal:P.Goals,people:'M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM21 20v-2a4 4 0 0 0-3-3.9',money:'M3 7h18v10H3zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',car:'M5 16h14M6 16l1.5-6h9L18 16M7 16v2M17 16v2M8 13h8',trip:'M3 11l18-7-7 18-3-8z',study:'M3 8l9-4 9 4-9 4zM7 10v5c2 2 8 2 10 0v-5',food:'M6 3v8M9 3v8M6 7h3M7.5 11v10M16 3c-2 2-2 7 0 9v9',school:'M4 20V9l8-5 8 5v11M9 20v-6h6v6',kids:'M12 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 22v-6l-2-4 4-2h8l4 2-2 4v6',appt:P.Calendar,heart:'M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z',info:'M12 16v-4M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',team:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3v18'};
+var LIFE={Life:[['Money','money','2 bills this week',1],['Your team','team','4 things wait on you',1],['Study','study','Lesson 4 planned today',1],['Car','car','MOT due in 3 weeks',1],['People','people','A birthday on Saturday',1],['Lists','list','Shopping · 6 to get',0],['Goals and habits','goal','3 of 5 habits today',0],['Trips','trip','Packing 8 of 20',0],['Dinners','food','Tonight: pasta bake',0],['School','school','Inset day Fri 20 Nov',0],['Kids','kids','Shoe sizes checked Oct',0],['Appointments','appt','Dentist · Tue 17 Nov',0],['Date night','heart','Next: Fri 27 Nov',0],['Routines','list','Morning · runs 06:30',0],['What Navilife knows','info','212 facts',0]],
+Daily:[['Morning brief','list','Read at 06:42 today',0],['Shut down the day','goal','Ready from 17:00',1],['Review','goal','This week’s review is ready',1],['Week ahead','appt','Sunday’s look at the week',0],['News','info','12 new stories',0],['Train queue','trip','1 article saved',0],['Life admin hour','appt','Next: Saturday 10:00',0]],
+Settings:[['Health','info','1 thing wants a look',1],['About you','people','Home, work, stations',0],['Work mode','team','On · 09:00–17:30',0],['Obi’s voice','heart','One voice everywhere',0],['Calendars','appt','4 connected',0],['What Navilife may do','goal','Asks before sending or paying',0],['Appearance','info','Dark · motion on',0],['Vault','list','Locked',0]]};
+var all=LIFE[s.askTab],PG=8,pages=Math.max(1,Math.ceil(all.length/PG)),p=Math.min(s.page,pages-1);
+var pill=function(on){return 'width:28px;height:28px;border-radius:14px;border:1px solid '+c.hair+';background:'+c.card+';font-size:15px;padding:0;color:'+(on?c.brass:c.dim);};
+var OTHER={'Needs you':'Needs you keeps its approved grouped look (built 10–11 Nov); in this batch only its header, chips and FYI rows move to the type ladder below.',Calendar:'Calendar and the Week board keep their approved designs; their text moves to the Mac ladder.',Lists:'Lists becomes one card per list in the Life page shape.',Goals:'Goals and habits follow the approved Habits design.',Review:'Review becomes three numbers on top, then one card per area.',Vault:'Vault stays locked behind Touch ID, in one card.'};
+var subs={Today:'Thursday 19 November · 9° cloudy, dry',Ask:s.askTab==='Life'?'Everything in your life, today’s first':(s.askTab==='Daily'?'The things that run each day':'How Navilife works for you')};
+return {
+c:c,
+rail:[rowFor('Today'),rowFor('Needs you','2'),rowFor('Calendar'),rowFor('Ask')],
+more:[rowFor('Lists'),rowFor('Goals'),rowFor('Review'),rowFor('Vault')],
+badgeStyle:'font-size:11px;font-weight:600;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;background:'+c.approval+';color:'+(light?'#FFFFFF':'#0B1220'),
+orbStyle:'width:22px;height:22px;border-radius:11px;flex:none;background:radial-gradient(circle at 35% 35%,'+c.lit+','+c.brass+' 55%,transparent 72%);box-shadow:0 0 10px '+c.brass,
+hello:say('Obi is listening…'),
+title:dest==='Today'?'Good morning':dest,
+sub:subs[dest]||'',
+isToday:dest==='Today',isAsk:dest==='Ask',isOther:dest!=='Today'&&dest!=='Ask',
+info:s.info&&dest==='Ask'?'Ask holds every page of your life in one shape: a card per thing, numbers first, nothing open until you click. Life, Daily and Settings split it up.':'',
+toggleInfo:function(){self.setState({info:!s.info});},
+search:say('The command bar opens (⌘K)'),add:say('Add a task: type, then Return'),
+tileStyle:'background:'+c.card+';border:1px solid '+c.hair+';border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;text-align:left;color:'+c.text+';min-height:64px',
+tiles:[{n:String(9-n),l:'tasks left',go:go('Today')},{n:'2h 10',l:'free today',go:go('Calendar')},{n:'2',l:'need you',go:go('Needs you')},{n:'3 of 5',l:'habits',go:go('Goals')}],
+cardStyle:'background:'+c.card+';border:1px solid '+c.hair+';border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px',
+take:say('Directions open in Maps'),later:say('Up next moves to the next thing'),seeAll:say('The Day list opens'),openNeeds:go('Needs you'),
+tasks:tasks,doneLine:n?n+' done today':'',
+needs:[{t:'Reply to the school',m:'Draft ready · trip form',go:go('Needs you'),style:needRow(true)},{t:'Car insurance renews',m:'£412 · cancel by 20 Nov',go:go('Needs you'),style:needRow(false)}],
+alsoStyle:'background:transparent;border:1px solid '+c.hair+';border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;text-align:left;color:'+c.text+';min-height:64px',
+also:[{k:'Trains',v:'08:12 on time',m:'Platform 2',go:say('Trains open')},{k:'Bins',v:'Black bin tonight',m:'and food caddy',go:say('Bins open')},{k:'Countdown',v:'Christmas',m:'36 days',go:say('Countdowns open')},{k:'Money',v:'2 bills this week',m:'£68 in all',go:say('Money opens')}],
+askTabs:['Life','Daily','Settings'].map(function(t){var on=s.askTab===t;return {name:t,go:function(){self.setState({askTab:t,page:0,toast:''});},style:'border:0;border-radius:999px;height:28px;padding:0 16px;font-size:13px;'+(on?'background:'+c.brassSoft+';color:'+c.text+';font-weight:600':'background:transparent;color:'+c.text2)};}),
+lifeStyle:'background:'+c.card+';border:1px solid '+c.hair+';border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px;text-align:left;color:'+c.text+';min-height:108px',
+life:all.slice(p*PG,p*PG+PG).map(function(x){return {name:x[0],line:x[2],path:I[x[1]],go:say(x[0]+' opens beside the list'),
+icon:'width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:'+(x[3]?c.brassSoft:(light?'#F0EFEA':'#18181B'))+';color:'+(x[3]?c.lit:c.text2),
+lineStyle:'font-size:12px;line-height:1.35;color:'+(x[3]?c.lit:c.text2)};}),
+pageLine:(p*PG+1)+'–'+Math.min(all.length,p*PG+PG)+' of '+all.length+(s.askTab==='Life'?' · today’s first':''),
+prev:function(){self.setState({page:Math.max(0,p-1)});},next:function(){self.setState({page:Math.min(pages-1,p+1)});},prevStyle:pill(p>0),nextStyle:pill(p<pages-1),
+otherTitle:dest,otherLine:OTHER[dest]||'',
+foot:'Mac type: Title 22 · Heading 16 · Body 14 · Row 13 · Meta 12 · Caption 11 · Label 10 caps. One gold thing per screen: Take me there on Today. Synced 2 min ago.',
+toast:s.toast
+};
+}
+}
+</script>
+</body>
+</html>
