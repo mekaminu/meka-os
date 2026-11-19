@@ -176,6 +176,7 @@ struct NeedsYouView: View {
     @State private var msgPage = 0
     @State private var fyiPage = 0
     @State private var mailPage = 0
+    @State private var scamPage = 0
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
     private var decideCount: Int {
@@ -202,7 +203,7 @@ struct NeedsYouView: View {
         let mailMomentOn = model.mailMoment != nil || model.mailMomentSession != nil
         let renewals = model.mailFinds.map { $0.rows.map(\.title) }
         let tiles = model.needsYouMail?.tiles ?? []
-        let tidiedAny = model.needsYouMail != nil || model.archivedForYou != nil || model.mailUnopened != nil
+        let tidiedAny = model.needsYouMail != nil || model.archivedForYou != nil || model.mailUnopened != nil || model.mailScams != nil
         return NeedsYouGroupFacts(
             decideCount: Int32(decideCount),
             decidePeek: NeedsYouGroupRules.shared.decidePeekOf(
@@ -221,9 +222,11 @@ struct NeedsYouView: View {
             mailRows: model.mailMomentSession == nil ? Int32(model.mailNeeds?.every.count ?? 0) : 0,
             renewals: renewals,
             tidiedAny: tidiedAny,
-            tidiedCount: Int32(tiles.first.flatMap { Int($0.number) } ?? 0),
-            tidiedPeek: tiles.isEmpty ? (model.archivedForYou == nil ? "" : "Archived for you")
-                : NeedsYouGroupRules.shared.tidiedPeek(tiles: tiles))
+            tidiedCount: MailScamListRules.shared.tidiedCount(tidiedToday: Int32(tiles.first.flatMap { Int($0.number) } ?? 0),
+                                                              scams: model.mailScams),
+            tidiedPeek: MailScamListRules.shared.peek(card: model.mailScams)
+                ?? (tiles.isEmpty ? (model.archivedForYou == nil ? "" : "Archived for you")
+                    : NeedsYouGroupRules.shared.tidiedPeek(tiles: tiles)))
     }
 
     var body: some View {
@@ -328,6 +331,20 @@ struct NeedsYouView: View {
         case .renewals:
             MailFindView(palette: palette, firstIndex: 0)
         default:
+            // Possible scams to check (Meka 2026-11-18 23:34): thin rows flagged Possible scam; a click opens Junk it &
+            // block · Not a scam · Done.
+            if let scams = model.mailScams {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(scams.headline.uppercased()).font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                    Text(MailScamListRules.shared.LEAD).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                }
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("needs-you-mail-scams")
+                MailNeedsView(palette: palette, firstIndex: 0, boxed: true, page: scamPage, onPage: { next in
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { scamPage = next }
+                }, scams: true)
+            }
             NeedsYouMailGroup(palette: palette, firstIndex: 0)
         }
     }

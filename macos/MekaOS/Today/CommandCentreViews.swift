@@ -68,6 +68,8 @@ struct CommandNeedsYouView: View {
                     GroupGistsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks + model.requests.count)
                     MailMomentView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     MailNeedsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    // Possible scams to check (Meka 2026-11-18 23:34): their own card, not under the mail to answer.
+                    MailNeedsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count, scams: true)
                     MailChaseView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     DiscordCardsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     ArchivedForYouView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)

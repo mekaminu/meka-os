@@ -276,6 +276,9 @@ final class CoreModel {
     private(set) var needsYouMail: NeedsYouMailSummary?
     /// Inbox autopilot, slice 6a: "From your mail" — the emails that need Meka, each with Done and Snooze.
     private(set) var mailNeeds: MailNeedsCard?
+    /// Possible scams to check (Meka 2026-11-18 23:34): out of Mail to answer, shown in the Mail tidied today box.
+    private(set) var mailScams: MailNeedsCard?
+    private var allMailScams: MailNeedsCard?
     /// Inbox autopilot, slice 6b-3: "Time to chase" — Waiting for items from email whose chase is due, each drafted.
     private(set) var mailChases: MailChaseCard?
     /// Promises, receipts and renewals, slice 1: "Renewals from your mail" — renewals to add, each only on his tap.
@@ -596,6 +599,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await n in core.mailNeeds { self?.allMailNeeds = n; self?.showMailCards() }
+        })
+        observers.append(Task { [weak self] in
+            for await n in core.mailScams { self?.allMailScams = n; self?.showMailCards() }
         })
         observers.append(Task { [weak self] in
             for await c in core.mailChases { self?.allMailChases = c; self?.showMailCards() }
@@ -9004,10 +9010,12 @@ final class CoreModel {
     private func showMailCards() {
         let R = InstantMailRules.shared
         if !mailDecided.isEmpty {
-            let present = Set(R.present(needs: allMailNeeds, chases: allMailChases, finds: allMailFinds, archived: allArchivedForYou))
+            let present = Set(R.present(needs: allMailNeeds, chases: allMailChases, finds: allMailFinds, archived: allArchivedForYou)
+                + (allMailScams?.every.map(\.id) ?? []))
             mailDecided = mailDecided.filter { present.contains($0) }
         }
         mailNeeds = R.needs(card: allMailNeeds, hidden: mailDecided)
+        mailScams = R.needs(card: allMailScams, hidden: mailDecided)
         mailChases = R.chases(card: allMailChases, hidden: mailDecided)
         mailFinds = R.finds(card: allMailFinds, hidden: mailDecided)
         archivedForYou = R.archived(card: allArchivedForYou, hidden: mailDecided)

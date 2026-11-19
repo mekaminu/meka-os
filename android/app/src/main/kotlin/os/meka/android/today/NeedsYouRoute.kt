@@ -35,6 +35,7 @@ import os.meka.core.domain.NeedsYouDecideRules
 import os.meka.core.domain.NeedsYouSection
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -585,6 +586,8 @@ internal fun NeedsYouColumn(
     // The approved look, slice 2: MAIL NAVILIFE TIDIED TODAY as four tiles and the one unsubscribe question.
     val needsMail by core.needsYouMail.collectAsState()
     val allMailNeeds by core.mailNeeds.collectAsState()
+    // Possible scams to check (Meka 2026-11-18 23:34): out of Mail to answer, into the Mail tidied today box.
+    val allMailScams by core.mailScams.collectAsState()
     val allMailChases by core.mailChases.collectAsState()
     val allMailFinds by core.mailFinds.collectAsState()
     // Taps feel instant, slice 20: an answer on a mail card takes its row (or the card) away in this frame.
@@ -592,10 +595,11 @@ internal fun NeedsYouColumn(
     val mailDecided = remember { mutableStateOf(emptySet<String>()) }
     val mailTaps = remember(mailDecided, mailScope, moves) { MailTaps(mailDecided, mailScope, moves.undoLine) }
     val mailHidden = mailTaps.hidden
-    LaunchedEffect(allMailNeeds, allMailChases, allMailFinds, allArchived) {
-        mailTaps.settle(InstantMailRules.present(allMailNeeds, allMailChases, allMailFinds, allArchived))
+    LaunchedEffect(allMailNeeds, allMailChases, allMailFinds, allArchived, allMailScams) {
+        mailTaps.settle(InstantMailRules.present(allMailNeeds, allMailChases, allMailFinds, allArchived) + allMailScams?.every?.map { it.id }.orEmpty())
     }
     val mailNeeds = remember(allMailNeeds, mailHidden) { InstantMailRules.needs(allMailNeeds, mailHidden) }
+    val mailScams = remember(allMailScams, mailHidden) { InstantMailRules.needs(allMailScams, mailHidden) }
     val mailChases = remember(allMailChases, mailHidden) { InstantMailRules.chases(allMailChases, mailHidden) }
     val mailFinds = remember(allMailFinds, mailHidden) { InstantMailRules.finds(allMailFinds, mailHidden) }
     val archived = remember(allArchived, mailHidden) { InstantMailRules.archived(allArchived, mailHidden) }
@@ -639,7 +643,7 @@ internal fun NeedsYouColumn(
     val mailCount = mailNeeds?.count ?: 0  // the card headline's figure, never just the rows shown
     val renewalCount = mailFinds?.rows?.size ?: 0  // the Renewals box's own figure
     fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section) && NeedsYouLayoutRules.inPart(part, section)
-    val mailAny = mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null
+    val mailAny = mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null || mailScams != null
     // Needs you grouped and folding (APPROVED 2026-11-10 21:51, needs-you-grouped.dc.html), slice 1: on the folded Fold
     // every section is a box that opens and closes; what he left open is kept on this phone. Slice 3: the open Fold's
     // two columns are boxes too (To decide and Messages left; FYI, Group chats and the mail boxes right), sharing one
@@ -660,6 +664,7 @@ internal fun NeedsYouColumn(
     var msgPage by rememberSaveable { mutableIntStateOf(0) }
     var fyiPage by rememberSaveable { mutableIntStateOf(0) }
     var mailPage by rememberSaveable { mutableIntStateOf(0) }
+    var scamPage by rememberSaveable { mutableIntStateOf(0) }
     fun sectionOf(g: NeedsYouGroup): NeedsYouSection = when (g) {
         NeedsYouGroup.DECIDE -> NeedsYouSection.DECIDE
         NeedsYouGroup.MESSAGES, NeedsYouGroup.CHATS -> NeedsYouSection.MESSAGES
@@ -673,7 +678,7 @@ internal fun NeedsYouColumn(
     fun inG(g: NeedsYouGroup): Boolean = showG(g) && (!boxed || g in openGroups)
     val chatsCount = (digest?.cards?.size ?: 0) + (discord?.cards?.size ?: 0)
     val mailAnswerAny = mailMoment != null || mailMomentSession != null || mailNeeds != null || mailChases != null
-    val tidiedAny = needsMail != null || archived != null || unopened != null
+    val tidiedAny = needsMail != null || archived != null || unopened != null || mailScams != null
     val msgsAny = messageChats.isNotEmpty() || sendAll != null
     // Every group with something in it on the whole page (the header's Open all / Close all reaches both columns);
     // [present] is this column's.
@@ -709,8 +714,10 @@ internal fun NeedsYouColumn(
                 open, mailPg.takeIf { mailMomentSession == null })
             NeedsYouGroup.RENEWALS -> NeedsYouGroupRules.head(g, mailFinds?.rows?.size ?: 0,
                 NeedsYouGroupRules.renewalsPeek(mailFinds?.rows?.map { it.title }.orEmpty()), open)
-            NeedsYouGroup.TIDIED -> NeedsYouGroupRules.head(g, needsMail?.tiles?.firstOrNull()?.number?.toIntOrNull() ?: 0,
-                needsMail?.tiles?.takeIf { it.isNotEmpty() }?.let(NeedsYouGroupRules::tidiedPeek) ?: archived?.let { "Archived for you" }.orEmpty(), open)
+            NeedsYouGroup.TIDIED -> NeedsYouGroupRules.head(g,
+                os.meka.core.domain.MailScamListRules.tidiedCount(needsMail?.tiles?.firstOrNull()?.number?.toIntOrNull() ?: 0, mailScams),
+                os.meka.core.domain.MailScamListRules.peek(mailScams)
+                    ?: needsMail?.tiles?.takeIf { it.isNotEmpty() }?.let(NeedsYouGroupRules::tidiedPeek) ?: archived?.let { "Archived for you" }.orEmpty(), open)
         }
     }
     // Walk-through 2026-11-15 A17: a group is one box, its rows on the head's surface (NeedsYouGroupBox.kt). Cards keep
@@ -776,6 +783,13 @@ internal fun NeedsYouColumn(
             item(key = "mail-needs") {
                 MailNeedsSection(n, core, moves.undoLine, mailTaps,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Possible scams to check (Meka 2026-11-18 23:34): their own card, not under the mail to answer.
+        mailScams?.let { sc ->
+            item(key = "mail-scams") {
+                MailNeedsSection(sc, core, moves.undoLine, mailTaps,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)), drafts = false)
             }
         }
         // Inbox autopilot, slice 6b-3: Waiting for items from email whose chase is due, a chase drafted for each.
@@ -1307,6 +1321,20 @@ internal fun NeedsYouColumn(
         boxEnd(NeedsYouGroup.RENEWALS)
         groupHead(boxed && NeedsYouGroup.TIDIED in present, NeedsYouGroup.TIDIED, ::headOf, toggleGroup, play)
         if (inG(NeedsYouGroup.TIDIED)) {
+        // Possible scams to check (Meka 2026-11-18 23:34): each a thin row flagged Possible scam; tapped, it opens on
+        // Junk it & block · Not a scam · Done. Not a scam sends it back to Mail to answer.
+        mailScams?.let { sc ->
+            item(key = "mail-scams") {
+                Column(Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)).testTag(NEEDS_YOU_SCAMS_TAG)) {
+                    Column(Modifier.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+                        .semantics(mergeDescendants = true) { contentDescription = "${sc.headline}. ${os.meka.core.domain.MailScamListRules.LEAD}" }) {
+                        SectionLabel(sc.headline)
+                        Text(needsShown(os.meka.core.domain.MailScamListRules.LEAD), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                    }
+                    MailNeedsSection(sc, core, moves.undoLine, mailTaps, boxed = true, page = scamPage, onPage = { scamPage = it }, drafts = false)
+                }
+            }
+        }
         // The approved look, slice 2: today's tidies as four tiles, the one unsubscribe question and See all › (All
         // tidied mail keeps every Put back), in place of the long log and the weekly offer's card.
         needsMail?.let { m ->

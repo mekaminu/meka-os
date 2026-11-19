@@ -31,15 +31,19 @@ struct MailNeedsView: View {
     var boxed = false
     var page = 0
     var onPage: (Int) -> Void = { _ in }
+    /// Possible scams to check (Meka 2026-11-18 23:34): the possible scams in the Mail tidied today box, boxed, with no
+    /// Draft replies bar (a possible scam is never answered from here).
+    var scams = false
+    private var source: MailNeedsCard? { scams ? model.mailScams : model.mailNeeds }
     /// Slice 4b: which thin rows are open (Draft replies opens the ones it drafted, so their drafts can be read).
     @State private var openRows: Set<String> = []
 
     var body: some View {
         Group {
-            if boxed, let card = model.mailNeeds, model.mailMomentSession == nil {
+            if boxed, let card = source, scams || model.mailMomentSession == nil {
                 boxedBody(card)
             // While the ten-minute inbox runs (slice 7) it shows these one at a time instead.
-            } else if !boxed, let card = model.mailNeeds, model.mailMomentSession == nil {
+            } else if !boxed, let card = source, scams || model.mailMomentSession == nil {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Button { MekaHaptics.tick(); open.toggle() } label: {
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -62,7 +66,7 @@ struct MailNeedsView: View {
                     .accessibilityLabel("\(card.title). \(card.headline)")
                     if open {
                         VStack(alignment: .leading, spacing: MekaSpace.m) {
-                            if MailSendAllRules.shared.barShows(rows: Int32(card.rows.count)) {
+                            if !scams && MailSendAllRules.shared.barShows(rows: Int32(card.rows.count)) {
                                 sendAllBar(rows: card.rows)
                             }
                             ForEach(card.rows, id: \.id) { row in rowView(row) }
@@ -89,8 +93,8 @@ struct MailNeedsView: View {
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailNeeds == nil)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailNeeds?.rows.map(\.id) ?? [])
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: source == nil)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: source?.rows.map(\.id) ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: openRows)
         .task { await model.refreshAiStatus() }
@@ -148,7 +152,7 @@ struct MailNeedsView: View {
                 NeedsYouPagerView(page: p, palette: palette, onPage: onPage)
                     .padding(.top, MekaSpace.xxs)
             }
-            if MailSendAllRules.shared.barShows(rows: Int32(shown.count)) {
+            if !scams && MailSendAllRules.shared.barShows(rows: Int32(shown.count)) {
                 sendAllBar(rows: shown)
                     .padding(.top, MekaSpace.xs).padding(.horizontal, MekaSpace.m) // A27: on the rows' text line
             }
@@ -161,7 +165,7 @@ struct MailNeedsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: shown.map(\.id))
-        .accessibilityIdentifier("mail-needs")
+        .accessibilityIdentifier(scams ? "mail-scams" : "mail-needs")
     }
 }
 

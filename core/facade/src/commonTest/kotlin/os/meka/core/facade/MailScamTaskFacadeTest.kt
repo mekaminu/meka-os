@@ -17,6 +17,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** A possible scam never becomes a task (Meka 2026-11-19): Task is refused, and a task made before the flag is removed. */
@@ -55,14 +56,15 @@ class MailScamTaskFacadeTest {
         val a = email("m1", "Our bank account details are changing", warning = scam)
         val fold = core("android")
         assertTrue(fold.syncNow())
-        assertTrue(fold.mailNeeds.value!!.rows.single().scam)
+        assertTrue(fold.mailScams.value!!.rows.single().scam)
+        assertNull(fold.mailNeeds.value)
         assertEquals(MailScamTaskRules.BLOCKED_LINE, fold.taskFromMailItem(a))
         assertEquals(MailScamTaskRules.BLOCKED_LINE, fold.mailToDay(a, fold.boardFeedDays().first().day))
         assertEquals(MailScamTaskRules.BLOCKED_LINE, fold.waitingFromMailItem(a))
         assertTrue(fold.syncNow())
         assertTrue(task(MailNeedsRules.taskId(a)).isEmpty())
-        // Still on the card: nothing was archived by the refused tap.
-        assertEquals(listOf(a), fold.mailNeeds.value?.rows?.map { it.id })
+        // Still under Possible scams to check: nothing was archived by the refused tap.
+        assertEquals(listOf(a), fold.mailScams.value?.rows?.map { it.id })
     }
 
     @Test

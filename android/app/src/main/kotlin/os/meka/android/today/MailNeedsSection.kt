@@ -98,6 +98,8 @@ internal fun MailNeedsSection(
     boxed: Boolean = false,
     page: Int = 0,
     onPage: (Int) -> Unit = {},
+    /** False under Possible scams to check: no Draft replies bar (a possible scam is never answered from here). */
+    drafts: Boolean = true,
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -155,7 +157,7 @@ internal fun MailNeedsSection(
             Column(Modifier.padding(top = if (boxed) 0.dp else MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)),
                 verticalArrangement = Arrangement.spacedBy(if (boxed) 0.dp else MekaSpace.m)) {
                 @Composable fun draftBar() {
-                if (MailSendAllRules.barShows(shownRows.size)) {
+                if (drafts && MailSendAllRules.barShows(shownRows.size)) {
                     MailSendAllBar(
                         draftLabel = if (draftingAll) MailSendAllRules.DRAFTING else draftAll, drafting = draftingAll,
                         draftSpoken = MailSendAllRules.draftSpoken(shownRows.size),

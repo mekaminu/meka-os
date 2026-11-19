@@ -112,12 +112,17 @@ class MailNeedsFacadeTest {
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         val rows = assertNotNull(fold.mailNeeds.value).rows.associateBy { it.id }
         assertTrue(rows.getValue(a).canUnsubscribe && rows.getValue(a).canBlock)
-        assertTrue(rows.getValue(b).scam && rows.getValue(b).canBlock && !rows.getValue(b).canUnsubscribe)
+        // A possible scam isn't mail to answer: it waits under Possible scams to check (Meka 2026-11-18 23:34).
+        assertFalse(b in rows)
+        val scams = assertNotNull(fold.mailScams.value).rows.associateBy { it.id }
+        assertTrue(scams.getValue(b).scam && scams.getValue(b).canBlock && !scams.getValue(b).canUnsubscribe)
         assertEquals(MailSenderRuleRules.binLine("Notification via PayPal"), fold.blockMailItem(b))
         assertEquals(MailCardUnsubRules.line("Prize Team"), fold.unsubscribeMailItem(a))
         assertEquals(listOf(c), fold.mailNeeds.value?.rows?.map { it.id })
+        assertNull(fold.mailScams.value)
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertEquals(listOf(c), mac.mailNeeds.value?.rows?.map { it.id })
+        assertNull(mac.mailScams.value)
         val ops = serverOps.after("hh", 0, 100_000).map { it.op }
         assertTrue(ops.any { it.entityId == b && it.field == MailItemFields.RULE_ASKED })
         // Phishing in the body, slice 4: on the possible scam it's Junk it & block, asking for Junk.
@@ -134,23 +139,29 @@ class MailNeedsFacadeTest {
 
     @Test
     fun notAScamTakesTheLineOffOnBothAppsAndUndoBringsItBack() = runTest {
-        // Phishing in the body, slice 4: Not a scam on a possible scam; the email stays on the card.
+        // Phishing in the body, slice 4: Not a scam on a possible scam; the email moves from Possible scams to check to
+        // Mail to answer (Meka 2026-11-18 23:34), and Undo sends it back.
         val b = email("m2", "Outlook Session", "Is Your Account Still Active?", 2 * hour,
             warning = "⚠ Possible scam · sent from formlab.example, not microsoft.com")
         val fold = core("android")
         val mac = core("mac")
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
-        assertTrue(assertNotNull(fold.mailNeeds.value).rows.single().scam)
+        assertNull(fold.mailNeeds.value)
+        assertTrue(assertNotNull(fold.mailScams.value).rows.single().scam)
+        assertEquals("1 possible scam to check", fold.mailScams.value?.headline)
         assertEquals(os.meka.core.domain.MailNotScamRules.line("Outlook Session"), fold.notScamMailItem(b))
         val row = assertNotNull(fold.mailNeeds.value).rows.single()
         assertEquals(b, row.id)
         assertFalse(row.scam)
         assertNull(row.warning)
+        assertNull(fold.mailScams.value)
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertFalse(assertNotNull(mac.mailNeeds.value).rows.single().scam)
+        assertNull(mac.mailScams.value)
         now += 1_000
         fold.undoMailItem()
-        assertTrue(assertNotNull(fold.mailNeeds.value).rows.single().scam)
+        assertNull(fold.mailNeeds.value)
+        assertTrue(assertNotNull(fold.mailScams.value).rows.single().scam)
         assertEquals(MailNeedsRules.UNKNOWN, fold.notScamMailItem("nothing"))
     }
 

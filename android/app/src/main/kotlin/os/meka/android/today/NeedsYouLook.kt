@@ -106,6 +106,7 @@ internal const val NEEDS_YOU_ROW_TAG = "needs-you-row"
 internal const val NEEDS_YOU_FYI_TAG = "needs-you-fyi"
 internal const val NEEDS_YOU_MAIL_TAG = "needs-you-mail"
 internal const val NEEDS_YOU_TILE_TAG = "needs-you-mail-tile"
+internal const val NEEDS_YOU_SCAMS_TAG = "needs-you-mail-scams"
 
 /**
  * "Needs you" over "2 to decide · 4 to reply · 4 FYI", with Clear FYI on the right while there is FYI; grouped and

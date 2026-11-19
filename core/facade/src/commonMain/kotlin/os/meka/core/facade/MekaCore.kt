@@ -2501,6 +2501,14 @@ class MekaCore(
      */
     val mailUnopened: StateFlow<os.meka.core.domain.MailUnopenedCard?> = _mailUnopened.asStateFlow()
 
+    private val _mailScams = MutableStateFlow<os.meka.core.domain.MailNeedsCard?>(null)
+    /**
+     * Possible scams to check (Meka 2026-11-18 23:34): the emails flagged as a possible scam that he hasn't said are real,
+     * out of [mailNeeds] and shown in the Mail tidied today box, each row with Junk it & block · Not a scam · Done; null
+     * when none. Follows sync and the minute tick.
+     */
+    val mailScams: StateFlow<os.meka.core.domain.MailNeedsCard?> = _mailScams.asStateFlow()
+
     private val _needsYouMail = MutableStateFlow<os.meka.core.domain.NeedsYouMailSummary?>(null)
     /**
      * The approved Needs you look, slice 2: MAIL NAVILIFE TIDIED TODAY — four tiles over today's standing tidies and the
@@ -2511,8 +2519,11 @@ class MekaCore(
     private fun needsYouMailChanged() {
         val tidies = activity.mailTidyBatches()
         val offer = _mailUnopened.value
-        _needsYouMail.value = viewMemo.keep("Needs you mail", listOf(tidies, offer, minuteNow(), timeZone())) {
+        val scams = _mailScams.value
+        _needsYouMail.value = viewMemo.keep("Needs you mail", listOf(tidies, offer, scams, minuteNow(), timeZone())) {
+            // A possible scam waiting counts under junk & scams (Meka 2026-11-18 23:34).
             os.meka.core.domain.NeedsYouMailRules.summary(tidies, offer, nowMs(), ZoneCalendar(timeZone))
+                ?.let { it.copy(tiles = os.meka.core.domain.MailScamListRules.withScams(it.tiles, scams)) }
         }
     }
 
@@ -9287,12 +9298,15 @@ class MekaCore(
 
     /** The emails "From your mail" shows now: the synced ones less the business mail protected time holds. */
     private fun mailShown(items: List<os.meka.core.domain.MailItem> = activity.mailItems()): List<os.meka.core.domain.MailItem> {
-        val held = os.meka.core.domain.ProtectedMailRules.held(items, protectedTime.setting(), mailHeldUntil())
-        return if (held.isEmpty()) items else items.filterNot { it.id in held }
+        // A possible scam isn't mail to answer: it waits in the tidied box instead ([mailScams]).
+        val answer = os.meka.core.domain.MailScamListRules.toAnswer(items)
+        val held = os.meka.core.domain.ProtectedMailRules.held(answer, protectedTime.setting(), mailHeldUntil())
+        return if (held.isEmpty()) answer else answer.filterNot { it.id in held }
     }
 
     /** How many emails that would be on the card are held now. */
-    private fun mailHeldCount(items: List<os.meka.core.domain.MailItem> = activity.mailItems()): Int {
+    private fun mailHeldCount(all: List<os.meka.core.domain.MailItem> = activity.mailItems()): Int {
+        val items = os.meka.core.domain.MailScamListRules.toAnswer(all)
         val held = os.meka.core.domain.ProtectedMailRules.held(items, protectedTime.setting(), mailHeldUntil())
         if (held.isEmpty()) return 0
         return os.meka.core.domain.MailNeedsRules.showingSorted(items.filter { it.id in held }, nowMs()).size
@@ -9337,6 +9351,13 @@ class MekaCore(
             os.meka.core.domain.MailNeedsRules.card(items, nowMs(), cal)?.copy(
                 heldLine = os.meka.core.domain.ProtectedMailRules.cardLine(mailHeldCount(all), heldUntil, nowMs(), cal),
             )
+        }
+        val scams = viewMemo.keep("Mail scams", listOf(all, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailScamListRules.card(all, nowMs(), cal)
+        }
+        if (_mailScams.value != scams) {
+            _mailScams.value = scams
+            needsYouMailChanged()
         }
         // Drafted replies, slice 2: Today's count follows Send, Not needed, Done and Snooze at once on this app.
         val replies = viewMemo.keep("Mail replies", listOf(items, minuteNow(), timeZone())) {
