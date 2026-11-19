@@ -51,7 +51,8 @@ class MailRowActionsTest {
         assertEquals(listOf(MailRowAction.BIN, MailRowAction.DONE), MailRowActionRules.actions(r).shown)
         assertEquals(MailSenderRuleRules.BIN, MailRowActionRules.label(MailRowAction.BIN, r))
         assertTrue(MailRowActionRules.critical(MailRowAction.BIN))
-        assertTrue(MailRowAction.entries.filter { it != MailRowAction.BIN }.none(MailRowActionRules::critical))
+        // Move to Trash (slice 3 of Scam email never a task) wears it too, as on a tidied email.
+        assertTrue(MailRowAction.entries.filter { it != MailRowAction.BIN && it != MailRowAction.TRASH }.none(MailRowActionRules::critical))
     }
 
     @Test

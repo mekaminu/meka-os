@@ -39,6 +39,7 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailNotScamRules
 import os.meka.core.domain.MailScamListRules
+import os.meka.core.domain.MailScamTrashRules
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.facade.MekaCore
@@ -130,7 +131,7 @@ class NeedsYouScamScreensTest {
 
     private fun onScreen(text: String) = shows(ScreenShots.plainText(text, substring = true))
 
-    private fun shoot(name: String, theme: ThemeChoice, byHand: Boolean) {
+    private fun shoot(name: String, theme: ThemeChoice, byHand: Boolean, trash: Boolean = false) {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val real = email("m1", "Sam Taylor", "Football on Saturday", hour)
@@ -167,6 +168,16 @@ class NeedsYouScamScreensTest {
             .performSemanticsAction(SemanticsActions.OnClick)
         turns()
         if (!onScreen(MailSenderRuleRules.BIN)) fail("$name: the possible scam doesn't open on ${MailSenderRuleRules.BIN}")
+        // Scam email never a task, slice 3: a plain Move to Trash (no block) beside it.
+        if (!onScreen(MailScamTrashRules.TRASH)) fail("$name: the possible scam doesn't offer ${MailScamTrashRules.TRASH}")
+        if (trash) {
+            reach(name, ScreenShots.plainText(MailScamTrashRules.TRASH) and hasClickAction(), "Move to Trash")[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            until { core.mailScams.value == null }
+            if (core.mailScams.value != null) fail("$name: Move to Trash left it under Possible scams to check")
+            if (core.mailNeeds.value?.rows?.map { it.id } != listOf(real)) fail("$name: Move to Trash sent it to Mail to answer")
+            return
+        }
         reach(name, ScreenShots.plainText(MailNotScamRules.NOT_SCAM) and hasClickAction(), "Not a scam")[0]
             .performSemanticsAction(SemanticsActions.OnClick)
         until { core.mailScams.value == null }
@@ -182,4 +193,7 @@ class NeedsYouScamScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverScamsByHand() { shoot("cover-dark-scams-by-hand", ThemeChoice.DARK, byHand = true) }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun coverScamMovedToTrash() { shoot("cover-dark-scams-trash", ThemeChoice.DARK, byHand = true, trash = true) }
 }

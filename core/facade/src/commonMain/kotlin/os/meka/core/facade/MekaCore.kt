@@ -9963,6 +9963,24 @@ class MekaCore(
         if (scam) os.meka.core.domain.MailSenderRuleRules.binLine(item.from) else os.meka.core.domain.MailSenderRuleRules.blockLine(item.from)
     }
 
+    /**
+     * Scam email never a task, slice 3: **Move to Trash** on a possible scam, on its row or in the reader: it is Done, and
+     * at the server's next check just this email goes to Gmail's/Outlook's Trash (kept there 30 days), the sender left
+     * alone (no block). The linked emails are Done with it. Undo brings it back. Returns the bar's line.
+     */
+    suspend fun trashMailItem(id: String): String = onCore {
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        val group = mailGroup(id)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailScamTrashRules.fields(nowMs()))
+        val linked = doneLinked(group)
+        mailNeedsUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs()))
+            linked()
+        }
+        mailNeedsChanged()
+        os.meka.core.domain.MailScamTrashRules.line(item.from)
+    }
+
     /** Slice 4: the cards whose email the reader opened as a possible scam this session (Junk it & block goes to Junk). */
     private val readerScams = mutableSetOf<String>()
 

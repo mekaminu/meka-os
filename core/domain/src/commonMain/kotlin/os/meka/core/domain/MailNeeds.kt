@@ -94,6 +94,11 @@ object MailItemFields {
     /** Slice 4 (the server): it wrote the sender's Always keep for that Not a scam, and (after an Undo) took it off. */
     const val NOT_SCAM_KEPT_AT = "notScamKeptAtMs"
     const val NOT_SCAM_CLEARED_AT = "notScamClearedAtMs"
+    /**
+     * Scam email never a task, slice 3 (an app): **Move to Trash** on a possible scam — a Done (written with the same
+     * time as [DONE_ASKED_AT]) whose email goes to Trash instead of Archive, no sender rule ([MailScamTrashRules]).
+     */
+    const val TRASH_ASKED_AT = "trashAskedAtMs"
     /** Scheduling assistant, slice 2 (an app's): Book it's calendar edit ("" once undone) and the start it booked (0). */
     /**
      * Account-security mail ([MailSecurityRules], 2026-10-17): the provider whose security alert this is ("Google"),
@@ -165,6 +170,8 @@ data class MailItem(
     val notScamUndoAtMs: Long? = null,
     val notScamKeptAtMs: Long? = null,
     val notScamClearedAtMs: Long? = null,
+    /** Scam email never a task, slice 3: Move to Trash's tap (the same time as its Done), or null. */
+    val trashAskedAtMs: Long? = null,
     /** Scheduling assistant, slice 2: Book it's calendar edit and the start it booked, or null. */
     val meetingEditId: String? = null,
     val meetingAtMs: Long? = null,
@@ -428,6 +435,7 @@ object MailNeedsRules {
             notScamUndoAtMs = ms(MailItemFields.NOT_SCAM_UNDO_AT),
             notScamKeptAtMs = ms(MailItemFields.NOT_SCAM_KEPT_AT),
             notScamClearedAtMs = ms(MailItemFields.NOT_SCAM_CLEARED_AT),
+            trashAskedAtMs = ms(MailItemFields.TRASH_ASKED_AT),
             meetingEditId = text(MailItemFields.MEETING_EDIT_ID),
             meetingAtMs = ms(MailItemFields.MEETING_AT),
             replyNeeded = (f[MailAutoDraftFields.REPLY_NEEDED] as? FieldValue.Bool)?.value == true,

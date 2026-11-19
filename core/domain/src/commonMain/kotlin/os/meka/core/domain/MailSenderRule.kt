@@ -118,7 +118,10 @@ object MailSenderRuleRules {
 
     /** Where the server moves the card's own email once it's Done: Trash for a block of a sender it may block. */
     fun cardTidy(i: MailItem, protected: Boolean): MailTidy =
-        if (i.tidyAskedAtMs != null && MailNeedsRules.done(i) && asked(i) == MailSenderRule.BLOCK && !protected && i.security == null) {
+        // Scam email never a task, slice 3: Move to Trash on a possible scam sends just this email to Trash (his own
+        // tap on one email, recoverable for 30 days; no sender rule, so never a block of a protected sender).
+        if (MailScamTrashRules.trashing(i)) MailTidy.TRASH
+        else if (i.tidyAskedAtMs != null && MailNeedsRules.done(i) && asked(i) == MailSenderRule.BLOCK && !protected && i.security == null) {
             // Slice 4: Junk it & block on a possible scam goes to Junk (recoverable; the provider's filter learns).
             if (i.junkAsked) MailTidy.SCAM_JUNK else MailTidy.TRASH
         } else MailTidy.ARCHIVE

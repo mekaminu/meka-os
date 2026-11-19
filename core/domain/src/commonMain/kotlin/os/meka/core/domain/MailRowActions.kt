@@ -70,7 +70,7 @@ object MailNoteRules {
 }
 
 /** The answers an email row in From your mail can offer (both apps draw them from [MailRowActionRules]). */
-enum class MailRowAction { BOOK, SUGGEST, REPLY, DONE, TASK, BIN, WAITING, SNOOZE, UNSUBSCRIBE, ALWAYS_TIDY, BLOCK, TO_DAY, NOT_SCAM }
+enum class MailRowAction { BOOK, SUGGEST, REPLY, DONE, TASK, BIN, WAITING, SNOOZE, UNSUBSCRIBE, ALWAYS_TIDY, BLOCK, TO_DAY, NOT_SCAM, TRASH }
 
 /** What the row shows straight away, and what waits under ⋯ More. */
 data class MailRowActions(val shown: List<MailRowAction>, val more: List<MailRowAction>)
@@ -95,14 +95,18 @@ object MailRowActionRules {
      */
     fun actions(
         row: MailNeedsRow, tidy: Boolean = true, block: Boolean = true, unsubscribe: Boolean = true, toDay: Boolean = false,
-        notScam: Boolean = false,
+        notScam: Boolean = false, trash: Boolean = false,
     ): MailRowActions {
         if (row.note != null) return MailRowActions(listOf(MailRowAction.TASK, MailRowAction.DONE), listOfNotNull(MailRowAction.TO_DAY.takeIf { toDay }, MailRowAction.SNOOZE))
         // Phishing in the body, slice 4: a possible scam leads with Junk it & block and Not a scam; Done stays, Reply
         // waits under More. A possible scam never becomes a task ([MailScamTaskRules], 2026-11-19): no Task, To a day or
         // Waiting for until he says Not a scam.
         if (block && row.canBlock && row.scam) {
-            val shown = listOfNotNull(MailRowAction.BIN, MailRowAction.NOT_SCAM.takeIf { notScam }, MailRowAction.DONE)
+            // Slice 3 of "Scam email never a task": Move to Trash (just this email, no block) after Junk it & block.
+            val shown = listOfNotNull(
+                MailRowAction.BIN, MailRowAction.TRASH.takeIf { trash && row.security == null },
+                MailRowAction.NOT_SCAM.takeIf { notScam }, MailRowAction.DONE,
+            )
             val more = buildList {
                 add(MailRowAction.REPLY)
                 add(MailRowAction.SNOOZE)
@@ -145,6 +149,7 @@ object MailRowActionRules {
         MailRowAction.BLOCK -> MailSenderRuleRules.BLOCK
         MailRowAction.TO_DAY -> BoardFeedRules.TO_DAY
         MailRowAction.NOT_SCAM -> MailNotScamRules.NOT_SCAM
+        MailRowAction.TRASH -> MailScamTrashRules.TRASH
     }
 
     /** What a screen reader says for it. */
@@ -162,6 +167,7 @@ object MailRowActionRules {
         MailRowAction.BLOCK -> "Block ${row.from}: this email and their later ones go to Trash"
         MailRowAction.TO_DAY -> BoardFeedRules.spoken(row.subject)
         MailRowAction.NOT_SCAM -> MailNotScamRules.spoken(row.from)
+        MailRowAction.TRASH -> MailScamTrashRules.spoken(row.from)
     }
 
     /**
@@ -169,15 +175,17 @@ object MailRowActionRules {
      * may find one the card didn't): **Junk it & block** first (unless it's account-security mail or [block] isn't
      * offered here), **Not a scam** when [notScam] is offered, then Done.
      */
-    fun readerScam(row: MailNeedsRow, block: Boolean = true, notScam: Boolean = false): List<MailRowAction> =
+    fun readerScam(row: MailNeedsRow, block: Boolean = true, notScam: Boolean = false, trash: Boolean = false): List<MailRowAction> =
         listOfNotNull(
             MailRowAction.BIN.takeIf { block && row.security == null && row.note == null },
+            // Scam email never a task, slice 3: Move to Trash, just this email (no block).
+            MailRowAction.TRASH.takeIf { trash && row.security == null && row.note == null },
             MailRowAction.NOT_SCAM.takeIf { notScam },
             MailRowAction.DONE,
         )
 
-    /** Junk it & block keeps the critical colour; every other answer wears the accent. */
-    fun critical(a: MailRowAction): Boolean = a == MailRowAction.BIN
+    /** Junk it & block and Move to Trash keep the critical colour (as on a tidied email); every other answer wears the accent. */
+    fun critical(a: MailRowAction): Boolean = a == MailRowAction.BIN || a == MailRowAction.TRASH
 
     fun moreSpoken(open: Boolean, row: MailNeedsRow): String =
         if (open) "Fewer answers for ${row.from}" else "More answers for ${row.from}: waiting for, snooze, unsubscribe, always tidy, block"

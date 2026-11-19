@@ -1,18 +1,22 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.fv
+
 /**
  * A possible scam isn't mail to answer (Meka 2026-11-18 23:34, Needs you screenshot: "Possible scam · CMC Invest" sat
  * under Mail to answer; and 2026-11-19 00:52, the same email had become a task). An email Navilife flags as a possible
  * scam ([MailScamRules.scamLine] on its warning) leaves Mail to answer, the ten-minute inbox and every "n emails need
  * you" count, and waits instead in the Mail tidied today box as **Possible scams to check**, counted with junk & scams.
- * Tapped, its row opens on **Junk it & block** (Junk, and the sender's later emails to Trash) · **Not a scam** · Done.
+ * Tapped, its row opens on **Junk it & block** (Junk, and the sender's later emails to Trash) · **Move to Trash** (just
+ * this email, no block; [MailScamTrashRules]) · **Not a scam** · Done.
  * Not a scam puts it back with the mail to answer. Non-AI and pure; nothing here moves or sends anything.
  */
 object MailScamListRules {
     const val TITLE = "Possible scams to check"
 
     /** The box's lead line over the rows: why they're here and not under Mail to answer. */
-    const val LEAD = "Not answered here · Junk it & block, or Not a scam if it's real"
+    const val LEAD = "Not answered here · Junk it & block, Move to Trash, or Not a scam if it's real"
 
     /** True when [i] is a possible scam he hasn't said is real: out of Mail to answer, into the tidied box. */
     fun possibleScam(i: MailItem): Boolean = MailScamRules.scamLine(i.warning) && !MailNotScamRules.notScam(i)
@@ -58,4 +62,30 @@ object MailScamListRules {
             }
         }
     }
+}
+
+/**
+ * Scam email never a task, slice 3 (Meka 2026-11-18 23:34: a possible scam "must open on tap with Not a scam · Trash ·
+ * Block"): **Move to Trash** on a possible scam's row and in the reader's scam answers. It is a Done whose email the
+ * server moves to Gmail's/Outlook's Trash (kept there 30 days, never deleted for good) instead of Archive, and the
+ * sender is left alone (no block, no keep). Undo brings it back like any Done. Non-AI and pure.
+ */
+object MailScamTrashRules {
+    const val TRASH = MailTidiedAskRules.TRASH
+
+    /** What an app writes on the `mail_item`: a Done and the Trash ask, stamped with the same time. */
+    fun fields(nowMs: Long): Map<String, FieldValue> =
+        MailNeedsRules.doneFields(nowMs) + (MailItemFields.TRASH_ASKED_AT to nowMs.fv())
+
+    /** True while [i]'s current Done is the Move to Trash tap (a later plain Done, after an Undo, archives as usual). */
+    fun trashing(i: MailItem): Boolean {
+        val at = i.trashAskedAtMs ?: return false
+        return MailNeedsRules.done(i) && i.doneAskedAtMs == at && i.security == null
+    }
+
+    /** The bar's line after the tap. */
+    fun line(from: String): String = "Moving $from's email to Trash · kept there 30 days · Undo brings it back"
+
+    /** What a screen reader says for the answer. */
+    fun spoken(from: String): String = "Move $from's email to Trash, kept there 30 days. The sender isn't blocked"
 }

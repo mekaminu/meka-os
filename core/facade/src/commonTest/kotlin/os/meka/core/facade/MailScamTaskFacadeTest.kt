@@ -111,4 +111,23 @@ class MailScamTaskFacadeTest {
         assertNotEquals<FieldValue?>(FieldValue.Bool(true), task(MailNeedsRules.taskId(real))[ActionableFields.DELETED])
         assertTrue(activityLines(fold).none { it.startsWith("Removed") })
     }
+
+    @Test
+    fun moveToTrashOnAPossibleScamIsADoneThatAsksForTrashAndUndoBringsItBack() = runTest {
+        val a = email("m1", "Our bank account details are changing", warning = scam)
+        val fold = core("android")
+        assertTrue(fold.syncNow())
+        assertEquals("Moving Invest Co's email to Trash · kept there 30 days · Undo brings it back", fold.trashMailItem(a))
+        assertNull(fold.mailScams.value)
+        assertTrue(fold.syncNow())
+        val f = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityType == EntityTypes.MAIL_ITEM && it.entityId == a }
+            .associate { it.field to it.value }
+        assertEquals(f[MailItemFields.DONE_ASKED_AT], f[MailItemFields.TRASH_ASKED_AT])
+        // No sender rule asked: it isn't a block.
+        assertNull(f[MailItemFields.TIDY_ASKED_AT])
+        assertTrue(task(MailNeedsRules.taskId(a)).isEmpty())
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals(listOf(a), fold.mailScams.value?.rows?.map { it.id })
+    }
 }

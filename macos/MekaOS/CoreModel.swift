@@ -8455,6 +8455,13 @@ final class CoreModel {
         answerMail(id, what: "Block", undo: .mailItem) { try await $0.blockMailItem(id: id) }
     }
 
+    /// Move to Trash on a possible scam (Scam email never a task, slice 3): Done, and at the server's next check just this
+    /// email goes to Trash (kept there 30 days), the sender not blocked; Undo on the bar brings it back. Only the id crosses.
+    func trashMailItem(_ id: String) {
+        MekaHaptics.medium()
+        answerMail(id, what: "Move to Trash", undo: .mailItem) { try await $0.trashMailItem(id: id) }
+    }
+
     /// Not a scam on a possible scam (Phishing in the body, slice 4): the red line goes on both apps, the email stays,
     /// and the server keeps the sender at its next check; Undo on the bar takes it back. Only the id (a String) crosses.
     func notScamMailItem(_ id: String) {

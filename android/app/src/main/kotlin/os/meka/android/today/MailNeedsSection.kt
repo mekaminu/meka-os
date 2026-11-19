@@ -223,6 +223,8 @@ internal fun MailNeedsSection(
                             onUnsubscribe = { haptics.medium(); gone(row.id, "Unsubscribe") { core.unsubscribeMailItem(row.id) } },
                             // Slice 4: Not a scam takes the red line off and keeps the sender; Undo on the bar.
                             onNotScam = { haptics.light(); answer { core.notScamMailItem(row.id) } },
+                            // Scam email never a task, slice 3: Move to Trash, just this email (no block); Undo on the bar.
+                            onTrash = { haptics.medium(); gone(row.id, "Move to Trash") { core.trashMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
                             onSuggestTimes = { core.suggestMeetingTimes(row.id) },
                             // Drafted replies: Not needed puts Navilife's draft away (Undo on the bar); the email stays.
@@ -268,6 +270,8 @@ internal fun MailNeedsRowView(
     onUnsubscribe: (() -> Unit)? = null,
     /** Phishing in the body, slice 4: Not a scam on a possible scam (null: not offered here). */
     onNotScam: (() -> Unit)? = null,
+    /** Scam email never a task, slice 3: Move to Trash on a possible scam (null: not offered here). */
+    onTrash: (() -> Unit)? = null,
     incoming: Pair<Int, String>? = null,
     onEditor: ((String?) -> Unit)? = null,
     /** Scheduling assistant, slice 1: his free times as a reply, for an email that asks to meet (null: not offered here). */
@@ -491,7 +495,7 @@ internal fun MailNeedsRowView(
         // rest unfold under ⋯ More (expand spring; reduced motion: cross-fade). They wrap on the narrow cover screen.
         val actions = MailRowActionRules.actions(
             row, tidy = onAlwaysTidy != null, block = onBlock != null, unsubscribe = onUnsubscribe != null, toDay = onToDay != null,
-            notScam = onNotScam != null,
+            notScam = onNotScam != null, trash = onTrash != null,
         )
         var more by rememberSaveable(row.id) { mutableStateOf(false) }
         // Week board item (5): To a day… unfolds the days under the answers; a tap on one sends it there.
@@ -520,6 +524,7 @@ internal fun MailNeedsRowView(
                 MailRowAction.BIN, MailRowAction.BLOCK -> onBlock?.invoke()
                 MailRowAction.TO_DAY -> { haptics.tick(); choosingDay = !choosingDay }
                 MailRowAction.NOT_SCAM -> onNotScam?.invoke()
+                MailRowAction.TRASH -> onTrash?.invoke()
             }
         }
         fun pillLabel(a: MailRowAction): String =
@@ -570,8 +575,8 @@ internal fun MailNeedsRowView(
                 actions = (actions.shown + actions.more).filter(::offered).map { a ->
                     MailReaderAction(MailRowActionRules.label(a, row), MailRowActionRules.spoken(a, row), MailRowActionRules.critical(a)) { perform(a) }
                 },
-                // Slice 4: an email the reader opens as a possible scam: Junk it & block, Not a scam, Done.
-                scamActions = MailRowActionRules.readerScam(row, block = onBlock != null, notScam = onNotScam != null).map { a ->
+                // Slice 4: an email the reader opens as a possible scam: Junk it & block, Move to Trash, Not a scam, Done.
+                scamActions = MailRowActionRules.readerScam(row, block = onBlock != null, notScam = onNotScam != null, trash = onTrash != null).map { a ->
                     MailReaderAction(MailRowActionRules.label(a, row), MailRowActionRules.spoken(a, row), MailRowActionRules.critical(a)) { perform(a) }
                 },
                 onClose = { reading = false },
