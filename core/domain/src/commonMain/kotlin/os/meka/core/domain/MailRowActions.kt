@@ -86,6 +86,9 @@ object MailRowActionRules {
     const val MORE = "⋯ More"
     const val FEWER = "Fewer"
 
+    /** What a possible scam's row never offers ([MailScamTaskRules]). */
+    private val NO_TASK = setOf(MailRowAction.TASK, MailRowAction.TO_DAY, MailRowAction.WAITING)
+
     /**
      * The row's answers. [tidy], [block] and [unsubscribe] say whether this surface offers them at all (the ten-minute
      * inbox and the card do; null callbacks elsewhere). [toDay] (Week board item (5)) puts **To a day…** first under More.
@@ -95,14 +98,13 @@ object MailRowActionRules {
         notScam: Boolean = false,
     ): MailRowActions {
         if (row.note != null) return MailRowActions(listOf(MailRowAction.TASK, MailRowAction.DONE), listOfNotNull(MailRowAction.TO_DAY.takeIf { toDay }, MailRowAction.SNOOZE))
-        // Phishing in the body, slice 4: a possible scam leads with Junk it & block and Not a scam; Done stays, Reply and
-        // Task wait under More.
+        // Phishing in the body, slice 4: a possible scam leads with Junk it & block and Not a scam; Done stays, Reply
+        // waits under More. A possible scam never becomes a task ([MailScamTaskRules], 2026-11-19): no Task, To a day or
+        // Waiting for until he says Not a scam.
         if (block && row.canBlock && row.scam) {
             val shown = listOfNotNull(MailRowAction.BIN, MailRowAction.NOT_SCAM.takeIf { notScam }, MailRowAction.DONE)
             val more = buildList {
                 add(MailRowAction.REPLY)
-                add(MailRowAction.TASK)
-                if (toDay) add(MailRowAction.TO_DAY)
                 add(MailRowAction.SNOOZE)
                 if (unsubscribe && row.canUnsubscribe) add(MailRowAction.UNSUBSCRIBE)
             }
@@ -124,6 +126,7 @@ object MailRowActionRules {
             if (tidy) add(MailRowAction.ALWAYS_TIDY)
             if (block && row.canBlock && !row.scam) add(MailRowAction.BLOCK)
         }
+        if (!MailScamTaskRules.offersTask(row)) return MailRowActions(shown - NO_TASK, more - NO_TASK)
         return MailRowActions(shown, more)
     }
 

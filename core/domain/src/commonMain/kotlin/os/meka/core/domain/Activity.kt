@@ -858,6 +858,13 @@ class ActivityLog(
         write(id, ActivityKind.APPROVAL, summary, detail, why, "approvals")
     }
 
+    /** A task made from a possible scam email was removed ([MailScamTaskRules]); written once, whichever device did it. */
+    fun recordScamTaskRemoved(s: MailScamTaskRules.Stray) {
+        val id = MailScamTaskRules.activityId(s)
+        if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
+        write(id, ActivityKind.CHANGED, MailScamTaskRules.summary(s), null, MailScamTaskRules.WHY, MailScamTaskRules.SOURCE)
+    }
+
     /** A digest this device just posted. */
     fun recordDigest(d: Digest) {
         val now = nowMs()

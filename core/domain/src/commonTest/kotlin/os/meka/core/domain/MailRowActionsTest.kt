@@ -35,9 +35,14 @@ class MailRowActionsTest {
     fun aPossibleScamShowsBinAndBlockInTheCriticalColour() {
         val r = row(item(warning = "⚠ Possible scam · sent from mail-x.example, not paypal.com"))
         val a = MailRowActionRules.actions(r, notScam = true)
-        // Phishing in the body, slice 4: Junk it & block and Not a scam lead, Done stays; Reply and Task wait under More.
+        // Phishing in the body, slice 4: Junk it & block and Not a scam lead, Done stays; Reply waits under More. A possible
+        // scam never becomes a task (2026-11-19): no Task, To a day or Waiting for anywhere on its row.
         assertEquals(listOf(MailRowAction.BIN, MailRowAction.NOT_SCAM, MailRowAction.DONE), a.shown)
-        assertEquals(listOf(MailRowAction.REPLY, MailRowAction.TASK), a.more.take(2))
+        assertEquals(listOf(MailRowAction.REPLY, MailRowAction.SNOOZE), a.more.take(2))
+        val withDays = MailRowActionRules.actions(r, toDay = true, notScam = true)
+        assertTrue((withDays.shown + withDays.more).none { it == MailRowAction.TASK || it == MailRowAction.TO_DAY || it == MailRowAction.WAITING })
+        val noBlock = MailRowActionRules.actions(r, block = false, toDay = true)
+        assertTrue((noBlock.shown + noBlock.more).none { it == MailRowAction.TASK || it == MailRowAction.TO_DAY || it == MailRowAction.WAITING })
         assertFalse(MailRowAction.BLOCK in a.more)
         assertFalse(MailRowAction.ALWAYS_TIDY in a.more)
         assertEquals("Junk it & block", MailRowActionRules.label(MailRowAction.BIN, r))

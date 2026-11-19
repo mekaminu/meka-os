@@ -9325,6 +9325,7 @@ class MekaCore(
     }
 
     private fun mailNeedsChanged() {
+        removeScamTasks()
         val all = activity.mailItems()
         val cal = ZoneCalendar(timeZone)
         // Taps feel instant, slice 6: which emails show (protected time may hold the business ones) and the card over
@@ -9699,6 +9700,31 @@ class MekaCore(
      */
     suspend fun taskForDetail(id: String): os.meka.core.domain.Task? = onCore { tasks.get(id) }
 
+    /**
+     * A possible scam never becomes a task ([os.meka.core.domain.MailScamTaskRules]): a task still open, or a Waiting for
+     * item, made from an email now flagged as a possible scam or sent to Junk is removed, with one line in Activity.
+     * Caller is on the core.
+     */
+    private fun removeScamTasks() {
+        val S = os.meka.core.domain.MailScamTaskRules
+        val blocked = activity.mailItems().filter(S::blocked)
+        if (blocked.isEmpty()) return
+        val waiting by lazy { lists.waitingItems().mapTo(HashSet()) { it.id } }
+        val strays = S.strays(
+            blocked,
+            openTask = { id -> liveTask(id) && tasks.get(id)?.lifecycle?.isTerminal == false },
+            liveWaiting = { it in waiting },
+        )
+        if (strays.isEmpty()) return
+        replica.batched {
+            strays.forEach { s ->
+                s.taskId?.let { runCatching { tasks.delete(it) } }
+                s.waitingId?.let { runCatching { lists.deleteWaiting(it) } }
+                activity.recordScamTaskRemoved(s)
+            }
+        }
+    }
+
     private fun liveTask(id: String?): Boolean {
         val e = id?.let { replica.entity(os.meka.core.domain.EntityTypes.TASK, it) } ?: return false
         return !e.deleted
@@ -10011,6 +10037,7 @@ class MekaCore(
     private fun mailToTask(id: String, day: Long?): String {
         val R = os.meka.core.domain.MailNeedsRules
         val item = activity.mailItems().firstOrNull { it.id == id } ?: return R.UNKNOWN
+        if (os.meka.core.domain.MailScamTaskRules.blocked(item)) return os.meka.core.domain.MailScamTaskRules.BLOCKED_LINE
         val group = mailGroup(id)
         val cal = ZoneCalendar(timeZone)
         val taskId = tasks.createWithId(R.taskId(id), os.meka.core.domain.NewTask(R.taskTitle(item), notes = R.taskNotes(item, cal)))
@@ -10038,6 +10065,7 @@ class MekaCore(
     suspend fun waitingFromMailItem(id: String): String = onCore {
         val R = os.meka.core.domain.MailNeedsRules
         val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        if (os.meka.core.domain.MailScamTaskRules.blocked(item)) return@onCore os.meka.core.domain.MailScamTaskRules.BLOCKED_LINE
         val group = mailGroup(id)
         val waitingId = lists.addWaiting(R.taskTitle(item), item.from, os.meka.core.domain.ListRules.DEFAULT_CHASE_DAYS, withId = R.waitingId(id))
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.waitingFields(waitingId, nowMs()))
