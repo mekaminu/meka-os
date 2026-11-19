@@ -125,11 +125,11 @@ class ArchivedAllPagesScreensTest {
         turns(600)
     }
 
-    /** Every sender on the page, read from the top down, so rows a scroll hid still count. */
+    /** Every sender whose row is on the page (its "Sender 3 · sender 3.example" line, not the chips), top to bottom. */
     private fun senders(): Set<String> {
         toTop()
         val seen = mutableSetOf<String>()
-        fun read() = ScreenShots.texts(compose).forEach { t -> Regex("Sender \\d").findAll(t).forEach { seen += it.value } }
+        fun read() = ScreenShots.texts(compose).forEach { t -> Regex("(Sender \\d) · sender").findAll(t).forEach { seen += it.groupValues[1] } }
         read()
         compose.onNodeWithTag("archived-all").performScrollToIndex(7)
         turns(300)
