@@ -565,7 +565,7 @@ struct ArchivedAllSheet: View {
                             }
                         }
                     }
-                    .padding(MekaSpace.s)
+                    .padding(MekaSpace.m)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -585,7 +585,7 @@ struct ArchivedAllSheet: View {
                             }
                         }
                     }
-                    .padding(MekaSpace.s)
+                    .padding(MekaSpace.m)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -613,7 +613,7 @@ struct ArchivedAllSheet: View {
                     openEmail = openEmail == id ? nil : id
                 }
             } label: {
-                HStack(alignment: .center, spacing: MekaSpace.s) {
+                HStack(alignment: .center, spacing: MekaSpace.xs) {
                 if pickable {
                     Circle().fill(picked ? palette.accent : palette.background)
                         .overlay(Circle().stroke(picked ? palette.accent : palette.textTertiary, lineWidth: 2))

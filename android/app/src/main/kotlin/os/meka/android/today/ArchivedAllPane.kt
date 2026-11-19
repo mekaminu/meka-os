@@ -192,7 +192,7 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                     }
                     AnimatedVisibility(selecting, enter = unfold(), exit = fold()) {
                         val bar = MailTidiedBulkRules.bar(shown, selected)
-                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.s)) {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m)) {
                             Text(bar.line, style = MekaType.body, color = Meka.colors.textPrimary,
                                 modifier = Modifier.semantics { contentDescription = bar.spoken })
                             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -216,7 +216,7 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                     AnimatedVisibility(confirming && all != null && !selecting, enter = unfold(), exit = fold()) {
                         if (all != null) {
                             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                                .padding(MekaSpace.s).testTag(ARCHIVED_ALL_CONFIRM_TAG)) {
+                                .padding(MekaSpace.m).testTag(ARCHIVED_ALL_CONFIRM_TAG)) {
                                 Text(all.confirmTitle, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                                 Text(all.confirmBody, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -239,7 +239,7 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                     Text("${r.from} · ${r.meta}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                     val pickable = selecting && r.row.swipe?.any == true
                     if (pickable) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.s), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                             SelectRing(id in selected)
                             Column(Modifier.weight(1f)) {
                                 ArchivedEmailRowView(r.row, spokenAs = (if (id in selected) "Selected. " else "Not selected. ") + r.spoken.removeSuffix(". Opens its preview")) {
