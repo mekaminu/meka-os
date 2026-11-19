@@ -160,7 +160,8 @@ class NeedsYouScamScreensTest {
         reach(name, hasTestTag(NEEDS_YOU_SCAMS_TAG), "Possible scams to check")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
         ScreenShots.assertSensible(compose, name)
-        if (!onScreen(MailScamListRules.headline(1))) fail("$name: no \"${MailScamListRules.headline(1)}\" line")
+        // The headline is the section label, drawn in capitals.
+        if (!onScreen(MailScamListRules.headline(1).uppercase())) fail("$name: no \"${MailScamListRules.headline(1)}\" line")
         if (!byHand) return
         reach(name, hasTestTag("$NEEDS_YOU_MAIL_ROW_TAG-$scam") and hasClickAction(), "the possible scam's row")[0]
             .performSemanticsAction(SemanticsActions.OnClick)
