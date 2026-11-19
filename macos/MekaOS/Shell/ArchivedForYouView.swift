@@ -167,6 +167,7 @@ private struct ArchivedEmailGroupRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel([row.subject, row.chip, row.time, row.state].compactMap { $0 }.joined(separator: ", ") + ". Opens its preview")
+                .modifier(ArchivedSwipeMenu(row: row))
                 if openEmail == id {
                     ArchivedEmailPreviewView(row: row, lineState: line.state, palette: palette)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -197,6 +198,11 @@ private struct ArchivedEmailPreviewView: View {
     private func readerActions(_ p: ArchivedEmailPreview) -> [MailReaderAction] {
         let batchId = p.batchId, key = p.key
         var out: [MailReaderAction] = []
+        // Tidied mail, slice 3: Not junk first on a junk or scam email.
+        if let label = p.notJunk {
+            out.append(MailReaderAction(id: "NOT_JUNK", label: label, spoken: "\(label), \(p.subject)",
+                                        action: { model.askArchivedEmail(batchId: batchId, key: key, action: "NOT_JUNK") }))
+        }
         if let label = p.putBack {
             out.append(MailReaderAction(id: "PUT_BACK", label: label, spoken: "\(label), \(p.subject)",
                                         action: { model.askArchivedEmail(batchId: batchId, key: key, action: "PUT_BACK") }))
@@ -255,6 +261,11 @@ private struct ArchivedEmailPreviewView: View {
                         ArchivedPill(label: MailReaderRules.shared.READ_WHOLE, palette: palette,
                                      spoken: "\(MailReaderRules.shared.READ_WHOLE), \(p.subject)") {
                             MekaHaptics.light(); reading = true
+                        }
+                        if let label = p.notJunk {
+                            ArchivedPill(label: label, palette: palette, spoken: "\(label), \(p.subject)") {
+                                model.askArchivedEmail(batchId: p.batchId, key: p.key, action: "NOT_JUNK")
+                            }
                         }
                         if let label = p.putBack {
                             ArchivedPill(label: label, palette: palette, spoken: "\(label), \(p.subject)") {
@@ -328,6 +339,32 @@ private struct ArchivedEmailPreviewView: View {
         }
         .task(id: "\(row.key)|\(row.state ?? "")|\(lineState ?? "")") {
             preview = await model.archivedEmail(batchId: row.batchId, key: row.key)
+        }
+    }
+}
+
+/// Tidied mail, slice 3 (Meka 2026-11-18: "swipe right = put back, swipe left = Trash"): the Mac's same moves sit in
+/// the row's context menu and VoiceOver's actions (no swipe on a trackpad list); each asks with Undo on the bar.
+private struct ArchivedSwipeMenu: ViewModifier {
+    @Environment(CoreModel.self) private var model
+    let row: ArchivedEmailRow
+
+    func body(content: Content) -> some View {
+        if let sw = row.swipe {
+            let batchId = row.batchId, key = row.key
+            let right = sw.right?.name, left = sw.left?.name
+            let rightLabel = sw.rightLabel ?? "", trash = MailTidiedAskRules.shared.TRASH
+            content
+                .contextMenu {
+                    if let a = right { Button(rightLabel) { model.askArchivedEmail(batchId: batchId, key: key, action: a) } }
+                    if let a = left { Button(trash) { model.askArchivedEmail(batchId: batchId, key: key, action: a) } }
+                }
+                .accessibilityActions {
+                    if let a = right { Button(rightLabel) { model.askArchivedEmail(batchId: batchId, key: key, action: a) } }
+                    if let a = left { Button(trash) { model.askArchivedEmail(batchId: batchId, key: key, action: a) } }
+                }
+        } else {
+            content
         }
     }
 }
@@ -498,6 +535,7 @@ struct ArchivedAllSheet: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(r.spoken)
+            .modifier(ArchivedSwipeMenu(row: r.row))
             if openEmail == id {
                 ArchivedEmailPreviewView(row: r.row, lineState: "\(reads)", palette: palette)
                     .transition(.opacity.combined(with: .move(edge: .top)))

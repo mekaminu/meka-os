@@ -49,6 +49,8 @@ data class ArchivedEmailRow(
     val state: String? = null,
     /** The tidy it belongs to (slice 2: a tap opens [MailTidiedAskRules.preview] with both). */
     val batchId: String = "",
+    /** Tidied mail, slice 3: what a swipe right / left asks ([MailTidiedAskRules.swipes]); null where the list doesn't swipe. */
+    val swipe: MailTidiedSwipe? = null,
 )
 
 /** A sender's emails in one tidy: "Deliveroo · 4 promos" when several, else the sender alone. */
@@ -224,7 +226,8 @@ object MailTidiedRules {
             val rows = runs.map { r ->
                 val e = r.first()
                 val again = if (r.size > 1) " · ${r.size} times" else ""
-                ArchivedEmailRow(e.key, e.subject, chip(e) + again, time(e.receivedAtMs, today, cal), MailTidiedAskRules.state(batch, e.key), batch.id)
+                ArchivedEmailRow(e.key, e.subject, chip(e) + again, time(e.receivedAtMs, today, cal), MailTidiedAskRules.state(batch, e.key), batch.id,
+                    MailTidiedAskRules.swipes(batch, e, nowMs).takeIf { it.any })
             }
             val more = es.size - runs.sumOf { it.size }
             ArchivedEmailGroup(

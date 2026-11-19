@@ -195,4 +195,50 @@ class MailTidiedAsksTest {
         val b4 = b.with(mapOf(MailTidyBatchFields.UNDO_ASKED_AT to FieldValue.Int64(now)))
         assertNull(MailTidiedAskRules.preview(b4, promo.key, now, cal)?.trash)
     }
+
+    @Test
+    fun notJunkIsOfferedOnJunkAndScamsOnlyAndBringsItBack() {
+        val promo = email("m1", "Deliveroo", "2 for 1 tonight")
+        val spam = email("j1", "Prize Desk", "You won", MailTidy.JUNK_TRASH, null)
+        val scam = email("s1", "Bank Alerts", "Verify now", MailTidy.SCAM_JUNK, null)
+        val b = batch(listOf(promo, spam, scam))
+        val now = at(12 * 60 + 30)
+        assertNull(MailTidiedAskRules.preview(b, promo.key, now, cal)?.notJunk)
+        assertEquals("Not junk · keep Prize Desk", MailTidiedAskRules.preview(b, spam.key, now, cal)?.notJunk)
+        assertEquals("Not junk · keep Bank Alerts", MailTidiedAskRules.preview(b, scam.key, now, cal)?.notJunk)
+        // Asked: it's on its way back, so no Put back, Trash or Not junk again; Undo takes it off before the check.
+        val b1 = b.with(MailTidiedAskRules.ask(b, spam.key, MailTidiedAction.NOT_JUNK, now))
+        assertEquals(MailTidiedAction.NOT_JUNK.pending, MailTidiedAskRules.state(b1, spam.key))
+        val p1 = assertNotNull(MailTidiedAskRules.preview(b1, spam.key, now, cal))
+        assertNull(p1.putBack); assertNull(p1.notJunk); assertNull(p1.trash)
+        assertNull(MailTidiedAskRules.ask(b1, spam.key, MailTidiedAction.NOT_JUNK, now))
+        assertEquals("Not junk · Prize Desk's email goes back to the inbox and they're kept from now on",
+            MailTidiedAskRules.barLine(MailTidiedAction.NOT_JUNK, "Prize Desk"))
+        val b2 = b1.with(MailTidiedAskRules.unask(b1, spam.key, MailTidiedAction.NOT_JUNK))
+        assertEquals("Not junk · keep Prize Desk", MailTidiedAskRules.preview(b2, spam.key, now, cal)?.notJunk)
+        // The server's answer puts even the Junk review's email in the inbox.
+        val done = b1.with(MailTidiedAskRules.doneFields(b1, listOf(MailTidiedDone(spam.key, MailTidiedAction.NOT_JUNK, now + 1, "Back in the inbox · Prize Desk kept from now on"))))
+        assertEquals(MailPlace.INBOX, MailOpenRules.place(done, spam))
+        // Binned first: no Not junk.
+        val b3 = b.with(MailTidiedAskRules.ask(b, scam.key, MailTidiedAction.TRASH, now))
+        assertNull(MailTidiedAskRules.preview(b3, scam.key, now, cal)?.notJunk)
+    }
+
+    @Test
+    fun swipesPutBackRightAndTrashLeftOnlyWhileTheyCanBeAsked() {
+        val promo = email("m1", "Deliveroo", "2 for 1 tonight")
+        val spam = email("j1", "Prize Desk", "You won", MailTidy.JUNK_TRASH, null)
+        val b = batch(listOf(promo, spam))
+        val now = at(12 * 60 + 30)
+        assertEquals(MailTidiedSwipe(MailTidiedAction.PUT_BACK, "Put back", MailTidiedAction.TRASH, "Trash"), MailTidiedAskRules.swipes(b, promo, now))
+        // Junk already in Trash: right puts it back in Junk, nothing to the left.
+        assertEquals(MailTidiedSwipe(MailTidiedAction.PUT_BACK, "Put back in Junk", null, null), MailTidiedAskRules.swipes(b, spam, now))
+        // Once put back: no swipe either way; the row in the list carries none.
+        val b1 = b.with(MailTidiedAskRules.ask(b, promo.key, MailTidiedAction.PUT_BACK, now))
+        assertFalse(MailTidiedAskRules.swipes(b1, promo, now).any)
+        val rows = MailTidiedRules.groups(b1, b1.emails, now, cal).first.flatMap { it.rows }
+        assertNull(rows.first { it.key == promo.key }.swipe)
+        assertNotNull(rows.first { it.key == spam.key }.swipe)
+        assertNull(MailTidiedAskRules.swipes(b, "missing", now))
+    }
 }

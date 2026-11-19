@@ -94,6 +94,8 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
             undo(said) { runCatching { core.undoArchivedEmail(p.batchId, p.key, action.name) } }
         }
     }
+    // Tidied mail, slice 3: swipe right = put back, left = Trash, with Undo on the bar.
+    val swipe = rememberArchivedSwipe(core, undo)
     val l = list
     LazyColumn(
         Modifier.fillMaxSize().testTag("archived-all"),
@@ -153,7 +155,7 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                 val id = r.id
                 Column(Modifier.animateItem().fillMaxWidth()) {
                     Text("${r.from} · ${r.meta}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-                    ArchivedEmailRowView(r.row, spokenAs = r.spoken) { haptics.tick(); openEmail = if (openEmail == id) null else id }
+                    ArchivedEmailRowView(r.row, spokenAs = r.spoken, onSwipe = { a -> swipe(r.row, a) }) { haptics.tick(); openEmail = if (openEmail == id) null else id }
                     AnimatedVisibility(openEmail == id, enter = unfold(), exit = fold()) {
                         ArchivedEmailPreviewPanel(r.row, tick, core, ask)
                     }

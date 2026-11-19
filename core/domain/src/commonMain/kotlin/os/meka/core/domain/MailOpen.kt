@@ -62,6 +62,8 @@ object MailOpenRules {
         val back = b.undoneAtMs != null || b.emailDone.any {
             it.key == e.key && (it.action == MailTidiedAction.PUT_BACK || it.action == MailTidiedAction.KEEP)
         }
+        // Tidied mail, slice 3: Not junk brings even the Junk review's email to the inbox.
+        if (b.emailDone.any { it.key == e.key && it.action == MailTidiedAction.NOT_JUNK && it.note.startsWith("Back") }) return MailPlace.INBOX
         if (back) return if (junkReview) MailPlace.JUNK else MailPlace.INBOX
         return when (e.tidy) {
             MailTidy.TRASH, MailTidy.JUNK_TRASH -> MailPlace.TRASH

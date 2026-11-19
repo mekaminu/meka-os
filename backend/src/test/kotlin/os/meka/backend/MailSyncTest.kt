@@ -75,6 +75,8 @@ import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
 import os.meka.core.domain.MailTidiedAction
+import os.meka.core.domain.MailPlace
+import os.meka.core.domain.MailOpenRules
 import os.meka.core.domain.MailTidiedAsk
 import os.meka.core.domain.MailTidiedAskRules
 import os.meka.core.domain.MailTidiedRules
@@ -1780,6 +1782,40 @@ class MailSyncTest {
         assertTrue(gmail.mailbox.getValue("n1").inInbox)
         assertFalse(gmail.mailbox.getValue("n2").inInbox || gmail.mailbox.getValue("n3").inInbox)
         assertEquals(FieldValue.Text("Put back 1 email in the inbox"), tidies(ops).getValue(batchId)[MailTidyBatchFields.UNDO_NOTE])
+    }
+
+    @Test
+    fun notJunkOnABinnedJunkEmailBringsItToTheInboxAndKeepsTheSender() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += 2 * day
+        autopilotOn(ops, on = true)
+        gmail.junkBox["s1"] = junkMsg("s1", "prizes@win.example", "You have WON")
+        i.syncAccount(id)
+        assertEquals(mapOf("s1" to MailTidy.JUNK_TRASH), gmail.tidyCalls.single())
+        val batchId = tidies(ops).entries.single { (bid, f) -> MailAutopilotRules.readBatch(bid, f)!!.emails.any { it.tidy == MailTidy.JUNK_TRASH } }.key
+        // Tidied mail, slice 3: Not junk on it.
+        now += 60_000
+        val key = MailTidiedRules.key(id, "s1")
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.EMAIL_ASKS,
+            FieldValue.Text(MailTidiedAskRules.encodeAsks(listOf(MailTidiedAsk(key, MailTidiedAction.NOT_JUNK, now)))))
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        // Out of Trash into Junk, then on to the inbox the way a rescue goes.
+        assertTrue(gmail.mailbox.getValue("s1").inInbox)
+        assertFalse("s1" in gmail.junkBox || "s1" in gmail.trashBox)
+        assertEquals(mapOf("s1" to MailTidy.RESCUE), gmail.tidyCalls.last())
+        val sender = senders(ops).getValue(MailUnsubscribeRules.senderId(id, "prizes@win.example"))
+        assertEquals(FieldValue.Text(MailSenderRule.KEEP.name), sender[MailSenderFields.RULE])
+        val b = MailAutopilotRules.readBatch(batchId, tidies(ops).getValue(batchId))!!
+        assertTrue(MailTidiedAskRules.pending(b).isEmpty())
+        val note = MailTidiedAskRules.state(b, key)!!
+        assertTrue(note.startsWith("Back in the inbox") && note.endsWith("kept from now on"), note)
+        assertFalse("@" in note)
+        assertEquals(MailPlace.INBOX, MailOpenRules.place(b, b.emails.single { it.key == key }))
     }
 
     @Test

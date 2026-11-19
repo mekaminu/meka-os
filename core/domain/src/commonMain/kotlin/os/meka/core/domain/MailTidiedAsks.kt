@@ -26,11 +26,31 @@ enum class MailTidiedAction(
      */
     TRASH("Moving to Trash at Navilife's next check…"),
     /** Slice 2: **Block sender** — this email to Trash and the sender's later emails straight to Trash ([MailSenderRule.BLOCK]). */
-    BLOCK("Blocking this sender at Navilife's next check…");
+    BLOCK("Blocking this sender at Navilife's next check…"),
+    /**
+     * Tidied mail, slice 3 (Meka, 2026-11-18 23:34: "Not junk / Always keep this sender"): on a junk or scam email, **Not
+     * junk** — the email back in the inbox (out of Trash or Junk) and the sender's Always keep ([MailSenderRule.KEEP]).
+     */
+    NOT_JUNK("Moving it to the inbox and keeping this sender at Navilife's next check…");
 
     companion object {
         fun of(stored: String?): MailTidiedAction? = entries.firstOrNull { it.name == stored }
     }
+}
+
+/**
+ * Tidied mail, slice 3: what a swipe on an email's row does (Meka 2026-11-18: "swipe right = put back, swipe left =
+ * Trash, with Undo"); a side is null when that move can't be asked now, and the row doesn't move that way.
+ */
+data class MailTidiedSwipe(
+    val right: MailTidiedAction?,
+    /** "Put back" / "Put back in Junk". */
+    val rightLabel: String?,
+    val left: MailTidiedAction?,
+    /** "Trash". */
+    val leftLabel: String?,
+) {
+    val any: Boolean get() = right != null || left != null
 }
 
 /** One ask on one email of a tidy. */
@@ -66,6 +86,8 @@ data class ArchivedEmailPreview(
     val trash: String? = null,
     /** Slice 2: "Block Deliveroo", or null (a scam's sender is blocked already; asked; back in the inbox). */
     val block: String? = null,
+    /** Tidied mail, slice 3: "Not junk · keep Deliveroo" on a junk or scam email, or null. */
+    val notJunk: String? = null,
     val note: String,
     val spoken: String,
     /** Slice 4: "Open in Gmail" / "Open in Outlook" ([MailOpenRules.label]); null where the caller didn't ask. */
@@ -82,7 +104,8 @@ object MailTidiedAskRules {
     const val MAX_NOTE = 140
     const val NO_LINES = "No preview kept for this email · open it in Gmail or Outlook to read it all"
     const val NOTE = "Shown as the sender wrote it, nothing in it is acted on. Put back returns just this email; " +
-        "Always keep also stops Autopilot tidying this sender. Move to Trash keeps it in Trash for 30 days."
+        "Always keep also stops Autopilot tidying this sender. Move to Trash keeps it in Trash for 30 days. " +
+        "Swipe an email right to put it back, left to move it to Trash."
     const val TRASH = "Move to Trash"
     fun blockLabel(from: String) = "Block $from"
     /** The server's answers. */
@@ -101,6 +124,10 @@ object MailTidiedAskRules {
     private val BLOCKABLE = setOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.RESCUE)
     /** What can be unsubscribed from here: newsletters and promos (never spam: that only confirms the address). */
     private val UNSUBSCRIBABLE = setOf(MailTidy.NEWSLETTER, MailTidy.ARCHIVE)
+    /** Tidied mail, slice 3: what can be called Not junk: the Junk review's binned junk and a sure scam moved to Junk. */
+    private val NOT_JUNKABLE = setOf(MailTidy.JUNK_TRASH, MailTidy.SCAM_JUNK)
+    fun notJunkLabel(from: String) = "Not junk · keep $from"
+    const val SWIPE_TRASH = "Trash"
 
     private fun clean(s: String) = s.map { if (it == '\t' || it == '\n' || it == '\r' || it.code < 0x20) ' ' else it }
         .joinToString("").trim().take(MAX_NOTE)
@@ -147,7 +174,7 @@ object MailTidiedAskRules {
     fun available(b: MailTidyBatch, e: MailTidiedEmail, nowMs: Long): Set<MailTidiedAction> {
         if (!inWindow(b, nowMs) || b.backlog) return emptySet()
         val asked = b.emailAsks.filter { it.key == e.key }.map { it.action }.toSet()
-        val back = MailTidiedAction.PUT_BACK in asked || MailTidiedAction.KEEP in asked
+        val back = MailTidiedAction.PUT_BACK in asked || MailTidiedAction.KEEP in asked || MailTidiedAction.NOT_JUNK in asked
         // Slice 2: once it's asked to Trash (or blocked) it isn't put back or kept from here; once back, it isn't trashed.
         val binned = MailTidiedAction.TRASH in asked || MailTidiedAction.BLOCK in asked
         return buildSet {
@@ -156,8 +183,26 @@ object MailTidiedAskRules {
             if (b.canUndo && !back && !binned && e.tidy in TRASHABLE) add(MailTidiedAction.TRASH)
             if (b.canUndo && !back && !binned && e.tidy in BLOCKABLE && e.domain != null) add(MailTidiedAction.BLOCK)
             if (e.unsubscribe && e.tidy in UNSUBSCRIBABLE && MailTidiedAction.UNSUBSCRIBE !in asked) add(MailTidiedAction.UNSUBSCRIBE)
+            if (b.canUndo && !back && !binned && e.tidy in NOT_JUNKABLE) add(MailTidiedAction.NOT_JUNK)
         }
     }
+
+    private fun junkReview(e: MailTidiedEmail) = e.tidy == MailTidy.JUNK_TRASH || e.tidy == MailTidy.RESCUE
+
+    /** Tidied mail, slice 3: the row's swipes: right puts it back where it was, left moves it to Trash; each only while it can be asked. */
+    fun swipes(b: MailTidyBatch, e: MailTidiedEmail, nowMs: Long): MailTidiedSwipe {
+        val can = available(b, e, nowMs)
+        val right = MailTidiedAction.PUT_BACK.takeIf { it in can }
+        val left = MailTidiedAction.TRASH.takeIf { it in can }
+        return MailTidiedSwipe(
+            right, right?.let { if (junkReview(e)) "Put back in Junk" else ArchivedForYouRules.PUT_BACK },
+            left, left?.let { SWIPE_TRASH },
+        )
+    }
+
+    /** Tidied mail, slice 3: the same for an email named by its key, or null when it isn't in [b]. */
+    fun swipes(b: MailTidyBatch, key: String, nowMs: Long): MailTidiedSwipe? =
+        b.emails.firstOrNull { it.key == key }?.let { swipes(b, it, nowMs) }
 
     /** The ask's write, or null when it can't be asked (gone, already asked, too old). */
     fun ask(b: MailTidyBatch, key: String, action: MailTidiedAction, nowMs: Long): Map<String, FieldValue>? {
@@ -180,6 +225,7 @@ object MailTidiedAskRules {
         MailTidiedAction.UNSUBSCRIBE -> "Unsubscribing from $from at Navilife's next check"
         MailTidiedAction.TRASH -> "Moving $from's email to Trash at Navilife's next check"
         MailTidiedAction.BLOCK -> "Blocking $from · this email and their later ones go to Trash"
+        MailTidiedAction.NOT_JUNK -> "Not junk · $from's email goes back to the inbox and they're kept from now on"
     }
 
     /** The preview of one email, or null when the tidy or the email isn't there any more. */
@@ -189,7 +235,7 @@ object MailTidiedAskRules {
         val day = cal.epochDayOf(e.receivedAtMs)
         val time = "${CivilDate.shortLabel(day)} · ${LocalClock.formatMinute(cal.minuteOfDay(e.receivedAtMs))}"
         val meta = listOfNotNull(e.domain, b.account).joinToString(" · ")
-        val junk = e.tidy == MailTidy.JUNK_TRASH || e.tidy == MailTidy.RESCUE
+        val junk = junkReview(e)
         val chip = MailTidiedRules.chip(e)
         val state = state(b, key)
         return ArchivedEmailPreview(
@@ -200,6 +246,7 @@ object MailTidiedAskRules {
             unsubscribe = if (MailTidiedAction.UNSUBSCRIBE in can) "Unsubscribe from ${e.from}" else null,
             trash = if (MailTidiedAction.TRASH in can) TRASH else null,
             block = if (MailTidiedAction.BLOCK in can) blockLabel(e.from) else null,
+            notJunk = if (MailTidiedAction.NOT_JUNK in can) notJunkLabel(e.from) else null,
             note = NOTE,
             spoken = listOfNotNull("${e.from}, $meta", e.subject, "$chip, $time", e.preview ?: NO_LINES, state).joinToString(". ") + ".",
         )

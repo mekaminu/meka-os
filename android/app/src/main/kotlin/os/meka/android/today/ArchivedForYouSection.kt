@@ -30,7 +30,27 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import os.meka.android.designsystem.MekaChoreography
+import os.meka.android.designsystem.MotionMath
+import os.meka.android.designsystem.SwipeBackdrop
+import os.meka.android.designsystem.SwipeGlyph
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaMotion
@@ -84,6 +104,8 @@ internal fun ArchivedForYouSection(
             undo(said) { runCatching { core.undoArchivedEmail(p.batchId, p.key, action.name) } }
         }
     }
+    // Tidied mail, slice 3: a swipe asks the same, with Undo on the bar.
+    val swipe = rememberArchivedSwipe(core, undo)
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).testTag("archived-for-you"),
@@ -113,7 +135,7 @@ internal fun ArchivedForYouSection(
                         ArchivedLineRow(
                             line, core, openEmail,
                             onOpen = { id -> haptics.tick(); openEmail = if (openEmail == id) null else id },
-                            onAsk = ask,
+                            onAsk = ask, onSwipe = swipe,
                         ) {
                             haptics.light()
                             scope.launch { runCatching { core.undoMailTidy(line.id) }.getOrNull()?.let { undo(it.line, null) } }
@@ -148,7 +170,7 @@ internal fun ArchivedForYouSection(
 @Composable
 private fun ArchivedLineRow(
     line: ArchivedForYouLine, core: MekaCore, openEmail: String?, onOpen: (String) -> Unit,
-    onAsk: (ArchivedEmailPreview, MailTidiedAction) -> Unit, onPutBack: () -> Unit,
+    onAsk: (ArchivedEmailPreview, MailTidiedAction) -> Unit, onSwipe: (ArchivedEmailRow, MailTidiedAction) -> Unit, onPutBack: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().testTag("archived-${line.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -171,7 +193,7 @@ private fun ArchivedLineRow(
                 Modifier.fillMaxWidth().padding(start = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {
-                line.emails.forEach { g -> androidx.compose.runtime.key(g.id) { ArchivedEmailGroupRow(g, line, core, openEmail, onOpen, onAsk) } }
+                line.emails.forEach { g -> androidx.compose.runtime.key(g.id) { ArchivedEmailGroupRow(g, line, core, openEmail, onOpen, onAsk, onSwipe) } }
                 line.emailsMore?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
             }
         }
@@ -185,7 +207,7 @@ private fun ArchivedLineRow(
 @Composable
 private fun ArchivedEmailGroupRow(
     g: ArchivedEmailGroup, line: ArchivedForYouLine, core: MekaCore, openEmail: String?, onOpen: (String) -> Unit,
-    onAsk: (ArchivedEmailPreview, MailTidiedAction) -> Unit,
+    onAsk: (ArchivedEmailPreview, MailTidiedAction) -> Unit, onSwipe: (ArchivedEmailRow, MailTidiedAction) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().testTag("archived-email-${g.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = "${g.title}, ${g.meta}" }) {
@@ -195,7 +217,7 @@ private fun ArchivedEmailGroupRow(
         g.rows.forEach { r ->
             val id = "${r.batchId}|${r.key}"
             androidx.compose.runtime.key(id) {
-                ArchivedEmailRowView(r, onClick = { onOpen(id) })
+                ArchivedEmailRowView(r, onSwipe = { a -> onSwipe(r, a) }, onClick = { onOpen(id) })
                 AnimatedVisibility(openEmail == id, enter = unfold(), exit = fold()) {
                     ArchivedEmailPreviewPanel(r, line.state, core, onAsk)
                 }
@@ -205,11 +227,92 @@ private fun ArchivedEmailGroupRow(
     }
 }
 
+/** Tidied mail, slice 3: what a swipe on a row asks of the core, the bar's line and its Undo after. */
 @Composable
-internal fun ArchivedEmailRowView(r: ArchivedEmailRow, spokenAs: String? = null, onClick: () -> Unit) {
+internal fun rememberArchivedSwipe(core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit): (ArchivedEmailRow, MailTidiedAction) -> Unit {
+    val scope = rememberCoroutineScope()
+    val latestUndo by rememberUpdatedState(undo)
+    return remember<(ArchivedEmailRow, MailTidiedAction) -> Unit>(core) {
+        { r, action ->
+            scope.launch {
+                val said = runCatching { core.askArchivedEmail(r.batchId, r.key, action.name) }.getOrNull() ?: return@launch
+                latestUndo(said) { runCatching { core.undoArchivedEmail(r.batchId, r.key, action.name) } }
+            }
+            Unit
+        }
+    }
+}
+
+/**
+ * One tidied email's row. Tidied mail, slice 3 (Meka 2026-11-18): where [r]'s swipe allows it, a swipe right washes in
+ * the gold Put back layer and a swipe left the critical Trash layer; a tick haptic arms each at the catalogue's arm
+ * distance, letting go asks it (light haptic) with Undo on the bar, and the row springs back. TalkBack offers both as
+ * actions. Reduced motion: the row springs back at once.
+ */
+@Composable
+internal fun ArchivedEmailRowView(
+    r: ArchivedEmailRow, spokenAs: String? = null, onSwipe: ((MailTidiedAction) -> Unit)? = null, onClick: () -> Unit,
+) {
     val spoken = spokenAs ?: (listOfNotNull(r.subject, r.chip, r.time, r.state).joinToString(", ") + ". Opens its preview")
+    val sw = r.swipe?.takeIf { onSwipe != null }
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val threshold = with(density) { MekaChoreography.swipeArmDistanceDp.dp.toPx() }
+    var dx by remember(r.key) { mutableFloatStateOf(0f) }
+    var armed by remember(r.key) { mutableIntStateOf(0) }
+    val act by rememberUpdatedState(onSwipe)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val max = constraints.maxWidth.toFloat().coerceAtLeast(threshold * 1.5f)
+        val progress = MotionMath.swipeProgress(with(density) { abs(dx).toDp().value })
+        if (sw != null && dx > 0f) SwipeBackdrop(
+            side = 1, progress = progress, armed = armed > 0, glyph = SwipeGlyph.OPEN,
+            label = sw.rightLabel.orEmpty(), fill = Meka.colors.accent, content = Meka.colors.onAccent,
+        )
+        if (sw != null && dx < 0f) SwipeBackdrop(
+            side = -1, progress = progress, armed = armed < 0, glyph = SwipeGlyph.HIDE,
+            label = sw.leftLabel.orEmpty(), fill = Meka.colors.critical, content = Meka.colors.background,
+        )
+        val drag = rememberDraggableState { delta ->
+            val s = sw ?: return@rememberDraggableState
+            val lo = if (s.left != null) -max else 0f
+            val hi = if (s.right != null) max else 0f
+            dx = (dx + delta).coerceIn(lo, hi)
+            val now = MotionMath.swipeArmed(with(density) { dx.toDp().value })
+            if (now != armed) { if (now != 0) haptics.tick(); armed = now }
+        }
+        ArchivedEmailRowBody(
+            r, spoken,
+            Modifier.offset { IntOffset(dx.roundToInt(), 0) }
+                .clip(RoundedCornerShape(MekaRadius.s)).background(if (dx != 0f) Meka.colors.surfaceRaised else androidx.compose.ui.graphics.Color.Transparent)
+                .then(
+                    if (sw == null) Modifier else Modifier.draggable(
+                        orientation = Orientation.Horizontal, state = drag,
+                        onDragStopped = {
+                            val side = armed
+                            armed = 0
+                            val action = if (side > 0) sw.right else if (side < 0) sw.left else null
+                            if (action != null) { haptics.light(); act?.invoke(action) }
+                            scope.launch { animate(dx, 0f, animationSpec = MekaMotion.complete(reduced)) { v, _ -> dx = v } }
+                        },
+                    ),
+                )
+                .semantics {
+                    if (sw != null) customActions = listOfNotNull(
+                        sw.right?.let { a -> CustomAccessibilityAction(sw.rightLabel.orEmpty()) { act?.invoke(a); true } },
+                        sw.left?.let { a -> CustomAccessibilityAction(MailTidiedAskRules.TRASH) { act?.invoke(a); true } },
+                    )
+                },
+            onClick,
+        )
+    }
+}
+
+@Composable
+private fun ArchivedEmailRowBody(r: ArchivedEmailRow, spoken: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button, onClick = onClick)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = spoken }
             .padding(vertical = MekaSpace.xxs),
     ) {
@@ -254,6 +357,8 @@ internal fun ArchivedEmailPreviewPanel(
             pv.state?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
         }
         val actions = listOfNotNull(
+            // Tidied mail, slice 3: Not junk first on a junk or scam email.
+            pv.notJunk?.let { it to MailTidiedAction.NOT_JUNK },
             pv.putBack?.let { it to MailTidiedAction.PUT_BACK }, pv.keep?.let { it to MailTidiedAction.KEEP },
             pv.unsubscribe?.let { it to MailTidiedAction.UNSUBSCRIBE },
             // Tidied mail, slice 2 (Meka 2026-11-18): Move to Trash and Block sender, Undo on the bar until the next check.

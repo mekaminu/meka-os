@@ -185,7 +185,7 @@ object MailAskRules {
                 e.tidy != MailTidy.KEEP && nowMs - e.receivedAtMs <= MailNeedsRules.WINDOW_MS && e.receivedAtMs <= nowMs + 60_000L &&
                     tidiedMatches(e, t)
             }.map { e ->
-                MailTidiedHit(e, b.account, b.undoneAtMs != null || b.emailDone.any { it.key == e.key && it.action == MailTidiedAction.PUT_BACK })
+                MailTidiedHit(e, b.account, b.undoneAtMs != null || b.emailDone.any { it.key == e.key && (it.action == MailTidiedAction.PUT_BACK || it.action == MailTidiedAction.NOT_JUNK) })
             }
         }.sortedWith(compareByDescending<MailTidiedHit> { it.email.receivedAtMs }.thenBy { it.email.key }).distinctBy { it.email.key }
     }

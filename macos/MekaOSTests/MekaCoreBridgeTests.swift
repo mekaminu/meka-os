@@ -4712,4 +4712,28 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(LeavePageRules.shared.STEPPER_WIDEST, "60 days")
         XCTAssertEqual(LeavePageRules.shared.yearStartLabel(month: 4), "1 Apr")
     }
+
+    /// Tidied mail, slice 3: the row's swipes (the Mac's context menu) and Not junk on a junk email come through the bridge.
+    func testTidiedMailSwipesAndNotJunkReachTheMac() {
+        let at: Int64 = 1_800_000_000_000
+        let promo = MailTidiedEmail(key: "k1", tidy: .archive, sort: nil, receivedAtMs: at - 60_000, from: "Deliveroo",
+                                    domain: "shop.example", subject: "2 for 1", pence: nil, unsubscribe: false, preview: nil)
+        let junk = MailTidiedEmail(key: "k2", tidy: .junkTrash, sort: nil, receivedAtMs: at - 60_000, from: "Prize Desk",
+                                   domain: "win.example", subject: "You won", pence: nil, unsubscribe: false, preview: nil)
+        let counts: [MailTidy: KotlinInt] = [.archive: KotlinInt(int: 1), .junkTrash: KotlinInt(int: 1)]
+        let fields = MailAutopilotRules.shared.batchFields(atMs: at, account: "Personal", counts: counts, receipts: [], returns: 0, warranties: 0)
+            .merging(MailTidiedRules.shared.fields(emails: [promo, junk])) { _, b in b }
+        guard let b = MailAutopilotRules.shared.readBatch(id: "mt1", f: fields) else { return XCTFail("no batch") }
+        let now = at + 60_000
+        let sw = MailTidiedAskRules.shared.swipes(b: b, e: promo, nowMs: now)
+        XCTAssertEqual(sw.right?.name, "PUT_BACK")
+        XCTAssertEqual(sw.left?.name, "TRASH")
+        XCTAssertEqual(sw.rightLabel, "Put back")
+        let js = MailTidiedAskRules.shared.swipes(b: b, e: junk, nowMs: now)
+        XCTAssertEqual(js.rightLabel, "Put back in Junk")
+        XCTAssertNil(js.left)
+        XCTAssertTrue(MailTidiedAskRules.shared.available(b: b, e: junk, nowMs: now).contains(MailTidiedAction.notJunk))
+        XCTAssertFalse(MailTidiedAskRules.shared.available(b: b, e: promo, nowMs: now).contains(MailTidiedAction.notJunk))
+        XCTAssertEqual(MailTidiedAskRules.shared.notJunkLabel(from: "Prize Desk"), "Not junk · keep Prize Desk")
+    }
 }

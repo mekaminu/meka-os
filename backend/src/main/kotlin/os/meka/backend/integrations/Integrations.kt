@@ -2368,6 +2368,16 @@ class Integrations(
      * by its key among the tidy's own moves, so an ask can't reach any other email. A provider failure leaves the ask for
      * the next check.
      */
+    /** Always keep on a sender (its entity made if Autopilot hadn't published it: the account's label, name and domain, never the address). */
+    private fun keepSender(a: AccountRow, account: String, from: String, address: String, receivedAtMs: Long, atMs: Long) {
+        val id = MailUnsubscribeRules.senderId(a.id, address)
+        val current = reader.entity(a.householdId, EntityTypes.MAIL_SENDER, id)
+        val base = if (current?.get(MailSenderFields.NAME) == null) MailUnsubscribeRules.senderFields(
+            account, from, MailSortRules.domain(address), UnsubscribeMethod.NONE, receivedAtMs, 1,
+        ) else emptyMap()
+        writeSender(a, id, base + MailSenderRuleRules.fields(MailSenderRule.KEEP, atMs), rewrite = setOf(MailSenderFields.RULE, MailSenderFields.RULE_AT))
+    }
+
     private fun tidiedEmailAsks(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
         val batches = reader.entities(a.householdId, EntityTypes.MAIL_TIDY)
             .mapNotNull { (id, f) -> MailAutopilotRules.readBatch(id, f) }
@@ -2411,6 +2421,14 @@ class Integrations(
                         backKeys += ask.key
                     }
                 }
+                // Tidied mail, slice 3: Not junk on the Junk review's binned junk: out of Trash it's back in Junk, so it
+                // goes on to the inbox the way a rescue does (Gmail: Spam off, inbox, starred; Outlook: Inbox, flagged).
+                var rescued: Boolean? = null
+                if (ask.action == MailTidiedAction.NOT_JUNK && putBack && b.canUndo && item.tidy == MailTidy.JUNK_TRASH && backId != null) {
+                    val (moved, _) = m.tidyKept(token, mapOf(backId to MailTidy.RESCUE))
+                    rescued = backId in moved
+                    moved[backId]?.let { ms.neverTidy(a.id, listOf(it)) }
+                }
                 val h = header(item.id, item.movedId, backId)
                 val from = h?.let { MailUnsubscribeRules.displayName(it.fromName, it.fromAddress) } ?: b.emails.firstOrNull { it.key == ask.key }?.from ?: "the sender"
                 val note = when (ask.action) {
@@ -2418,13 +2436,19 @@ class Integrations(
                     MailTidiedAction.KEEP -> {
                         val address = h?.fromAddress
                         if (h == null || address == null) "Couldn't find that sender" else {
-                            val id = MailUnsubscribeRules.senderId(a.id, address)
-                            val current = reader.entity(a.householdId, EntityTypes.MAIL_SENDER, id)
-                            val base = if (current?.get(MailSenderFields.NAME) == null) MailUnsubscribeRules.senderFields(
-                                account, from, MailSortRules.domain(address), UnsubscribeMethod.NONE, h.receivedAtMs, 1,
-                            ) else emptyMap()
-                            writeSender(a, id, base + MailSenderRuleRules.fields(MailSenderRule.KEEP, ask.atMs), rewrite = setOf(MailSenderFields.RULE, MailSenderFields.RULE_AT))
+                            keepSender(a, account, from, address, h.receivedAtMs, ask.atMs)
                             "Kept · $from stays in the inbox from now on" + if (putBack && b.canUndo) " · this one is back" else ""
+                        }
+                    }
+                    MailTidiedAction.NOT_JUNK -> {
+                        val address = h?.fromAddress
+                        if (h != null && address != null) keepSender(a, account, from, address, h.receivedAtMs, ask.atMs)
+                        val kept = if (h != null && address != null) " · $from kept from now on" else ""
+                        when {
+                            !b.canUndo -> "Already back · the whole tidy was put back"
+                            !putBack -> "Couldn't put it back · it had gone"
+                            rescued == false -> "Back in Junk · couldn't reach the inbox, move it there in your mail$kept"
+                            else -> "Back in the inbox$kept"
                         }
                     }
                     MailTidiedAction.TRASH -> if (binned) MailTidiedAskRules.IN_TRASH else if (!b.canUndo) "Already back · the whole tidy was put back" else MailTidiedAskRules.GONE

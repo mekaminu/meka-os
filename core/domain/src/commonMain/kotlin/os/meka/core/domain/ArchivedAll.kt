@@ -128,7 +128,7 @@ object ArchivedAllRules {
                         val meta = listOfNotNull(e.domain, b.account).joinToString(" · ")
                         ArchivedAllRow(
                             id = "${b.id}|${e.key}",
-                            row = ArchivedEmailRow(e.key, e.subject, chip, time, state, b.id),
+                            row = ArchivedEmailRow(e.key, e.subject, chip, time, state, b.id, MailTidiedAskRules.swipes(b, e, nowMs).takeIf { it.any }),
                             from = e.from, meta = meta,
                             spoken = listOfNotNull(e.from, e.subject, chip, time, state).joinToString(", ") + ". Opens its preview",
                         )
