@@ -110,6 +110,8 @@ class ArchivedAllPagesScreensTest {
             }
         }
         turns()
+        // The list is read off the main thread: wait for it (up to 6 s more) rather than fail on a slow CI frame.
+        repeat(30) { if (!ScreenShots.texts(compose).any { it.contains("Trash all 8 promos") }) turns(200) }
         return core
     }
 
