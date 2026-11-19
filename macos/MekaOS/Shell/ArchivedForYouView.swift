@@ -407,6 +407,12 @@ struct ArchivedAllSheet: View {
     @State private var list: ArchivedAllList?
     @State private var openEmail: String?
     @State private var reads = 0
+    /// Tidied mail, slice 4: picking several, and the Trash all confirm.
+    @State private var selecting = false
+    @State private var selected: Set<String> = []
+    @State private var confirming = false
+
+    private var shown: [ArchivedAllRow] { (list?.days ?? []).flatMap { $0.rows } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -437,6 +443,7 @@ struct ArchivedAllSheet: View {
                 }
                 .staggeredAppear(1)
             }
+            if let l = list { bulkControls(l).staggeredAppear(1) }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if let l = list {
@@ -474,6 +481,9 @@ struct ArchivedAllSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: openEmail)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: sender)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: kind)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: selecting)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: confirming)
+        .onChange(of: (sender ?? "") + "|" + (kind ?? "")) { _, _ in selected = []; confirming = false }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: list?.summary)
         .onDisappear { model.archivedAllKind = nil }
         .task(id: (sender ?? "") + "|" + (kind ?? "")) {
@@ -508,14 +518,108 @@ struct ArchivedAllSheet: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
+    /// Slice 4: Select / Done and "Trash all 38 promos"; while selecting, the bar ("3 selected · Select all · Trash 3 ·
+    /// Put back 2"); Trash all unfolds its confirm (how many, Trash for 30 days, never deleted for good).
+    @ViewBuilder
+    private func bulkControls(_ l: ArchivedAllList) -> some View {
+        let rows = shown
+        let canPick = !MailTidiedBulkRules.shared.selectable(rows: rows).isEmpty
+        if canPick || l.trashAll != nil {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                HStack(spacing: MekaSpace.xs) {
+                    if canPick {
+                        ArchivedPill(label: selecting ? MailTidiedBulkRules.shared.DONE : MailTidiedBulkRules.shared.SELECT,
+                                     palette: palette, quiet: !selecting,
+                                     spoken: selecting ? "Stop selecting" : "Select several emails") {
+                            MekaHaptics.tick()
+                            selecting.toggle(); selected = []; confirming = false; openEmail = nil
+                        }
+                    }
+                    if let all = l.trashAll, !selecting {
+                        ArchivedPill(label: all.label, palette: palette, critical: true, spoken: all.spoken) {
+                            MekaHaptics.tick(); confirming.toggle()
+                        }
+                    }
+                }
+                if selecting {
+                    let bar = MailTidiedBulkRules.shared.bar(rows: rows, selected: selected)
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        Text(bar.line).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            .accessibilityLabel(bar.spoken)
+                        HStack(spacing: MekaSpace.xs) {
+                            ArchivedPill(label: bar.toggle, palette: palette, quiet: true, spoken: bar.toggle) {
+                                MekaHaptics.tick()
+                                selected = MailTidiedBulkRules.shared.toggled(rows: rows, selected: selected)
+                            }
+                            if let t = bar.trash {
+                                ArchivedPill(label: t, palette: palette, critical: true, spoken: "\(t), to Trash") {
+                                    let ids = rows.filter { selected.contains($0.id) && $0.row.swipe?.left?.name == "TRASH" }.map(\.id)
+                                    bulk(ids, "TRASH")
+                                }
+                            }
+                            if let b = bar.putBack {
+                                ArchivedPill(label: b, palette: palette, spoken: b) {
+                                    let ids = rows.filter { selected.contains($0.id) && $0.row.swipe?.right?.name == "PUT_BACK" }.map(\.id)
+                                    bulk(ids, "PUT_BACK")
+                                }
+                            }
+                        }
+                    }
+                    .padding(MekaSpace.s)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                if confirming, !selecting, let all = l.trashAll {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        Text(all.confirmTitle).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        Text(all.confirmBody).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: MekaSpace.xs) {
+                            ArchivedPill(label: all.confirmButton, palette: palette, critical: true, spoken: all.confirmButton) {
+                                bulk(all.ids, "TRASH")
+                            }
+                            ArchivedPill(label: MailTidiedBulkRules.shared.CANCEL, palette: palette, quiet: true,
+                                         spoken: MailTidiedBulkRules.shared.CANCEL) {
+                                MekaHaptics.tick(); confirming = false
+                            }
+                        }
+                    }
+                    .padding(MekaSpace.s)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    private func bulk(_ ids: [String], _ action: String) {
+        model.askArchivedEmails(ids: ids, action: action, kind: kind)
+        selected = []; selecting = false; confirming = false
+    }
+
     @ViewBuilder
     private func row(_ r: ArchivedAllRow) -> some View {
         let id = r.id
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            let pickable = selecting && (r.row.swipe?.any ?? false)
+            let picked = selected.contains(id)
             Button {
                 MekaHaptics.tick()
-                openEmail = openEmail == id ? nil : id
+                if pickable {
+                    if picked { selected.remove(id) } else { selected.insert(id) }
+                } else if !selecting {
+                    openEmail = openEmail == id ? nil : id
+                }
             } label: {
+                HStack(alignment: .center, spacing: MekaSpace.s) {
+                if pickable {
+                    Circle().fill(picked ? palette.accent : palette.background)
+                        .overlay(Circle().stroke(picked ? palette.accent : palette.textTertiary, lineWidth: 2))
+                        .frame(width: 18, height: 18)
+                        .animation(MekaMotion.expand(reduced: reduceMotion), value: picked)
+                }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("\(r.from) · \(r.meta)").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                     HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
@@ -531,12 +635,14 @@ struct ArchivedAllSheet: View {
                         Text(state).font(MekaType.itemMeta).foregroundStyle(palette.accent).transition(.opacity)
                     }
                 }
+                }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(r.spoken)
+            .accessibilityLabel(pickable ? (picked ? "Selected. " : "Not selected. ") + r.spoken : r.spoken)
+            .accessibilityAddTraits(pickable && picked ? .isSelected : [])
             .modifier(ArchivedSwipeMenu(row: r.row))
-            if openEmail == id {
+            if openEmail == id && !selecting {
                 ArchivedEmailPreviewView(row: r.row, lineState: "\(reads)", palette: palette)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }

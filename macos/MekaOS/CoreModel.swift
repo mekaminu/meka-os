@@ -5166,6 +5166,7 @@ final class CoreModel {
             run { _ = try await $0.laterTriageBack(messageIds: ids) }
         case .archivedSeen: unhideMail(); run { try await $0.undoSeenArchivedForYou() }
         case .archivedEmail(let batchId, let key, let action): run { try await $0.undoArchivedEmail(batchId: batchId, key: key, action: action) }
+        case .archivedEmails(let ids, let action): run { try await $0.undoArchivedEmails(ids: ids, action: action) }
         case .mailUnopened: run { try await $0.undoUnopened() }
         case .mailItem: unhideMail(); run { try await $0.undoMailItem() }
         case .mailChase: unhideMail(); run { try await $0.undoMailChase() }
@@ -8960,6 +8961,20 @@ final class CoreModel {
         }
     }
 
+    /// Tidied mail, slice 4: one move on several emails ("Trash 3", "Put back 2", "Trash all 38 promos"), with one Undo
+    /// on the bar. Only the row ids and Strings cross to the core.
+    func askArchivedEmails(ids: [String], action: String, kind: String?) {
+        guard let core, !ids.isEmpty else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let line = try await core.askArchivedEmails(ids: ids, action: action, kind: kind) {
+                    offerEventUndo(line, .archivedEmails(ids, action))
+                }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Caught up on the group digest (one group's card, or all of them): the cards leave Needs you here and on the Fold,
     /// with Undo on the bar. Only the groups' keys (Strings) cross to the core.
     func catchUpGroupDigest(_ gists: [GroupGist]) {
@@ -9313,6 +9328,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case archivedSeen
         /// Put back, Always keep or Unsubscribe on one archived email: the ask comes off (while the server hasn't acted).
         case archivedEmail(String, String, String)
+        /// Tidied mail, slice 4: a bulk move's row ids and its action's name.
+        case archivedEmails([String], String)
         /// Unsubscribe from all, Not now or Keep on "Not opened in 30 days": the last answer is taken back.
         case mailUnopened
         /// Done or Snooze on an email in "From your mail": the card comes back (and the email, if already archived).

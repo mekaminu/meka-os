@@ -71,6 +71,8 @@ data class ArchivedAllList(
     val empty: String?,
     val note: String,
     val spoken: String,
+    /** Tidied mail, slice 4: "Trash all 38 promos" behind a confirm, on a chosen kind; null otherwise or when none can go. */
+    val trashAll: ArchivedTrashAll? = null,
 )
 
 object ArchivedAllRules {
@@ -203,6 +205,12 @@ object ArchivedAllRules {
             },
             note = NOTE,
             spoken = "$TITLE. $summary.",
+            trashAll = MailTidiedBulkRules.trashAll(
+                chosenKind,
+                chosen?.let { bySender.getValue(it).first().second.from },
+                shownEmails.filter { (b, e) -> MailTidiedAction.TRASH in MailTidiedAskRules.available(b, e, nowMs) }
+                    .map { (b, e) -> "${b.id}|${e.key}" }.distinct(),
+            ),
         )
     }
 }

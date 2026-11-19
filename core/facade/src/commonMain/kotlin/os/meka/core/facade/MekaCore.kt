@@ -9195,6 +9195,32 @@ class MekaCore(
         os.meka.core.domain.ArchivedAllRules.list(activity.mailTidyBatches(), sender, nowMs(), ZoneCalendar(timeZone), kind)
     }
 
+    /**
+     * Tidied mail, slice 4: a **bulk** move ("Trash 3", "Put back 2", "Trash all 38 promos") on the emails [ids]
+     * ("batchId|key", as [os.meka.core.domain.ArchivedAllRow.id]); the same per-email asks as one tap, one write per
+     * tidy. Returns the bar's line ("Moving 38 promos to Trash at Navilife's next check"), or null when none could be
+     * asked. [kind] (a [os.meka.core.domain.TidiedKind] id) only words the line.
+     */
+    suspend fun askArchivedEmails(ids: List<String>, action: String, kind: String? = null): String? = onCore {
+        val a = os.meka.core.domain.MailTidiedAction.of(action) ?: return@onCore null
+        val batches = activity.mailTidyBatches()
+        val n = os.meka.core.domain.MailTidiedBulkRules.asked(batches, ids, a, nowMs())
+        val writes = os.meka.core.domain.MailTidiedBulkRules.ask(batches, ids, a, nowMs())
+        if (n == 0 || writes.isEmpty()) return@onCore null
+        writes.forEach { (bid, fields) -> replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_TIDY, bid, fields) }
+        archivedChanged()
+        os.meka.core.domain.MailTidiedBulkRules.barLine(a, n, os.meka.core.domain.TidiedKind.of(kind))
+    }
+
+    /** Undo on the bar after [askArchivedEmails]: the asks the server hasn't acted on yet come off. */
+    suspend fun undoArchivedEmails(ids: List<String>, action: String) = onCore {
+        val a = os.meka.core.domain.MailTidiedAction.of(action) ?: return@onCore
+        val writes = os.meka.core.domain.MailTidiedBulkRules.unask(activity.mailTidyBatches(), ids, a)
+        if (writes.isEmpty()) return@onCore
+        writes.forEach { (bid, fields) -> replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_TIDY, bid, fields) }
+        archivedChanged()
+    }
+
     /** Undo on the bar after [askArchivedEmail]: the ask comes off while the server hasn't acted on it yet. */
     suspend fun undoArchivedEmail(batchId: String, key: String, action: String) = onCore {
         val a = os.meka.core.domain.MailTidiedAction.of(action) ?: return@onCore
