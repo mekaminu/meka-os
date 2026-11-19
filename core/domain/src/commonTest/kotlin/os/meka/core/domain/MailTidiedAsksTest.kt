@@ -160,4 +160,39 @@ class MailTidiedAsksTest {
         assertEquals("Unsubscribed · the sender confirmed it", back.note)
         assertTrue(MailTidiedAskRules.decodeAsks("broken\nte1\tNOPE\t5").isEmpty())
     }
+
+    @Test
+    fun moveToTrashAndBlockAreOfferedWhereTheyFitAndRuleEachOtherOut() {
+        val promo = email("m1", "Deliveroo", "2 for 1 tonight")
+        val spam = email("j1", "Prize Desk", "You won", MailTidy.JUNK_TRASH, null)
+        val scam = email("s1", "Bank Alerts", "Verify now", MailTidy.SCAM_JUNK, null)
+        val b = batch(listOf(promo, spam, scam))
+        val now = at(12 * 60 + 30)
+        val p = assertNotNull(MailTidiedAskRules.preview(b, promo.key, now, cal))
+        assertEquals(MailTidiedAskRules.TRASH, p.trash)
+        assertEquals("Block Deliveroo", p.block)
+        // Already in Trash: neither; a sure scam's sender is blocked already: Trash only.
+        val sp = assertNotNull(MailTidiedAskRules.preview(b, spam.key, now, cal))
+        assertNull(sp.trash); assertNull(sp.block)
+        val sc = assertNotNull(MailTidiedAskRules.preview(b, scam.key, now, cal))
+        assertEquals(MailTidiedAskRules.TRASH, sc.trash); assertNull(sc.block)
+        // Asked to Trash: no Put back, Keep, Block or Trash again; the bar says so; Undo takes it off before the check.
+        val b1 = b.with(MailTidiedAskRules.ask(b, promo.key, MailTidiedAction.TRASH, now))
+        assertEquals(MailTidiedAction.TRASH.pending, MailTidiedAskRules.state(b1, promo.key))
+        val p1 = assertNotNull(MailTidiedAskRules.preview(b1, promo.key, now, cal))
+        assertNull(p1.putBack); assertNull(p1.keep); assertNull(p1.trash); assertNull(p1.block)
+        assertNull(MailTidiedAskRules.ask(b1, promo.key, MailTidiedAction.BLOCK, now))
+        assertEquals("Moving Deliveroo's email to Trash at Navilife's next check", MailTidiedAskRules.barLine(MailTidiedAction.TRASH, "Deliveroo"))
+        val b2 = b1.with(MailTidiedAskRules.unask(b1, promo.key, MailTidiedAction.TRASH))
+        assertEquals("Put back", MailTidiedAskRules.preview(b2, promo.key, now, cal)?.putBack)
+        // Put back first: no Trash or Block from here.
+        val b3 = b.with(MailTidiedAskRules.ask(b, promo.key, MailTidiedAction.PUT_BACK, now))
+        assertNull(MailTidiedAskRules.preview(b3, promo.key, now, cal)?.trash)
+        // The server's answer that it's in Trash is what a whole Undo leaves alone.
+        assertTrue(MailTidiedAskRules.trashed(MailTidiedDone(promo.key, MailTidiedAction.BLOCK, now, MailTidiedAskRules.IN_TRASH + " · Deliveroo blocked")))
+        assertFalse(MailTidiedAskRules.trashed(MailTidiedDone(promo.key, MailTidiedAction.TRASH, now, MailTidiedAskRules.GONE)))
+        // A whole Undo asked: nothing more to bin.
+        val b4 = b.with(mapOf(MailTidyBatchFields.UNDO_ASKED_AT to FieldValue.Int64(now)))
+        assertNull(MailTidiedAskRules.preview(b4, promo.key, now, cal)?.trash)
+    }
 }

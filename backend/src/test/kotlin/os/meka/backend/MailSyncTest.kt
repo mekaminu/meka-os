@@ -1737,6 +1737,52 @@ class MailSyncTest {
     }
 
     @Test
+    fun oneTidiedEmailCanBeMovedToTrashOrItsSenderBlockedAndAWholeUndoLeavesItInTrash() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["n1"] = newsletter("n1", "editor@weekly.example", "The Weekly", null)
+        gmail.mailbox["n2"] = newsletter("n2", "deals@shop.example", "Shop Deals", null)
+        gmail.mailbox["n3"] = newsletter("n3", "news@club.example", "Club News", null)
+        gmail.nextRound = { MailChanges(fetch = listOf("n1", "n2", "n3"), cursor = "h2") }
+        i.syncAccount(id)
+        val batchId = tidies(ops).keys.single()
+        // Tidied mail, slice 2: Move to Trash on Shop Deals, Block on Club News.
+        now += 60_000
+        fun key(m: String) = MailTidiedRules.key(id, m)
+        val asks = listOf(MailTidiedAsk(key("n2"), MailTidiedAction.TRASH, now), MailTidiedAsk(key("n3"), MailTidiedAction.BLOCK, now))
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.EMAIL_ASKS, FieldValue.Text(MailTidiedAskRules.encodeAsks(asks)))
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        val calls = gmail.tidyCalls.size
+        i.syncAccount(id)
+        // Each moved alone to Trash (never a permanent delete); nothing put back.
+        assertEquals(listOf(mapOf("n2" to MailTidy.TRASH), mapOf("n3" to MailTidy.TRASH)), gmail.tidyCalls.drop(calls).sortedBy { it.keys.single() })
+        assertTrue(listOf("n1", "n2", "n3").none { gmail.mailbox.getValue(it).inInbox })
+        // Club News is blocked; Shop Deals is left alone.
+        val club = senders(ops).getValue(MailUnsubscribeRules.senderId(id, "news@club.example"))
+        assertEquals(FieldValue.Text(MailSenderRule.BLOCK.name), club[MailSenderFields.RULE])
+        assertNull(senders(ops)[MailUnsubscribeRules.senderId(id, "deals@shop.example")]?.get(MailSenderFields.RULE))
+        val b = MailAutopilotRules.readBatch(batchId, tidies(ops).getValue(batchId))!!
+        assertTrue(MailTidiedAskRules.pending(b).isEmpty())
+        assertEquals(MailTidiedAskRules.IN_TRASH, MailTidiedAskRules.state(b, key("n2")))
+        assertEquals("${MailTidiedAskRules.IN_TRASH} · Club News blocked, their later emails go to Trash", MailTidiedAskRules.state(b, key("n3")))
+        assertFalse(b.emailDone.any { "@" in it.note })
+        // Undo of the whole tidy puts The Weekly back, and leaves the two he binned in Trash.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("n1").inInbox)
+        assertFalse(gmail.mailbox.getValue("n2").inInbox || gmail.mailbox.getValue("n3").inInbox)
+        assertEquals(FieldValue.Text("Put back 1 email in the inbox"), tidies(ops).getValue(batchId)[MailTidyBatchFields.UNDO_NOTE])
+    }
+
+    @Test
     fun undoPutsATidyBackAndItIsNeverTidiedAgain() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()

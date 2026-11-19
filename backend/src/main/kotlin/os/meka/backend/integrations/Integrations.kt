@@ -2337,8 +2337,11 @@ class Integrations(
             // Slice 8b: the backlog clean-up's tidy is put back a few hundred a check by [applyBacklog].
             .filter { MailAutopilotRules.undoDue(it, now()) && !it.backlog }
         for (b in due) {
-            val items = ms.tidied(a.id, b.id)
-            if (items.isEmpty()) continue // another account's tidy
+            val trashed = b.emailDone.filter(MailTidiedAskRules::trashed).map { it.key }.toSet()
+            // Tidied mail, slice 2: an email he moved to Trash himself stays there when the whole tidy is put back.
+            val all = ms.tidied(a.id, b.id)
+            if (all.isEmpty()) continue // another account's tidy
+            val items = all.filter { MailTidiedRules.key(a.id, it.id) !in trashed }
             // Completeness: an Undo a provider failure cut short protects what came back now (never tidied again) and
             // is tried again whole at the next check (putting back is idempotent; one already moved is skipped), and
             // only says it's done once a try got through.
@@ -2386,7 +2389,16 @@ class Integrations(
                 // Put back (Put back, and Always keep's own email): skipped when the whole tidy or this email is already back.
                 var backId: String? = null
                 var putBack = true
-                if (ask.action != MailTidiedAction.UNSUBSCRIBE && b.canUndo && ask.key !in backKeys) {
+                val binning = ask.action == MailTidiedAction.TRASH || ask.action == MailTidiedAction.BLOCK
+                // Tidied mail, slice 2: Move to Trash / Block sender move just this email (where the tidy put it) to
+                // Trash (Gmail's messages.trash, Outlook's Deleted Items: kept 30 days, never deleted for good).
+                var binned = false
+                if (binning && b.canUndo && ask.key !in backKeys && item.tidy != MailTidy.TRASH && item.tidy != MailTidy.JUNK_TRASH) {
+                    val (moved, interrupted) = m.tidyKept(token, mapOf(item.movedId to MailTidy.TRASH))
+                    if (interrupted) continue
+                    binned = item.movedId in moved
+                }
+                if (!binning && ask.action != MailTidiedAction.UNSUBSCRIBE && b.canUndo && ask.key !in backKeys) {
                     val (back, interrupted) = m.untidyKept(token, mapOf(item.movedId to item.tidy))
                     // Couldn't reach the provider: asked again next check. Not in the answer: the email had gone.
                     if (interrupted) continue
@@ -2413,6 +2425,19 @@ class Integrations(
                             ) else emptyMap()
                             writeSender(a, id, base + MailSenderRuleRules.fields(MailSenderRule.KEEP, ask.atMs), rewrite = setOf(MailSenderFields.RULE, MailSenderFields.RULE_AT))
                             "Kept · $from stays in the inbox from now on" + if (putBack && b.canUndo) " · this one is back" else ""
+                        }
+                    }
+                    MailTidiedAction.TRASH -> if (binned) MailTidiedAskRules.IN_TRASH else if (!b.canUndo) "Already back · the whole tidy was put back" else MailTidiedAskRules.GONE
+                    MailTidiedAction.BLOCK -> {
+                        val address = h?.fromAddress
+                        if (h == null || address == null) (if (binned) MailTidiedAskRules.IN_TRASH else "Couldn't find that sender") else {
+                            val id = MailUnsubscribeRules.senderId(a.id, address)
+                            val current = reader.entity(a.householdId, EntityTypes.MAIL_SENDER, id)
+                            val base = if (current?.get(MailSenderFields.NAME) == null) MailUnsubscribeRules.senderFields(
+                                account, from, MailSortRules.domain(address), UnsubscribeMethod.NONE, h.receivedAtMs, 1,
+                            ) else emptyMap()
+                            writeSender(a, id, base + MailSenderRuleRules.fields(MailSenderRule.BLOCK, ask.atMs), rewrite = setOf(MailSenderFields.RULE, MailSenderFields.RULE_AT))
+                            (if (binned) MailTidiedAskRules.IN_TRASH else "Couldn't move this one · it had gone") + " · $from blocked, their later emails go to Trash"
                         }
                     }
                     MailTidiedAction.UNSUBSCRIBE -> {

@@ -209,6 +209,15 @@ private struct ArchivedEmailPreviewView: View {
             out.append(MailReaderAction(id: "UNSUBSCRIBE", label: label, spoken: label,
                                         action: { model.askArchivedEmail(batchId: batchId, key: key, action: "UNSUBSCRIBE") }))
         }
+        // Tidied mail, slice 2: Move to Trash and Block sender.
+        if let label = p.trash {
+            out.append(MailReaderAction(id: "TRASH", label: label, spoken: "\(label), \(p.subject)",
+                                        action: { model.askArchivedEmail(batchId: batchId, key: key, action: "TRASH") }))
+        }
+        if let label = p.block {
+            out.append(MailReaderAction(id: "BLOCK", label: label, spoken: label,
+                                        action: { model.askArchivedEmail(batchId: batchId, key: key, action: "BLOCK") }))
+        }
         return out
     }
 
@@ -270,6 +279,22 @@ private struct ArchivedEmailPreviewView: View {
                             }
                         }
                     }
+                    // Tidied mail, slice 2 (Meka 2026-11-18): Move to Trash and Block sender on their own line (the
+                    // sheet is narrow), Undo on the bar until Navilife's next check.
+                    if p.trash != nil || p.block != nil {
+                        HStack(spacing: MekaSpace.xs) {
+                            if let label = p.trash {
+                                ArchivedPill(label: label, palette: palette, critical: true, spoken: "\(label), \(p.subject)") {
+                                    model.askArchivedEmail(batchId: p.batchId, key: p.key, action: "TRASH")
+                                }
+                            }
+                            if let label = p.block {
+                                ArchivedPill(label: label, palette: palette, critical: true, spoken: label) {
+                                    model.askArchivedEmail(batchId: p.batchId, key: p.key, action: "BLOCK")
+                                }
+                            }
+                        }
+                    }
                     if let hint = openLine ?? p.openHint {
                         Text(hint).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -311,6 +336,8 @@ private struct ArchivedPill: View {
     let label: String
     let palette: MekaPalette
     var quiet: Bool = false
+    /// Slice 2: Move to Trash and Block wear the critical colour.
+    var critical: Bool = false
     let spoken: String
     let action: () -> Void
 
@@ -318,7 +345,7 @@ private struct ArchivedPill: View {
         Button(label, action: action)
             .buttonStyle(MekaPressStyle())
             .font(MekaType.itemMeta)
-            .foregroundStyle(quiet ? palette.textSecondary : palette.accent)
+            .foregroundStyle(critical ? palette.critical : (quiet ? palette.textSecondary : palette.accent))
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(palette.surface, in: Capsule())
             .accessibilityLabel(spoken)

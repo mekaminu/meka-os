@@ -256,6 +256,8 @@ internal fun ArchivedEmailPreviewPanel(
         val actions = listOfNotNull(
             pv.putBack?.let { it to MailTidiedAction.PUT_BACK }, pv.keep?.let { it to MailTidiedAction.KEEP },
             pv.unsubscribe?.let { it to MailTidiedAction.UNSUBSCRIBE },
+            // Tidied mail, slice 2 (Meka 2026-11-18): Move to Trash and Block sender, Undo on the bar until the next check.
+            pv.trash?.let { it to MailTidiedAction.TRASH }, pv.block?.let { it to MailTidiedAction.BLOCK },
         )
         // Slice 4: Open in Gmail / Outlook — the link is made on the tap and handed to the browser, never kept.
         val uri = androidx.compose.ui.platform.LocalUriHandler.current
@@ -286,7 +288,8 @@ internal fun ArchivedEmailPreviewPanel(
             ArchivedPill(MailReaderRules.READ_WHOLE, spoken = "${MailReaderRules.READ_WHOLE}, ${pv.subject}") { reading = true }
             run {
                 actions.forEach { (label, action) ->
-                    ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = action == MailTidiedAction.UNSUBSCRIBE) { onAsk(pv, action) }
+                    ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = action == MailTidiedAction.UNSUBSCRIBE,
+                        critical = action == MailTidiedAction.TRASH || action == MailTidiedAction.BLOCK) { onAsk(pv, action) }
                 }
                 pv.openLabel?.let { label ->
                     ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = true) { openInMail() }
@@ -325,10 +328,11 @@ private fun ReasonChip(label: String) {
 }
 
 @Composable
-internal fun ArchivedPill(label: String, spoken: String, quiet: Boolean = false, onClick: () -> Unit) {
+internal fun ArchivedPill(label: String, spoken: String, quiet: Boolean = false, critical: Boolean = false, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemMeta,
-        color = if (quiet) Meka.colors.textSecondary else Meka.colors.accent,
+        // Slice 2: Move to Trash and Block wear the critical colour, as Junk it & block does.
+        color = if (critical) Meka.colors.critical else if (quiet) Meka.colors.textSecondary else Meka.colors.accent,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = spoken }

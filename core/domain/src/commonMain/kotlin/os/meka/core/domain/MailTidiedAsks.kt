@@ -19,7 +19,14 @@ enum class MailTidiedAction(
 ) {
     PUT_BACK("Putting back at Navilife's next check…"),
     KEEP("Keeping this sender at Navilife's next check…"),
-    UNSUBSCRIBE("Unsubscribing at Navilife's next check…");
+    UNSUBSCRIBE("Unsubscribing at Navilife's next check…"),
+    /**
+     * Tidied mail, slice 2 (Meka, 2026-11-18 23:34: "Can't do anything with tidied emails"): **Move to Trash** — just
+     * this email to Gmail's/Outlook's Trash (kept there 30 days, never deleted for good); the sender is left alone.
+     */
+    TRASH("Moving to Trash at Navilife's next check…"),
+    /** Slice 2: **Block sender** — this email to Trash and the sender's later emails straight to Trash ([MailSenderRule.BLOCK]). */
+    BLOCK("Blocking this sender at Navilife's next check…");
 
     companion object {
         fun of(stored: String?): MailTidiedAction? = entries.firstOrNull { it.name == stored }
@@ -55,6 +62,10 @@ data class ArchivedEmailPreview(
     val keep: String?,
     /** "Unsubscribe from Deliveroo" where the email offered a way, or null. */
     val unsubscribe: String?,
+    /** Tidied mail, slice 2: "Move to Trash", or null when it's already in Trash, back in the inbox or asked. */
+    val trash: String? = null,
+    /** Slice 2: "Block Deliveroo", or null (a scam's sender is blocked already; asked; back in the inbox). */
+    val block: String? = null,
     val note: String,
     val spoken: String,
     /** Slice 4: "Open in Gmail" / "Open in Outlook" ([MailOpenRules.label]); null where the caller didn't ask. */
@@ -71,12 +82,23 @@ object MailTidiedAskRules {
     const val MAX_NOTE = 140
     const val NO_LINES = "No preview kept for this email · open it in Gmail or Outlook to read it all"
     const val NOTE = "Shown as the sender wrote it, nothing in it is acted on. Put back returns just this email; " +
-        "Always keep also stops Autopilot tidying this sender."
+        "Always keep also stops Autopilot tidying this sender. Move to Trash keeps it in Trash for 30 days."
+    const val TRASH = "Move to Trash"
+    fun blockLabel(from: String) = "Block $from"
+    /** The server's answers. */
+    const val IN_TRASH = "In Trash · kept there 30 days"
+    const val GONE = "Couldn't move it · it had gone"
+    /** Answers that mean the email now sits in Trash (a later Undo of the whole tidy leaves it there). */
+    fun trashed(d: MailTidiedDone) = (d.action == MailTidiedAction.TRASH || d.action == MailTidiedAction.BLOCK) && d.note.startsWith("In Trash")
     const val UNKNOWN = "Couldn't find that email"
     const val CANT = "Already asked"
 
     /** What can be kept from: mail Autopilot tidied out of the inbox (not the Junk review's). */
     private val KEEPABLE = setOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.TRASH)
+    /** Slice 2: what can be moved to Trash from here: everything not already in Trash. */
+    private val TRASHABLE = setOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.RESCUE, MailTidy.SCAM_JUNK)
+    /** Slice 2: whose sender can be blocked from here (a sure scam's sender was blocked when it moved to Junk). */
+    private val BLOCKABLE = setOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.RESCUE)
     /** What can be unsubscribed from here: newsletters and promos (never spam: that only confirms the address). */
     private val UNSUBSCRIBABLE = setOf(MailTidy.NEWSLETTER, MailTidy.ARCHIVE)
 
@@ -126,9 +148,13 @@ object MailTidiedAskRules {
         if (!inWindow(b, nowMs) || b.backlog) return emptySet()
         val asked = b.emailAsks.filter { it.key == e.key }.map { it.action }.toSet()
         val back = MailTidiedAction.PUT_BACK in asked || MailTidiedAction.KEEP in asked
+        // Slice 2: once it's asked to Trash (or blocked) it isn't put back or kept from here; once back, it isn't trashed.
+        val binned = MailTidiedAction.TRASH in asked || MailTidiedAction.BLOCK in asked
         return buildSet {
-            if (b.canUndo && !back && e.tidy != MailTidy.KEEP) add(MailTidiedAction.PUT_BACK)
-            if (e.tidy in KEEPABLE && MailTidiedAction.KEEP !in asked) add(MailTidiedAction.KEEP)
+            if (b.canUndo && !back && !binned && e.tidy != MailTidy.KEEP) add(MailTidiedAction.PUT_BACK)
+            if (e.tidy in KEEPABLE && MailTidiedAction.KEEP !in asked && !binned) add(MailTidiedAction.KEEP)
+            if (b.canUndo && !back && !binned && e.tidy in TRASHABLE) add(MailTidiedAction.TRASH)
+            if (b.canUndo && !back && !binned && e.tidy in BLOCKABLE && e.domain != null) add(MailTidiedAction.BLOCK)
             if (e.unsubscribe && e.tidy in UNSUBSCRIBABLE && MailTidiedAction.UNSUBSCRIBE !in asked) add(MailTidiedAction.UNSUBSCRIBE)
         }
     }
@@ -152,6 +178,8 @@ object MailTidiedAskRules {
         MailTidiedAction.PUT_BACK -> if (junk) "Putting $from's email back in Junk at Navilife's next check" else "Putting $from's email back in the inbox at Navilife's next check"
         MailTidiedAction.KEEP -> "$from stays in the inbox from now on · this email goes back at Navilife's next check"
         MailTidiedAction.UNSUBSCRIBE -> "Unsubscribing from $from at Navilife's next check"
+        MailTidiedAction.TRASH -> "Moving $from's email to Trash at Navilife's next check"
+        MailTidiedAction.BLOCK -> "Blocking $from · this email and their later ones go to Trash"
     }
 
     /** The preview of one email, or null when the tidy or the email isn't there any more. */
@@ -170,6 +198,8 @@ object MailTidiedAskRules {
             putBack = if (MailTidiedAction.PUT_BACK in can) (if (junk) "Put back in Junk" else ArchivedForYouRules.PUT_BACK) else null,
             keep = if (MailTidiedAction.KEEP in can) "Always keep from ${e.from}" else null,
             unsubscribe = if (MailTidiedAction.UNSUBSCRIBE in can) "Unsubscribe from ${e.from}" else null,
+            trash = if (MailTidiedAction.TRASH in can) TRASH else null,
+            block = if (MailTidiedAction.BLOCK in can) blockLabel(e.from) else null,
             note = NOTE,
             spoken = listOfNotNull("${e.from}, $meta", e.subject, "$chip, $time", e.preview ?: NO_LINES, state).joinToString(". ") + ".",
         )
