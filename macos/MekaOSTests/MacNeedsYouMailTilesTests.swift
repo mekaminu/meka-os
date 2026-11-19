@@ -55,4 +55,21 @@ final class MacNeedsYouMailTilesTests: XCTestCase {
         XCTAssertEqual(NeedsYouGroupRules.shared.tidiedPeek(tiles: tiles),
                        "138 tidied · 33 newsletters · 71 promos · 33 junk & scams · 1 other")
     }
+
+    /// Meka 2026-11-18 23:34 (b), the Mac's gaps: the box holds only the parts with something to show, a card's gap
+    /// apart, and nothing after the last one.
+    @MainActor
+    func testTheMailBoxHoldsOnlyWhatShowsSoItEndsAtItsLastCard() {
+        let rules = NeedsYouMailRules.shared
+        let tiles = [tile("84", rules.TIDIED), tile("38", rules.PROMOS)]
+        let withTiles = NeedsYouMailSummary(tiles: tiles, question: nil, foot: rules.FOOT, spoken: "Tidied today: 84.", rest: nil)
+        let withQuestion = NeedsYouMailSummary(tiles: tiles, question: question(), foot: rules.FOOT, spoken: "Tidied today: 84.",
+                                               rest: nil)
+        XCTAssertEqual(NeedsYouMailGroup.parts(withTiles, archived: true, unopened: false), [.tiles])
+        XCTAssertEqual(NeedsYouMailGroup.parts(withTiles, archived: true, unopened: true), [.tiles, .offer])
+        XCTAssertEqual(NeedsYouMailGroup.parts(withQuestion, archived: true, unopened: true), [.tiles])
+        XCTAssertEqual(NeedsYouMailGroup.parts(nil, archived: true, unopened: true), [.log, .offer])
+        XCTAssertEqual(NeedsYouMailGroup.parts(nil, archived: false, unopened: false), [])
+        XCTAssertEqual(NeedsYouMailGroup.gap, MekaSpace.m)
+    }
 }

@@ -311,7 +311,8 @@ struct NeedsYouView: View {
             NeedsYouFyiRowsView(palette: palette, chats: needsYouPageRows(fyi, page), firstIndex: 0, boxed: true)
             pager(total: fyi.count, page: fyiPage) { fyiPage = $0 }
         case .chats:
-            GroupGistsView(palette: palette, firstIndex: 0)
+            // (b) the Mac's gaps: a part with nothing to show is left out, so it adds no spacing to the box.
+            if !model.digestGists.isEmpty { GroupGistsView(palette: palette, firstIndex: 0) }
             DiscordCardsView(palette: palette, firstIndex: 0)
         case .mail:
             // Slice 4b: the due ten-minute inbox is the box's lead line (Start, Not today with Undo on the bar); once
@@ -367,9 +368,13 @@ struct NeedsYouView: View {
             NeedsYouGroupLeadView(line: NeedsYouGroupRules.shared.listsLead(why: lists.why), button: lists.yesLabel,
                                   palette: palette) { model.decide(lists, .yes, reduced: reduceMotion) }
         }
-        ApprovalCardsView(palette: palette, firstIndex: 0)
-        SchoolCoversView(palette: palette, firstIndex: 0)
-        RequestCardsView(palette: palette, firstIndex: 0)
+        // (b) the Mac's gaps (Meka 2026-11-18 23:34): an empty list is left out rather than drawn as an empty stack, which
+        // would still take the box's spacing and leave a gap under its last card.
+        if !model.approvals.isEmpty { ApprovalCardsView(palette: palette, firstIndex: 0) }
+        if !model.schoolCovers.isEmpty || model.dateNightNudge != nil || !model.appointmentNudges.isEmpty {
+            SchoolCoversView(palette: palette, firstIndex: 0)
+        }
+        if !model.looseRequests.isEmpty { RequestCardsView(palette: palette, firstIndex: 0) }
         if model.needsYouCards.contains(where: { $0.id != listsCard?.id }) {
             NeedsYouStackView(palette: palette, leaveOut: listsCard?.id)
             MailWorkingView(palette: palette)

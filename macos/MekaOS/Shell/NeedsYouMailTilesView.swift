@@ -79,20 +79,37 @@ struct NeedsYouMailGroup: View {
     let firstIndex: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            NeedsYouMailTilesView(palette: palette, firstIndex: firstIndex)
-                .padding(.bottom, model.needsYouMail == nil ? 0 : MekaSpace.m)
-            if NeedsYouMailGroup.showsLog(model.needsYouMail) {
+        // Meka 2026-11-18 23:34 (b), the Mac's gaps: the parts sit a card's gap apart and the last one ends the box (no
+        // padding left under it), so the Mail tidied today box is as tall as what it holds.
+        let parts = NeedsYouMailGroup.parts(model.needsYouMail, archived: model.archivedForYou != nil,
+                                            unopened: model.mailUnopened != nil)
+        VStack(alignment: .leading, spacing: NeedsYouMailGroup.gap) {
+            ForEach(parts, id: \.self) { part in
+                switch part {
+                case .tiles: NeedsYouMailTilesView(palette: palette, firstIndex: firstIndex)
                 // What Autopilot archived (Inbox autopilot, slice 4), with the digests until Got it.
-                ArchivedForYouView(palette: palette, firstIndex: firstIndex)
-                    .padding(.bottom, model.archivedForYou == nil ? 0 : MekaSpace.m)
-            }
-            if NeedsYouMailGroup.showsOffer(model.needsYouMail) {
+                case .log: ArchivedForYouView(palette: palette, firstIndex: firstIndex)
                 // The weekly "Not opened in 30 days" (Inbox autopilot, slice 5c), from Saturday 09:00 until answered.
-                UnopenedOfferView(palette: palette, firstIndex: firstIndex)
-                    .padding(.bottom, model.mailUnopened == nil ? 0 : MekaSpace.m)
+                case .offer: UnopenedOfferView(palette: palette, firstIndex: firstIndex)
+                }
             }
         }
+    }
+
+    /// One part of the box, in the order drawn.
+    enum Part: Hashable { case tiles, log, offer }
+
+    /// The space between two parts; nothing is added after the last.
+    static let gap: CGFloat = MekaSpace.m
+
+    /// The parts that have something to show: the tiles while today has a summary, the log only while today has no
+    /// tidies to count, the weekly offer only while the tiles' one question isn't showing.
+    static func parts(_ summary: NeedsYouMailSummary?, archived: Bool, unopened: Bool) -> [Part] {
+        var out: [Part] = []
+        if summary != nil { out.append(.tiles) }
+        if archived && showsLog(summary) { out.append(.log) }
+        if unopened && showsOffer(summary) { out.append(.offer) }
+        return out
     }
 
     /// The long log shows only while today has no tidies to count.
