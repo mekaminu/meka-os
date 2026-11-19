@@ -21,6 +21,18 @@ data class ArchivedAllSender(
     val spoken: String,
 )
 
+/**
+ * One kind chip (Meka 2026-11-18 23:34): "Last 30 days", then today's four as the tiles count them ("Today · 84",
+ * "Newsletters · 26", "Promos · 38", "Junk & scams · 20"); a tile's tap opens the list on its chip.
+ */
+data class ArchivedAllKindChip(
+    /** A [TidiedKind.id]; null for the last 30 days. */
+    val kind: String?,
+    val label: String,
+    val selected: Boolean,
+    val spoken: String,
+)
+
 /** One email in the list. */
 data class ArchivedAllRow(
     /** "batchId|key": unique across the list (the same email can sit in two tidies, e.g. rescued then tidied). */
@@ -42,6 +54,10 @@ data class ArchivedAllList(
     val title: String,
     /** "212 emails tidied in the last 30 days · from 46 senders", or the filter's "Deliveroo · 12 emails tidied …". */
     val summary: String,
+    /** The kind chips while today has tidies or a kind is chosen; else empty. */
+    val kinds: List<ArchivedAllKindChip> = emptyList(),
+    /** The chosen [TidiedKind.id]: today's emails of that kind; null for the last 30 days. */
+    val kind: String? = null,
     /** "All" first, then the senders with the most tidied emails (the chosen one always shown). */
     val senders: List<ArchivedAllSender>,
     /** No sender chosen. */
@@ -67,6 +83,9 @@ object ArchivedAllRules {
     /** Sender chips besides All. */
     const val SENDERS_SHOWN = 12
     const val EMPTY = "Nothing tidied in the last 30 days"
+    const val LAST_30 = "Last 30 days"
+    /** What a chosen kind shows when none of today's are of it. */
+    fun emptyToday(k: TidiedKind) = if (k == TidiedKind.ALL) "Nothing tidied yet today" else "No ${k.many} tidied today"
     const val NOTE = "Every email Navilife tidied in the last 30 days, while Put back still works. " +
         "Tap one to see it, put it back or keep its sender. Shown as the sender wrote it, nothing in it is acted on."
 
@@ -83,9 +102,12 @@ object ArchivedAllRules {
      * The list, filtered to one sender when [sender] (an [ArchivedAllSender.id]) is given; a sender with nothing left
      * in the window shows the whole list.
      */
-    fun list(batches: List<MailTidyBatch>, sender: String?, nowMs: Long, cal: LocalCalendar): ArchivedAllList {
-        val window = inWindow(batches, nowMs)
-        val all = window.flatMap { b -> b.emails.map { b to it } }
+    fun list(batches: List<MailTidyBatch>, sender: String?, nowMs: Long, cal: LocalCalendar, kind: String? = null): ArchivedAllList {
+        val chosenKind = TidiedKind.of(kind)
+        val todays = NeedsYouMailRules.today(batches, nowMs, cal)
+        // A tile's kind: today's tidies that still stand, as the tiles count them; else the last 30 days.
+        val window = if (chosenKind != null) todays else inWindow(batches, nowMs)
+        val all = window.flatMap { b -> b.emails.filter { chosenKind == null || chosenKind.matches(it.tidy) }.map { b to it } }
             .sortedWith(compareByDescending<Pair<MailTidyBatch, MailTidiedEmail>> { it.second.receivedAtMs }.thenBy { it.second.key })
         val bySender = all.groupBy { it.second.from.lowercase() }
         val chosen = sender?.lowercase()?.takeIf { it in bySender }
@@ -126,15 +148,33 @@ object ArchivedAllRules {
             ArchivedAllSender(id, "$name · ${es.size}", id == chosen, "Show only $name's ${plural(es.size, "email")}")
         }
 
+        val tiles = NeedsYouMailRules.tiles(todays)
+        val kinds = if (tiles.isEmpty() && chosenKind == null) emptyList() else {
+            listOf(ArchivedAllKindChip(null, LAST_30, chosenKind == null, "Show every email tidied in the last 30 days")) +
+                TidiedKind.entries.map { k ->
+                    val n = tiles.firstOrNull { it.kind == k.id }?.number ?: "0"
+                    ArchivedAllKindChip(k.id, "${k.chip} · $n", k == chosenKind,
+                        if (k == TidiedKind.ALL) "Show today's $n tidied" else "Show today's $n ${k.many}")
+                }
+        }
         val listed = window.filter { it.emails.isNotEmpty() }
         val unlisted = window.filter { it.emails.isEmpty() }
         // A tidy whose list couldn't hold every email it moved: the rest are counted, not named.
-        val unnamed = listed.sumOf { maxOf(0, it.count - it.emails.size) }
+        val unnamed = if (chosenKind != null) {
+            val counted = tiles.firstOrNull { it.kind == chosenKind.id }?.number?.toIntOrNull() ?: 0
+            maxOf(0, counted - all.size)
+        } else listed.sumOf { maxOf(0, it.count - it.emails.size) }
+        val since = if (chosenKind != null) "today" else "in the last 30 days"
+        val noun = chosenKind?.takeIf { it != TidiedKind.ALL }
+        fun nouns(n: Int) = if (noun != null) plural(n, noun.one, noun.many) else plural(n, "email")
         val summary = when {
             chosen != null -> {
                 val name = bySender.getValue(chosen).first().second.from
-                "$name · ${plural(shownEmails.size, "email")} tidied in the last 30 days"
+                "$name · ${nouns(shownEmails.size)} tidied $since"
             }
+            chosenKind != null && all.isEmpty() -> emptyToday(chosenKind)
+            chosenKind != null -> "${nouns(all.size)} tidied today · from ${plural(bySender.size, "sender")}" +
+                if (unnamed > 0) " · ${plural(unnamed, "more", "more")} not named" else ""
             all.isEmpty() -> EMPTY
             else -> "${plural(all.size, "email")} tidied in the last 30 days · from ${plural(bySender.size, "sender")}" +
                 if (unnamed > 0) " · ${plural(unnamed, "more", "more")} not named" else ""
@@ -143,18 +183,24 @@ object ArchivedAllRules {
             if (chosen != null) "Showing the newest $MAX_ROWS of ${shownEmails.size}"
             else "Showing the newest $MAX_ROWS · choose a sender to see all of theirs"
         } else null
-        val countsOnly = unlisted.takeIf { it.isNotEmpty() && chosen == null }?.let { u ->
+        val countsOnly = unlisted.takeIf { it.isNotEmpty() && chosen == null && chosenKind == null }?.let { u ->
             "Before Navilife listed each email: ${plural(u.size, "tidy", "tidies")} · ${plural(u.sumOf { it.count }, "email")} (counts only)"
         }
         return ArchivedAllList(
             title = TITLE,
             summary = summary,
+            kinds = kinds,
+            kind = chosenKind?.id,
             senders = senders,
             allSelected = chosen == null,
             days = days,
             more = more,
             countsOnly = countsOnly,
-            empty = if (all.isEmpty() && unlisted.isEmpty()) EMPTY else null,
+            empty = when {
+                chosenKind != null -> if (all.isEmpty()) emptyToday(chosenKind) else null
+                all.isEmpty() && unlisted.isEmpty() -> EMPTY
+                else -> null
+            },
             note = NOTE,
             spoken = "$TITLE. $summary.",
         )

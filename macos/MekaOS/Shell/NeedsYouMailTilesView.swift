@@ -23,7 +23,11 @@ struct NeedsYouMailTilesView: View {
                         .accessibilityAddTraits(.isHeader)
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         if !summary.tiles.isEmpty {
-                            NeedsYouMailTilesRow(tiles: summary.tiles, spoken: summary.spoken, palette: palette)
+                            NeedsYouMailTilesRow(tiles: summary.tiles, palette: palette) { t in
+                                MekaHaptics.tick()
+                                model.archivedAllKind = t.kind
+                                model.showArchivedAll = true
+                            }
                             // Week 4, A7: what the three parts leave out, so the tiles add up ("Also 1 receipt or order").
                             if let rest = summary.rest {
                                 Text(rest)
@@ -44,6 +48,7 @@ struct NeedsYouMailTilesView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Button(NeedsYouMailRules.shared.SEE_ALL) {
                                 MekaHaptics.tick()
+                                model.archivedAllKind = nil
                                 model.showArchivedAll = true
                             }
                             .buttonStyle(MekaPressStyle())
@@ -63,6 +68,7 @@ struct NeedsYouMailTilesView: View {
     }
 
     static let heading = "MAIL NAVILIFE TIDIED TODAY"
+    static let chevron = "›"
 }
 
 /// Needs you's mail on the Mac: the tiles, then Archived for you only while nothing was tidied today (the tiles stand
@@ -95,33 +101,42 @@ struct NeedsYouMailGroup: View {
     static func showsOffer(_ summary: NeedsYouMailSummary?) -> Bool { summary?.question == nil }
 }
 
-/// The four tiles side by side, read as one line by VoiceOver ("Tidied today: 138. 33 newsletters, …").
+/// The four tiles side by side, each a button (Meka 2026-11-18 23:34, "Can't do anything with tidied emails"): a
+/// chevron, the press style, and a click opens All tidied mail on today's emails of its kind; VoiceOver reads each tile.
 private struct NeedsYouMailTilesRow: View {
     let tiles: [NeedsYouMailTile]
-    let spoken: String
     let palette: MekaPalette
+    let onOpen: (NeedsYouMailTile) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: MekaSpace.xs) {
             ForEach(Array(tiles.enumerated()), id: \.offset) { _, t in
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(t.number)
-                        .font(MekaType.upNextCardTitle).tracking(MekaType.upNextCardTitleTracking)
-                        .foregroundStyle(t.warn ? palette.critical : palette.textPrimary)
-                        .contentTransition(.numericText())
-                        .lineLimit(1)
-                    Text(t.label)
-                        .font(MekaType.micro).foregroundStyle(palette.textTertiary)
-                        .lineLimit(2)
+                Button { onOpen(t) } label: {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        HStack(spacing: MekaSpace.xxs) {
+                            Text(t.number)
+                                .font(MekaType.upNextCardTitle).tracking(MekaType.upNextCardTitleTracking)
+                                .foregroundStyle(t.warn ? palette.critical : palette.textPrimary)
+                                .contentTransition(.numericText())
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Text(NeedsYouMailTilesView.chevron)
+                                .font(MekaType.captionStrong).foregroundStyle(palette.textTertiary)
+                        }
+                        Text(t.label)
+                            .font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(MekaSpace.xs)
+                    .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.s, style: .continuous))
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(MekaSpace.xs)
-                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.s, style: .continuous))
+                .buttonStyle(MekaPressStyle())
+                .accessibilityLabel(t.spoken)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
     }
 }
 

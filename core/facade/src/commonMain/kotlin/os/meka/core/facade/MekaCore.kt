@@ -9177,10 +9177,11 @@ class MekaCore(
     /**
      * "Archived for you" shows which emails, slice 3: **All tidied mail** — every email tidied in the last 30 days, newest
      * first by day, filtered to one sender when [sender] (an [os.meka.core.domain.ArchivedAllSender.id]) is given. Read
-     * again after an ask or as tidies sync; each row opens [archivedEmail].
+     * again after an ask or as tidies sync; each row opens [archivedEmail]. [kind] (a [os.meka.core.domain.TidiedKind]
+     * id, from a Needs you tile) narrows it to today's tidied emails of that kind; null keeps the last 30 days.
      */
-    suspend fun archivedAll(sender: String?): os.meka.core.domain.ArchivedAllList = onCore {
-        os.meka.core.domain.ArchivedAllRules.list(activity.mailTidyBatches(), sender, nowMs(), ZoneCalendar(timeZone))
+    suspend fun archivedAll(sender: String?, kind: String?): os.meka.core.domain.ArchivedAllList = onCore {
+        os.meka.core.domain.ArchivedAllRules.list(activity.mailTidyBatches(), sender, nowMs(), ZoneCalendar(timeZone), kind)
     }
 
     /** Undo on the bar after [askArchivedEmail]: the ask comes off while the server hasn't acted on it yet. */

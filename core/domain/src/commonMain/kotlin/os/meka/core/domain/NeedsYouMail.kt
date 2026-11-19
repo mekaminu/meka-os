@@ -15,7 +15,37 @@ data class NeedsYouMailTile(
     val label: String,
     /** True on junk & scams: its number wears the soft warning colour. */
     val warn: Boolean,
+    /**
+     * Meka 2026-11-18 23:34 ("Can't do anything with tidied emails"): which of today's tidied emails a tap on the tile
+     * opens in All tidied mail ([TidiedKind.id]).
+     */
+    val kind: String = TidiedKind.ALL.id,
+    /** What a screen reader says for the tile as a button: "38 promos tidied today. Opens them". */
+    val spoken: String = "$number $label",
 )
+
+/**
+ * The four kinds the tiles count, as All tidied mail filters by them (Meka 2026-11-18 23:34): a tile opens today's
+ * tidied emails of its kind; [ALL] is every one of them.
+ */
+enum class TidiedKind(val id: String, val chip: String, val one: String, val many: String) {
+    ALL("all", "Today", "email", "emails"),
+    NEWSLETTERS("newsletters", "Newsletters", "newsletter", "newsletters"),
+    PROMOS("promos", "Promos", "promo", "promos"),
+    JUNK("junk", "Junk & scams", "junk or scam email", "junk and scam emails");
+
+    /** The tidies a tile of this kind counts. */
+    fun matches(t: MailTidy): Boolean = when (this) {
+        ALL -> t != MailTidy.KEEP
+        NEWSLETTERS -> t == MailTidy.NEWSLETTER
+        PROMOS -> t == MailTidy.ARCHIVE
+        JUNK -> t in NeedsYouMailRules.JUNK_KINDS
+    }
+
+    companion object {
+        fun of(id: String?): TidiedKind? = entries.firstOrNull { it.id == id }
+    }
+}
 
 /** The one question: "Unsubscribe from The Weekly Digest?" over "Personal · 6 emails, none opened · last Mon 12 Oct". */
 data class NeedsYouUnsubQuestion(
@@ -52,7 +82,7 @@ object NeedsYouMailRules {
     const val PROMOS = "promos"
     const val JUNK = "junk & scams"
 
-    private val JUNK_KINDS = setOf(MailTidy.JUNK_TRASH, MailTidy.SCAM_JUNK, MailTidy.TRASH)
+    internal val JUNK_KINDS = setOf(MailTidy.JUNK_TRASH, MailTidy.SCAM_JUNK, MailTidy.TRASH)
 
     /**
      * Today's tidies that still stand (not put back or being put back, not the backlog clean-up he approved, which Mail
@@ -68,12 +98,21 @@ object NeedsYouMailRules {
         val total = today.sumOf { it.count }
         if (total == 0) return emptyList()
         fun kind(vararg k: MailTidy) = today.sumOf { b -> k.sumOf { b.kinds[it] ?: 0 } }
+        fun tile(n: Int, label: String, warn: Boolean, k: TidiedKind) =
+            NeedsYouMailTile(n.toString(), label, warn, k.id, tileSpoken(n, label, k))
         return listOf(
-            NeedsYouMailTile(total.toString(), TIDIED, false),
-            NeedsYouMailTile(kind(MailTidy.NEWSLETTER).toString(), NEWSLETTERS, false),
-            NeedsYouMailTile(kind(MailTidy.ARCHIVE).toString(), PROMOS, false),
-            NeedsYouMailTile(kind(*JUNK_KINDS.toTypedArray()).toString(), JUNK, true),
+            tile(total, TIDIED, false, TidiedKind.ALL),
+            tile(kind(MailTidy.NEWSLETTER), NEWSLETTERS, false, TidiedKind.NEWSLETTERS),
+            tile(kind(MailTidy.ARCHIVE), PROMOS, false, TidiedKind.PROMOS),
+            tile(kind(*JUNK_KINDS.toTypedArray()), JUNK, true, TidiedKind.JUNK),
         )
+    }
+
+    /** "84 emails tidied today. Opens them" / "38 promos tidied today. Opens them" / "None of today's are newsletters". */
+    fun tileSpoken(n: Int, label: String, k: TidiedKind): String = when {
+        n == 0 && k != TidiedKind.ALL -> "No ${k.many} tidied today. Opens the list"
+        k == TidiedKind.ALL -> "$n ${if (n == 1) "email" else "emails"} tidied today. Opens them"
+        else -> "$n ${if (n == 1) k.one else k.many} tidied today. Opens ${if (n == 1) "it" else "them"}"
     }
 
     /** Kinds the three part tiles count; everything else tidied today goes on [rest]'s line. */

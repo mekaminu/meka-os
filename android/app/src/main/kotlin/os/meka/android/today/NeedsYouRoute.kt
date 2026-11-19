@@ -221,6 +221,8 @@ internal class DecisionMoves(
     val openTask: (String) -> Unit = {},
     /** "Archived for you" shows which emails, slice 3: All tidied mail open over the screen ([ArchivedAllHost]). */
     val archivedAll: MutableState<Boolean> = mutableStateOf(false),
+    /** The kind a Needs you tile opened All tidied mail on ([os.meka.core.domain.TidiedKind] id); null = the last 30 days. */
+    val archivedAllKind: MutableState<String?> = mutableStateOf(null),
     /** Review opens its own list, slice 1: the Empty Junk card whose review is open over the screen ([JunkReviewHost]). */
     val junkReview: MutableState<String?> = mutableStateOf(null),
     /** Week board item (5) part 3: To a day… on an overdue or due-today card; Undo on the bar. */
@@ -717,6 +719,9 @@ internal fun NeedsYouColumn(
     // A21 part 5: in Light the box's sides carry the 1 dp track-ink edge (NeedsYouGroupBox.kt); none in Dark.
     val boxEdge = os.meka.android.designsystem.LightInk.cardEdge(Meka.colors, Meka.theme.isDark)
     val inBox = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge) else Modifier
+    // Meka 2026-11-18 23:34 ("a tall empty gap" under a box's last card): inside a box a card is as tall as its content
+    // and its own padding, and the box's foot closes it; the extra gap under each card is for the unboxed list only.
+    val cardGap = if (boxed) Modifier else Modifier.padding(bottom = MekaSpace.m)
     val inBoxLine = if (boxed) Modifier.fillMaxWidth().groupBoxFill(boxFill, boxEdge).padding(horizontal = MekaSpace.m) else Modifier
     val inBoxLead = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge).padding(horizontal = MekaSpace.xs) else Modifier
     // Messages and FYI rows share the box's colour, so each is parted from the one above by the mockup's hairline.
@@ -1017,7 +1022,7 @@ internal fun NeedsYouColumn(
         approvals.forEachIndexed { i, card ->
             item(key = "approval-${card.id}") {
                 ApprovalCardView(card, core, { line -> moves.undoLine(line, null) },
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(1 + i, play)))
             }
         }
         }
@@ -1231,7 +1236,7 @@ internal fun NeedsYouColumn(
         digest?.takeIf { boxed || !it.due }?.let { d ->
             item(key = "group-digest") {
                 GroupDigestSection(d, captures, core, moves.undoLine,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2 + triage.size + asks + requests.size, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2 + triage.size + asks + requests.size, play)))
             }
         }
         }
@@ -1240,7 +1245,7 @@ internal fun NeedsYouColumn(
         discord?.let { d ->
             item(key = "discord") {
                 DiscordSection(d, core, moves.undoLine,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)))
             }
         }
         }
@@ -1268,7 +1273,7 @@ internal fun NeedsYouColumn(
         if (mailMomentSession != null || (mailMoment != null && !boxed)) {
             item(key = "mail-moment") {
                 MailMomentSection(mailMoment, mailMomentSession, core, moves.undoLine,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)))
             }
         }
         // Inbox autopilot, slice 6a: the emails that need Meka, newest first, each with Done and Snooze.
@@ -1276,7 +1281,7 @@ internal fun NeedsYouColumn(
         mailNeeds?.takeIf { mailMomentSession == null }?.let { n ->
             item(key = "mail-needs") {
                 MailNeedsSection(n, core, moves.undoLine, mailTaps,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)),
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)),
                     boxed = boxed, page = mailPg.page, onPage = { mailPage = it })
             }
         }
@@ -1284,7 +1289,7 @@ internal fun NeedsYouColumn(
         mailChases?.let { c ->
             item(key = "mail-chases") {
                 MailChaseSection(c, core, moves.undoLine, mailTaps,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)))
             }
         }
         }
@@ -1295,7 +1300,7 @@ internal fun NeedsYouColumn(
         mailFinds?.let { f ->
             item(key = "mail-finds") {
                 MailFindSection(f, core, moves.undoLine, mailTaps,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)))
             }
         }
         }
@@ -1317,8 +1322,9 @@ internal fun NeedsYouColumn(
                             moves.undoLine(said) { runCatching { core.undoUnopened() } }
                         }
                     } },
-                    onSeeAll = { moves.archivedAll.value = true },
-                    modifier = Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    onSeeAll = { moves.archivedAllKind.value = null; moves.archivedAll.value = true },
+                    modifier = Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)),
+                    onTile = { t -> moves.archivedAllKind.value = t.kind; moves.archivedAll.value = true })
             }
         }
         // Inbox autopilot, slice 4: what Autopilot archived, with the digests (12:30, 18:30) until Got it; in the
@@ -1326,7 +1332,7 @@ internal fun NeedsYouColumn(
         archived?.takeIf { needsMail?.tiles.isNullOrEmpty() }?.let { a ->
             item(key = "archived-for-you") {
                 ArchivedForYouSection(a, core, moves.undoLine, mailTaps,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)),
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)),
                     openAll = { moves.archivedAll.value = true })
             }
         }
@@ -1334,17 +1340,11 @@ internal fun NeedsYouColumn(
         unopened?.takeIf { needsMail?.question == null }?.let { u ->
             item(key = "mail-unopened") {
                 UnopenedOfferSection(u, core, moves.undoLine,
-                    Modifier.animateItem().then(inBox).padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)))
             }
         }
         }
         boxEnd(NeedsYouGroup.TIDIED)
-        if (boxed && presentAll.isNotEmpty() && part != NeedsYouPart.RIGHT) {
-            item(key = "groups-hint") {
-                Text(needsShown(NeedsYouGroupRules.HINT), style = MekaType.micro, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.xxs, start = MekaSpace.xxs))
-            }
-        }
         if (filter == NeedsYouFilter.ALL && part != NeedsYouPart.RIGHT) {
         if (cards.isEmpty() && approvals.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0) {
             item(key = "clear") {

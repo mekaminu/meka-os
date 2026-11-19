@@ -23,6 +23,8 @@ final class CoreModel {
     var showAfterWork = false
     /// "Archived for you" shows which emails, slice 3: All tidied mail, opened from the card.
     var showArchivedAll = false
+    /// The kind a Needs you tile opened All tidied mail on (a TidiedKind id); nil = the last 30 days.
+    var archivedAllKind: String?
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
     private(set) var requests: [RequestCard] = []
@@ -8924,10 +8926,11 @@ final class CoreModel {
     }
 
     /// Slice 3: All tidied mail (every email tidied in the last 30 days), filtered to one sender's id when given.
-    /// Only a String crosses to the core.
-    func archivedAll(sender: String?) async -> ArchivedAllList? {
+    /// [kind] (a TidiedKind id, from a Needs you tile) narrows it to today's emails of that kind. Only Strings cross to
+    /// the core.
+    func archivedAll(sender: String?, kind: String?) async -> ArchivedAllList? {
         guard let core else { return nil }
-        return try? await core.archivedAll(sender: sender)
+        return try? await core.archivedAll(sender: sender, kind: kind)
     }
 
     /// Slice 2: Put back, Always keep or Unsubscribe on one email (an action's name), done at the server's next check;

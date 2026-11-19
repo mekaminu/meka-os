@@ -337,6 +337,9 @@ struct ArchivedAllSheet: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var sender: String?
+    /// Meka 2026-11-18 23:34: a Needs you tile opens the sheet on today's emails of its kind; the chips change it.
+    @State private var kind: String?
+    @State private var kindRead = false
     @State private var list: ArchivedAllList?
     @State private var openEmail: String?
     @State private var reads = 0
@@ -349,6 +352,16 @@ struct ArchivedAllSheet: View {
                 .contentTransition(.opacity)
                 .accessibilityLabel(list?.spoken ?? "")
                 .staggeredAppear(0)
+            if let l = list, !l.kinds.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(l.kinds, id: \.label) { k in
+                            chip(k.label, spoken: k.spoken, selected: k.selected) { kind = k.kind; sender = nil }
+                        }
+                    }
+                }
+                .staggeredAppear(1)
+            }
             if let l = list, !l.senders.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: MekaSpace.xs) {
@@ -396,18 +409,21 @@ struct ArchivedAllSheet: View {
         .background(palette.surface)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: openEmail)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: sender)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: kind)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: list?.summary)
-        .task(id: sender) {
+        .onDisappear { model.archivedAllKind = nil }
+        .task(id: (sender ?? "") + "|" + (kind ?? "")) {
+            if !kindRead { kindRead = true; kind = model.archivedAllKind; if kind != nil { return } }
             // Read now, then again every 20 s while the sheet is open: asks and the server's answers arrive by sync.
             while !Task.isCancelled {
-                list = await model.archivedAll(sender: sender)
+                list = await model.archivedAll(sender: sender, kind: kind)
                 reads += 1
                 try? await Task.sleep(for: .seconds(20))
             }
         }
         .onChange(of: model.eventUndo != nil) { _, _ in
             // An ask (or its Undo) changes the rows: read again straight away.
-            Task { list = await model.archivedAll(sender: sender); reads += 1 }
+            Task { list = await model.archivedAll(sender: sender, kind: kind); reads += 1 }
         }
     }
 

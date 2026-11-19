@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -26,6 +29,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.today.NEEDS_YOU_TILE_CHEVRON
 import os.meka.android.today.NEEDS_YOU_TILE_TAG
 import os.meka.android.today.NeedsYouHead
 import os.meka.android.today.NeedsYouMailCard
@@ -77,6 +81,7 @@ class NeedsYouMailTilesScreensTest {
 
     private var unsubscribed = 0
     private var seeAll = 0
+    private var tiled: String? = null
 
     private fun turns(ms: Long = 2_000L) {
         repeat((ms / 100).toInt()) {
@@ -99,7 +104,7 @@ class NeedsYouMailTilesScreensTest {
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
                     NeedsYouHead(NeedsYouLayoutRules.MAIL_HEAD)
-                    NeedsYouMailCard(summary, { unsubscribed++ }, {}, { seeAll++ })
+                    NeedsYouMailCard(summary, { unsubscribed++ }, {}, { seeAll++ }, onTile = { tiled = it.kind })
                 }
             }
         }
@@ -137,5 +142,22 @@ class NeedsYouMailTilesScreensTest {
         turns(300)
         if (unsubscribed != 1) fail("Unsubscribe didn't answer")
         if (seeAll != 1) fail("See all didn't open the list")
+    }
+
+    /** Meka 2026-11-18 23:34 ("Can't do anything with tidied emails"): each tile is a button opening its kind. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun eachTileOpensItsKind() {
+        draw(ThemeChoice.DARK)
+        if (compose.onAllNodesWithText(NEEDS_YOU_TILE_CHEVRON, useUnmergedTree = true).fetchSemanticsNodes().size != 4) fail("each tile should show its chevron")
+        compose.onNodeWithContentDescription("33 newsletters tidied today. Opens them").assertHasClickAction().performClick()
+        turns(300)
+        if (tiled != "newsletters") fail("the newsletters tile opened $tiled")
+        compose.onNodeWithContentDescription("33 junk and scam emails tidied today. Opens them").performClick()
+        turns(300)
+        if (tiled != "junk") fail("the junk & scams tile opened $tiled")
+        compose.onNodeWithContentDescription("138 emails tidied today. Opens them").performClick()
+        turns(300)
+        if (tiled != "all") fail("the tidied tile opened $tiled")
+        if (seeAll != 0) fail("a tile shouldn't be See all")
     }
 }

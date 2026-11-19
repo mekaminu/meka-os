@@ -6,7 +6,7 @@ import XCTest
 /// the place of the long Archived for you log and the weekly offer's card (core NeedsYouMailRules; NeedsYouMailGroup).
 final class MacNeedsYouMailTilesTests: XCTestCase {
     private func tile(_ n: String, _ label: String, warn: Bool = false) -> NeedsYouMailTile {
-        NeedsYouMailTile(number: n, label: label, warn: warn)
+        NeedsYouMailTile(number: n, label: label, warn: warn, kind: TidiedKind.all.id, spoken: "\(n) \(label)")
     }
 
     private func question() -> NeedsYouUnsubQuestion {
@@ -25,6 +25,14 @@ final class MacNeedsYouMailTilesTests: XCTestCase {
         XCTAssertFalse(NeedsYouMailGroup.showsOffer(both))
         XCTAssertEqual(both.tiles.map(\.label), ["tidied", "newsletters", "promos", "junk & scams"])
         XCTAssertEqual(both.tiles.filter(\.warn).map(\.label), ["junk & scams"])
+    }
+
+    /// Meka 2026-11-18 23:34: each tile opens All tidied mail on its kind; the kinds' ids are what the sheet asks for.
+    @MainActor
+    func testEachTileNamesTheKindItOpens() {
+        XCTAssertEqual(TidiedKind.companion.of(id: "junk"), TidiedKind.junk)
+        XCTAssertEqual(NeedsYouMailRules.shared.tileSpoken(n: 2, label: "promos", k: .promos), "2 promos tidied today. Opens them")
+        XCTAssertEqual(NeedsYouMailTilesView.chevron, "›")
     }
 
     @MainActor

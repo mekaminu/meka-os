@@ -195,7 +195,7 @@ class NeedsYouMailScreensTest {
      * never end or start a line on a dot or leave a word alone, wherever they wrap.
      */
     private fun assertWrapsWhole(name: String, core: MekaCore) {
-        val lines = listOf(NeedsYouGroupRules.HINT) + core.mailFinds.value?.rows.orEmpty().map { it.line } +
+        val lines = core.mailFinds.value?.rows.orEmpty().map { it.line } +
             core.mailNeeds.value?.rows.orEmpty().map { it.line }
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotEndingALine(compose, name, lines)

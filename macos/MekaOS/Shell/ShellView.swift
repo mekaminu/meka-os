@@ -253,11 +253,6 @@ struct NeedsYouView: View {
                     if filter == .all { emptyState }
                     // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
                     if NeedsYouGroupRules.shared.shows(filter: filter, group: .messages) { ScamTextsView(palette: palette) }
-                    if !present.isEmpty {
-                        Text(LoneWordGlue.shared.measured(line: NeedsYouGroupRules.shared.HINT_MAC))
-                            .font(MekaType.micro).foregroundStyle(palette.textTertiary)
-                            .padding(.top, MekaSpace.xs).padding(.leading, MekaSpace.xxs)
-                    }
                 }
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: filter)
                 .padding(.horizontal, MekaSpace.gutterWide)

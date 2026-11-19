@@ -98,9 +98,8 @@ object NeedsYouGroupRules {
     const val FYI_PEEK = "No reply needed"
     const val RENEWALS_PEEK = "nothing added until you tap Add"
     const val LISTS_TITLE = "From your lists"
-    const val HINT = "Tap a heading to open or close it · up to 5 in a page, ‹ › for more · Navilife remembers which groups you left open"
-    /** The Mac's foot hint (slice 4): a click, and this Mac keeps what he left open. */
-    const val HINT_MAC = "Click a heading to open or close it · up to 5 in a page, ‹ › for more · this Mac remembers which groups you left open"
+    // Meka 2026-11-18 23:34: the foot hint ("Tap a heading to open or close it · …") was a note on the mockup, not app
+    // text, so it is gone from both apps.
 
     /** The groups open before he has opened or closed any: To decide and Messages. */
     val DEFAULT_OPEN: Set<NeedsYouGroup> = NeedsYouGroup.entries.filter { it.openByDefault }.toSet()

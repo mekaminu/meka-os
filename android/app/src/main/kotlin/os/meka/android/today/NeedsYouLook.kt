@@ -58,6 +58,7 @@ import os.meka.core.domain.NeedsYouFyiRow
 import os.meka.core.domain.NeedsYouLayoutRules
 import os.meka.core.domain.NeedsYouMailRules
 import os.meka.core.domain.NeedsYouMailSummary
+import os.meka.core.domain.NeedsYouMailTile
 import os.meka.core.domain.NeedsYouUnsubQuestion
 import os.meka.core.domain.NeedsYouMessageRow
 import androidx.compose.animation.core.animate
@@ -346,6 +347,9 @@ internal fun NeedsYouFyiRowView(row: NeedsYouFyiRow, onSeen: () -> Unit, modifie
     }
 }
 
+/** The tile's sign that it opens something. */
+internal const val NEEDS_YOU_TILE_CHEVRON = "›"
+
 /** Below this a tile's label can't hold "newsletters" whole, so the four tiles go two by two. */
 internal val MAIL_TILE_MIN_WIDTH = 76.dp
 
@@ -357,7 +361,7 @@ internal val MAIL_TILE_MIN_WIDTH = 76.dp
 @Composable
 internal fun NeedsYouMailCard(
     summary: NeedsYouMailSummary, onUnsubscribe: (NeedsYouUnsubQuestion) -> Unit, onKeep: (NeedsYouUnsubQuestion) -> Unit,
-    onSeeAll: () -> Unit, modifier: Modifier = Modifier,
+    onSeeAll: () -> Unit, modifier: Modifier = Modifier, onTile: (NeedsYouMailTile) -> Unit = { onSeeAll() },
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -369,7 +373,9 @@ internal fun NeedsYouMailCard(
         if (summary.tiles.isNotEmpty()) {
             // Week 4, A7 ("newslett / ers"): a quarter of the cover screen is too narrow for "newsletters" whole, so
             // there the tiles sit two by two; a word never breaks across lines.
-            BoxWithConstraints(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = summary.spoken }) {
+            // Meka 2026-11-18 23:34 ("Can't do anything with tidied emails"): each tile is a button (a chevron, the
+            // press ripple) opening All tidied mail on today's emails of its kind; each says its own number aloud.
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val perRow = if ((maxWidth - MekaSpace.xs * 3) / 4 < MAIL_TILE_MIN_WIDTH) 2 else 4
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     summary.tiles.chunked(perRow).forEach { row ->
@@ -377,10 +383,15 @@ internal fun NeedsYouMailCard(
                             row.forEach { t ->
                                 Column(
                                     Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
+                                        .clickable(role = Role.Button) { haptics.tick(); onTile(t) }
+                                        .semantics(mergeDescendants = true) { contentDescription = t.spoken }
                                         .padding(MekaSpace.xs).testTag(NEEDS_YOU_TILE_TAG),
                                 ) {
-                                    Text(t.number, style = MekaType.upNextCardTitle, maxLines = 1,
-                                        color = if (t.warn) Meka.colors.critical else Meka.colors.textPrimary)
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(t.number, style = MekaType.upNextCardTitle, maxLines = 1, modifier = Modifier.weight(1f),
+                                            color = if (t.warn) Meka.colors.critical else Meka.colors.textPrimary)
+                                        Text(NEEDS_YOU_TILE_CHEVRON, style = MekaType.captionStrong, color = Meka.colors.textTertiary, maxLines = 1)
+                                    }
                                     Text(t.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 2)
                                 }
                             }

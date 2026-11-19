@@ -228,6 +228,5 @@ class NeedsYouGroupsTest {
         assertEquals("Five-a-side, Parents · 3 new in 2 channels", R.chatsPeek(listOf("Five-a-side", "Parents"), "3 new in 2 channels"))
         assertEquals("Five-a-side", R.chatsPeek(listOf("Five-a-side"), null))
         assertEquals("", R.chatsPeek(emptyList(), " "))
-        assertTrue(R.HINT_MAC.startsWith("Click a heading"))
     }
 }

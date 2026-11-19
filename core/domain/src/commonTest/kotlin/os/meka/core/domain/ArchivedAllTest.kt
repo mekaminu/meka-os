@@ -109,4 +109,65 @@ class ArchivedAllTest {
         val b = batch("mt1", listOf(email("a", "Deliveroo", "2 for 1", 9 * 60)), at(12 * 60), count = 5)
         assertEquals("1 email tidied in the last 30 days · from 1 sender · 4 more not named", ArchivedAllRules.list(listOf(b), null, now, cal).summary)
     }
+
+    /** A tidy whose counts follow its emails' kinds, as the server writes them. */
+    private fun mixed(id: String, emails: List<MailTidiedEmail>, atMs: Long): MailTidyBatch {
+        val counts = emails.groupingBy { it.tidy }.eachCount()
+        return MailAutopilotRules.readBatch(id, MailAutopilotRules.batchFields(atMs, "Personal", counts) + MailTidiedRules.fields(emails))!!
+    }
+
+    @Test
+    fun aTilesKindOpensTodaysEmailsOfThatKindWithTheTilesNumbers() {
+        // Meka 2026-11-18 23:34: "Can't do anything with tidied emails". Each tile opens its kind, today's only.
+        val today = mixed("mt1", listOf(
+            email("a", "Deliveroo", "2 for 1", 9 * 60),
+            email("b", "The Digest", "This week", 10 * 60, tidy = MailTidy.NEWSLETTER),
+            email("c", "Prize Desk", "You won", 11 * 60, tidy = MailTidy.JUNK_TRASH),
+            email("d", "Bank Alert", "Verify now", 11 * 60 + 5, tidy = MailTidy.SCAM_JUNK),
+        ), at(12 * 60))
+        val yesterday = mixed("mt2", listOf(email("e", "Deliveroo", "Tonight only", 8 * 60, day - 1)), at(18 * 60, day - 1))
+        val tiles = NeedsYouMailRules.tiles(NeedsYouMailRules.today(listOf(today, yesterday), now, cal))
+        assertEquals(listOf("all", "newsletters", "promos", "junk"), tiles.map { it.kind })
+        assertEquals("2 junk and scam emails tidied today. Opens them", tiles[3].spoken)
+        assertEquals("1 promo tidied today. Opens it", tiles[2].spoken)
+
+        val junk = ArchivedAllRules.list(listOf(today, yesterday), null, now, cal, TidiedKind.JUNK.id)
+        assertEquals("junk", junk.kind)
+        assertEquals(listOf("Verify now", "You won"), junk.days.flatMap { it.rows }.map { it.row.subject })
+        assertEquals("2 junk and scam emails tidied today · from 2 senders", junk.summary)
+        assertEquals(listOf("Last 30 days", "Today · 4", "Newsletters · 1", "Promos · 1", "Junk & scams · 2"), junk.kinds.map { it.label })
+        assertEquals(listOf("junk"), junk.kinds.filter { it.selected }.map { it.kind })
+
+        val promos = ArchivedAllRules.list(listOf(today, yesterday), null, now, cal, TidiedKind.PROMOS.id)
+        assertEquals(listOf("2 for 1"), promos.days.flatMap { it.rows }.map { it.row.subject }, "yesterday's promo is not today's")
+        assertEquals(listOf("Today"), promos.days.map { it.label })
+
+        val all = ArchivedAllRules.list(listOf(today, yesterday), null, now, cal, TidiedKind.ALL.id)
+        assertEquals(4, all.days.flatMap { it.rows }.size)
+        assertEquals("4 emails tidied today · from 4 senders", all.summary)
+
+        // The last 30 days is the list as before, its chip lit.
+        val month = ArchivedAllRules.list(listOf(today, yesterday), null, now, cal)
+        assertNull(month.kind)
+        assertEquals(5, month.days.flatMap { it.rows }.size)
+        assertTrue(month.kinds.first().selected)
+
+        // A sender within a kind.
+        val one = ArchivedAllRules.list(listOf(today, yesterday), "deliveroo", now, cal, TidiedKind.PROMOS.id)
+        assertEquals("Deliveroo · 1 promo tidied today", one.summary)
+    }
+
+    @Test
+    fun aKindWithNothingTodaySaysSoAndNoChipsShowWithoutTodaysTidies() {
+        val today = mixed("mt1", listOf(email("a", "Deliveroo", "2 for 1", 9 * 60)), at(12 * 60))
+        val news = ArchivedAllRules.list(listOf(today), null, now, cal, TidiedKind.NEWSLETTERS.id)
+        assertEquals("No newsletters tidied today", news.summary)
+        assertEquals("No newsletters tidied today", news.empty)
+        assertTrue(news.days.isEmpty())
+        val old = mixed("mt2", listOf(email("e", "Deliveroo", "Tonight only", 8 * 60, day - 1)), at(18 * 60, day - 1))
+        assertTrue(ArchivedAllRules.list(listOf(old), null, now, cal).kinds.isEmpty())
+        assertEquals("No newsletters tidied today. Opens the list", NeedsYouMailRules.tileSpoken(0, "newsletters", TidiedKind.NEWSLETTERS))
+        assertEquals(TidiedKind.JUNK, TidiedKind.of("junk"))
+        assertNull(TidiedKind.of("nope"))
+    }
 }

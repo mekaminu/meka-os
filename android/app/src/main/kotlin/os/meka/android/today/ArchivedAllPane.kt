@@ -48,17 +48,21 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.core.domain.ArchivedAllList
+import os.meka.core.domain.ArchivedAllKindChip
 import os.meka.core.domain.ArchivedAllRules
 import os.meka.core.domain.ArchivedAllSender
 import os.meka.core.domain.ArchivedEmailPreview
 import os.meka.core.domain.MailTidiedAction
 import os.meka.core.facade.MekaCore
 
+internal const val ARCHIVED_ALL_KINDS_TAG = "archived-all-kinds"
+
 /** Hosts All tidied mail over Needs you (or the command centre): it springs up as a pane and drops away on Close. */
 @Composable
 internal fun ArchivedAllHost(core: MekaCore, moves: DecisionMoves) {
     MekaPane(visible = moves.archivedAll.value) {
-        ArchivedAllPane(core, moves.undoLine, onClose = { moves.archivedAll.value = false })
+        ArchivedAllPane(core, moves.undoLine, moves.archivedAllKind.value,
+            onClose = { moves.archivedAll.value = false; moves.archivedAllKind.value = null })
     }
 }
 
@@ -72,15 +76,17 @@ internal fun ArchivedAllHost(core: MekaCore, moves: DecisionMoves) {
  * unfolds on the expand spring. Reduced motion: cross-fades.
  */
 @Composable
-internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, onClose: () -> Unit) {
+internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, startKind: String? = null, onClose: () -> Unit) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     val reduced = Meka.reducedMotion
     var sender by rememberSaveable { mutableStateOf<String?>(null) }
+    // Meka 2026-11-18 23:34: a Needs you tile opens the list on today's emails of its kind; the chips change it.
+    var kind by rememberSaveable(startKind) { mutableStateOf(startKind) }
     var openEmail by rememberSaveable { mutableStateOf<String?>(null) }
     var list by remember { mutableStateOf<ArchivedAllList?>(null) }
     val tick by core.archivedTick.collectAsState()
-    LaunchedEffect(sender, tick) { list = runCatching { core.archivedAll(sender) }.getOrNull() }
+    LaunchedEffect(sender, kind, tick) { list = runCatching { core.archivedAll(sender, kind) }.getOrNull() }
     val ask: (ArchivedEmailPreview, MailTidiedAction) -> Unit = { p, action ->
         haptics.light()
         scope.launch {
@@ -106,6 +112,21 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
             Crossfade(l?.summary.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "archived-all-summary") { s ->
                 Text(s, style = MekaType.body, color = Meka.colors.textSecondary,
                     modifier = Modifier.appear(rememberAppearance(1)).semantics { contentDescription = l?.spoken ?: s })
+            }
+        }
+        if (l != null && l.kinds.isNotEmpty()) {
+            item(key = "kinds") {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs)
+                        .appear(rememberAppearance(2)).testTag(ARCHIVED_ALL_KINDS_TAG),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
+                    l.kinds.forEach { k: ArchivedAllKindChip ->
+                        SenderChip(k.label, k.spoken, k.selected) {
+                            haptics.tick(); kind = k.kind; sender = null; openEmail = null
+                        }
+                    }
+                }
             }
         }
         if (l != null && l.senders.isNotEmpty()) {
