@@ -333,6 +333,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/needs-you/cover-dark-many.png](docs/screens/fold/needs-you/cover-dark-many.png)
 - [fold/needs-you/cover-dark-one.png](docs/screens/fold/needs-you/cover-dark-one.png)
 - [fold/needs-you/cover-dark-scams-by-hand.png](docs/screens/fold/needs-you/cover-dark-scams-by-hand.png)
+- [fold/needs-you/cover-dark-scams-trash.png](docs/screens/fold/needs-you/cover-dark-scams-trash.png)
 - [fold/needs-you/cover-dark-scams.png](docs/screens/fold/needs-you/cover-dark-scams.png)
 - [fold/needs-you/cover-dark.png](docs/screens/fold/needs-you/cover-dark.png)
 - [fold/needs-you/cover-light-mail.png](docs/screens/fold/needs-you/cover-light-mail.png)
