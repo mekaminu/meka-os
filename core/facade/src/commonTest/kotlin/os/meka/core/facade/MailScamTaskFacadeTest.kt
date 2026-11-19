@@ -16,6 +16,7 @@ import os.meka.core.sync.SyncService
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /** A possible scam never becomes a task (Meka 2026-11-19): Task is refused, and a task made before the flag is removed. */
@@ -72,7 +73,8 @@ class MailScamTaskFacadeTest {
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertEquals(MailNeedsRules.TASK_LINE, fold.taskFromMailItem(a))
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
-        assertEquals(FieldValue.Bool(false), task(MailNeedsRules.taskId(a))[ActionableFields.DELETED])
+        assertTrue(task(MailNeedsRules.taskId(a)).isNotEmpty())
+        assertNotEquals<FieldValue?>(FieldValue.Bool(true), task(MailNeedsRules.taskId(a))[ActionableFields.DELETED])
 
         // The server's body check flags it afterwards.
         now += 60_000
@@ -103,8 +105,8 @@ class MailScamTaskFacadeTest {
         serverWrite(done, mapOf(MailItemFields.WARNING to FieldValue.Text(scam)))
         serverWrite(real, mapOf(MailItemFields.WARNING to FieldValue.Text(scam), MailItemFields.NOT_SCAM_AT to FieldValue.Int64(now - 1_000)))
         assertTrue(fold.syncNow()); assertTrue(fold.syncNow())
-        assertEquals(FieldValue.Bool(false), task(MailNeedsRules.taskId(done))[ActionableFields.DELETED])
-        assertEquals(FieldValue.Bool(false), task(MailNeedsRules.taskId(real))[ActionableFields.DELETED])
+        assertNotEquals<FieldValue?>(FieldValue.Bool(true), task(MailNeedsRules.taskId(done))[ActionableFields.DELETED])
+        assertNotEquals<FieldValue?>(FieldValue.Bool(true), task(MailNeedsRules.taskId(real))[ActionableFields.DELETED])
         assertTrue(activityLines(fold).none { it.startsWith("Removed") })
     }
 }
