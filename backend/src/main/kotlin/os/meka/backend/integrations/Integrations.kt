@@ -2424,10 +2424,12 @@ class Integrations(
                 // Tidied mail, slice 3: Not junk on the Junk review's binned junk: out of Trash it's back in Junk, so it
                 // goes on to the inbox the way a rescue does (Gmail: Spam off, inbox, starred; Outlook: Inbox, flagged).
                 var rescued: Boolean? = null
+                var rescuedId: String? = null
                 if (ask.action == MailTidiedAction.NOT_JUNK && putBack && b.canUndo && item.tidy == MailTidy.JUNK_TRASH && backId != null) {
                     val (moved, _) = m.tidyKept(token, mapOf(backId to MailTidy.RESCUE))
                     rescued = backId in moved
-                    moved[backId]?.let { ms.neverTidy(a.id, listOf(it)) }
+                    rescuedId = moved[backId]
+                    rescuedId?.let { ms.neverTidy(a.id, listOf(it)) }
                 }
                 val h = header(item.id, item.movedId, backId)
                 val from = h?.let { MailUnsubscribeRules.displayName(it.fromName, it.fromAddress) } ?: b.emails.firstOrNull { it.key == ask.key }?.from ?: "the sender"
@@ -2441,9 +2443,12 @@ class Integrations(
                         }
                     }
                     MailTidiedAction.NOT_JUNK -> {
-                        val address = h?.fromAddress
-                        if (h != null && address != null) keepSender(a, account, from, address, h.receivedAtMs, ask.atMs)
-                        val kept = if (h != null && address != null) " · $from kept from now on" else ""
+                        // Junk was never kept with the inbox's headers: read this one's sender from the provider.
+                        val jh = h ?: runCatching { m.header(token, rescuedId ?: backId ?: item.movedId) }.getOrNull()
+                        val address = jh?.fromAddress
+                        val name = jh?.let { MailUnsubscribeRules.displayName(it.fromName, it.fromAddress) } ?: from
+                        if (jh != null && address != null) keepSender(a, account, name, address, jh.receivedAtMs, ask.atMs)
+                        val kept = if (jh != null && address != null) " · $name kept from now on" else ""
                         when {
                             !b.canUndo -> "Already back · the whole tidy was put back"
                             !putBack -> "Couldn't put it back · it had gone"
