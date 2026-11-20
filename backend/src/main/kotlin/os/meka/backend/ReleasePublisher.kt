@@ -536,12 +536,24 @@ object ReleasePublisherCli {
     fun deviceSpeedLines(reports: List<DeviceSpeedCodec.Report>?): List<String> {
         if (reports == null) return listOf("::notice title=Obi's speed (devices)::this server doesn't take the devices' times yet")
         if (reports.isEmpty()) return listOf("::notice title=Obi's speed (devices)::no device has sent its day's times yet")
-        return reports.map { r ->
+        val rules = os.meka.core.domain.DeviceSpeedRules
+        return reports.flatMap { r ->
             val s = os.meka.core.domain.DeviceSpeedSummary(
                 r.device, r.sentAtMs, r.helloCount, r.helloAvgMs, r.helloMaxMs, r.answerCount, r.answerAvgMs, r.answerMaxMs,
+                slow = r.slow.map { os.meka.core.domain.DeviceSlowWork(it.name, it.worstMs, it.count, it.slow) },
+                feel = r.feel.mapNotNull { f ->
+                    val m = os.meka.core.domain.FeelMoment.entries.firstOrNull { it.name == f.moment } ?: return@mapNotNull null
+                    os.meka.core.domain.FeelEntry(m, f.worstMs, f.place, f.worstMs, f.count, f.over)
+                },
             )
-            val level = if (os.meka.core.domain.DeviceSpeedRules.overAim(s)) "warning" else "notice"
-            "::$level title=Obi's speed (devices, last day)::${os.meka.core.domain.DeviceSpeedRules.line(s)} · sent ${utc(r.sentAtMs)}".replace("%", "%25")
+            fun level(over: Boolean) = if (over) "warning" else "notice"
+            val sent = " · sent ${utc(r.sentAtMs)}"
+            listOfNotNull(
+                "::${level(rules.overAim(s))} title=Obi's speed (devices, last day)::${rules.line(s)}$sent",
+                // Taps feel instant (3, rest): the day's slowest core work and how the app felt, for the build to fix.
+                rules.workLine(s)?.let { "::${level(rules.workOver(s))} title=Slowest work (devices, last day)::$it$sent" },
+                rules.feelLine(s)?.let { "::${level(rules.feelOver(s))} title=How it feels (devices, last day)::$it$sent" },
+            ).map { it.replace("%", "%25") }
         }
     }
 

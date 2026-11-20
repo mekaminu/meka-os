@@ -15,7 +15,17 @@ data class DeviceSpeedSummary(
     val answerCount: Int,
     val answerAvgMs: Long?,
     val answerMaxMs: Long?,
+    /**
+     * Taps feel instant (3, rest; 2026-11-20): the slowest core work over the last day, by the code's own names ("Money
+     * view"), slowest first, at most [DeviceSpeedRules.SLOW_MAX], each over [SpeedRules.SLOW_MS]. Never what it was about.
+     */
+    val slow: List<DeviceSlowWork> = emptyList(),
+    /** The same slice: cold start, tab switch and first content as the app timed them in the last day ([FeelLog.all]). */
+    val feel: List<FeelEntry> = emptyList(),
 )
+
+/** One named piece of core work: its slowest time in the window, how many times it ran and how many were slow. */
+data class DeviceSlowWork(val name: String, val worstMs: Long, val count: Int, val slow: Int)
 
 object DeviceSpeedRules {
     /** The device-only store's key for when the last summary went ([MekaCore]'s local values: never synced). */
@@ -25,6 +35,12 @@ object DeviceSpeedRules {
     /** The turns a summary covers: the last day. */
     const val WINDOW_MS = 24 * 60 * 60_000L
     const val DEVICE_MAX = 12
+    /** The report names this many of the slowest pieces of work. */
+    const val SLOW_MAX = 5
+    /** A work name the report can print: the code's names are short ("Whole-app refresh"). */
+    const val NAME_MAX = 32
+    /** The slowest work worth a warning in the report: a second or more held the core's one thread. */
+    const val SLOW_WARN_MS = 1_000L
 
     /** Due when nothing went yet, the last went [EVERY_MS] ago or more, or the clock moved back. */
     fun due(lastSentMs: Long?, nowMs: Long): Boolean = lastSentMs == null || nowMs - lastSentMs !in 0 until EVERY_MS
@@ -33,8 +49,28 @@ object DeviceSpeedRules {
     fun label(device: String): String =
         device.filter { it.isLetter() || it == ' ' }.trim().take(DEVICE_MAX).ifEmpty { "device" }
 
-    /** The last day's turns as numbers, or null when there were none (nothing worth sending). */
-    fun summary(traces: List<TurnTrace>, device: String, nowMs: Long): DeviceSpeedSummary? {
+    /** A work name the report can print: letters, digits, spaces and · - ' only, at most [NAME_MAX]; null when nothing is left. */
+    fun workName(name: String): String? =
+        name.filter { it.isLetterOrDigit() || it == ' ' || it == '·' || it == '-' || it == '\'' }.trim().take(NAME_MAX).trim().ifEmpty { null }
+
+    /** The day's work log ([SpeedLog.worst] over a day) as the report's list: slow ones only, slowest first, at most [SLOW_MAX]. */
+    fun slowWork(entries: List<SpeedEntry>): List<DeviceSlowWork> =
+        entries.filter { it.worstMs > SpeedRules.SLOW_MS }
+            .sortedWith(compareByDescending<SpeedEntry> { it.worstMs }.thenBy { it.name })
+            .mapNotNull { e -> workName(e.name)?.let { DeviceSlowWork(it, e.worstMs, e.count, e.slow) } }
+            .take(SLOW_MAX)
+
+    /**
+     * The last day's turns as numbers, with the day's [slow] work and [feel] times riding along, or null when there were
+     * no turns (nothing worth sending: the summary goes as a turn ends).
+     */
+    fun summary(
+        traces: List<TurnTrace>,
+        device: String,
+        nowMs: Long,
+        slow: List<SpeedEntry> = emptyList(),
+        feel: List<FeelEntry> = emptyList(),
+    ): DeviceSpeedSummary? {
         val recent = traces.filter { it.atMs in (nowMs - WINDOW_MS)..nowMs && it.toVoiceMs != null }
         if (recent.isEmpty()) return null
         val hellos = recent.filter { it.kind == TurnKind.HELLO }.mapNotNull { it.toVoiceMs }
@@ -44,6 +80,7 @@ object DeviceSpeedRules {
             label(device), nowMs,
             hellos.size, avg(hellos), hellos.maxOrNull(),
             answers.size, avg(answers), answers.maxOrNull(),
+            slowWork(slow), feel,
         )
     }
 
@@ -63,6 +100,36 @@ object DeviceSpeedRules {
         if (parts.size == 1) parts += "no turns"
         return parts.joinToString(" · ")
     }
+
+    /**
+     * The report's work line, or null with nothing slow: "Phone · Money view 1.8 s (12 times, 3 slow) · Whole-app refresh
+     * 640 ms (40 times, 6 slow)".
+     */
+    fun workLine(s: DeviceSpeedSummary): String? {
+        if (s.slow.isEmpty()) return null
+        return (listOf(s.device.replaceFirstChar { it.uppercaseChar() }) + s.slow.map { w ->
+            "${w.name} ${SpeedRules.said(w.worstMs)}" + when {
+                w.count <= 1 -> ""
+                w.slow == 0 -> " (${w.count} times)"
+                else -> " (${w.count} times, ${w.slow} slow)"
+            }
+        }).joinToString(" · ")
+    }
+
+    /** A second or more of work held the core: the report shows the work line as a warning. */
+    fun workOver(s: DeviceSpeedSummary): Boolean = s.slow.any { it.worstMs >= SLOW_WARN_MS }
+
+    /**
+     * The report's feel line, or null when nothing was timed: "Phone: Cold start to Today · 2.1 s · aim 1.5 s · 3 times,
+     * 1 over; Tab switch · 90 ms (Calendar) · aim 150 ms · 40 times".
+     */
+    fun feelLine(s: DeviceSpeedSummary): String? {
+        if (s.feel.isEmpty()) return null
+        return s.device.replaceFirstChar { it.uppercaseChar() } + ": " + s.feel.joinToString("; ") { FeelRules.line(it) }
+    }
+
+    /** A moment's slowest time over its aim: the report shows the feel line as a warning. */
+    fun feelOver(s: DeviceSpeedSummary): Boolean = FeelRules.worstOver(s.feel) != null
 
     /** Either kind's average over its aim: the report shows it as a warning, not a notice. */
     fun overAim(s: DeviceSpeedSummary): Boolean =

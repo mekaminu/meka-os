@@ -61,6 +61,26 @@ class DeviceSpeedsTest {
     }
 
     @Test
+    fun theReportAlsoNamesTheDaysSlowestWorkAndHowItFelt() {
+        val r = phone.copy(
+            slow = listOf(DeviceSpeedCodec.Work("Money view", 1_800, 12, 3), DeviceSpeedCodec.Work("Whole-app refresh", 640, 40, 6)),
+            feel = listOf(DeviceSpeedCodec.Feel("COLD_START", 1_200, null, 3, 0), DeviceSpeedCodec.Feel("TAB", 90, "Calendar", 40, 0)),
+        )
+        val read = DeviceSpeedCodec.decodeReport(DeviceSpeedCodec.encodeReport(r))
+        assertEquals(
+            listOf(
+                "::warning title=Obi's speed (devices, last day)::Phone · 6 hellos avg 0.5 s, slowest 1.2 s (aim 0.6 s) · " +
+                    "14 answers avg 1.7 s, slowest 3.1 s (aim 1.5 s), over aim · sent 2026-11-13 08:00 UTC",
+                "::warning title=Slowest work (devices, last day)::Phone · Money view 1.8 s (12 times, 3 slow) · " +
+                    "Whole-app refresh 640 ms (40 times, 6 slow) · sent 2026-11-13 08:00 UTC",
+                "::notice title=How it feels (devices, last day)::Phone: Cold start to Today · 1.2 s · aim 1.5 s · 3 times; " +
+                    "Tab switch · 90 ms (Calendar) · aim 150 ms · 40 times · sent 2026-11-13 08:00 UTC",
+            ),
+            ReleasePublisherCli.deviceSpeedLines(listOf(read)),
+        )
+    }
+
+    @Test
     fun thePublisherCantSendAndUnsignedCallersAreRefused() = testApplication {
         mekaServer()
         val path = DeviceSpeedCodec.REPORT_PATH

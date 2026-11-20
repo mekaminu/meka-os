@@ -24,4 +24,24 @@ class DeviceSpeedCodecTest {
         assertFailsWith<WireFormatException> { DeviceSpeedCodec.decodeReport("""{"w":${WireCodec.VERSION},"device":"123","sent":5}""") }
         assertFailsWith<WireFormatException> { DeviceSpeedCodec.decodeReport("""{"w":${WireCodec.VERSION},"device":"Mac"}""") }
     }
+
+    @Test
+    fun theDaysSlowWorkAndFeelTimesRoundTripAsNamesAndNumbers() {
+        val full = r.copy(
+            slow = listOf(DeviceSpeedCodec.Work("Money view", 1_800, 12, 3), DeviceSpeedCodec.Work("Mail · list", 300, 1, 1)),
+            feel = listOf(DeviceSpeedCodec.Feel("COLD_START", 2_100, null, 3, 1), DeviceSpeedCodec.Feel("TAB", 90, "Calendar", 40, 0)),
+        )
+        assertEquals(full, DeviceSpeedCodec.decodeReport(DeviceSpeedCodec.encodeReport(full)))
+        assertEquals(listOf(full), DeviceSpeedCodec.decodeLatest(DeviceSpeedCodec.encodeLatest(listOf(full))))
+        // An older report without them still reads.
+        assertEquals(r, DeviceSpeedCodec.decodeReport(DeviceSpeedCodec.encodeReport(r)))
+        // Only names and numbers get through: odd characters dropped, unknown moments, bad times and extra fields left out.
+        val odd = DeviceSpeedCodec.decodeReport(
+            """{"w":${WireCodec.VERSION},"device":"phone","sent":5,"hn":1,"an":0,""" +
+                """"slow":[{"n":"Money <b>view</b> 12:00","ms":1800,"c":2,"s":1,"words":"hi"},{"n":"***","ms":5},{"n":"Big","ms":999999}],""" +
+                """"feel":[{"m":"TAB","ms":90,"p":"Calendar 1 <x>","c":4,"o":0},{"m":"EVIL","ms":5},{"m":"TAB","ms":10}]}""",
+        )
+        assertEquals(listOf(DeviceSpeedCodec.Work("Money bviewb 1200", 1_800, 2, 1)), odd.slow)
+        assertEquals(listOf(DeviceSpeedCodec.Feel("TAB", 90, "Calendar  x", 4, 0)), odd.feel)
+    }
 }

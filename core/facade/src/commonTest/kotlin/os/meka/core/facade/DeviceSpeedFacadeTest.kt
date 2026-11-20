@@ -3,6 +3,8 @@ package os.meka.core.facade
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.DeviceSpeedRules
+import os.meka.core.domain.FeelMoment
+import os.meka.core.domain.SpeedRules
 import os.meka.core.domain.TurnKind
 import os.meka.core.domain.TurnSpeedRules
 import os.meka.core.domain.TurnTrace
@@ -48,6 +50,29 @@ class DeviceSpeedFacadeTest {
     private fun seed(vararg traces: TurnTrace) =
         store.transaction { store.setLocalValue(TurnSpeedRules.KEY, TurnSpeedRules.encode(traces.toList())) }
 
+    /** The turns' numbers alone (the core's own work timings depend on the machine running the test). */
+    private fun turnsOnly(r: DeviceSpeedCodec.Report) = r.copy(slow = emptyList(), feel = emptyList())
+
+    @Test
+    fun theDaysFeelTimesAndOnlySlowNamedWorkRideAlong() = runTest {
+        seed(TurnTrace(TurnKind.HELLO, now - hour, toVoiceMs = 400))
+        val c = core()
+        c.noteFeel(FeelMoment.COLD_START, 2_100)
+        c.noteFeel(FeelMoment.TAB, 90, "Calendar")
+        c.noteFeel(FeelMoment.TAB, 200, "Money")
+        c.feelAll() // the notes are recorded on the core's thread
+        c.turnEnded()
+        val sent = server.sent.single()
+        assertEquals(
+            listOf(DeviceSpeedCodec.Feel("COLD_START", 2_100, null, 1, 1), DeviceSpeedCodec.Feel("TAB", 200, "Money", 2, 1)),
+            sent.feel,
+        )
+        // Whatever work was slow on this machine: named by the code, over 100 ms, slowest first, five at most.
+        assertTrue(sent.slow.size <= DeviceSpeedRules.SLOW_MAX)
+        assertTrue(sent.slow.all { it.worstMs > SpeedRules.SLOW_MS && it.name.isNotBlank() })
+        assertEquals(sent.slow.sortedByDescending { it.worstMs }, sent.slow)
+    }
+
     @Test
     fun onceADayTheLastDaysTimesGoAsNumbersOnly() = runTest {
         seed(
@@ -58,7 +83,7 @@ class DeviceSpeedFacadeTest {
         )
         val c = core()
         c.turnEnded()
-        assertEquals(listOf(DeviceSpeedCodec.Report("phone", now, 2, 600, 800, 1, 2_000, 2_000)), server.sent)
+        assertEquals(listOf(DeviceSpeedCodec.Report("phone", now, 2, 600, 800, 1, 2_000, 2_000)), server.sent.map(::turnsOnly))
         // Not again the same day.
         now += hour
         c.turnEnded()
@@ -67,7 +92,7 @@ class DeviceSpeedFacadeTest {
         now += 20 * hour
         seed(TurnTrace(TurnKind.TALK, now - 60_000, toVoiceMs = 1_000))
         core().turnEnded(device = "Mac")
-        assertEquals(DeviceSpeedCodec.Report("Mac", now, 0, null, null, 1, 1_000, 1_000), server.sent.last())
+        assertEquals(DeviceSpeedCodec.Report("Mac", now, 0, null, null, 1, 1_000, 1_000), turnsOnly(server.sent.last()))
     }
 
     @Test

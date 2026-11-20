@@ -25,6 +25,10 @@ object DeviceSpeedCodec {
     /** A time over a minute isn't a turn's (the devices drop those too). */
     const val MS_MAX = 60_000L
     const val COUNT_MAX = 10_000
+    const val SLOW_MAX = 5
+    const val NAME_MAX = 32
+    const val PLACE_MAX = 24
+    val FEEL_MOMENTS = setOf("COLD_START", "TAB", "SCREEN")
 
     data class Report(
         val device: String,
@@ -35,7 +39,16 @@ object DeviceSpeedCodec {
         val answerCount: Int,
         val answerAvgMs: Long?,
         val answerMaxMs: Long?,
+        /** 2026-11-20: the day's slowest core work by the code's own names, slowest first (at most [SLOW_MAX]). */
+        val slow: List<Work> = emptyList(),
+        /** The same day's feel times: cold start, tab switch, first content ([FEEL_MOMENTS]), at most one each. */
+        val feel: List<Feel> = emptyList(),
     )
+
+    data class Work(val name: String, val worstMs: Long, val count: Int, val slow: Int)
+
+    /** [moment] is one of [FEEL_MOMENTS] (the core's FeelMoment names); [place] a tab or screen's name, when the app said. */
+    data class Feel(val moment: String, val worstMs: Long, val place: String?, val count: Int, val over: Int)
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -79,6 +92,25 @@ object DeviceSpeedCodec {
         put("an", r.answerCount.coerceIn(0, COUNT_MAX))
         r.answerAvgMs?.let { put("aa", it) }
         r.answerMaxMs?.let { put("am", it) }
+        val work = r.slow.mapNotNull { w -> name(w.name)?.let { w.copy(name = it) } }.take(SLOW_MAX)
+        if (work.isNotEmpty()) put("slow", buildJsonArray {
+            work.forEach { w ->
+                add(buildJsonObject {
+                    put("n", w.name); put("ms", w.worstMs.coerceIn(0, MS_MAX))
+                    put("c", w.count.coerceIn(0, COUNT_MAX)); put("s", w.slow.coerceIn(0, COUNT_MAX))
+                })
+            }
+        })
+        val feel = r.feel.filter { it.moment in FEEL_MOMENTS }.distinctBy { it.moment }
+        if (feel.isNotEmpty()) put("feel", buildJsonArray {
+            feel.forEach { f ->
+                add(buildJsonObject {
+                    put("m", f.moment); put("ms", f.worstMs.coerceIn(0, MS_MAX))
+                    place(f.place)?.let { put("p", it) }
+                    put("c", f.count.coerceIn(0, COUNT_MAX)); put("o", f.over.coerceIn(0, COUNT_MAX))
+                })
+            }
+        })
     }
 
     private fun report(o: JsonObject): Report {
@@ -86,8 +118,28 @@ object DeviceSpeedCodec {
         val device = o.str("device")?.let(::clean)?.takeIf { it.isNotEmpty() } ?: throw IllegalArgumentException("device")
         fun ms(k: String): Long? = o.long(k)?.takeIf { it in 0..MS_MAX }
         fun count(k: String): Int = (o.long(k) ?: 0L).coerceIn(0L, COUNT_MAX.toLong()).toInt()
-        return Report(device, sent, count("hn"), ms("ha"), ms("hm"), count("an"), ms("aa"), ms("am"))
+        fun JsonObject.n(k: String): Int = (long(k) ?: 0L).coerceIn(0L, COUNT_MAX.toLong()).toInt()
+        val slow = (o["slow"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val w = e as? JsonObject ?: return@mapNotNull null
+            val n = w.str("n")?.let(::name) ?: return@mapNotNull null
+            val t = w.long("ms")?.takeIf { it in 0..MS_MAX } ?: return@mapNotNull null
+            Work(n, t, w.n("c"), w.n("s"))
+        }.take(SLOW_MAX)
+        val feel = (o["feel"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val f = e as? JsonObject ?: return@mapNotNull null
+            val m = f.str("m")?.takeIf { it in FEEL_MOMENTS } ?: return@mapNotNull null
+            val t = f.long("ms")?.takeIf { it in 0..MS_MAX } ?: return@mapNotNull null
+            Feel(m, t, f.str("p")?.let(::place), f.n("c"), f.n("o"))
+        }.distinctBy { it.moment }
+        return Report(device, sent, count("hn"), ms("ha"), ms("hm"), count("an"), ms("aa"), ms("am"), slow, feel)
     }
+
+    /** A work name: letters, digits, spaces and · - ' only (the code's own names), at most [NAME_MAX]; null when empty. */
+    private fun name(s: String): String? =
+        s.filter { it.isLetterOrDigit() || it == ' ' || it == '·' || it == '-' || it == '\'' }.trim().take(NAME_MAX).trim().ifEmpty { null }
+
+    /** A tab or screen's name: letters and spaces only, at most [PLACE_MAX]; null when empty. */
+    private fun place(s: String?): String? = s?.filter { it.isLetter() || it == ' ' }?.trim()?.take(PLACE_MAX)?.trim()?.ifEmpty { null }
 
     /** Letters and spaces only, so nothing but a label can ride in this field. */
     private fun clean(s: String): String = s.filter { it.isLetter() || it == ' ' }.trim().take(DEVICE_MAX)

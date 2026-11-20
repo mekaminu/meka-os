@@ -130,6 +130,8 @@ class MekaCore(
     /** The Speed log (taps feel instant, slice 3): in memory on this device, written on the core's thread only. Declared
      * before anything that refreshes (the init block's first refresh is timed). */
     private val speedLog = os.meka.core.domain.SpeedLog()
+    /** The same times over a day, for the daily build report's work line ([os.meka.core.domain.DeviceSpeedRules.slowWork]). */
+    private val speedDayLog = os.meka.core.domain.SpeedLog(os.meka.core.domain.DeviceSpeedRules.WINDOW_MS)
     /** Taps feel instant, part (4): cold start, tab switches and first content as the apps timed them. Core thread only. */
     private val feelLog = os.meka.core.domain.FeelLog()
     /**
@@ -1437,7 +1439,7 @@ class MekaCore(
             }
             val took = started.elapsedNow().inWholeMilliseconds
             withContext(confined) {
-                speedLog.record(SPEED_MONEY_VIEW, took, nowMs())
+                recordSpeed(SPEED_MONEY_VIEW, took, nowMs())
                 if (gen != moneyGen || !moneyOpen) return@withContext
                 moneyJob = null
                 moneyPendingFrom = null
@@ -13258,7 +13260,10 @@ class MekaCore(
             val last = runCatching { localStore.transaction { localStore.localValue(rules.SENT_KEY) } }.getOrNull()?.toLongOrNull()
             val now = nowMs()
             if (!rules.due(last, now)) return@onCore null
-            rules.summary(loadTurnTraces(), device, now)?.also { deviceSpeedSending = true }
+            rules.summary(
+                loadTurnTraces(), device, now,
+                slow = speedDayLog.worst(os.meka.core.domain.SpeedRules.MAX_NAMES), feel = feelLog.all(),
+            )?.also { deviceSpeedSending = true }
         } ?: return
         val api = deviceSpeedApi
         val sent = api != null && try {
@@ -13266,6 +13271,10 @@ class MekaCore(
                 os.meka.core.wire.DeviceSpeedCodec.Report(
                     summary.device, summary.sentAtMs, summary.helloCount, summary.helloAvgMs, summary.helloMaxMs,
                     summary.answerCount, summary.answerAvgMs, summary.answerMaxMs,
+                    slow = summary.slow.map { os.meka.core.wire.DeviceSpeedCodec.Work(it.name, it.worstMs, it.count, it.slow) },
+                    feel = summary.feel.map {
+                        os.meka.core.wire.DeviceSpeedCodec.Feel(it.moment.name, it.worstMs, it.worstPlace, it.count, it.over)
+                    },
                 ),
             )
         } catch (e: CancellationException) {
@@ -13616,7 +13625,7 @@ class MekaCore(
                 lastLiveOutcome = o
                 lastLiveOutcomeRead = true
                 // 2026-10-25: a talk where Obi waited for the network shows in Health → Speed with its longest wait.
-                if (live && audio != null && audio.waits > 0) speedLog.record(os.meka.core.domain.LiveAudioLines.SPEED_WAIT, audio.longestWaitMs, now)
+                if (live && audio != null && audio.waits > 0) recordSpeed(os.meka.core.domain.LiveAudioLines.SPEED_WAIT, audio.longestWaitMs, now)
                 runCatching {
                     localStore.transaction {
                         localStore.setLocalValue(os.meka.core.domain.LiveDiagnosisRules.KEY, os.meka.core.domain.LiveDiagnosisRules.encode(o))
@@ -14403,14 +14412,14 @@ class MekaCore(
         val asked = TimeSource.Monotonic.markNow()
         val (result, moneyBuild) = withContext(confined) {
             val waited = asked.elapsedNow().inWholeMilliseconds
-            if (waited > os.meka.core.domain.SpeedRules.LOG_MS) speedLog.record(SPEED_WAIT, waited, nowMs())
+            if (waited > os.meka.core.domain.SpeedRules.LOG_MS) recordSpeed(SPEED_WAIT, waited, nowMs())
             val started = TimeSource.Monotonic.markNow()
             val before = moneyJob
             try {
                 block() to moneyJob.takeIf { it !== before }
             } finally {
                 val took = started.elapsedNow().inWholeMilliseconds
-                if (took > os.meka.core.domain.SpeedRules.LOG_MS) speedLog.record(SPEED_WORK, took, nowMs())
+                if (took > os.meka.core.domain.SpeedRules.LOG_MS) recordSpeed(SPEED_WORK, took, nowMs())
             }
         }
         // (4c) rest: a money build this call started runs off the core; the call returns once it's showing, while the
@@ -14419,13 +14428,19 @@ class MekaCore(
         return result
     }
 
+    /** One timing into Health's hour-long Speed log and the daily report's day-long one. Core thread only. */
+    private fun recordSpeed(name: String, ms: Long, atMs: Long) {
+        speedLog.record(name, ms, atMs)
+        speedDayLog.record(name, ms, atMs)
+    }
+
     /** Times [block] into the Speed log as [name] (every run counted, so Health can say "12 times, 3 slow"). Core only. */
     private inline fun <T> timed(name: String, block: () -> T): T {
         val started = TimeSource.Monotonic.markNow()
         try {
             return block()
         } finally {
-            speedLog.record(name, started.elapsedNow().inWholeMilliseconds, nowMs())
+            recordSpeed(name, started.elapsedNow().inWholeMilliseconds, nowMs())
         }
     }
 
