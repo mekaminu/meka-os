@@ -99,7 +99,7 @@ object DeviceSpeedRules {
     /** The report names this many of the slowest pieces of work. */
     const val SLOW_MAX = 5
     /** A work name the report can print: the code's names are short ("Whole-app refresh"). */
-    const val NAME_MAX = 32
+    const val MAX_NAME_LENGTH = 32
     /** The slowest work worth a warning in the report: a second or more held the core's one thread. */
     const val SLOW_WARN_MS = 1_000L
 
@@ -110,9 +110,9 @@ object DeviceSpeedRules {
     fun label(device: String): String =
         device.filter { it.isLetter() || it == ' ' }.trim().take(DEVICE_MAX).ifEmpty { "device" }
 
-    /** A work name the report can print: letters, digits, spaces and · - ' only, at most [NAME_MAX]; null when nothing is left. */
+    /** A work name the report can print: letters, digits, spaces and · - ' only, at most [MAX_NAME_LENGTH]; null when nothing is left. */
     fun workName(name: String): String? =
-        name.filter { it.isLetterOrDigit() || it == ' ' || it == '·' || it == '-' || it == '\'' }.trim().take(NAME_MAX).trim().ifEmpty { null }
+        name.filter { it.isLetterOrDigit() || it == ' ' || it == '·' || it == '-' || it == '\'' }.trim().take(MAX_NAME_LENGTH).trim().ifEmpty { null }
 
     /** The day's work log ([SpeedLog.worst] over a day) as the report's list: slow ones only, slowest first, at most [SLOW_MAX]. */
     fun slowWork(entries: List<SpeedEntry>): List<DeviceSlowWork> =

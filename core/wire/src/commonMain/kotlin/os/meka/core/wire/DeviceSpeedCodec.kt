@@ -26,7 +26,7 @@ object DeviceSpeedCodec {
     const val MS_MAX = 60_000L
     const val COUNT_MAX = 10_000
     const val SLOW_MAX = 5
-    const val NAME_MAX = 32
+    const val MAX_NAME_LENGTH = 32
     const val PLACE_MAX = 24
     val FEEL_MOMENTS = setOf("COLD_START", "TAB", "SCREEN")
 
@@ -153,9 +153,9 @@ object DeviceSpeedCodec {
         return Report(device, sent, count("hn"), ms("ha"), ms("hm"), count("an"), ms("aa"), ms("am"), slow, feel, live)
     }
 
-    /** A work name: letters, digits, spaces and · - ' only (the code's own names), at most [NAME_MAX]; null when empty. */
+    /** A work name: letters, digits, spaces and · - ' only (the code's own names), at most [MAX_NAME_LENGTH]; null when empty. */
     private fun name(s: String): String? =
-        s.filter { it.isLetterOrDigit() || it == ' ' || it == '·' || it == '-' || it == '\'' }.trim().take(NAME_MAX).trim().ifEmpty { null }
+        s.filter { it.isLetterOrDigit() || it == ' ' || it == '·' || it == '-' || it == '\'' }.trim().take(MAX_NAME_LENGTH).trim().ifEmpty { null }
 
     /** A tab or screen's name: letters and spaces only, at most [PLACE_MAX]; null when empty. */
     private fun place(s: String?): String? = s?.filter { it.isLetter() || it == ' ' }?.trim()?.take(PLACE_MAX)?.trim()?.ifEmpty { null }

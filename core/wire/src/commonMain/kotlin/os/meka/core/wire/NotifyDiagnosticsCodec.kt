@@ -35,7 +35,7 @@ object NotifyDiagnosticsCodec {
     const val MAIL_MAX = 6
     const val MAIL_DETAIL_MAX = 400
     const val DETAIL_MAX = 120
-    const val NAME_MAX = 40
+    const val MAX_NAME_LENGTH = 40
     const val MODEL_MAX = 40
 
     const val SENT = "sent"
@@ -219,7 +219,7 @@ object NotifyDiagnosticsCodec {
         put("phone", clean(r.phone, 12))
         put("channels", buildJsonArray {
             r.channels.take(CHANNELS_MAX).forEach { c ->
-                add(buildJsonObject { put("id", clean(c.id, NAME_MAX)); put("name", clean(c.name, NAME_MAX)); put("on", c.on)
+                add(buildJsonObject { put("id", clean(c.id, MAX_NAME_LENGTH)); put("name", clean(c.name, MAX_NAME_LENGTH)); put("on", c.on)
                     c.lastPostMs?.takeIf { it > 0 }?.let { put("last", it) }
                 })
             }
@@ -262,7 +262,7 @@ object NotifyDiagnosticsCodec {
             val c = e as? JsonObject ?: return@mapNotNull null
             val id = c.str("id")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val on = (c["on"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: return@mapNotNull null
-            Channel(clean(id, NAME_MAX), clean(c.str("name") ?: id, NAME_MAX), on, c.long("last")?.takeIf { it > 0 })
+            Channel(clean(id, MAX_NAME_LENGTH), clean(c.str("name") ?: id, MAX_NAME_LENGTH), on, c.long("last")?.takeIf { it > 0 })
         }.take(CHANNELS_MAX)
         val trace = entries(o["trace"] as? JsonArray ?: throw IllegalArgumentException("trace"), TRACE_MAX)
         return Report(
