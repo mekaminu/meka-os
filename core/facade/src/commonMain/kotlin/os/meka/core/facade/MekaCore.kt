@@ -13263,6 +13263,7 @@ class MekaCore(
             rules.summary(
                 loadTurnTraces(), device, now,
                 slow = speedDayLog.worst(os.meka.core.domain.SpeedRules.MAX_NAMES), feel = feelLog.all(),
+                live = os.meka.core.domain.LiveDayRules.day(liveDayTalks(), now),
             )?.also { deviceSpeedSending = true }
         } ?: return
         val api = deviceSpeedApi
@@ -13274,6 +13275,9 @@ class MekaCore(
                     slow = summary.slow.map { os.meka.core.wire.DeviceSpeedCodec.Work(it.name, it.worstMs, it.count, it.slow) },
                     feel = summary.feel.map {
                         os.meka.core.wire.DeviceSpeedCodec.Feel(it.moment.name, it.worstMs, it.worstPlace, it.count, it.over)
+                    },
+                    live = summary.live?.let {
+                        os.meka.core.wire.DeviceSpeedCodec.Live(it.talks, it.speakerTalks, it.cutOffs, it.speakerCutOffs, it.waits, it.longestWaitMs)
                     },
                 ),
             )
@@ -13626,8 +13630,15 @@ class MekaCore(
                 lastLiveOutcomeRead = true
                 // 2026-10-25: a talk where Obi waited for the network shows in Health → Speed with its longest wait.
                 if (live && audio != null && audio.waits > 0) recordSpeed(os.meka.core.domain.LiveAudioLines.SPEED_WAIT, audio.longestWaitMs, now)
+                // 2026-11-20: and it counts in the day's Live line of the daily build report (numbers only, this device).
+                val day = if (live && audio != null) os.meka.core.domain.LiveDayRules.added(
+                    liveDayTalks(),
+                    os.meka.core.domain.LiveDayRules.Talk(now, audio.output, audio.cutOffs, audio.waits, audio.longestWaitMs),
+                    now,
+                ) else null
                 runCatching {
                     localStore.transaction {
+                        day?.let { localStore.setLocalValue(os.meka.core.domain.LiveDayRules.KEY, os.meka.core.domain.LiveDayRules.encode(it)) }
                         localStore.setLocalValue(os.meka.core.domain.LiveDiagnosisRules.KEY, os.meka.core.domain.LiveDiagnosisRules.encode(o))
                         localStore.setLocalValue(os.meka.core.domain.LiveTalkLogRules.KEY, os.meka.core.domain.LiveTalkLogRules.encode(kept))
                     }
@@ -13635,6 +13646,11 @@ class MekaCore(
             }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { }
     }
+
+    /** The day's Live talks kept on this device for the daily build report ([os.meka.core.domain.LiveDayRules]). Core only. */
+    private fun liveDayTalks(): List<os.meka.core.domain.LiveDayRules.Talk> = os.meka.core.domain.LiveDayRules.decode(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.LiveDayRules.KEY) } }.getOrNull(),
+    )
 
     /** The last talk with Live on (this device). Core only. */
     private var lastLiveOutcome: os.meka.core.domain.LiveDiagnosisRules.LiveOutcome? = null

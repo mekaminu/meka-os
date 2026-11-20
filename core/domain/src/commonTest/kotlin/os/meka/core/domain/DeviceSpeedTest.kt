@@ -95,4 +95,37 @@ class DeviceSpeedTest {
         // Slow work alone sends nothing: the summary goes with a turn.
         assertNull(DeviceSpeedRules.summary(emptyList(), "phone", now, work, feel))
     }
+
+    @Test
+    fun theDaysLiveTalksBecomeTheLiveLine() {
+        val sp = BargeInOutput.SPEAKER
+        val hp = BargeInOutput.HEADPHONES
+        var talks = emptyList<LiveDayRules.Talk>()
+        talks = LiveDayRules.added(talks, LiveDayRules.Talk(now - 25 * hour, sp, 9, 9, 9_000), now) // over a day ago: dropped
+        assertTrue(talks.isEmpty())
+        talks = LiveDayRules.added(talks, LiveDayRules.Talk(now - 3 * hour, sp, 1, 2, 1_200), now)
+        talks = LiveDayRules.added(talks, LiveDayRules.Talk(now - 2 * hour, hp, 1, 0, 0), now)
+        talks = LiveDayRules.added(talks, LiveDayRules.Talk(now - hour, sp, 0, 1, 300), now)
+        assertEquals(talks, LiveDayRules.decode(LiveDayRules.encode(talks)))
+        assertEquals(emptyList(), LiveDayRules.decode("x;1,LOUD,1,1,1;"))
+        val day = LiveDayRules.day(talks, now)!!
+        assertEquals(DeviceLiveDay(talks = 3, speakerTalks = 2, cutOffs = 2, speakerCutOffs = 1, waits = 3, longestWaitMs = 1_200), day)
+        val s = DeviceSpeedRules.summary(listOf(TurnTrace(TurnKind.TALK, now - hour, 900)), "phone", now, live = day)!!
+        assertEquals(
+            "Phone · Live: 3 talks (2 on the speaker) · Google stopped Obi 2 times (1 on the speaker) · waited 3 times for the network, longest 1.2 s",
+            DeviceSpeedRules.liveLine(s),
+        )
+        assertTrue(DeviceSpeedRules.liveOver(s))
+        // A quiet day on the speaker: a notice.
+        val quiet = s.copy(live = DeviceLiveDay(1, 1, 0, 0, 0, 0))
+        assertEquals("Phone · Live: 1 talk on the speaker · Google never stopped Obi · no waits for the network", DeviceSpeedRules.liveLine(quiet))
+        assertFalse(DeviceSpeedRules.liveOver(quiet))
+        // Stopped only on headphones (he talked over Obi, as he may): no warning.
+        val hpOnly = s.copy(live = DeviceLiveDay(2, 0, 2, 0, 0, 0))
+        assertEquals("Phone · Live: 2 talks on headphones · Google stopped Obi 2 times · no waits for the network", DeviceSpeedRules.liveLine(hpOnly))
+        assertFalse(DeviceSpeedRules.liveOver(hpOnly))
+        // No Live talk: no line.
+        assertNull(DeviceSpeedRules.liveLine(s.copy(live = null)))
+        assertNull(LiveDayRules.day(talks, now + 2 * DeviceSpeedRules.WINDOW_MS))
+    }
 }

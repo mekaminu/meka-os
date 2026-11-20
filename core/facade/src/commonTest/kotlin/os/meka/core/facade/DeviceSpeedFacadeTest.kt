@@ -54,6 +54,19 @@ class DeviceSpeedFacadeTest {
     private fun turnsOnly(r: DeviceSpeedCodec.Report) = r.copy(slow = emptyList(), feel = emptyList())
 
     @Test
+    fun theDaysLiveTalksRideAlongAsCounts() = runTest {
+        seed(TurnTrace(TurnKind.TALK, now - hour, toVoiceMs = 900))
+        val c = core()
+        val sp = os.meka.core.domain.BargeInOutput.SPEAKER
+        c.noteLiveOutcome(live = true, fallback = null, detail = null, audio = os.meka.core.domain.LiveAudioStats(sp, cutOffs = 1, waits = 2, longestWaitMs = 1_200))
+        c.noteLiveOutcome(live = true, fallback = null, detail = null, audio = os.meka.core.domain.LiveAudioStats(os.meka.core.domain.BargeInOutput.HEADPHONES, cutOffs = 1))
+        // A talk that fell back to normal Obi isn't a Live talk.
+        c.noteLiveOutcome(live = false, fallback = null, detail = null, audio = os.meka.core.domain.LiveAudioStats(sp, cutOffs = 5))
+        core().turnEnded() // a fresh core reads the kept talks
+        assertEquals(DeviceSpeedCodec.Live(2, 1, 2, 1, 2, 1_200), server.sent.single().live)
+    }
+
+    @Test
     fun theDaysFeelTimesAndOnlySlowNamedWorkRideAlong() = runTest {
         seed(TurnTrace(TurnKind.HELLO, now - hour, toVoiceMs = 400))
         val c = core()

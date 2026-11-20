@@ -22,7 +22,68 @@ data class DeviceSpeedSummary(
     val slow: List<DeviceSlowWork> = emptyList(),
     /** The same slice: cold start, tab switch and first content as the app timed them in the last day ([FeelLog.all]). */
     val feel: List<FeelEntry> = emptyList(),
+    /**
+     * Live's sound (2026-11-20, the Live item's (3) rest): the last day's Live talks with how often Google stopped Obi and
+     * how often he waited for the network ([LiveDayRules]); null when there was no Live talk. Counts and times only.
+     */
+    val live: DeviceLiveDay? = null,
 )
+
+/** The last day's Live talks on one device: how many (on the speaker), Google's stops (on the speaker) and network waits. */
+data class DeviceLiveDay(
+    val talks: Int,
+    val speakerTalks: Int,
+    val cutOffs: Int,
+    val speakerCutOffs: Int,
+    val waits: Int,
+    val longestWaitMs: Long,
+)
+
+/**
+ * The day's Live talks kept on this device for the daily build report (never synced): one entry per talk, its time,
+ * output, cut-offs, waits and longest wait. Pure; the core keeps the encoded list under [KEY].
+ */
+object LiveDayRules {
+    const val KEY = "live_day.v1"
+    /** Talks kept: more than any day has. */
+    const val MAX = 200
+    /** A longest wait this long, or Google stopping Obi on the speaker, makes the report's Live line a warning. */
+    const val WAIT_WARN_MS = 1_000L
+
+    data class Talk(val atMs: Long, val output: BargeInOutput, val cutOffs: Int, val waits: Int, val longestWaitMs: Long)
+
+    /** [talks] with [add], only the last [DeviceSpeedRules.WINDOW_MS] before [nowMs] kept, at most [MAX], oldest first. */
+    fun added(talks: List<Talk>, add: Talk, nowMs: Long): List<Talk> =
+        (talks + add).filter { it.atMs in (nowMs - DeviceSpeedRules.WINDOW_MS)..nowMs }.sortedBy { it.atMs }.takeLast(MAX)
+
+    /** The talks in the day before [nowMs] as the report's numbers, or null with none. */
+    fun day(talks: List<Talk>, nowMs: Long): DeviceLiveDay? {
+        val recent = talks.filter { it.atMs in (nowMs - DeviceSpeedRules.WINDOW_MS)..nowMs }
+        if (recent.isEmpty()) return null
+        val speaker = recent.filter { it.output == BargeInOutput.SPEAKER }
+        return DeviceLiveDay(
+            talks = recent.size,
+            speakerTalks = speaker.size,
+            cutOffs = recent.sumOf { it.cutOffs },
+            speakerCutOffs = speaker.sumOf { it.cutOffs },
+            waits = recent.sumOf { it.waits },
+            longestWaitMs = recent.maxOf { it.longestWaitMs },
+        )
+    }
+
+    /** "at,OUTPUT,cut,waits,longest" per talk, ";" between. */
+    fun encode(talks: List<Talk>): String =
+        talks.joinToString(";") { "${it.atMs},${it.output.name},${it.cutOffs},${it.waits},${it.longestWaitMs}" }
+
+    /** What [encode] wrote; an entry that can't be read is skipped. */
+    fun decode(s: String?): List<Talk> = s.orEmpty().split(';').mapNotNull { e ->
+        val p = e.split(',')
+        if (p.size != 5) return@mapNotNull null
+        val at = p[0].toLongOrNull() ?: return@mapNotNull null
+        val out = BargeInOutput.entries.firstOrNull { it.name == p[1] } ?: return@mapNotNull null
+        Talk(at, out, p[2].toIntOrNull()?.coerceAtLeast(0) ?: 0, p[3].toIntOrNull()?.coerceAtLeast(0) ?: 0, p[4].toLongOrNull()?.coerceAtLeast(0) ?: 0)
+    }.takeLast(MAX)
+}
 
 /** One named piece of core work: its slowest time in the window, how many times it ran and how many were slow. */
 data class DeviceSlowWork(val name: String, val worstMs: Long, val count: Int, val slow: Int)
@@ -70,6 +131,7 @@ object DeviceSpeedRules {
         nowMs: Long,
         slow: List<SpeedEntry> = emptyList(),
         feel: List<FeelEntry> = emptyList(),
+        live: DeviceLiveDay? = null,
     ): DeviceSpeedSummary? {
         val recent = traces.filter { it.atMs in (nowMs - WINDOW_MS)..nowMs && it.toVoiceMs != null }
         if (recent.isEmpty()) return null
@@ -80,7 +142,7 @@ object DeviceSpeedRules {
             label(device), nowMs,
             hellos.size, avg(hellos), hellos.maxOrNull(),
             answers.size, avg(answers), answers.maxOrNull(),
-            slowWork(slow), feel,
+            slowWork(slow), feel, live,
         )
     }
 
@@ -127,6 +189,32 @@ object DeviceSpeedRules {
         if (s.feel.isEmpty()) return null
         return s.device.replaceFirstChar { it.uppercaseChar() } + ": " + s.feel.joinToString("; ") { FeelRules.line(it) }
     }
+
+    /**
+     * The report's Live line, or null with no Live talk: "Phone · Live: 4 talks (3 on the speaker) · Google stopped Obi
+     * 2 times (1 on the speaker) · waited 3 times for the network, longest 1.2 s".
+     */
+    fun liveLine(s: DeviceSpeedSummary): String? {
+        val l = s.live ?: return null
+        val parts = mutableListOf(
+            "${s.device.replaceFirstChar { it.uppercaseChar() }} · Live: ${count(l.talks, "talk")}" +
+                if (l.speakerTalks == l.talks) " on the speaker" else if (l.speakerTalks == 0) " on headphones" else " (${l.speakerTalks} on the speaker)",
+        )
+        parts += when {
+            l.cutOffs == 0 -> "Google never stopped Obi"
+            l.speakerCutOffs == l.cutOffs && l.speakerTalks < l.talks -> "Google stopped Obi ${count(l.cutOffs, "time")}, all on the speaker"
+            l.speakerCutOffs in 1 until l.cutOffs -> "Google stopped Obi ${count(l.cutOffs, "time")} (${l.speakerCutOffs} on the speaker)"
+            else -> "Google stopped Obi ${count(l.cutOffs, "time")}"
+        }
+        parts += if (l.waits == 0) "no waits for the network" else "waited ${count(l.waits, "time")} for the network, longest ${SpeedRules.said(l.longestWaitMs)}"
+        return parts.joinToString(" · ")
+    }
+
+    /** Google stopped Obi on the speaker (his echo, most likely), or a wait of a second or more: the Live line is a warning. */
+    fun liveOver(s: DeviceSpeedSummary): Boolean =
+        s.live?.let { it.speakerCutOffs > 0 || it.longestWaitMs >= LiveDayRules.WAIT_WARN_MS } ?: false
+
+    private fun count(n: Int, what: String) = if (n == 1) "1 $what" else "$n ${what}s"
 
     /** A moment's slowest time over its aim: the report shows the feel line as a warning. */
     fun feelOver(s: DeviceSpeedSummary): Boolean = FeelRules.worstOver(s.feel) != null

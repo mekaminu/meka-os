@@ -545,6 +545,7 @@ object ReleasePublisherCli {
                     val m = os.meka.core.domain.FeelMoment.entries.firstOrNull { it.name == f.moment } ?: return@mapNotNull null
                     os.meka.core.domain.FeelEntry(m, f.worstMs, f.place, f.worstMs, f.count, f.over)
                 },
+                live = r.live?.let { os.meka.core.domain.DeviceLiveDay(it.talks, it.speakerTalks, it.cutOffs, it.speakerCutOffs, it.waits, it.longestWaitMs) },
             )
             fun level(over: Boolean) = if (over) "warning" else "notice"
             val sent = " · sent ${utc(r.sentAtMs)}"
@@ -553,6 +554,8 @@ object ReleasePublisherCli {
                 // Taps feel instant (3, rest): the day's slowest core work and how the app felt, for the build to fix.
                 rules.workLine(s)?.let { "::${level(rules.workOver(s))} title=Slowest work (devices, last day)::$it$sent" },
                 rules.feelLine(s)?.let { "::${level(rules.feelOver(s))} title=How it feels (devices, last day)::$it$sent" },
+                // The Live item's (3) rest: how the day's Live talks sounded (Google's stops, network waits).
+                rules.liveLine(s)?.let { "::${level(rules.liveOver(s))} title=Live's sound (devices, last day)::$it$sent" },
             ).map { it.replace("%", "%25") }
         }
     }

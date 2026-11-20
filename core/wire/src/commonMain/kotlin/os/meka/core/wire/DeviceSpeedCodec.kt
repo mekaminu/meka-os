@@ -43,7 +43,12 @@ object DeviceSpeedCodec {
         val slow: List<Work> = emptyList(),
         /** The same day's feel times: cold start, tab switch, first content ([FEEL_MOMENTS]), at most one each. */
         val feel: List<Feel> = emptyList(),
+        /** 2026-11-20: the day's Live talks, Google's stops and network waits ([Live]); null without a Live talk. */
+        val live: Live? = null,
     )
+
+    /** The day's Live talks (on the speaker), Google's stops of Obi (on the speaker), network waits and the longest. */
+    data class Live(val talks: Int, val speakerTalks: Int, val cutOffs: Int, val speakerCutOffs: Int, val waits: Int, val longestWaitMs: Long)
 
     data class Work(val name: String, val worstMs: Long, val count: Int, val slow: Int)
 
@@ -111,6 +116,15 @@ object DeviceSpeedCodec {
                 })
             }
         })
+        r.live?.takeIf { it.talks > 0 }?.let { l ->
+            val talks = l.talks.coerceIn(0, COUNT_MAX)
+            val cut = l.cutOffs.coerceIn(0, COUNT_MAX)
+            put("live", buildJsonObject {
+                put("t", talks); put("st", l.speakerTalks.coerceIn(0, talks))
+                put("c", cut); put("sc", l.speakerCutOffs.coerceIn(0, cut))
+                put("wn", l.waits.coerceIn(0, COUNT_MAX)); put("wl", l.longestWaitMs.coerceIn(0, MS_MAX))
+            })
+        }
     }
 
     private fun report(o: JsonObject): Report {
@@ -131,7 +145,12 @@ object DeviceSpeedCodec {
             val t = f.long("ms")?.takeIf { it in 0..MS_MAX } ?: return@mapNotNull null
             Feel(m, t, f.str("p")?.let(::place), f.n("c"), f.n("o"))
         }.distinctBy { it.moment }
-        return Report(device, sent, count("hn"), ms("ha"), ms("hm"), count("an"), ms("aa"), ms("am"), slow, feel)
+        val live = (o["live"] as? JsonObject)?.let { l ->
+            val talks = l.n("t").takeIf { it > 0 } ?: return@let null
+            val cut = l.n("c")
+            Live(talks, l.n("st").coerceAtMost(talks), cut, l.n("sc").coerceAtMost(cut), l.n("wn"), (l.long("wl") ?: 0L).coerceIn(0L, MS_MAX))
+        }
+        return Report(device, sent, count("hn"), ms("ha"), ms("hm"), count("an"), ms("aa"), ms("am"), slow, feel, live)
     }
 
     /** A work name: letters, digits, spaces and · - ' only (the code's own names), at most [NAME_MAX]; null when empty. */

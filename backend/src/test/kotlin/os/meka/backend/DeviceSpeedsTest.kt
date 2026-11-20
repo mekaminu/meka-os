@@ -81,6 +81,18 @@ class DeviceSpeedsTest {
     }
 
     @Test
+    fun theReportSaysHowTheDaysLiveTalksSounded() {
+        val r = phone.copy(live = DeviceSpeedCodec.Live(3, 2, 2, 1, 3, 1_200))
+        val read = DeviceSpeedCodec.decodeReport(DeviceSpeedCodec.encodeReport(r))
+        assertEquals(
+            "::warning title=Live's sound (devices, last day)::Phone · Live: 3 talks (2 on the speaker) · Google stopped Obi 2 times " +
+                "(1 on the speaker) · waited 3 times for the network, longest 1.2 s · sent 2026-11-13 08:00 UTC",
+            ReleasePublisherCli.deviceSpeedLines(listOf(read)).last(),
+        )
+        assertEquals(1, ReleasePublisherCli.deviceSpeedLines(listOf(phone)).size) // no Live talk, no Live line
+    }
+
+    @Test
     fun thePublisherCantSendAndUnsignedCallersAreRefused() = testApplication {
         mekaServer()
         val path = DeviceSpeedCodec.REPORT_PATH

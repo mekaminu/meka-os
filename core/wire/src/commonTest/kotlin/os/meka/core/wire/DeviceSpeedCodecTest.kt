@@ -44,4 +44,17 @@ class DeviceSpeedCodecTest {
         assertEquals(listOf(DeviceSpeedCodec.Work("Money bviewb 1200", 1_800, 2, 1)), odd.slow)
         assertEquals(listOf(DeviceSpeedCodec.Feel("TAB", 90, "Calendar  x", 4, 0)), odd.feel)
     }
+
+    @Test
+    fun theDaysLiveCountsRoundTripAsNumbersOnly() {
+        val full = r.copy(live = DeviceSpeedCodec.Live(3, 2, 2, 1, 3, 1_200))
+        assertEquals(full, DeviceSpeedCodec.decodeReport(DeviceSpeedCodec.encodeReport(full)))
+        assertEquals(listOf(full), DeviceSpeedCodec.decodeLatest(DeviceSpeedCodec.encodeLatest(listOf(full))))
+        // No talks: nothing sent; parts can't exceed their wholes; a wait over a minute is held to one.
+        assertEquals(r, DeviceSpeedCodec.decodeReport(DeviceSpeedCodec.encodeReport(r.copy(live = DeviceSpeedCodec.Live(0, 0, 0, 0, 0, 0)))))
+        val odd = DeviceSpeedCodec.decodeReport(
+            """{"w":${WireCodec.VERSION},"device":"phone","sent":5,"hn":1,"an":0,"live":{"t":2,"st":9,"c":1,"sc":5,"wn":1,"wl":999999,"words":"hi"}}""",
+        )
+        assertEquals(DeviceSpeedCodec.Live(2, 2, 1, 1, 1, DeviceSpeedCodec.MS_MAX), odd.live)
+    }
 }
