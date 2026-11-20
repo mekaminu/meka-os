@@ -38,6 +38,12 @@ open class TransportException(message: String, cause: Throwable? = null) : Excep
 /** The server no longer accepts this device's credentials (revoked, re-enrolled elsewhere, or key mismatch). */
 class AuthRejectedException(message: String) : TransportException(message)
 
+/**
+ * The build a phone was downloading is no longer on the server (a newer one replaced it: the server keeps the newest
+ * few). Not a network error: retrying the same build can't help, fetching the newest one can.
+ */
+class ReleaseGoneException(message: String) : TransportException(message)
+
 /** Server-side durable op store. The backend implements this on Postgres with `op_id` UNIQUE. */
 interface ServerOpStore {
     fun <T> transaction(block: () -> T): T

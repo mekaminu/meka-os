@@ -29,6 +29,7 @@ import os.meka.core.domain.UpdateFailure
 import os.meka.core.domain.UpdateFailureRules
 import os.meka.core.facade.AppRelease
 import os.meka.core.facade.ReleaseTransfer
+import os.meka.core.sync.ReleaseGoneException
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -187,12 +188,17 @@ class AppUpdater(private val app: MekaApplication) {
         app.appScope.launch { install(release) }
     }
 
-    suspend fun install(release: AppRelease) {
+    /**
+     * [switchedFrom]: the build this tap first asked for, when the server had dropped it and this is the newest instead
+     * (2026-11-10: "HTTP 404 from /v1/releases/chunk" on build 2787, replaced on the server while it was offered).
+     */
+    suspend fun install(release: AppRelease, switchedFrom: Long? = null) {
         if (!app.packageManager.canRequestPackageInstalls()) {
             _state.value = UpdateState.NeedsPermission(release)
             return
         }
         if (!installing.tryLock()) return
+        var newest: AppRelease? = null
         try {
             // One install at a time: while Android has the last one (its prompt up or on its way), a tap brings the
             // prompt back instead of making a second session beside it.
@@ -225,8 +231,21 @@ class AppUpdater(private val app: MekaApplication) {
                         e
                     }
                     if (error == null) break
-                    if (!UpdateFailureRules.retries(attempts)) {
-                        fail(release, UpdateFailureRules.STAGE_DOWNLOAD, null, error.javaClass.simpleName + (error.message?.let { ": $it" } ?: ""), attempts)
+                    if (error is ReleaseGoneException) {
+                        // A newer build replaced this one on the server: fetch the newest instead (once per tap).
+                        val latest = app.core.latestRelease()
+                        val code = UpdateFailureRules.replacement(release.versionCode, latest?.versionCode, installedCode, switchedFrom != null)
+                        if (latest != null && code == latest.versionCode) {
+                            file.delete()
+                            _latestCode.value = latest.versionCode
+                            _newest.value = latest
+                            newest = latest
+                            return
+                        }
+                    }
+                    if (error is ReleaseGoneException || !UpdateFailureRules.retries(attempts)) {
+                        val words = error.javaClass.simpleName + (error.message?.let { ": $it" } ?: "")
+                        fail(release, UpdateFailureRules.STAGE_DOWNLOAD, null, switchedFrom?.let { "$words · ${UpdateFailureRules.switchedNote(it)}" } ?: words, attempts)
                         return
                     }
                     delay(UpdateFailureRules.retryDelayMs(attempts + 1))
@@ -260,6 +279,8 @@ class AppUpdater(private val app: MekaApplication) {
             fail(release, UpdateFailureRules.STAGE_INSTALL, null, InstallSessionRules.reportMessage(words, autoRetries + 1, false), 1)
         } finally {
             installing.unlock()
+            // Started after the lock is let go (the return above runs this finally first).
+            newest?.let { n -> _state.value = UpdateState.Downloading(n, 0); app.appScope.launch { install(n, switchedFrom = release.versionCode) } }
         }
     }
 

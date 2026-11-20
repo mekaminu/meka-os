@@ -234,6 +234,21 @@ object UpdateFailureRules {
     fun retries(attempt: Int): Boolean = attempt < DOWNLOAD_ATTEMPTS
 
     /**
+     * The build to fetch instead when the server no longer holds [goneCode] (a newer build replaced it while it was
+     * offered or downloading; the server keeps the newest two, 2026-11-10's "HTTP 404 from /v1/releases/chunk"):
+     * [latestCode], the server's newest, when it is newer than both the gone build and what's installed, and this tap
+     * hasn't already switched once ([switched]). Null: say it failed, as before.
+     */
+    fun replacement(goneCode: Long, latestCode: Long?, installedCode: Long, switched: Boolean): Long? =
+        latestCode?.takeIf { !switched && it > goneCode && it > installedCode }
+
+    /** How a report's message starts when the server no longer held the build (the exception's own name). */
+    const val GONE = "ReleaseGoneException"
+
+    /** Kept in a report when a switch to a newer build still failed, so a build run can tell the two apart. */
+    fun switchedNote(fromCode: Long): String = "after build $fromCode was replaced"
+
+    /**
      * An install status that isn't a failure for Meka to read about: success, the prompt (Android's own step), and
      * ABORTED (he dismissed Android's prompt, or it was closed under him): the card goes back to Install.
      */
@@ -273,7 +288,8 @@ object UpdateFailureRules {
 
     /** The card's line: what went wrong in Meka's words. */
     fun line(f: UpdateFailure): String = when (f.stage) {
-        STAGE_DOWNLOAD -> if (f.attempts > 1) "Couldn't download the update (tried ${f.attempts} times). Check the connection and try again."
+        STAGE_DOWNLOAD -> if (f.message?.startsWith(GONE) == true) "A newer build replaced this one. Look again for the newest."
+            else if (f.attempts > 1) "Couldn't download the update (tried ${f.attempts} times). Check the connection and try again."
             else "Couldn't download the update. Check the connection and try again."
         STAGE_CHECK -> "The download didn't match the published build. Try again."
         else -> when (f.status) {

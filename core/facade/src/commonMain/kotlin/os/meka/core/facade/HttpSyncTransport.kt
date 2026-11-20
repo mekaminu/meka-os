@@ -793,7 +793,13 @@ class HttpSyncTransport(
     }
 
     override suspend fun releaseChunk(platform: String, versionCode: Long, index: Int): ByteArray {
-        val body = post("/v1/releases/chunk", WireCodec.encodeChunkRef(WireCodec.ChunkRef(platform, versionCode, index)))
+        val path = "/v1/releases/chunk"
+        val resp = send(path, WireCodec.encodeChunkRef(WireCodec.ChunkRef(platform, versionCode, index)))
+        if (resp.status.value == 401) throw AuthRejectedException("HTTP 401 from $path")
+        // The server answers 404 "no such build" once a newer build has replaced this one (2026-11-10, build 2787).
+        if (resp.status.value == 404) throw os.meka.core.sync.ReleaseGoneException("build $versionCode is no longer on the server")
+        if (!resp.status.isSuccess()) throw TransportException("HTTP ${resp.status.value} from $path")
+        val body = resp.bodyAsText()
         return try {
             Base64.decode(WireCodec.decodeChunkData(body))
         } catch (e: IllegalArgumentException) {

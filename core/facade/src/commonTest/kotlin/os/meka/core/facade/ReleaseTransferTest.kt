@@ -12,6 +12,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ReleaseTransferTest {
@@ -112,5 +113,19 @@ class ReleaseTransferTest {
         assertEquals(null, t.latestRelease("android"))
         val out = ReleaseTransfer.publish(t, "android", apk, 412, "0.1.412")
         assertEquals(PublishOutcome.Refused("build 412 isn't newer than the published build 412"), out)
+    }
+
+    @Test
+    fun aBuildTheServerNoLongerHoldsStopsAtOnceWithoutRetrying() = runTest {
+        var asked = 0
+        val client = HttpClient(MockEngine { req ->
+            if (req.url.encodedPath == "/v1/releases/chunk") asked++
+            respond("no such build", HttpStatusCode.NotFound)
+        })
+        val t = HttpSyncTransport(client, "https://meka.example", null) { "s".repeat(64) }
+        val release = ReleaseTransfer.describe("android", apk, 2787, "0.1.2787")
+        val e = assertFailsWith<os.meka.core.sync.ReleaseGoneException> { ReleaseTransfer.download(t, release, {}, {}) }
+        assertEquals("build 2787 is no longer on the server", e.message)
+        assertEquals(1, asked) // not three tries of a build that has gone
     }
 }

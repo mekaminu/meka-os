@@ -110,4 +110,19 @@ class UpdateFailureTest {
         assertTrue(AppUpdateRules.isWhole(30L * mib, 30L * mib))
         assertFalse(AppUpdateRules.isWhole(29L * mib, 30L * mib))
     }
+
+    @Test
+    fun aBuildTheServerDroppedIsSwappedForTheNewestOnce() {
+        // 2026-11-10: build 2787 was replaced on the server while the Fold (on 2784) was offered it.
+        assertEquals(2790L, r.replacement(goneCode = 2787, latestCode = 2790, installedCode = 2784, switched = false))
+        // Only once per tap, never to the same or an older build, never to what's already installed, not offline.
+        assertNull(r.replacement(2787, 2790, 2784, switched = true))
+        assertNull(r.replacement(2787, 2787, 2784, switched = false))
+        assertNull(r.replacement(2787, 2786, 2784, switched = false))
+        assertNull(r.replacement(2787, 2790, 2790, switched = false))
+        assertNull(r.replacement(2787, null, 2784, switched = false))
+        val gone = UpdateFailure(stage = r.STAGE_DOWNLOAD, message = "ReleaseGoneException: build 2787 is no longer on the server", fromCode = 2784, toCode = 2787, atMs = 1, attempts = 1)
+        assertEquals("A newer build replaced this one. Look again for the newest.", r.line(gone))
+        assertEquals("after build 2787 was replaced", r.switchedNote(2787))
+    }
 }

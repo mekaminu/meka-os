@@ -2,6 +2,7 @@ package os.meka.core.facade
 
 import os.meka.core.domain.AppUpdateRules
 import os.meka.core.sync.AuthRejectedException
+import os.meka.core.sync.ReleaseGoneException
 import os.meka.core.sync.TransportException
 import os.meka.core.wire.WireCodec
 import kotlin.coroutines.cancellation.CancellationException
@@ -94,7 +95,8 @@ object ReleaseTransfer {
 
     /**
      * Fetches [release] chunk by chunk into [sink], with [progress] after each one (chunks done). Each chunk is retried
-     * a few times on network errors; a chunk of the wrong size stops the download. The caller checks the whole
+     * a few times on network errors; a chunk of the wrong size stops the download, and a build the server no longer
+     * holds throws [ReleaseGoneException] at once (the caller fetches the newest build instead). The caller checks the whole
      * file's hash before installing. [fromChunk] resumes a download whose first chunks the caller already holds.
      */
     suspend fun download(api: ReleasesApi, release: AppRelease, sink: suspend (ByteArray) -> Unit, progress: (Int) -> Unit, fromChunk: Int = 0) {
@@ -113,6 +115,8 @@ object ReleaseTransfer {
                 return block()
             } catch (e: AuthRejectedException) {
                 throw e
+            } catch (e: ReleaseGoneException) {
+                throw e // asking again for a build the server dropped can't bring it back
             } catch (e: TransportException) {
                 if (++attempt >= ATTEMPTS) throw e
             }
