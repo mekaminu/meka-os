@@ -48,6 +48,8 @@ object MoneySave {
      * i.e. the forecast's "About £X a month left over" less the amount, so the two figures on the Plan page agree.
      */
     const val LEFT_AFTER = "left each month after saving this and your usual spending: about"
+    /** The total's caption starts "saved by Apr 2027", so it can't be read as the forecast's left over by then. */
+    const val SAVED = "saved"
     const val MIN_PENCE = 2_500L
     const val MAX_PENCE = 200_000L
     const val STEP_PENCE = 2_500L
@@ -127,7 +129,10 @@ object MoneySave {
         val paidIn = amt * n
         val interest = total - paidIn
         val endMonth = base.thisMonth + n
-        val end = "by ${monthShort(endMonth)}"
+        // Found and fixing week 5, A5: Plan open showed "BY APR 2027 +£13,620" (left over at his pace) beside "£6,750 by
+        // Apr 2027" with nothing to say how they differ; the saving's total says it's what's saved.
+        val by = "by ${monthShort(endMonth)}"
+        val end = "$SAVED $by"
         val bars = bal.mapIndexed { i, b ->
             MoneySaveBar(if (total > 0) b.toDouble() / total else 0.0, i == bal.lastIndex, "${monthShort(base.thisMonth + 1 + i)}: ${fmt(b)}")
         }
@@ -150,7 +155,7 @@ object MoneySave {
         val totalText = fmt(roundPound(total))
         return MoneySaveView(
             HEAD, EACH, fmt(amt), amt, monthChips, rateChips, bars, totalText, total, end, split, obi, lit,
-            goalTitle = "Save $totalText ${end}", goalTarget = totalText, basis = BASIS,
+            goalTitle = "Save $totalText $by", goalTarget = totalText, basis = BASIS,
             spoken = "Save ${fmt(amt)} a month for $n months, ${rateLabel(bp).lowercase()}: $totalText $end. ${if (split.isEmpty()) "" else "$split. "}$obi",
         )
     }

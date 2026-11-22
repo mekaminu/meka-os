@@ -101,6 +101,8 @@ object MoneyPlanMore {
     const val IN = "IN / MONTH"
     const val OUT = "OUT / MONTH"
     const val LEFT = "LEFT OVER"
+    /** The forecast's by-then tiles: "LEFT BY APR 2027", what's left over by then (walk-through week 5, A5); short enough for two tiles on the cover screen. */
+    const val LEFT_BY = "LEFT BY"
     val SPANS = listOf(6, 12)
     const val CUT_HEAD = "What if I cut…"
     /** The slider at nothing (walk-through 2026-11-08 A8: a bare "—" where a figure belongs). */
@@ -184,8 +186,10 @@ object MoneyPlanMore {
                 if (key) short(total) else null, key, total < 0, labelled = s <= 6 || i % 2 == 0)
         }
         val by = SPANS.map { h ->
-            MoneyPlanTile("BY ${monthYear(f.thisMonth + h)}", signed(at(h)), alarm = at(h) < 0,
-                spoken = "By ${Recurrence.MONTH_SHORT[(f.thisMonth + h) % 12]} ${(f.thisMonth + h) / 12}, ${signed(at(h))}")
+            // Found and fixing week 5, A5: "LEFT BY APR 2027", what's left over by then at his pace, so it isn't read as
+            // What if I save's "£6,750 saved by Apr 2027" beside it.
+            MoneyPlanTile("$LEFT_BY ${monthYear(f.thisMonth + h)}", signed(at(h)), alarm = at(h) < 0,
+                spoken = "Left over by ${Recurrence.MONTH_SHORT[(f.thisMonth + h) % 12]} ${(f.thisMonth + h) / 12}, ${signed(at(h))}")
         }
         val end = f.thisMonth + 12
         val cutLabel = if (cut == 0L) CUT_NONE else "${fmt(cut)} a month"

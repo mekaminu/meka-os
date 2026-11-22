@@ -131,7 +131,9 @@ class MoneySaveScreensTest {
         assertEquals(112_500L, start, "the slider doesn't start where Plan's other shots do")
         scrollTo("money-save-card")
         assertTrue(showsText(MoneyRules.fmt(start * 6)), "six months of ${MoneyRules.fmt(start)} should total ${MoneyRules.fmt(start * 6)}")
-        assertTrue(showsText("by Apr 2027"))
+        // Found and fixing week 5, A5: the total says it's what's saved, so it isn't read as the forecast's left over by
+        // then ("LEFT BY APR 2027" on the forecast beside it).
+        assertTrue(showsText("saved by Apr 2027"), "the saving's total doesn't say it's what's saved")
         // Walk-through A28 slice 5: on the cover screen no month chip sits alone on its row ("24 months" under three).
         val tops = MoneySave.MONTHS.map { m ->
             compose.onNodeWithTag("money-save-months-$m", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top.toInt()
@@ -141,7 +143,7 @@ class MoneySaveScreensTest {
         }
         tap("money-save-months-12")
         assertTrue(showsText(MoneyRules.fmt(start * 12)), "twelve months should total ${MoneyRules.fmt(start * 12)}")
-        assertTrue(showsText("by Oct 2027"))
+        assertTrue(showsText("saved by Oct 2027"))
         // A5 (g1a 4, 5): the shared month has two whole months, so Obi says what's spare, from the same average month as
         // Plan's tiles and Ask Obi (£2,270 left over less the £200).
         val base = core.moneyView.value.save ?: fail("no save base")

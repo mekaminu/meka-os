@@ -168,9 +168,9 @@ class MoneyPlanMoreScreensTest {
         assertTrue(showsText(MoneyPlanMore.IN) && showsText(MoneyPlanMore.LEFT), "the forecast should open on its tiles")
         assertTrue(shows("money-forecast-bars") && shows("money-cut-slider"), "the bars and What if I cut… should be on the card")
         assertTrue(showsText(MoneyPlanMore.CUT_HINT))
-        assertTrue(showsText("BY OCT 2027"), "the 12-month tile should name its month")
+        assertTrue(showsText("LEFT BY OCT 2027"), "the 12-month tile should name its month")
         // Walk-through A11 (2026-11-08): the tiles' labels whole ("OUT / MONTH", never "OUT /").
-        ScreenShots.assertNotCut(compose, "plan-forecast-tiles-cover", listOf(MoneyPlanMore.IN, MoneyPlanMore.OUT, MoneyPlanMore.LEFT, "BY OCT 2027"))
+        ScreenShots.assertNotCut(compose, "plan-forecast-tiles-cover", listOf(MoneyPlanMore.IN, MoneyPlanMore.OUT, MoneyPlanMore.LEFT, "LEFT BY OCT 2027"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "plan-forecast-tiles-cover"))
         // Walk-through A32: the month names under the twelve bars never touch ("Apr" ran into "May" on the cover).
         val names = compose.onAllNodes(

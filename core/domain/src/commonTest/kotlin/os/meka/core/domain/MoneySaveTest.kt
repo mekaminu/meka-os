@@ -17,7 +17,7 @@ class MoneySaveTest {
         assertEquals("£300", v.amount)
         assertEquals(180_000, v.totalPence)
         assertEquals("£1,800", v.total)
-        assertEquals("by Apr 2027", v.end)
+        assertEquals("saved by Apr 2027", v.end)
         assertEquals(6, v.bars.size)
         assertTrue(v.bars.last().last && !v.bars.first().last)
         assertEquals(1.0, v.bars.last().share)

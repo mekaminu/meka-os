@@ -7054,3 +7054,15 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
 - Tests: `MoneyWorthTest.aCardsSpendingMovesTheLineSoTheChangeIsTheMonthsMoney` (core). The accounts-total shot no longer
   shows a change at all: since slice 8 added Savings (its statement starts 1 Oct) the line waits for every account's
   second month; the shot asserts no change line and the "line starts once a second month is in" words.
+
+### Found and fixing, week 5 — slice 13 (2026-11-22): A5's two Apr 2027 totals
+- g1b 6: Plan open showed "BY APR 2027 +£13,620" (the forecast: left over at his pace) beside "£6,750 by Apr 2027"
+  (What if I save: £1,125 × 6) with nothing to say how they differ. Both sums were right; the words weren't. The
+  forecast's by-then tiles now read `MoneyPlanMore.LEFT_BY` "LEFT BY APR 2027" (spoken "Left over by Apr 2027, …"),
+  short enough for two tiles on the cover screen, and What if I save's total caption reads "saved by Apr 2027"
+  (`MoneySave.SAVED`); the goal Make it a goal makes keeps "Save £6,750 by Apr 2027". The split line and Obi's line
+  both naming what's spare are left as the approved mockup has them (the walk-through's "says the same thing twice";
+  for the whole-app layout review if Meka wants one gone).
+- Tests: `MoneyPlanMoreTest` (labels and spoken), `MoneySaveTest` (end), `MoneySaveScreensTest` ("saved by Apr/Oct
+  2027"), `MoneyPlanMoreScreensTest` (the cover tile "LEFT BY OCT 2027" not cut), Mac `testMoneySaveOnTheMac` (end and
+  goal title). Both apps through the shared core.
