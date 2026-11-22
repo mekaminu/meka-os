@@ -163,7 +163,7 @@ object NeedsYouStackRules {
                 "Choose", "Later", "Open", DecisionEffect.OPEN_TASK, DecisionEffect.SET_ASIDE, DecisionEffect.OPEN_TASK, urgent = true,
             )
             NeedsYouReason.OVERDUE -> DecisionCard(
-                t.id, DecisionKind.OVERDUE, t.title, "Overdue · was due ${due(t.dueAtMs, todayDay, calendar)}", t.id,
+                t.id, DecisionKind.OVERDUE, t.title, TaskWhenRules.overdueLine(t.dueAtMs, todayDay, calendar), t.id,
                 "Done", "Tomorrow", "Open", DecisionEffect.COMPLETE_TASK, DecisionEffect.SNOOZE_TASK, DecisionEffect.OPEN_TASK, urgent = true,
             )
             NeedsYouReason.DUE_TODAY_UNSCHEDULED -> DecisionCard(
@@ -174,18 +174,6 @@ object NeedsYouStackRules {
     }
 
     /** "at 14:00" today, "yesterday 17:00", "Mon 5 Oct 17:00"; midnight leaves the time out. */
-    private fun due(dueAtMs: Long?, todayDay: Long, calendar: LocalCalendar): String {
-        if (dueAtMs == null) return "earlier"
-        val day = calendar.epochDayOf(dueAtMs)
-        val minute = calendar.minuteOfDay(dueAtMs)
-        val time = if (minute == 0) null else LocalClock.formatMinute(minute)
-        return when (day) {
-            todayDay -> if (time == null) "today" else "at $time"
-            todayDay - 1 -> "yesterday" + (time?.let { " $it" } ?: "")
-            else -> CivilDate.shortLabel(day) + (time?.let { " $it" } ?: "")
-        }
-    }
-
     private fun at(dueAtMs: Long?, calendar: LocalCalendar): String {
         val minute = dueAtMs?.let(calendar::minuteOfDay) ?: return ""
         return if (minute == 0) "" else " at ${LocalClock.formatMinute(minute)}"

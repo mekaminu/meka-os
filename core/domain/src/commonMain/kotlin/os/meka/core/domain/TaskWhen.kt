@@ -26,6 +26,8 @@ data class TaskWhenView(
  * (the same `deferredToDay` as Tomorrow), so the planner, the brief and the shutdown all agree.
  *
  * - The task's day: its planned day, else the day it shows from, else today; an earlier day (overdue) reads as today.
+ * - Label: an open task past its due time with no time planned today reads as Needs you's card does ("Overdue · was
+ *   due Sun 18 Oct 17:15"), not "Today" (walk-through 2026-11-22 A4); a time planned today keeps "Today · 14:30".
  * - Chips: Today · Tomorrow, plus the chosen day when it's later ("Thu 15 Oct"); the app offers "Pick a date" too.
  * - Time steps by [TIME_STEP_MIN] within the day; "Add a time" starts at the next quarter hour at least 15 minutes
  *   away (today), or 09:00 on another day.
@@ -57,14 +59,31 @@ object TaskWhenRules {
             add(WhenChoice("Tomorrow", today + 1, day == today + 1))
             if (day > today + 1) add(WhenChoice(CivilDate.shortLabel(day), day, true))
         }
+        val overdue = task.dueAtMs?.let { it < nowMs } == true && !task.lifecycle.isTerminal && day == today && minute == null
         return TaskWhenView(
-            label = label(day, minute, today),
+            label = if (overdue) overdueLine(task.dueAtMs, today, calendar) else label(day, minute, today),
             day = day,
             minute = minute,
             timeLabel = minute?.let(::timeLabel),
             chips = chips,
             suggestedMinute = suggestedMinute(day, today, calendar.minuteOfDay(nowMs)),
         )
+    }
+
+    /** Needs you's overdue card and the When row: "Overdue · was due yesterday 17:00", "… was due Sun 18 Oct 17:15". */
+    fun overdueLine(dueAtMs: Long?, today: Long, calendar: LocalCalendar): String = "Overdue · was due ${dueWord(dueAtMs, today, calendar)}"
+
+    /** "today", "at 09:00", "yesterday 17:00", "Sun 18 Oct 17:15"; "earlier" with no due date. A midnight due has no time. */
+    fun dueWord(dueAtMs: Long?, today: Long, calendar: LocalCalendar): String {
+        if (dueAtMs == null) return "earlier"
+        val day = calendar.epochDayOf(dueAtMs)
+        val minute = calendar.minuteOfDay(dueAtMs)
+        val time = if (minute == 0) null else LocalClock.formatMinute(minute)
+        return when (day) {
+            today -> if (time == null) "today" else "at $time"
+            today - 1 -> "yesterday" + (time?.let { " $it" } ?: "")
+            else -> CivilDate.shortLabel(day) + (time?.let { " $it" } ?: "")
+        }
     }
 
     /** "Today", "Today · 14:30", "Tomorrow", "Thu 15 Oct · 09:00". */

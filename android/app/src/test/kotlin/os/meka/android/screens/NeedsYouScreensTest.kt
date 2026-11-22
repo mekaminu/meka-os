@@ -388,6 +388,11 @@ class NeedsYouScreensTest {
         tap(name, "Open", hasText(NeedsYouStackRules.buttonLabels(top)[1]))
         until { !shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG)) }
         if (shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG))) fail("$name: opening a task kept the two columns")
+        // Walk-through 2026-11-22 A4: the overdue card's sheet said "When Today"; its When row now reads as the card does.
+        if (top.kind == os.meka.core.domain.DecisionKind.OVERDUE) {
+            if (!shows(hasContentDescription("When, ${top.why}"))) fail("$name: the overdue task's When row doesn't say \"${top.why}\"")
+            if (shows(hasContentDescription("When, Today"))) fail("$name: the overdue task's When row still says Today")
+        }
         // Walk-through 2026-11-15 A12 ("inner many = two-columns = two-columns-boxed"): the opening shot was byte for byte
         // inner-dark-many, so it is dropped and the state only this test reaches is shot instead: the task open beside
         // the list after ↑ Open.

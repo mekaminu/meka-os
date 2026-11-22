@@ -38,6 +38,40 @@ class TaskWhenTest {
     }
 
     @Test
+    fun anOverdueTaskReadsAsOverdueNotToday() {
+        // Walk-through 2026-11-22 A4: the card said "Overdue · was due Sun 18 Oct 17:15" and its sheet "When Today".
+        at(9 * 60)
+        val dueDay = today()
+        val id = fold.tasks.create(NewTask("Send the form", dueAtMs = dueDay * day + (17 * 60 + 15) * 60_000L))
+        world.clock.nowMs = (dueDay + 3) * day + 10 * 3_600_000L
+        val v = view(id)
+        val card = "Overdue · was due " + CivilDate.shortLabel(dueDay) + " 17:15"
+        assertEquals(card, v.label)
+        assertEquals(card, TaskWhenRules.overdueLine(fold.tasks.get(id)!!.dueAtMs, today(), cal))
+        assertEquals(today(), v.day)
+        assertEquals(listOf("Today" to true, "Tomorrow" to false), v.chips.map { it.label to it.selected })
+
+        // Yesterday reads as the card's "yesterday"; past its time today, "at 09:00".
+        world.clock.nowMs = (dueDay + 1) * day + 8 * 3_600_000L
+        assertEquals("Overdue · was due yesterday 17:15", view(id).label)
+
+        // A time planned today keeps the plan; a later day reads as that day; done, it's no longer overdue.
+        fold.tasks.setWhen(id, today(), 14 * 60)
+        assertEquals("Today · 14:00", view(id).label)
+        fold.tasks.setWhen(id, today() + 1, null)
+        assertEquals("Tomorrow", view(id).label)
+    }
+
+    @Test
+    fun aTaskDueLaterTodayIsStillToday() {
+        at(8 * 60)
+        val id = fold.tasks.create(NewTask("Post the parcel", dueAtMs = today() * day + 9 * 3_600_000L))
+        assertEquals("Today", view(id).label)
+        at(10 * 60)
+        assertEquals("Overdue · was due at 09:00", view(id).label)
+    }
+
+    @Test
     fun aTimeTodayPlansItOnTheTimeline() {
         at(8 * 60)
         val id = fold.tasks.create(NewTask("Call the bank"))
