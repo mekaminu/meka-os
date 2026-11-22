@@ -370,8 +370,6 @@ class TodayScreensTest {
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
         if (fill == Fill.MANY) seedComingDays(store)
-        // Walk-through 2026-11-22 A2: the full day is the brief's Wednesday, events and all.
-        if (fill == Fill.MANY) seedWednesday(store)
         if (fill == Fill.SCHEDULE) seedSchedule(store)
         if (fill != Fill.EMPTY) seedThursday(store)
         val core = core(store)
@@ -470,16 +468,6 @@ class TodayScreensTest {
             compose.onAllNodesWithTag(os.meka.android.today.SIDE_HOUSEKEEPING_TAG, useUnmergedTree = true).fetchSemanticsNodes()
                 .forEach { if (it.boundsInRoot.top < sched) fail("$name: Health and Setup sit above the Schedule") }
             ScreenShots.assertShows(compose, name, SCHEDULE_TITLES[3])
-            // Walk-through 2026-11-15 A20: the setup card's Open Setup and Not today are whole 48 dp targets, drawn inside
-            // the card (the row is lifted into the card's old bottom inset, so the card keeps its height).
-            listOf("Open Setup", "Not today").forEach { link ->
-                val m = hasText(link) and androidx.compose.ui.test.hasClickAction()
-                ScreenShots.assertTallTarget(compose, name, m)
-                val words = compose.onAllNodes(hasText(SETUP_LABEL), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
-                    ?: return fail("$name: no setup card")
-                val target = compose.onAllNodes(m).fetchSemanticsNodes().first().boundsInRoot
-                if (target.top < words.bottom) fail("$name: $link's target reaches over the card's label")
-            }
         }
         val lines = compose.onAllNodesWithTag(os.meka.android.today.SCHEDULE_BACKGROUND_TAG, useUnmergedTree = true).fetchSemanticsNodes()
         if (lines.isEmpty()) fail("$name: Work isn't one dim line in the Schedule card")
@@ -494,6 +482,25 @@ class TodayScreensTest {
             val inGap = shot.getPixel((a.left + 4f).toInt(), y)
             val screen = shot.getPixel(2, y)
             if (inGap == screen) fail("$name: the screen's background shows between two Schedule rows at y=$y px")
+        }
+        if (name.startsWith("inner")) {
+            // Walk-through 2026-11-22 A2: ShotLife's Wednesday is a longer schedule, so the setup card under it is reached
+            // by scrolling the right column (last, so the checks above saw the schedule as shot).
+            repeat(10) {
+                if (shownText("Open Setup")) return@repeat
+                compose.onNodeWithTag(TODAY_RIGHT_LIST_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 300f) }
+                settle()
+            }
+            // Walk-through 2026-11-15 A20: the setup card's Open Setup and Not today are whole 48 dp targets, drawn inside
+            // the card (the row is lifted into the card's old bottom inset, so the card keeps its height).
+            listOf("Open Setup", "Not today").forEach { link ->
+                val m = hasText(link) and androidx.compose.ui.test.hasClickAction()
+                ScreenShots.assertTallTarget(compose, name, m)
+                val words = compose.onAllNodes(hasText(SETUP_LABEL), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+                    ?: return fail("$name: no setup card")
+                val target = compose.onAllNodes(m).fetchSemanticsNodes().first().boundsInRoot
+                if (target.top < words.bottom) fail("$name: $link's target reaches over the card's label")
+            }
         }
     }
 
@@ -564,20 +571,25 @@ class TodayScreensTest {
     }
 
     /**
-     * Walk-through 2026-11-22 A2 (g3a 2): Today's full Wednesday had none of the brief's events (the planning meeting,
-     * the dentist, the call, the swimming lesson) and its Schedule had a "Training" in the swim's 18:30 slot. Both
-     * shots seed ShotLife's Wednesday: every event is on Today's timeline (all day, earlier or still to come) and
-     * every task is Today's, open or done.
+     * Walk-through 2026-11-22 A2 (g3a 2): Today's Schedule had none of the brief's events (the planning meeting, the
+     * dentist, the call, the swimming lesson) but a "Training" in the swim's 18:30 slot, and its full day's tasks
+     * weren't the brief's. Both seed ShotLife's Wednesday: every event is on the Schedule shot's timeline (all day,
+     * earlier or still to come) and every task is the full shot's, open or done.
      */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun theFullDayIsTheBriefsWednesday() {
-        val core = show(Fill.MANY)
-        val today = core.today.value
-        val t = today.timeline
+        // The Schedule shot is the day's events; the full shot is its tasks (it keeps a task-only day for its counts).
+        val t = show(Fill.SCHEDULE).today.value.timeline
         val shown = t.allDay.map { it.title } + t.earlier.map { it.title } + t.rows.map { it.title }
         val missing = ShotLife.WEDNESDAY.map { it.title }.filter { it !in shown }
-        if (missing.isNotEmpty()) fail("many: the brief's Wednesday has $missing, Today's timeline doesn't ($shown)")
-        if (shown.any { it == "Training" }) fail("many: a Training the brief never mentions")
+        if (missing.isNotEmpty()) fail("schedule: the brief's Wednesday has $missing, Today's timeline doesn't ($shown)")
+        if (shown.any { it == "Training" }) fail("schedule: a Training the brief never mentions")
+    }
+
+    /** A2 too: the full shot's tasks are the brief's six ([ShotLife.WEDNESDAY_TASKS]), open or done. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theFullDaysTasksAreTheBriefs() {
+        val today = show(Fill.MANY).today.value
         val tasks = (listOfNotNull(today.upNext) + today.yourDay + today.doneToday + today.needsYou.map { it.task } +
             today.fromYesterday.map { it.task }).map { it.title }.toSet()
         val noTask = ShotLife.WEDNESDAY_TASKS.map { it.title }.filter { it !in tasks }
