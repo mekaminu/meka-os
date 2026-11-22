@@ -61,6 +61,8 @@ data class WeekBlock(
     val clash: Boolean,
     val column: Int = 0,
     val columns: Int = 1,
+    /** What it clashes with when [clash]: work, or the journey there ([ClashWith.LEAVING]) or home ([ClashWith.HOME]). */
+    val clashWith: ClashWith? = if (clash) ClashWith.WORK else null,
 ) {
     /**
      * Too short for the title over its time at [hourDp] per hour: the title and start time on one line. (Screenshot
@@ -68,8 +70,13 @@ data class WeekBlock(
      */
     fun oneLine(hourDp: Float): Boolean = heightDp(hourDp) < CalendarWeekRules.TWO_LINE_DP
 
-    /** "Training, 16:55 to 17:55, clashes with work" */
-    val spoken: String get() = "$title, " + time.replace("–", " to ") + if (clash) ", clashes with work" else ""
+    /** "Training, 16:55 to 17:55, clashes with work" · "Swimming, 18:30 to 19:15, before you're home" */
+    val spoken: String get() = "$title, " + time.replace("–", " to ") + when (clashWith.takeIf { clash }) {
+        null -> ""
+        ClashWith.WORK -> ", clashes with work"
+        ClashWith.HOME -> ", before you're home"
+        ClashWith.LEAVING -> ", after you've left for work"
+    }
 
     /** Its top on the grid in dp at [hourDp] per hour (clamped to the grid). */
     fun topDp(hourDp: Float): Float = CalendarWeekRules.minuteDp(startMinute, hourDp)
@@ -193,7 +200,18 @@ data class WeekGrid(
      * The key's amber entry beside the calendars' ("● Clashes with work"), when a block in view carries the amber dot and
      * outline (walk-through 2026-11-15, A18, g4a 11: the amber wasn't in the key), else "".
      */
-    val clashKey: String get() = if (days.any { d -> d.blocks.any { it.clash } }) CalendarWeekRules.CLASH_KEY else ""
+    val clashKey: String get() {
+        // Walk-through 2026-11-22, A3 (g4a 3): the key names what the amber in view clashes with, work, the journey or both.
+        val kinds = days.flatMap { d -> d.blocks.filter { it.clash }.map { it.clashWith ?: ClashWith.WORK } }.toSet()
+        val work = ClashWith.WORK in kinds
+        val journey = kinds.any { it != ClashWith.WORK }
+        return when {
+            work && journey -> CalendarWeekRules.CLASH_BOTH_KEY
+            work -> CalendarWeekRules.CLASH_KEY
+            journey -> CalendarWeekRules.CLASH_JOURNEY_KEY
+            else -> ""
+        }
+    }
 
     /** "Booked this week 5.8 h", or "Booked this week 5 h · 1 h at the weekend" */
     val bookedLine: String get() = "${CalendarWeekRules.BOOKED} $booked" + if (outOfView.isEmpty()) "" else " · $outOfView"
@@ -235,6 +253,9 @@ object CalendarWeekRules {
     const val BOOKED = "Booked this week"
     /** The key's entry for the amber dot and outline. */
     const val CLASH_KEY = "Clashes with work"
+    /** The key when only the journey either side of work is clashed with in view ("Before you're home · about 18:50"). */
+    const val CLASH_JOURNEY_KEY = "Clashes with the commute"
+    const val CLASH_BOTH_KEY = "Clashes with work or the commute"
     const val FOLDED_DAYS = 3
     const val DEFAULT_OPEN_DAYS = 5
     val OPEN_DAYS = listOf(5, 7)
@@ -342,7 +363,7 @@ object CalendarWeekRules {
         val workBlocks = work?.blocks(d, calendar).orEmpty()
         val commute = work?.let { CommuteRules.bands(it, d, calendar) }.orEmpty()
         val raw = mutableListOf<DayBlock>()
-        val byKey = mutableMapOf<String, Pair<CalendarEvent, Boolean>>()
+        val byKey = mutableMapOf<String, Pair<CalendarEvent, ClashWith?>>()
         val allDay = mutableListOf<WeekChip>()
         val outside = mutableListOf<Pair<Int, WeekChip>>()
         for (e in events.sortedWith(compareBy({ it.startAtMs }, { it.id }))) {
@@ -363,7 +384,9 @@ object CalendarWeekRules {
             val key = "e:${e.id}"
             // The Agenda's rule (WorkClashRules.markWhileAhead): once an event is over it no longer marks a clash, so the
             // morning's Dentist doesn't keep its amber in Week while the Agenda says nothing (walk-through A18, g4a 11).
-            byKey[key] = e to (WorkClashRules.clash(e, workBlocks, calendar, commute = commute) != null && e.endAtMs > nowMs)
+            // What it clashes with, work or the journey either side (walk-through 2026-11-22, A3, g4a 3: the 18:30 lesson,
+            // a commute clash, wore the amber under a key that said "Clashes with work").
+            byKey[key] = e to WorkClashRules.clash(e, workBlocks, calendar, commute = commute)?.against?.takeIf { e.endAtMs > nowMs }
             raw += DayBlock(key, e.title, start, end, DayBlockKind.EVENT, event = e, tone = tone)
         }
         // A task with a time inside the grid's hours goes on the grid, sharing the width with what it overlaps (A18).
@@ -381,8 +404,8 @@ object CalendarWeekRules {
         }
         val laid = BoardTimelineRules.columns(raw)
         val blocks = laid.filter { it.kind == DayBlockKind.EVENT }.map { b ->
-            val (e, clash) = byKey.getValue(b.key)
-            WeekBlock(b.key, b.title, b.label, b.startMinute, b.endMinute, b.tone, e, clash, b.column, b.columns)
+            val (e, against) = byKey.getValue(b.key)
+            WeekBlock(b.key, b.title, b.label, b.startMinute, b.endMinute, b.tone, e, against != null, b.column, b.columns, against)
         }
         val taskBlocks = laid.filter { it.kind == DayBlockKind.TASK }.map { b ->
             WeekTaskBlock(b.key, b.taskId!!, b.title, b.label, b.startMinute, b.endMinute, b.column, b.columns)

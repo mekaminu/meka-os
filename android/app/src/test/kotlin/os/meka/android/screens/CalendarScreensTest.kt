@@ -399,7 +399,12 @@ class CalendarScreensTest {
                 fail("week-inner-dark-many: $t is over but still marked as a clash")
             }
         }
-        ScreenShots.assertShows(compose, "week-inner-dark-many", "Clashes with work")
+        // The 18:30 lesson clashes with the journey home, not work (walk-through 2026-11-22, A3, g4a 3), so its block says
+        // so and the key names both the call's work and the lesson's commute.
+        if (!shows(block and hasContentDescription("Swimming lesson, 18:30 to 19:15, before you're home", substring = true))) {
+            fail("week-inner-dark-many: the lesson isn't marked as before he's home")
+        }
+        ScreenShots.assertShows(compose, "week-inner-dark-many", "Clashes with work or the commute")
         // The now line passes behind the running call instead of through its title (walk-through 2026-11-15, A18, g4a 13):
         // it is laid down before the blocks, and the dot says what it passes behind.
         val dot = androidx.compose.ui.test.hasTestTag(os.meka.android.calendar.WEEK_NOW_DOT_TAG)

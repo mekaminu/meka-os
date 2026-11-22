@@ -131,6 +131,29 @@ class CalendarWeekTest {
     }
 
     @Test
+    fun aJourneyClashIsNamedForTheJourneyNotWork() {
+        // Walk-through 2026-11-22, A3 (g4a 3): the 18:30 lesson after work ends at 17:30 clashes with the journey home
+        // (the Agenda says "Before you're home"), so the key and the block don't call it a clash with work.
+        val work = WorkHours(WorkSchedule.DEFAULT)
+        val home = CommuteRules.bands(work, mon, cal).first { !it.toWork }
+        assertTrue(home.startMinute >= 17 * 60 + 30)
+        val lesson = ev("s", "Swimming lesson", mon, home.startMinute + 10, home.endMinute + 20)
+        val now = ms(mon, 17 * 60 + 15)
+        val journey = CalendarWeekRules.build(mon, 5, listOf(lesson), null, work, now, cal)
+        val b = journey.days[0].blocks.single()
+        assertTrue(b.clash)
+        assertEquals(ClashWith.HOME, b.clashWith)
+        assertTrue(b.spoken.endsWith(", before you're home"), b.spoken)
+        assertEquals("Clashes with the commute", journey.clashKey)
+        // With a call still to come inside work too, the key names both.
+        val both = CalendarWeekRules.build(mon, 5, listOf(lesson, ev("c", "Call", mon, 17 * 60, 17 * 60 + 25)), null, work, now, cal)
+        assertEquals(listOf(ClashWith.WORK, ClashWith.HOME), both.days[0].blocks.map { it.clashWith })
+        assertEquals("Clashes with work or the commute", both.clashKey)
+        // The Agenda's own mark for the lesson is the journey's.
+        assertEquals(ClashWith.HOME, WorkClashRules.clash(lesson, work.blocks(mon, cal), cal, commute = CommuteRules.bands(work, mon, cal))?.against)
+    }
+
+    @Test
     fun theNowLinePassesBehindWhatIsRunningAndTheDotSaysWhat() {
         // Walk-through 2026-11-15, A18 (g4a 13): the gold line ran through "Call with Sam"'s title. It is drawn under the
         // blocks now, so the dot names what it passes behind.
