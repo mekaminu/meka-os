@@ -1,5 +1,16 @@
 package os.meka.android.screens
 
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.EventFields
+import os.meka.core.domain.MekaSchema
+import os.meka.core.sync.HlcClock
+import os.meka.core.sync.Replica
+import os.meka.core.sync.ReplicaStore
+import os.meka.core.sync.fv
+
 /**
  * One invented life every screen's shots share (the walk-through 2026-11-08, A8's last pairs): where two screens show
  * the same thing (the GP's number on Emergency and Facts, the younger child's birthday on People, Ask and Gifts, the
@@ -83,6 +94,35 @@ object ShotLife {
      * the swim's 18:30 slot and none of the others): [WEEK]'s Wednesday, the book fair all day and the dinner.
      */
     val WEDNESDAY: List<WeekEvent> = listOf(BOOK_FAIR) + WEEK.filter { it.day == 21 }.sortedBy { it.startMin } + DINNER
+
+    /**
+     * Writes [events] (by default [WEDNESDAY]) into [store] as the server's calendar mirror does, before the core opens
+     * it, so a screen that times things around the day (the Day list's Fit times, the walk-through 2026-11-22 A3) sees
+     * the same swimming lesson and dinner the Calendar and Today show. [nowMs] stamps the writes.
+     */
+    fun seedEvents(store: ReplicaStore, nowMs: Long, events: List<WeekEvent> = WEDNESDAY) {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, min: Int, zone: TimeZone) =
+            LocalDateTime(2026, 10, day, min / 60, min % 60).toInstant(zone).toEpochMilliseconds()
+        var n = 0
+        val mirror = Replica("hh", "server", HlcClock("server", { nowMs }), store, MekaSchema) { "life${n++}" }
+        events.forEach { e ->
+            mirror.commitLocal(EntityTypes.EVENT, e.id, buildMap {
+                put(EventFields.TITLE, e.title.fv())
+                if (e.allDay) {
+                    put(EventFields.START_AT, at(e.day, 0, TimeZone.UTC).fv())
+                    put(EventFields.END_AT, at(e.day + 1, 0, TimeZone.UTC).fv())
+                    put(EventFields.ALL_DAY, true.fv())
+                } else {
+                    put(EventFields.START_AT, at(e.day, e.startMin, london).fv())
+                    put(EventFields.END_AT, at(e.day, e.endMin, london).fv())
+                }
+                put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
+                put(EventFields.CALENDAR, e.calendar.fv())
+                e.place?.let { put(EventFields.LOCATION, it.fv()) }
+            })
+        }
+    }
 
     /** One of Wednesday's tasks: its title, its day ([dayOffset] from Wednesday) and its size in minutes. */
     data class DayTask(val title: String, val dayOffset: Int, val minutes: Int?)

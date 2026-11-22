@@ -70,7 +70,7 @@ class DayListScreensTest {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = MekaCore(
-            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore().also { ShotLife.seedEvents(it, now) }, transport = null,
             secureRandom = Random(31), timeZone = { london }, nowMs = { now },
         )
         context.useCoreForScreens(core)
@@ -130,8 +130,10 @@ class DayListScreensTest {
         assertTrue(shows("1h"), "$name: the day's total isn't shown")
         assertTrue(shows("Work") && shows("Family"), "$name: the areas aren't shown")
         assertTrue(shows("Paste a list") && shows("Fit times from"), "$name: Paste a list or Fit times is missing")
-        // A18: the rows run from 19:10, so Fit times starts there too (it read the wall clock and offered 19:30).
-        assertTrue(shows("Fit times from 19:10") && shows("19:10"), "$name: Fit times doesn't start where the list does")
+        // A18: Fit times starts where the rows do (it read the wall clock and offered 19:30). Walk-through 2026-11-22 A3:
+        // at 19:10 the swimming lesson runs to 19:15, so the list starts after it rather than on top of it.
+        assertTrue(shows("Fit times from 19:15") && shows("19:15"), "$name: Fit times doesn't start after the swimming lesson")
+        assertTrue(!shows("19:10"), "$name: a task sits on top of the swimming lesson (18:30–19:15)")
         assertTrue(shows("Say them"), "$name: Say them is missing")
         assertTouchTargets(name)
 

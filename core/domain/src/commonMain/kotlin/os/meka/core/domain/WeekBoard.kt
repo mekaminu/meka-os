@@ -86,6 +86,8 @@ data class BoardDay(
     val freeTimes: List<BoardFreeTime> = emptyList(),
     /** Study, planned lessons under their day: "Study · 2 lessons · about 1 h" ([StudyRules.onBoard]); null with none. */
     val study: StudyDayLine? = null,
+    /** The day's busy stretches (events, work, the commute) the Day list's times step round ([DayListRules.busy]). */
+    val busy: List<DayBusy> = emptyList(),
 ) {
     /** "Today" · "Mon 19" */
     val title: String get() = if (isToday) "Today" else "$weekday $number"
@@ -418,6 +420,7 @@ object WeekBoardRules {
             accessibilityLabel = spoken,
             capacity = capacity,
             freeTimes = BoardBlockRules.freeTimes(d, today, nowMs, events, calendar, work),
+            busy = DayListRules.busy(d, today, events, calendar, work),
         )
     }
 

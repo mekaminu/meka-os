@@ -82,7 +82,7 @@ class DayListSpreadScreensTest {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = MekaCore(
-            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore().also { ShotLife.seedEvents(it, now) }, transport = null,
             secureRandom = Random(37), timeZone = { london }, nowMs = { now },
         )
         context.useCoreForScreens(core)

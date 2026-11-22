@@ -52,9 +52,23 @@ data class DayListView(
      * reading the wall clock on its own, offered "Fit times from 19:30").
      */
     val fitFrom: Int = DayListRules.DAY_START,
+    /** The day's busy stretches the times step round ([BoardDay.busy]): events, work and the commute. */
+    val busy: List<DayBusy> = emptyList(),
+    /** Where the day's open tasks run from before the busy stretches push it on (now on today, else 09:00). */
+    val fitBase: Int = fitFrom,
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
     val openIds: List<String> get() = rows.filter { !it.done }.map { it.id }
+}
+
+/**
+ * A stretch of a day the Day list's times step round (the walk-through 2026-11-22, A3: Fit times put 19:10 tasks on
+ * top of the 18:30–19:15 swimming lesson, and Friday's "Fit times from 09:00" started inside work):
+ * [startMinute]–[endMinute] past local midnight. [work] marks his working hours, which a Work task may still use;
+ * timed events and the commute block every task.
+ */
+data class DayBusy(val startMinute: Int, val endMinute: Int, val work: Boolean = false) {
+    fun blocks(area: BoardArea?): Boolean = !(work && area == BoardArea.WORK)
 }
 
 /** What the add bar did: the tasks made and the one line said under it ("Added 3 tasks · 1h 15m"). */
@@ -180,6 +194,39 @@ object DayListRules {
     /** Where "Fit times" starts: today from now (to the next 5 minutes, never before [DAY_START]); another day [DAY_START]. */
     fun fitFrom(isToday: Boolean, nowMinute: Int): Int = if (isToday) maxOf(DAY_START, startOf(true, nowMinute)) else DAY_START
 
+    /**
+     * Day [d]'s busy stretches ([DayBusy]): its timed events (every calendar, the boys' lessons included), his working
+     * hours and the commute either side, clipped to the day. Empty on a day before today.
+     */
+    fun busy(d: Long, today: Long, events: List<CalendarEvent>, calendar: LocalCalendar, work: WorkHours?): List<DayBusy> {
+        if (d < today) return emptyList()
+        val dayStart = calendar.toEpochMs(d, 0)
+        val dayEnd = calendar.toEpochMs(d + 1, 0)
+        fun minute(ms: Long, end: Boolean): Int = when {
+            ms <= dayStart -> 0
+            ms >= dayEnd -> 24 * 60
+            else -> calendar.minuteOfDay(ms).let { if (end && calendar.toEpochMs(d, it) < ms) it + 1 else it }
+        }
+        fun span(s: Long, e: Long, w: Boolean): DayBusy? =
+            if (e <= dayStart || s >= dayEnd || e <= s) null else DayBusy(minute(s, false), minute(e, true), w).takeIf { it.endMinute > it.startMinute }
+        return buildList {
+            events.filter { !it.allDay }.forEach { e -> span(e.startAtMs, e.endAtMs, false)?.let(::add) }
+            work?.let { w ->
+                w.blocks(d, calendar).forEach { b -> span(b.startMs, b.endMs, true)?.let(::add) }
+                CommuteRules.bands(w, d, calendar).forEach { b -> span(b.startMs, b.endMs, false)?.let(::add) }
+            }
+        }.sortedBy { it.startMinute }
+    }
+
+    /** [from] pushed past every busy stretch it falls in (for [area]; null area: past all of them). */
+    internal fun pastBusy(from: Int, busy: List<DayBusy>, area: BoardArea? = null, all: Boolean = true): Int {
+        var at = from
+        while (true) {
+            val b = busy.firstOrNull { (all || it.blocks(area)) && at >= it.startMinute && at < it.endMinute } ?: return at
+            at = b.endMinute
+        }
+    }
+
     /** "Fit times from 9:00". */
     fun fitLabel(fromMinute: Int): String = "Fit times from ${TaskWhenRules.timeLabel(fromMinute)}"
 
@@ -188,7 +235,9 @@ object DayListRules {
      * the list's order, start one after another in the gaps around them (a task never overlaps a held one). A task that
      * would run past midnight gets no start. Returns each open task's start (null when it doesn't fit) and the end.
      */
-    internal fun flow(cards: List<BoardCard>, fromMinute: Int, holdFrom: Int = fromMinute): Pair<Map<String, Int?>, Int> {
+    internal fun flow(
+        cards: List<BoardCard>, fromMinute: Int, holdFrom: Int = fromMinute, busy: List<DayBusy> = emptyList(),
+    ): Pair<Map<String, Int?>, Int> {
         val open = cards.filter { !it.done }
         val held = open.mapNotNull { c -> minuteOf(c.time)?.takeIf { it >= holdFrom }?.let { c.id to (it until it + lengthOf(c)) } }.toMap()
         val starts = mutableMapOf<String, Int?>()
@@ -198,9 +247,11 @@ object DayListRules {
         for (c in open) {
             if (c.id in held) continue
             val len = lengthOf(c)
+            val area = BoardAreaRules.of(c)
+            val blocks = held.values.toList() + busy.filter { it.blocks(area) }.map { it.startMinute until it.endMinute }
             var at = clock
             while (true) {
-                val clash = held.values.firstOrNull { at < it.last + 1 && it.first < at + len } ?: break
+                val clash = blocks.firstOrNull { at < it.last + 1 && it.first < at + len } ?: break
                 at = clash.last + 1
             }
             if (at + len > 24 * 60) { starts[c.id] = null; continue }
@@ -217,8 +268,13 @@ object DayListRules {
         // tasks without a time run from where Fit times would put them (today from now, never before 9:00), so the
         // times shown are the ones Fit writes; a time of his own from now on still holds (A18).
         val now = startOf(day.isToday, nowMinute)
-        val from = fitFrom(day.isToday, nowMinute)
-        val (starts, end) = flow(cards, from, holdFrom = if (day.isToday) now else 0)
+        val base = fitFrom(day.isToday, nowMinute)
+        val busy = day.busy
+        val holdFrom = if (day.isToday) now else 0
+        val (starts, end) = flow(cards, base, holdFrom = holdFrom, busy = busy)
+        // Fit times says where its first task goes: past the swimming lesson, or after work and the journey home (A3).
+        val firstFree = cards.firstOrNull { !it.done && starts[it.id] != null && minuteOf(it.time)?.let { m -> m >= holdFrom } != true }
+        val from = firstFree?.let { starts[it.id] } ?: pastBusy(base, busy)
         val built = cards.map { c ->
             val set = if (c.done) null else minuteOf(c.time)
             val time = when {
@@ -252,6 +308,8 @@ object DayListRules {
             rows = rows,
             timesOn = timesOn,
             fitFrom = from,
+            busy = busy,
+            fitBase = base,
         )
     }
 
@@ -260,7 +318,7 @@ object DayListRules {
      * other open task gets its start in the list's order, around them. Returns (task, start) for each that changes.
      */
     fun fit(view: DayListView, fromMinute: Int): List<Pair<String, Int>> {
-        val (starts, _) = flow(view.rows.map { it.card }, fromMinute)
+        val (starts, _) = flow(view.rows.map { it.card }, fromMinute, minOf(fromMinute, view.fitBase), view.busy)
         return view.rows.filter { !it.done }.mapNotNull { r ->
             val at = starts[r.id] ?: return@mapNotNull null
             if (r.timeIsSet && minuteOf(r.time) == at) null else r.id to at
@@ -306,7 +364,7 @@ object DayListRules {
     /** "Fitted 4 tasks from 09:00 · ends about 11:15"; "Times already fit" when nothing changes. */
     fun fitLine(view: DayListView, fromMinute: Int, changed: Int): String {
         if (changed == 0) return "Times already fit"
-        val (_, end) = flow(view.rows.map { it.card }, fromMinute)
+        val (_, end) = flow(view.rows.map { it.card }, fromMinute, minOf(fromMinute, view.fitBase), view.busy)
         val n = if (changed == 1) "1 task" else "$changed tasks"
         return "Fitted $n from ${TaskWhenRules.timeLabel(fromMinute)} · ends about ${TaskWhenRules.timeLabel(end.coerceAtMost(24 * 60 - 1))}"
     }

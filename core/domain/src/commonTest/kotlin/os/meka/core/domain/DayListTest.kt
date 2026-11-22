@@ -17,10 +17,63 @@ class DayListTest {
     private fun card(t: Task, time: String? = null, suggested: Int? = null) =
         BoardCard(t, t.title, time, null, t.isDone, false, suggestedMinutes = suggested)
 
-    private fun day(cards: List<BoardCard>, today: Boolean = false) = BoardDay(
+    private fun day(cards: List<BoardCard>, today: Boolean = false, busy: List<DayBusy> = emptyList()) = BoardDay(
         epochDay = CivilDate.toEpochDay(2026, 11, 8), weekday = "Sun", number = "8", isToday = today, isPast = false, place = null, placeLabel = null,
-        chips = emptyList(), moreChips = 0, cards = cards, countLine = "", accessibilityLabel = "",
+        chips = emptyList(), moreChips = 0, cards = cards, countLine = "", accessibilityLabel = "", busy = busy,
     )
+
+    private fun hm(h: Int, m: Int = 0) = h * 60 + m
+
+    /** Walk-through 2026-11-22 A3 (g4a 2): 19:10 tasks sat on top of the 18:30–19:15 swimming lesson. */
+    @Test
+    fun theTimesStepRoundTheDaysEvents() {
+        val busy = listOf(DayBusy(hm(18, 30), hm(19, 15)), DayBusy(hm(20), hm(21, 30)))
+        val cards = listOf(
+            card(task("w", "Complete feedbacks", 30, area = "work")),
+            card(task("s", "Call the school", 15, area = "family")),
+            card(task("n", "Pay the nursery", 30, area = "money")),
+        )
+        val v = DayListRules.view(day(cards, today = true, busy = busy), hm(19, 7), timesOn = true)
+        assertEquals(listOf("19:15", "19:45", "21:30"), v.rows.map { it.time })
+        assertEquals(hm(19, 15), v.fitFrom)
+        assertEquals("Fit times from 19:15", DayListRules.fitLabel(v.fitFrom))
+        assertEquals("ends about 22:00", v.endsLine)
+        // Fit writes exactly the times shown, and says where they end.
+        assertEquals(listOf("w" to hm(19, 15), "s" to hm(19, 45), "n" to hm(21, 30)), DayListRules.fit(v, v.fitFrom))
+        assertEquals("Fitted 3 tasks from 19:15 · ends about 22:00", DayListRules.fitLine(v, v.fitFrom, 3))
+    }
+
+    /** A3 (g4a 4): Friday's "Fit times from 09:00" sat inside work, over a task at 21:00. */
+    @Test
+    fun onAWorkDayFitTimesStartsWhenHesHomeButWorkTasksMayUseWork() {
+        val busy = listOf(DayBusy(hm(9), hm(17, 30), work = true), DayBusy(hm(17, 30), hm(18, 50)))
+        val lone = DayListRules.view(day(listOf(card(task("r", "Read", 30), time = "21:00")), busy = busy), hm(17, 15), timesOn = true)
+        assertEquals(hm(18, 50), lone.fitFrom)
+        assertEquals(listOf("21:00"), lone.rows.map { it.time })
+        // A Work task first goes at 09:00, inside work; the gate waits until he's home.
+        val mixed = DayListRules.view(
+            day(listOf(card(task("x", "Slides", 30, area = "work")), card(task("h", "Fix the gate", 60, area = "house"))), busy = busy),
+            hm(17, 15), timesOn = true,
+        )
+        assertEquals(listOf("x" to "09:00", "h" to "18:50"), mixed.rows.map { it.id to it.time })
+        assertEquals(hm(9), mixed.fitFrom)
+    }
+
+    @Test
+    fun aDaysBusyStretchesAreItsTimedEventsWorkAndTheCommute() {
+        val cal = LocalCalendar.UTC
+        val d = CivilDate.toEpochDay(2026, 10, 21) // a Wednesday
+        fun ev(id: String, s: Int, e: Int, allDay: Boolean = false) = CalendarEvent(
+            id, id, cal.toEpochMs(d, s), cal.toEpochMs(d, e), allDay, null, "google", null, null,
+        )
+        val busy = DayListRules.busy(d, d, listOf(ev("swim", hm(18, 30), hm(19, 15)), ev("fair", 0, 24 * 60, allDay = true)), cal, WorkHours(WorkSchedule.DEFAULT))
+        assertTrue(DayBusy(hm(18, 30), hm(19, 15)) in busy, "the lesson isn't busy: ${'$'}busy")
+        assertTrue(busy.none { it.startMinute == 0 && it.endMinute == 24 * 60 }, "an all-day event blocked the whole day")
+        assertTrue(busy.any { it.work }, "work isn't busy")
+        assertTrue(busy.filter { it.work }.none { it.blocks(BoardArea.WORK) } && busy.all { it.blocks(BoardArea.HOUSE) })
+        // A day before today has none.
+        assertTrue(DayListRules.busy(d - 1, d, emptyList(), cal, WorkHours(WorkSchedule.DEFAULT)).isEmpty())
+    }
 
     /** The lines the on-device test (DayListAddOnDeviceTest, ICU) types, read the same on the JVM. */
     @Test
