@@ -385,6 +385,10 @@ class AdminPlacesScreensTest {
         until { rows().firstOrNull { it.id == physio.id }?.dueDay != null }
         if (rows().firstOrNull { it.id == physio.id }?.dueDay == null) fail("$name: When did you last go? noted nothing for ${physio.title}")
         closeSheet()
+        // Walk-through 2026-11-22 A6: the line under the summary says what was done, never a bare "Next due …".
+        val noted = hasText("${physio.title} noted · ", substring = true)
+        until { shows(noted) }
+        if (!shows(noted)) fail("$name: no \"${physio.title} noted · …\" line after When did you last go?")
         assertTouchTargets(name)
         // Walk-through 2026-11-15 A9: after his taps the first number is still the To book card's count, never "None" over Dentist.
         assertToBookTileAgrees(name, core.appointmentsPage(core.appointmentsView.value))

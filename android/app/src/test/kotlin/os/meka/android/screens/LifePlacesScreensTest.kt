@@ -333,6 +333,20 @@ class LifePlacesScreensTest {
         if (added.to != "Jordan") fail("$name: the promise went to \"${added.to}\", not Jordan")
         until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         ScreenShots.assertShows(compose, name, "Added your promise to Jordan: Lend the ladder")
+        // Walk-through 2026-11-22 A6: the summary stays over the added line (Casey's count fell with the Kept above, not
+        // with Jordan's promise), and the line has Undo, as Reading's does.
+        ScreenShots.assertShows(compose, name, core.peopleView.value.summary)
+        val undo = hasText("Undo") and hasClickAction()
+        if (!shows(undo)) fail("$name: the added promise has no Undo")
+        tap(p, name, "Undo", undo)
+        until { core.listsView.value.promised.none { it.title == "Lend the ladder" } }
+        if (core.listsView.value.promised.any { it.title == "Lend the ladder" }) fail("$name: Undo left Jordan's promise")
+        tap(p, name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
+        tap(p, name, choice.label, hasText(choice.label))
+        type(p, name, PeoplePageRules.hint(PeoplePageRules.ADD_PROMISE), "Jordan: lend the ladder")
+        until { core.listsView.value.promised.any { it.title == "Lend the ladder" } }
+        until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         ScreenShots.reshootAfterHand(compose, p.area, "cover-dark-people-by-hand") // Walk-through 2026-11-08 A20: the promise just added
     }
 

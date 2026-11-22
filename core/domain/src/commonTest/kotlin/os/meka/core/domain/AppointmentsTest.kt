@@ -99,12 +99,17 @@ class AppointmentsTest {
         assertEquals(AppointmentRules.NO_INTERVAL, aFold.type("Physio last 2 Mar").line)
         assertTrue(aFold.type("last 12 Apr").refused)
         // A common one knows its interval; a later line adds the last visit to the same appointment.
-        assertFalse(aFold.addPreset("dentist").refused)
+        val added = aFold.addPreset("dentist")
+        assertFalse(added.refused)
+        assertTrue(added.line.startsWith("Added Dentist · "), added.line)
         assertEquals(AppointmentState.UNKNOWN, aFold.view().rows.single().state)
         val said = aFold.type("dental check-up 7 months ago")
         assertTrue(said.refused) // no "last": nothing new to read
         val last = AppointmentRules.addMonths(now, -7)
-        assertFalse(aFold.type("dentist last went ${CivilDate.fromEpochDay(last).let { "${it.day}/${it.month}/${it.year}" }}").refused)
+        val noted = aFold.type("dentist last went ${CivilDate.fromEpochDay(last).let { "${it.day}/${it.month}/${it.year}" }}")
+        assertFalse(noted.refused)
+        // Walk-through 2026-11-22 A6: the line says what was done, never a bare "Next due …" that reads as the card's heading.
+        assertTrue(noted.line.startsWith("Dentist noted · "), noted.line)
         assertEquals(1, aFold.items().size)
         assertEquals(1, aFold.view().nudges.size)
 

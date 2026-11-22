@@ -2204,6 +2204,31 @@ final class CoreModel {
         run { _ = try await $0.addPromise(title: t, to: (w?.isEmpty ?? true) ? nil : w, byInDays: Self.k(byInDays)) }
     }
 
+    /// People's + Add: the promise's id comes back for Undo. Only Strings cross to the core.
+    func addPromiseId(_ title: String, to: String?) async -> String? {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        let w = to?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let who: String? = (w?.isEmpty ?? true) ? nil : w
+        do { return try await core.addPromise(title: t, to: who, byInDays: nil) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// People's + Add: the waiting-for's id comes back for Undo. Only Strings and an Int cross to the core.
+    func addWaitingId(_ title: String, who: String?, chaseInDays: Int?) async -> String? {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        let w = who?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let from: String? = (w?.isEmpty ?? true) ? nil : w
+        let chase = Self.k(chaseInDays)
+        do { return try await core.addWaiting(title: t, who: from, chaseInDays: chase) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func setPromiseBy(_ id: String, days: Int?) { run { try await $0.setPromiseBy(id: id, days: Self.k(days)) } }
     func keptPromise(_ id: String) { MekaHaptics.light(); run { try await $0.keptPromise(id: id) } }
     func deletePromise(_ id: String) { run { try await $0.deletePromise(id: id) } }

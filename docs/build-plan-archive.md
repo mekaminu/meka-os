@@ -7080,3 +7080,18 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   list it heads, or when a journal week's went-well repeats a win kept in another week. Test only, Fold.
 - Left for later slices of A6: Gifts' "3 to sort soon" over Coming up 4, Errands' Waiting 3 vs 6, Appointments' Next due,
   People's promises by hand, Trips by hand dropping Barcelona, Dinners' fifth favourite, the routine's LAST RUN Now.
+
+### Found and fixing, week 5 — slice 16 (2026-11-22): A6's Appointments and People
+- g6c 13 (Appointments): by-hand read "6 appointments · 1 needs a date / Physio · Next due Jan 2027" over a Next due card
+  that starts with the Haircut and the Orthodontist. The card's order was right (soonest first); the second line was the
+  answer to his typed "1 Oct" for Physio, a bare status that read like the page naming its next one. A typed line now
+  says what it did: `AppointmentRules.saidLine`, "Added Physio · next due Jan 2027" for a new one, "Physio noted · next
+  due Jan 2027" for one already on the list (status lowercased after the verb). Tests: `AppointmentsTest` (Added / noted),
+  `AppointmentsFacadeTest` ("Added Dentist · due Mon 12 Oct"), `AdminPlacesScreensTest` appointments-by-hand fails without
+  "Physio noted · …" after When did you last go?.
+- g6d 4 (People): Casey's "You promised 2" → 1 came from the by-hand test's own Kept on Casey's promise, not from
+  Jordan's new one (the sums were right); but the confirmation took the place of "7 people · 1 to chase", so the shot
+  couldn't show it, and had no Undo. Now the summary always stays, the added line sits under it with Undo (deletes the
+  promise or waiting-for just added) on both apps (`PeoplePane`, Mac `PeopleSheet` with `CoreModel.addPromiseId` /
+  `addWaitingId` returning the id). `LifePlacesScreensTest` people-by-hand checks the summary is shown with the line, taps
+  Undo, checks the promise is gone, and adds it again before the reshoot.

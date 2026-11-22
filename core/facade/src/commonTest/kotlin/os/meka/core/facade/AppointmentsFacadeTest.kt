@@ -33,7 +33,7 @@ class AppointmentsFacadeTest {
         val mac = core("mac")
         assertEquals(AppointmentView.EMPTY.summary, fold.appointmentsView.value.summary)
         assertEquals(6, fold.appointmentsView.value.suggestions.size)
-        assertEquals("Dentist · Due Mon 12 Oct", fold.typeAppointment("Dentist every 6 months, last 12 Apr").line)
+        assertEquals("Added Dentist · due Mon 12 Oct", fold.typeAppointment("Dentist every 6 months, last 12 Apr").line)
         assertFalse(fold.addAppointmentPreset("haircut").refused)
         assertEquals("2 appointments · 1 due · 1 needs a date", fold.appointmentsView.value.summary) // the haircut has no last visit yet
         assertEquals(4, fold.appointmentsView.value.suggestions.size)

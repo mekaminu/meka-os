@@ -21,6 +21,8 @@ struct PeopleSheet: View {
     @State private var text = ""
     @State private var said: String?
     @State private var refused = false
+    /// The promise or waiting-for just added (its kind and id), for Undo (walk-through 2026-11-22 A6).
+    @State private var lastAdded: (kind: String, id: String)?
     /// The person that's open, if any (their People key).
     @State private var person: String?
     @State private var showAll = false
@@ -65,11 +67,7 @@ struct PeopleSheet: View {
                 }
                 .staggeredAppear(0)
                 if adding { addForm(page) }
-                Text(said ?? model.people?.summary ?? PeopleRules.shared.EMPTY_LINE)
-                    .font(MekaType.caption).foregroundStyle(refused ? palette.accent : palette.textSecondary)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-                    .staggeredAppear(1)
+                summaryLines.staggeredAppear(1)
                 LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -119,6 +117,33 @@ struct PeopleSheet: View {
         .transition(.opacity)
     }
 
+    /// The summary always stays ("7 people · 1 to chase"); what an add did sits under it, with Undo for a promise or a
+    /// waiting-for (walk-through 2026-11-22 A6: the line used to take the summary's place, with no Undo).
+    private var summaryLines: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(model.people?.summary ?? PeopleRules.shared.EMPTY_LINE)
+                .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            if let said {
+                HStack(spacing: MekaSpace.s) {
+                    Text(said).font(MekaType.caption).foregroundStyle(refused ? palette.accent : palette.textSecondary)
+                    if let added = lastAdded, !refused {
+                        Button("Undo") { undoAdded(added.kind, added.id) }
+                            .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.accent)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+    }
+
+    private func undoAdded(_ kind: String, _ id: String) {
+        MekaHaptics.tick()
+        if kind == PeoplePageRules.shared.ADD_PROMISE { model.deletePromise(id) } else { model.deleteWaiting(id) }
+        lastAdded = nil
+        said = nil
+    }
+
     private func submit(_ choice: String) {
         let rules = PeoplePageRules.shared
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -127,6 +152,7 @@ struct PeopleSheet: View {
             Task {
                 guard let r = await model.addOccasion(typed) else { return }
                 said = r.line
+                lastAdded = nil
                 refused = r.refused
                 if !r.refused { text = ""; adding = false; addChoice = nil }
             }
@@ -141,10 +167,12 @@ struct PeopleSheet: View {
         let what = owed.what
         let who = owed.who
         let line = rules.addedLine(choice: choice, o: owed)
-        if choice == rules.ADD_PROMISE {
-            model.addPromise(what, to: who, byInDays: nil)
-        } else {
-            model.addWaiting(what, who: who, chaseInDays: Int(ListRules.shared.DEFAULT_CHASE_DAYS))
+        let promise = choice == rules.ADD_PROMISE
+        Task {
+            let id = promise
+                ? await model.addPromiseId(what, to: who)
+                : await model.addWaitingId(what, who: who, chaseInDays: Int(ListRules.shared.DEFAULT_CHASE_DAYS))
+            lastAdded = id.map { (kind: choice, id: $0) }
         }
         MekaHaptics.light()
         said = line

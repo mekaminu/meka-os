@@ -83,6 +83,8 @@ fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
     var personKey by remember { mutableStateOf<String?>(null) }
     var said by remember { mutableStateOf<String?>(null) }
     var refused by remember { mutableStateOf(false) }
+    // The promise or waiting-for just added, for Undo (walk-through 2026-11-22 A6); cleared by Undo or the next add.
+    var lastAdded by remember { mutableStateOf<Pair<String, String>?>(null) }
     val saidColor by animateColorAsState(
         if (refused) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "people-said",
     )
@@ -105,9 +107,33 @@ fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
                 )
             }
             item(key = "summary") {
-                Crossfade(said ?: v.summary, animationSpec = MekaMotion.appear(reduced), label = "people-summary") { s ->
-                    Text(s, style = MekaType.caption, color = if (said != null) saidColor else Meka.colors.textSecondary,
-                        modifier = Modifier.appear(rememberAppearance(1)).semantics { liveRegion = LiveRegionMode.Polite })
+                // Walk-through 2026-11-22 A6: the summary ("7 people · 1 to chase") always stays; what an add did sits under
+                // it, with Undo for a promise or a waiting-for, so the counts read against the line that changed them.
+                Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "people-summary") { s ->
+                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                    val line = if (addOpen || refused) null else said
+                    Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "people-said-line") { l ->
+                        l?.let {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(it, style = MekaType.caption, color = saidColor,
+                                    modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite })
+                                lastAdded?.let { (kind, id) ->
+                                    Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
+                                        modifier = Modifier.clickable(role = Role.Button) {
+                                            haptics.tick()
+                                            scope.launch {
+                                                runCatching {
+                                                    if (kind == PeoplePageRules.ADD_PROMISE) core.deletePromise(id) else core.deleteWaiting(id)
+                                                }
+                                                lastAdded = null; said = null
+                                            }
+                                        }.minTouch().padding(start = MekaSpace.s))
+                                }
+                            }
+                        }
+                    }
                 }
             }
             item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
@@ -129,13 +155,14 @@ fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
                     scope.launch {
                         val line: String? = when (choice) {
                             PeoplePageRules.ADD_BIRTHDAY -> runCatching { core.addOccasion(text) }.getOrNull()?.let { r ->
+                                lastAdded = null
                                 if (r.refused) { refused = true; said = r.line; null } else r.line
                             }
                             else -> PeoplePageRules.readOwed(text)?.let { o ->
                                 runCatching {
                                     if (choice == PeoplePageRules.ADD_PROMISE) core.addPromise(o.what, o.who, null)
                                     else core.addWaiting(o.what, o.who, ListRules.DEFAULT_CHASE_DAYS)
-                                }.getOrNull()?.let { PeoplePageRules.addedLine(choice, o) }
+                                }.getOrNull()?.let { id -> lastAdded = choice to id; PeoplePageRules.addedLine(choice, o) }
                             }
                         }
                         if (line != null) { haptics.light(); refused = false; said = line; addOpen = false }

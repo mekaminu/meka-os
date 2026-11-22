@@ -554,7 +554,17 @@ object AppointmentRules {
             fields[AppointmentFields.ADDED_AT] = nowMs.fv()
             updated = AppointmentItem(id, p.title, weeks, months, p.lastDay, p.bookedDay, p.bookedMinute, null, nowMs)
         }
-        return AppointmentSaid("${updated.title} · ${status(updated, today)}", false, id) to (id to fields.toMap())
+        return AppointmentSaid(saidLine(updated, existing == null, today), false, id) to (id to fields.toMap())
+    }
+
+    /**
+     * The line under the summary after a typed line (walk-through 2026-11-22 A6): it says what was done, "Added Physio ·
+     * next due Jan 2027" or "Physio noted · next due Jan 2027", so it never reads as the page's own "Next due" heading
+     * naming the wrong appointment (the Next due card is soonest first).
+     */
+    fun saidLine(item: AppointmentItem, added: Boolean, today: Long): String {
+        val s = status(item, today).replaceFirstChar { it.lowercase() }
+        return if (added) "Added ${item.title} · $s" else "${item.title} noted · $s"
     }
 
     /** "Dentist · went today · next due Apr 2027". */
