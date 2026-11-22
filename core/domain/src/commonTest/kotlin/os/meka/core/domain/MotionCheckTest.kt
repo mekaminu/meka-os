@@ -27,7 +27,12 @@ class MotionCheckTest {
     fun removeAnimationsWithNothingChosenStillPlaysExpressive() {
         // Meka, 2026-10-08 20:58: what kept MEKA still; now nothing chosen means Expressive whatever the phone says.
         val c = MotionCheckRules.phone(null, 0f, powerSave = true)
-        assertEquals("Not chosen", c.rows[0].value)
+        assertEquals("Expressive · the default", c.rows[0].value)
+        // The row agrees with the lit chip and the result line (walk-through 2026-11-22 A8).
+        assertTrue(c.rows[0].value.startsWith(MotionRules.lit(null).label))
+        assertTrue(c.result.contains(MotionRules.lit(null).label))
+        assertEquals("Subtle", MotionCheckRules.mac(MotionChoice.SUBTLE, false, false).rows[0].value)
+        assertEquals("Expressive · the default", MotionCheckRules.mac(null, true, false).rows[0].value)
         assertEquals("Off (Remove animations)", c.rows[1].value)
         assertEquals("On", c.rows[2].value)
         assertEquals("Animations on · Expressive · playing even with Remove animations on", c.result)

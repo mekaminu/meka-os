@@ -59,6 +59,17 @@ import os.meka.core.domain.MotionChoice
 import os.meka.core.domain.MotionRules
 import os.meka.core.domain.TickerMode
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.AskContext
+import os.meka.core.domain.AskRules
+import os.meka.core.domain.TalkTurn
+import os.meka.core.facade.AiApi
+import os.meka.core.facade.AiStatusReply
+import os.meka.core.facade.AskReply
+import os.meka.core.sync.InMemoryServerOpStore
+import os.meka.core.sync.PullRequest
+import os.meka.core.sync.PushRequest
+import os.meka.core.sync.SyncService
+import os.meka.core.sync.SyncTransport
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
 import kotlin.test.fail
@@ -84,12 +95,16 @@ class SettingsScreensTest {
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
 
-    private fun core(): MekaCore = MekaCore(
-        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
+    private fun core(transport: SyncTransport? = null): MekaCore = MekaCore(
+        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
         secureRandom = Random(47), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
-    private companion object { const val SETTLE_MS = 3_000L }
+    private companion object {
+        const val SETTLE_MS = 3_000L
+        /** The connected phone's AI: on, $1.82 of a $20 month (invented). */
+        val AI_ON = AiStatusReply("on", null, spentCents = 182, budgetCents = 2_000, level = "ok")
+    }
 
     private enum class Fill { EMPTY, ONE, MANY }
 
@@ -123,10 +138,24 @@ class SettingsScreensTest {
         check(!core.addAboutYouChild("Robin, U10, Oakfield School").refused)
     }
 
-    private fun setUp(theme: ThemeChoice, fill: Fill): MekaCore {
+    /**
+     * Walk-through 2026-11-22 A8 ("the connected Settings shot says the device isn't connected"): the connected shots'
+     * phone has a server whose AI is on, so Navilife's AI reads "On · …" there, not "Ask works once this device is
+     * connected". Sync goes to an in-memory server.
+     */
+    private class ConnectedServer : SyncTransport, AiApi {
+        private val sync = SyncService(InMemoryServerOpStore())
+        override suspend fun push(request: PushRequest) = sync.push(request)
+        override suspend fun pull(request: PullRequest) = sync.pull(request)
+        override suspend fun ask(question: String, context: AskContext, history: List<TalkTurn>, voice: Boolean): AskReply =
+            AskReply.Unavailable("off", null)
+        override suspend fun aiStatus(): AiStatusReply = AI_ON
+    }
+
+    private fun setUp(theme: ThemeChoice, fill: Fill, connected: Boolean = false): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
-        val core = core()
+        val core = core(if (connected) ConnectedServer() else null)
         context.useCoreForScreens(core)
         runBlocking {
             core.tick()
@@ -150,7 +179,7 @@ class SettingsScreensTest {
     }
 
     private fun settings(name: String, connected: Boolean, appearanceOpen: Boolean = false, theme: ThemeChoice = ThemeChoice.DARK) {
-        val core = setUp(theme, Fill.EMPTY)
+        val core = setUp(theme, Fill.EMPTY, connected)
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
@@ -170,6 +199,11 @@ class SettingsScreensTest {
         ScreenShots.assertReadable(compose, name, rows.flatMap { listOf(it.label, it.line) }, mustShow = false)
         ScreenShots.assertEachOneLine(compose, name, rows.map { it.label })
         ScreenShots.assertNoLoneWords(compose, name, rows.map { it.line } + ShellNav.moreLine(MoreItem.WORK, 0, false, null, null))
+        // Walk-through 2026-11-22 A8: a connected phone's Navilife's AI never says it isn't connected.
+        val aiLine = AskRules.statusView(AI_ON.state, AI_ON.reason, AI_ON.spentCents, AI_ON.budgetCents, AI_ON.level).line
+        if (connected) {
+            if (ScreenShots.anyOnScreen(compose, listOf(AskRules.NOT_CONNECTED_LINE))) fail("$name: connected, yet Navilife's AI says \"${AskRules.NOT_CONNECTED_LINE}\"")
+        } else if (ScreenShots.anyOnScreen(compose, listOf(aiLine))) fail("$name: not connected, yet Navilife's AI reads \"$aiLine\"")
         if (appearanceOpen) shootAppearance(name)
     }
 

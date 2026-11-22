@@ -7157,3 +7157,16 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   `WatchHealthScreensTest` fails if Health says "isn't screening" beside Setup's full shot.
 - Tests: core `SetupTest.anExpiredSignInIsAStepToDoAsOnHealth`. Both apps through the shared core; Mac checked nightly.
 - Still in A8: Settings' Motion check and "connected" AI row, Protected time, Life audit vs Needs you.
+
+### Found and fixing, week 5 — slice 21 (2026-11-22): A8's Settings
+
+- Confirmed in the code: with nothing chosen Navilife plays Expressive and lights its chip (`MotionRules.lit`), and the
+  result line says "Animations on · Expressive", but `MotionCheckRules` wrote "Not chosen" in the check's first row. It
+  now reads "Expressive · the default" (`MotionCheckRules.chosenLabel`), on the phone's and the Mac's checks.
+- The "connected" Settings shots (cover dark and light, Appearance, inner) used a core with no server, so Navilife's AI
+  read "Ask works once this device is connected" on a connected phone: a fixture fault. `SettingsScreensTest`'s
+  connected phone now has an in-memory server whose AI is on ($1.82 of $20, invented), and the test fails if a
+  connected shot says it isn't connected or a not-connected one reads the AI as on.
+- Tests: core `MotionCheckTest` (row agrees with the lit chip and the result, phone and Mac). Both apps through the
+  shared core; Mac checked nightly.
+- Still in A8: Protected time, Life audit vs Needs you.

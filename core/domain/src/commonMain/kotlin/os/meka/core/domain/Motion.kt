@@ -98,7 +98,7 @@ object MotionCheckRules {
     fun phone(stored: MotionChoice?, animatorScale: Float?, powerSave: Boolean): MotionCheck {
         val systemOff = animatorScale == 0f
         val rows = listOf(
-            MotionCheckRow("Navilife Motion", stored?.label ?: "Not chosen"),
+            MotionCheckRow("Navilife Motion", chosenLabel(stored)),
             MotionCheckRow("Phone's animation scale", scaleLabel(animatorScale)),
             MotionCheckRow("Power saving", if (powerSave) "On" else "Off"),
         )
@@ -108,12 +108,18 @@ object MotionCheckRules {
     /** The Mac's check: [reduceMotion] is Accessibility → Reduce Motion, [lowPower] is Low Power Mode. */
     fun mac(stored: MotionChoice?, reduceMotion: Boolean, lowPower: Boolean): MotionCheck {
         val rows = listOf(
-            MotionCheckRow("Navilife Motion", stored?.label ?: "Not chosen"),
+            MotionCheckRow("Navilife Motion", chosenLabel(stored)),
             MotionCheckRow("Reduce Motion", if (reduceMotion) "On" else "Off"),
             MotionCheckRow("Low Power Mode", if (lowPower) "On" else "Off"),
         )
         return result(rows, stored, reduceMotion, lowPower, mac = true)
     }
+
+    /**
+     * The check's first row: the choice, or with nothing chosen the motion in effect, "Expressive · the default", so it
+     * agrees with the lit chip and the result line (walk-through 2026-11-22 A8: "Not chosen" sat under a lit Expressive).
+     */
+    fun chosenLabel(stored: MotionChoice?): String = stored?.label ?: "${MotionRules.lit(null).label} · the default"
 
     /** "1×" · "0.5×" · "Off (Remove animations)" · "Unknown". */
     fun scaleLabel(scale: Float?): String = when {
