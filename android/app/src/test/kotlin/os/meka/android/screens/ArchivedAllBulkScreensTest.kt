@@ -108,8 +108,14 @@ class ArchivedAllBulkScreensTest {
             }
         }
         turns()
-        // The list is read off the main thread: wait for it (up to 6 s more) rather than fail on a slow CI frame.
-        repeat(30) { if (!ScreenShots.texts(compose).any { it.contains("Trash all 3 promos") }) turns(200) }
+        // The list is read off the main thread: wait for it rather than fail on a slow CI frame. The read runs in real
+        // time, not the test's clock, so wait up to 15 s of wall time (ci runs 45028591163 and 45033418457 flaked on
+        // the clock-only wait: "Trash all 3 promos is missing").
+        val until = System.currentTimeMillis() + 15_000L
+        while (!ScreenShots.texts(compose).any { it.contains("Trash all 3 promos") } && System.currentTimeMillis() < until) {
+            Thread.sleep(50)
+            turns(200)
+        }
         return core
     }
 
