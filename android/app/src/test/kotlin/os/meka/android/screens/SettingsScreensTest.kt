@@ -149,13 +149,15 @@ class SettingsScreensTest {
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun ask(question: String, context: AskContext, history: List<TalkTurn>, voice: Boolean): AskReply =
             AskReply.Unavailable("off", null)
-        override suspend fun aiStatus(): AiStatusReply = AI_ON
+        /** How many times the AI's status was asked: the pane asks once it opens, off the main thread. */
+        val asked = java.util.concurrent.atomic.AtomicInteger()
+        override suspend fun aiStatus(): AiStatusReply = AI_ON.also { asked.incrementAndGet() }
     }
 
-    private fun setUp(theme: ThemeChoice, fill: Fill, connected: Boolean = false): MekaCore {
+    private fun setUp(theme: ThemeChoice, fill: Fill, server: ConnectedServer? = null): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
-        val core = core(if (connected) ConnectedServer() else null)
+        val core = core(server)
         context.useCoreForScreens(core)
         runBlocking {
             core.tick()
@@ -179,7 +181,9 @@ class SettingsScreensTest {
     }
 
     private fun settings(name: String, connected: Boolean, appearanceOpen: Boolean = false, theme: ThemeChoice = ThemeChoice.DARK) {
-        val core = setUp(theme, Fill.EMPTY, connected)
+        val server = if (connected) ConnectedServer() else null
+        val core = setUp(theme, Fill.EMPTY, server)
+        val askedBefore = server?.asked?.get() ?: 0
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
@@ -190,6 +194,8 @@ class SettingsScreensTest {
                 }
             }
         }
+        // The AI's status lands off the main thread: wait for the pane's ask, so the shot isn't taken mid-change.
+        if (server != null) until { server.asked.get() > askedBefore }
         settle("settings", name)
         ScreenShots.assertShows(compose, name, MoreItem.SETTINGS.label)
         val rows = ShellNav.settings(connected)
@@ -215,6 +221,7 @@ class SettingsScreensTest {
      */
     private fun shootAppearance(name: String) {
         val differs = listOf(MotionCheckRules.PLAY_OPENING, "Topics ›", TickerMode.CALM.label, DoneShow.entries.first().label)
+        turns(1_000) // the AI row's line may still be changing (connected phones): let the list's sizes settle
         val topIsCopy = !ScreenShots.anyOnScreen(compose, differs)
         val below = ScreenShots.shootBelow(compose, "settings", name, MotionCheckRules.PLAY_OPENING, settle = { turns(1_000) })
         if (!below && topIsCopy) fail("$name: Appearance's choices aren't on screen")
