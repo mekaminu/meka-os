@@ -90,7 +90,6 @@ class ShutdownScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
-    private val longMeeting = "Quarterly planning with the design and engineering leads"
     private val longTask = "Sort out the boys' swimming kit and the school trip forms before Friday"
 
     private fun seed(store: ReplicaStore, fill: Fill) {
@@ -104,8 +103,10 @@ class ShutdownScreensTest {
                 put(EventFields.CALENDAR, "Personal".fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
-        event("ev1", "Standup", at(22, 9, 30), at(22, 9, 45))
-        event("ev2", longMeeting, at(22, 11, 0), at(22, 12, 30), place = "Harbour House, Dock Street")
+        // Walk-through 2026-11-22 A1 (g3b 1): tomorrow here was a standup at 09:30 and the planning meeting at 11:00, a
+        // third Thursday beside Tomorrow's and the bedside's. It is ShotLife's Thursday: the parents' evening at 18:00.
+        val e = ShotLife.PARENTS_EVENING
+        event(e.id, e.title, at(e.day, e.startMin / 60, e.startMin % 60), at(e.day, e.endMin / 60, e.endMin % 60), e.place)
     }
 
     private fun setUp(theme: ThemeChoice, fill: Fill): MekaCore {
@@ -143,7 +144,8 @@ class ShutdownScreensTest {
                     val bins = core.addTask("Take the recycling out")
                     core.setRepeat(bins, core.repeatChoices(bins).first { it.label == "Every day" }.rule)
                     core.addTask(longTask)
-                    core.addOnBoardSized("Post the birthday card", core.weekBoard.value.todayEpochDay + 1, 15)
+                    // ShotLife's Thursday: the gym at 07:00 first, the school call and the water bill due.
+                    ShotLife.addThursday(core, core.weekBoard.value.todayEpochDay + 1)
                 }
             }
             core.tick()
@@ -324,8 +326,10 @@ class ShutdownScreensTest {
                 if (v.left.none { it.canSkip }) fail("$name: the recycling repeats, but it can't be skipped")
                 if (v.left.none { it.line == "Planned 14:00" }) fail("$name: the gate latch isn't \"Planned 14:00\" (${v.left.map { it.line }})")
                 if (v.tomorrow.workLine == null) fail("$name: tomorrow is an office Thursday, but no work line")
-                if (v.firstLine?.contains("09:30") != true) fail("$name: tomorrow starts at 09:30, but the line is \"${v.firstLine}\"")
-                if (v.tomorrow.rows.none { it.title == "Post the birthday card" }) fail("$name: tomorrow's task isn't in Tomorrow (${v.tomorrow.rows.map { it.title }})")
+                if (v.firstLine?.contains("07:00") != true) fail("$name: tomorrow starts with the gym at 07:00, but the line is \"${v.firstLine}\"")
+                val rows = v.tomorrow.rows.map { it.title }
+                if (ShotLife.GYM !in rows || ShotLife.RING_SCHOOL !in rows) fail("$name: tomorrow isn't ShotLife's Thursday ($rows)")
+                if (rows.none { it == ShotLife.PARENTS_EVENING.title }) fail("$name: no parents' evening tomorrow ($rows)")
             }
         }
     }

@@ -114,9 +114,27 @@ class TodayScreensTest {
                 if (allDay) put(EventFields.ALL_DAY, true.fv())
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
-        event("ev4", COMING_TITLES[0], at(22, 10, 0), at(22, 11, 30), "Personal")
-        event("ev5", COMING_TITLES[1], utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
-        event("ev6", COMING_TITLES[2], at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
+        // Walk-through 2026-11-22 A1 (g3a 1): Thursday's 10:00 planning meeting here made "Plan tomorrow" a different
+        // day from Tomorrow's and the bedside's; Thursday is ShotLife's now ([seedThursday]), the planning on Wednesday.
+        event("ev5", COMING_TITLES[0], utcMidnight(23), utcMidnight(24), "Kids", allDay = true)
+        event("ev6", COMING_TITLES[1], at(24, 10, 0), at(24, 11, 0), "Kids", place = "Oakfield Rec")
+    }
+
+    /**
+     * Walk-through 2026-11-22 A1: Thursday as Tomorrow, the bedside, Shut down and Week ahead show it (ShotLife): the
+     * parents' evening at 18:00, written as the calendar mirror does; [ShotLife.addThursday] adds its tasks and bill.
+     */
+    private fun seedThursday(store: ReplicaStore) {
+        var n = 0
+        val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "thu${n++}" }
+        val e = ShotLife.PARENTS_EVENING
+        mirror.commitLocal(EntityTypes.EVENT, e.id, buildMap {
+            put(EventFields.TITLE, e.title.fv())
+            put(EventFields.START_AT, at(e.day, e.startMin / 60, e.startMin % 60).fv())
+            put(EventFields.END_AT, at(e.day, e.endMin / 60, e.endMin % 60).fv())
+            put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
+            put(EventFields.CALENDAR, e.calendar.fv())
+        })
     }
 
     /**
@@ -155,7 +173,7 @@ class TodayScreensTest {
         /** Titles that may take two lines on the cover screen, so their rows are taller by right. */
         val LONG_TITLES = listOf("Plan Saturday's football run with Alex")
         /** The Calendar screen's coming days (its ev4–ev6), seeded into the full day's shots. */
-        val COMING_TITLES = listOf("Quarterly planning with the design and engineering leads", "Inset day", "Football training")
+        val COMING_TITLES = listOf("Inset day", "Football training")
         /** The Schedule card's day ([seedSchedule]). */
         val SCHEDULE_TITLES = listOf("Book fair week", "Class assembly", "Training", "Dinner with Sam")
     }
@@ -342,11 +360,13 @@ class TodayScreensTest {
         val store = InMemoryReplicaStore()
         if (fill == Fill.MANY) seedComingDays(store)
         if (fill == Fill.SCHEDULE) seedSchedule(store)
+        if (fill != Fill.EMPTY) seedThursday(store)
         val core = core(store)
         context.useCoreForScreens(core)
         runBlocking {
             core.tick()
             val today = core.weekBoard.value.todayEpochDay
+            if (fill != Fill.EMPTY) ShotLife.addThursday(core, today + 1)
             when (fill) {
                 Fill.EMPTY -> Unit
                 Fill.ONE -> core.addOnBoardSized("Book the MOT", today, 30)
@@ -542,6 +562,9 @@ class TodayScreensTest {
         ScreenShots.assertShows(compose, "evening", EveningCardRules.LABEL.uppercase())
         ScreenShots.assertShows(compose, "evening", EveningCardRules.SHUT_DOWN)
         ScreenShots.assertShows(compose, "evening", EveningCardRules.PLAN_TOMORROW)
+        // Walk-through 2026-11-22 A1: Plan tomorrow read "nothing planned yet" (or the 10:00 planning meeting) while Tomorrow
+        // and the bedside start Thursday with the gym at 07:00. It is the same Thursday (ShotLife).
+        ScreenShots.assertShows(compose, "evening", "first 07:00")
         // Walk-through 2026-11-15, A15 (g3a 15): "Plan tomorrow · Thu 22 Oct · 1 event · first 1…" was cut on the cover;
         // each step's line wraps whole instead.
         ScreenShots.assertNothingCutUnder(compose, "evening", EVENING_CARD_TAG)
@@ -606,7 +629,8 @@ class TodayScreensTest {
         settle()
         val tile = core.today.value.alsoToday.firstOrNull { it.kind == os.meka.core.domain.AlsoKind.RENEWAL }
             ?: throw AssertionError("also: no renewal tile in the core's Today")
-        if (tile.value != "Streaming app") fail("also: renewal tile says \"${tile.value}\"")
+        // (ShotLife's Thursday brings the water bill due tomorrow too, walk-through 2026-11-22 A1: either is a named tile.)
+        if (tile.value !in listOf("Streaming app", ShotLife.WATER_BILL)) fail("also: renewal tile says \"${tile.value}\"")
         scrollUntilShown(os.meka.core.domain.AlsoTodayRules.LABEL, 400f)
         ScreenShots.assertShows(compose, "also", os.meka.core.domain.AlsoTodayRules.LABEL)
         val node = compose.onNodeWithTag("also-tile-renewal", useUnmergedTree = true).fetchSemanticsNode("also: no renewal tile")

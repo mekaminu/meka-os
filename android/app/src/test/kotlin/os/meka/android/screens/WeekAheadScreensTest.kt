@@ -117,6 +117,9 @@ class WeekAheadScreensTest {
             core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, fill != Fill.EMPTY)
             if (fill == Fill.MANY) {
                 core.setWorkDayHours(4, 9 * 60, 15 * 60 + 30)
+                // Walk-through 2026-11-22 A1 (g3b 1): Thursday as Tomorrow, the bedside and Shut down have it (ShotLife):
+                // the gym and the school call (tasks, which the week ahead doesn't list) and the water bill due.
+                ShotLife.addThursday(core, core.todayEpochDay() + 1)
                 core.setAboutYou(AboutField.PARTNER_NAME, "Morgan")
                 core.addAboutYouChild("Alex, U7, Oakfield School")
                 core.addAboutYouChild("Sam, U10, Oakfield School")

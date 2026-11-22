@@ -94,6 +94,9 @@ class DayListSpreadScreensTest {
             val mot = core.addToDayList("Book the MOT 15m", today)!!.ids.single()
             core.complete(mot)
             core.addToDayList("Study module 6 1h30 21:00", today + 2)
+            // Walk-through 2026-11-22 A1 (g4a 1): Thursday's list said "Nothing planned yet" beside every other screen's
+            // gym, school call and water bill; it is ShotLife's Thursday.
+            ShotLife.addThursday(core, today + 1)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
