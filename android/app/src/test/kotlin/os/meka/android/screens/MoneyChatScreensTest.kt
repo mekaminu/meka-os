@@ -220,7 +220,8 @@ class MoneyChatScreensTest {
         val left = base.leftPence ?: fail("the shared month should make a forecast")
         assertEquals(MoneyShotMonth.FORECAST_LEFT_PENCE, MoneyForecast.roundTen(left), "Obi's average month isn't Plan's")
         val spare = os.meka.core.domain.MoneyRules.fmt(MoneySave.spareAfter(base.startPence, left))
-        assertTrue(drawn("money-chat-answer-0").contains("leaves about $spare spare"), "Obi's spare isn't Plan's $spare: ${drawn("money-chat-answer-0")}")
+        // The answer glues its words with no-break spaces (no lone words), so it's read as plain text.
+        assertTrue(showsText("leaves about $spare spare"), "Obi's spare isn't Plan's $spare: ${drawn("money-chat-answer-0")}")
         // Found and fixing week 4, A16: the foot says "Not financial advice."; the answer above it doesn't say it again.
         assertFalse(drawn("money-chat-answer-0").contains("financial advice", ignoreCase = true), "the answer repeats the foot's not financial advice")
         assertTrue(shows("money-chat-act-goal-0"), "no Make it a goal under the answer")
