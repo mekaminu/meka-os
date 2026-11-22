@@ -840,7 +840,11 @@ object ScreenShots {
                    tag: String = "screen", maxSwipes: Int = 16): Boolean {
         val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
         fun onScreen() = compose.onAllNodes(hasText(lastText, substring = true) or hasContentDescription(lastText, substring = true),
-            useUnmergedTree = true).fetchSemanticsNodes().any { it.boundsInRoot.top >= screen.top && it.boundsInRoot.bottom <= screen.bottom }
+            useUnmergedTree = true).fetchSemanticsNodes().any {
+                // boundsInRoot is clipped: a node just under the list's edge reads as a zero-height line on the edge
+                // (the connected Settings' Play the opening, 2026-11-22), which isn't on screen.
+                it.boundsInRoot.top >= screen.top && it.boundsInRoot.bottom <= screen.bottom && it.boundsInRoot.height > 0f
+            }
         var swipes = 0
         while (!onScreen() && swipes < maxSwipes) {
             compose.onNodeWithTag(tag).performTouchInput { swipeUp(startY = bottom * 0.85f, endY = bottom * 0.25f, durationMillis = 400) }
