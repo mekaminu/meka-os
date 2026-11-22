@@ -100,7 +100,8 @@ class SetupScreensTest {
         Fill.MANY -> SetupRules.view(
             SetupFacts(
                 device = SetupDevice(
-                    mac = false, notificationsAllowed = true, batteryExempt = true, notificationAccess = true, callRoleHeld = true,
+                    mac = false, notificationsAllowed = true, batteryExempt = true, notificationAccess = true,
+                    callRoleHeld = ShotLife.CALL_SCREENING_WHEN_FULL,
                     people = PeopleLists(family = setOf("Morgan", "Alex", "Sam"), numbers = mapOf("Morgan" to setOf("+447700900123"), "Alex" to setOf("+447700900124"), "Sam" to setOf("+447700900125"))),
                     watch = RequestWatch(people = setOf("Morgan")),
                 ),
@@ -108,7 +109,8 @@ class SetupScreensTest {
                 server = ServerHealth(ServerHealth.PUSH_ON, calls = true, speech = true, atMs = now, macs = 1, speechGoogle = ServerHealth.GOOGLE_ON),
                 accounts = listOf(
                     HealthAccount("google", "jordan@example.com", "Personal", "ok", now),
-                    HealthAccount("microsoft", "jordan@example.org", "Work", "ok", now),
+                    // Walk-through 2026-11-22 A8: the same work calendar as Health's full shot, its sign-in expired there.
+                    HealthAccount("microsoft", "jordan.work@example.com", "Work", if (ShotLife.WORK_SIGN_IN_EXPIRED_WHEN_FULL) "needs_reconnect" else "ok", now - 2 * 86_400_000L),
                     HealthAccount("weather", "home", "Weather", "ok", now),
                     HealthAccount("travel", "Google Routes · drive times to football", "Travel times", "ok", now),
                 ),
@@ -211,10 +213,19 @@ class SetupScreensTest {
                 if (labels.isEmpty()) fail("$name: no buttons")
             }
             Fill.MANY -> {
-                if (v.toDo != 0) fail("$name: ${v.toDo} left on a set-up Fold (${v.steps.filter { it.toDo }})")
-                // Walk-through A32: a row that couldn't be checked makes the head "No steps left", never "All set".
-                val head = if (v.steps.any { it.state == SetupState.UNKNOWN }) "No steps left" else "All set"
-                if (!onScreen(head)) fail("$name: doesn't say \"$head\" (${v.summary})")
+                // Walk-through 2026-11-22 A8: the one step left on a set-up Fold is the expired work sign-in Health
+                // flags too (it read "Connected · Work" beside Health's "sign-in expired").
+                val left = v.steps.filter { it.toDo }.map { it.key }
+                val expected = if (ShotLife.WORK_SIGN_IN_EXPIRED_WHEN_FULL) listOf("calendar.outlook") else emptyList()
+                if (left != expected) fail("$name: $left left on a set-up Fold, expected $expected")
+                if (ShotLife.WORK_SIGN_IN_EXPIRED_WHEN_FULL) {
+                    if (onScreen("Connected · Work")) fail("$name: says the work calendar is connected while its sign-in expired")
+                    if (!onScreen("sign-in expired")) fail("$name: doesn't say the work sign-in expired")
+                } else {
+                    // Walk-through A32: a row that couldn't be checked makes the head "No steps left", never "All set".
+                    val head = if (v.steps.any { it.state == SetupState.UNKNOWN }) "No steps left" else "All set"
+                    if (!onScreen(head)) fail("$name: doesn't say \"$head\" (${v.summary})")
+                }
                 if (!onScreen("Google Chirp 3 HD")) fail("$name: the natural voice doesn't name Google's voices")
             }
         }

@@ -52,6 +52,12 @@ object ShotLife {
     /** A full set's Work mode switch: Setup's full shot says the call assistant is on, so Health's full one does too. */
     const val CALL_ASSISTANT_ON_WHEN_FULL = true
 
+    /** A full set's phone holds Android's call screening role: Setup's full shot says so, and Health's full one agrees. */
+    const val CALL_SCREENING_WHEN_FULL = true
+
+    /** A full set's work calendar sign-in has expired: Health's full shot offers Reconnect, and Setup's full one too. */
+    const val WORK_SIGN_IN_EXPIRED_WHEN_FULL = true
+
     /**
      * Obi's Face setting in every shot (the walk-through 2026-11-08, A32: Obi's voice showed Face On while Health's voice
      * row said "Face · off"). Health reads the device's own setting, off on a new phone, so Obi's voice shows it off too.

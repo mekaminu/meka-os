@@ -311,4 +311,19 @@ class SetupTest {
         assertEquals("21:30–06:45", NotifyRules.quietRow(true, "21:30–06:45"))
         assertEquals(NotifyRules.QUIET_OFF, NotifyRules.quietRow(false, "21:30–06:45"))
     }
+    /** Walk-through 2026-11-22 A8: Setup said "Outlook calendar: Connected · Work" while Health said its sign-in expired. */
+    @Test
+    fun anExpiredSignInIsAStepToDoAsOnHealth() {
+        val expired = accounts.map { if (it.provider == "microsoft") it.copy(status = "needs_reconnect") else it }
+        val v = SetupRules.view(facts(accounts = expired))
+        val outlook = v.step("calendar.outlook")
+        assertEquals("Work's sign-in expired · reconnect it in Calendars", outlook.line)
+        assertEquals(SetupState.TODO, outlook.state)
+        assertEquals(SetupFix.CALENDARS, outlook.fix)
+        assertEquals("Reconnect", outlook.fixLabel)
+        assertEquals(1, v.toDo)
+        // Health's row for the same account is trouble too, so the two pages agree.
+        assertEquals("Connected · Personal", v.step("calendar.google").line)
+        assertEquals("Sign-ins expired for Work, School · reconnect them in Calendars", SetupRules.expiredLine(listOf("Work", "School")))
+    }
 }

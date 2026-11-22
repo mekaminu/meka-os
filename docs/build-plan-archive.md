@@ -7142,3 +7142,18 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   that's off. Both apps through the shared core; Mac checked nightly.
 - Still in A8: Health vs Setup (call screening, Outlook), Settings' Motion check and "connected" AI row, Protected time,
   Life audit vs Needs you.
+
+### Found and fixing, week 5 — slice 20 (2026-11-22): A8's Health vs Setup
+
+- Confirmed in the code: both pages read call screening from the same Android role (`MekaCallScreeningService.roleHeld`),
+  so "isn't screening" vs "screens calls" was the shots' two phones (Health's Robolectric phone held no role; Setup's
+  typed facts said it did). The calendar one was real: `SetupRules.calendars` said "Connected · <title>" for any account
+  of the provider, so a `needs_reconnect` work sign-in read Connected on Setup while Health said "Outlook sign-in expired".
+- `SetupRules` now makes an expired sign-in a step to do: "Work's sign-in expired · reconnect it in Calendars" with
+  Reconnect (opens Calendars on both apps, `SetupFix.CALENDARS`); several read "Sign-ins expired for Work, School · …".
+- Shots: `ShotLife.CALL_SCREENING_WHEN_FULL` and `WORK_SIGN_IN_EXPIRED_WHEN_FULL`; Health's full phone holds the call
+  screening role (Robolectric's `ShadowRoleManager`), Setup's full set has the same expired work account, and its one
+  step left is that Reconnect. `SetupScreensTest` fails if it says "Connected · Work" beside the expired sign-in;
+  `WatchHealthScreensTest` fails if Health says "isn't screening" beside Setup's full shot.
+- Tests: core `SetupTest.anExpiredSignInIsAStepToDoAsOnHealth`. Both apps through the shared core; Mac checked nightly.
+- Still in A8: Settings' Motion check and "connected" AI row, Protected time, Life audit vs Needs you.

@@ -259,6 +259,15 @@ class WatchHealthScreensTest {
             // Walk-through 2026-11-08 A8: Setup's full shot has the call assistant on, so Health's full one does too
             // (both read the same Work mode switch); they said Off here beside On there.
             if (fill == Fill.MANY) core.setCallAssistant(ShotLife.CALL_ASSISTANT_ON_WHEN_FULL)
+            // Walk-through 2026-11-22 A8: Setup's full shot has Navilife screening calls, so Health's full phone holds
+            // Android's call screening role too (it said "isn't screening calls" beside Setup's "screens calls").
+            if (fill == Fill.MANY && ShotLife.CALL_SCREENING_WHEN_FULL) {
+                val roles = org.robolectric.shadow.api.Shadow.extract<org.robolectric.shadows.ShadowRoleManager>(
+                    context.getSystemService(android.app.role.RoleManager::class.java),
+                )
+                roles.addAvailableRole(android.app.role.RoleManager.ROLE_CALL_SCREENING)
+                roles.addHeldRole(android.app.role.RoleManager.ROLE_CALL_SCREENING)
+            }
             core.refreshHealth(HealthDevice.facts(context))
         }
         show { HealthPane(core, onClose = {}, openPane = {}) }
@@ -297,6 +306,7 @@ class WatchHealthScreensTest {
             Fill.MANY -> {
                 val calls = v.rows.firstOrNull { it.key == "calls" } ?: fail("$name: no Call assistant row")
                 if (calls.line.startsWith("Off")) fail("$name: Call assistant says \"${calls.line}\" while Setup's full shot has it on")
+                if (calls.line.contains("isn't screening")) fail("$name: Call assistant says \"${calls.line}\" while Setup's full shot screens calls")
                 val expired = v.rows.firstOrNull { it.key.startsWith("calendar:microsoft") } ?: fail("$name: no row for the work calendar")
                 if (expired.fixLabel != "Reconnect") fail("$name: an expired sign-in offers \"${expired.fixLabel}\"")
                 if (v.attention < 1) fail("$name: an expired sign-in doesn't need a look (${v.summary})")

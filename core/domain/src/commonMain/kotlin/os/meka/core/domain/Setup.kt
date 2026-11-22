@@ -198,6 +198,11 @@ object SetupRules {
 
     private fun isCalendar(p: String) = p == "google" || p == "microsoft"
 
+    /** "Work's sign-in expired · reconnect it in Calendars" (one or more accounts by title, never an address). */
+    internal fun expiredLine(titles: List<String>): String =
+        if (titles.size == 1) "${titles[0]}'s sign-in expired · reconnect it in Calendars"
+        else "Sign-ins expired for ${titles.joinToString(", ")} · reconnect them in Calendars"
+
     private fun calendars(f: SetupFacts): List<SetupStep> {
         val accounts = f.accounts
             ?: return listOf(
@@ -207,6 +212,12 @@ object SetupRules {
             )
         fun account(provider: String, key: String, title: String): SetupStep {
             val signed = accounts.filter { it.provider == provider }
+            // Walk-through 2026-11-22 A8: an expired sign-in read "Connected · Work" here while Health said "Outlook
+            // sign-in expired"; it is a step to do, as on Health, never Connected.
+            val expired = signed.filter { it.status == "needs_reconnect" }
+            if (expired.isNotEmpty()) {
+                return SetupStep(key, title, expiredLine(expired.map { it.title }), SetupState.TODO, SetupFix.CALENDARS, "Reconnect")
+            }
             // Named by each account's title, never its address (walk-through A2); the facade titles them apart.
             return if (signed.isNotEmpty()) SetupStep(key, title, "Connected · " + signed.joinToString(", ") { it.title }, SetupState.DONE)
             else SetupStep(key, title, "Connect it so its events show in Today and the Calendar", SetupState.TODO, SetupFix.CALENDARS, "Connect")
