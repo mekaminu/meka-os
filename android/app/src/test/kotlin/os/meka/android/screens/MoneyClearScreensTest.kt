@@ -34,7 +34,6 @@ import os.meka.android.ask.MoneyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
-import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyClear
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
@@ -77,12 +76,7 @@ class MoneyClearScreensTest {
             core.tick()
             core.openMoney()
             MoneyShotMonth.fill(core)
-            for ((name, owed, apr) in listOf(Triple(MoneyShotMonth.CARD_NAME, "£4,200", "24.9%"), Triple(MoneyShotMonth.REWARDS_NAME, "£1,800", "22.9%"))) {
-                val card = core.moneyView.value.accounts.firstOrNull { it.name == name } ?: error("no $name")
-                check(!core.moneyCardField(card.id, MoneyCards.STATEMENT, owed).refused)
-                check(!core.moneyCardField(card.id, MoneyCards.APR, apr).refused)
-            }
-            core.tick()
+            MoneyShotMonth.typeCardStatements(core)
         }
         compose.mainClock.autoAdvance = false
         compose.setContent {

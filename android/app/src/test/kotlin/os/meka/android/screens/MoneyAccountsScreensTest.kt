@@ -37,7 +37,6 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.MoneyAccountList
 import os.meka.core.domain.MoneyBusiness
-import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyMore
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyWorth
@@ -267,18 +266,18 @@ class MoneyAccountsScreensTest {
         if (showsText(MoneyWorth.EMPTY)) fail("the old set-up sentence still shows")
         val v0 = core.moneyView.value
         val current = v0.accounts.first { it.name == "Current account" }
-        val card = v0.accounts.first { it.name == "Platinum Card" }
+        // Found and fixing week 5, A5 (g1a 2): the cards owe what Plan's Clear my cards clears (MoneyShotMonth's statements),
+        // not a £300 of this shot's own beside Plan's £4,200 and £1,800.
         runBlocking {
             check(!core.moneyBalance(current.id, "£1,240").refused)
-            check(!core.moneyCardField(card.id, MoneyCards.STATEMENT, "£300").refused)
-            core.tick()
+            MoneyShotMonth.typeCardStatements(core)
         }
         settle()
         val c = MoneyTotal.card(core.moneyView.value.worth)!!
-        assertTrue(c.head == "Across 2 accounts", "head was ${c.head}")
-        assertTrue(c.total == "£940", "total was ${c.total}")
-        assertTrue(c.breakdown == "Cash £1,240 · owed on cards £300", "breakdown was ${c.breakdown}")
-        assertTrue(showsText(c.head) && showsText("£940") && showsText(c.breakdown!!), "the total card doesn't show its words")
+        assertTrue(c.head == "Across 3 accounts", "head was ${c.head}")
+        assertTrue(c.total == "−£4,760", "total was ${c.total}")
+        assertTrue(c.breakdown == "Cash £1,240 · owed on cards ${MoneyShotMonth.OWED_ON_CARDS}", "breakdown was ${c.breakdown}")
+        assertTrue(showsText(c.head) && showsText(c.total!!) && showsText(c.breakdown!!), "the total card doesn't show its words")
         if (showsText(MoneyWorth.HEAD) || showsText("You have ")) fail("the NET WORTH label or the have/owe line still shows")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-total"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-total")

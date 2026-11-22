@@ -1,5 +1,6 @@
 package os.meka.android.screens
 
+import os.meka.core.domain.MoneyCards
 import os.meka.core.facade.MekaCore
 
 /**
@@ -72,6 +73,27 @@ internal object MoneyShotMonth {
 
     /** Both cards, as Bills' CARDS, Accounts and Plan's Clear my cards list them. */
     val CARD_NAMES = listOf(CARD_NAME, REWARDS_NAME)
+
+    /**
+     * Each card's typed statement balance and APR, the same on every shot that types them. Found and fixing week 5, A5
+     * (g1a 2): Plan's Clear my cards typed Platinum £4,200 and Rewards £1,800 while Accounts' total card typed Platinum
+     * £300 and left Rewards blank, so "owed on cards £300" sat beside £6,000 to clear. The app reads both from the same
+     * typed statement; only the shots disagreed.
+     */
+    val CARD_STATEMENTS = listOf(Triple(CARD_NAME, "£4,200", "24.9%"), Triple(REWARDS_NAME, "£1,800", "22.9%"))
+
+    /** What [CARD_STATEMENTS] add up to owed, as Accounts' total card shows it. */
+    const val OWED_ON_CARDS = "£6,000"
+
+    /** Types [CARD_STATEMENTS] into both cards' sheets (after [fill]). */
+    suspend fun typeCardStatements(core: MekaCore) {
+        for ((name, owed, apr) in CARD_STATEMENTS) {
+            val card = core.moneyView.value.accounts.firstOrNull { it.name == name } ?: error("no $name")
+            check(!core.moneyCardField(card.id, MoneyCards.STATEMENT, owed).refused)
+            check(!core.moneyCardField(card.id, MoneyCards.APR, apr).refused)
+        }
+        core.tick()
+    }
 
     /**
      * Imports the month into [core] (Money already open) and marks both cards cards; [pension] adds the £42,000 pension
