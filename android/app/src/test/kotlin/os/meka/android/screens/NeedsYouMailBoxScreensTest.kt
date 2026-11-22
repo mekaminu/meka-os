@@ -46,7 +46,6 @@ import os.meka.android.today.NeedsYouMailRowView
 import os.meka.android.today.NeedsYouPager
 import os.meka.core.domain.MailDraft
 import os.meka.core.domain.MailMomentRules
-import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.NeedsYouGroup
 import os.meka.core.domain.NeedsYouGroupRules
 import kotlin.test.assertEquals
@@ -68,20 +67,9 @@ class NeedsYouMailBoxScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private val senders = listOf("Sam Taylor", "PayPal", "Oakfield School", "Oakfield School", "Council", "Dentist", "Energy Co")
-    // Real-looking subjects and a morning's times, newest first (walk-through A22: "Subject 0…4" at 00:12…04:12).
-    private val subjects = listOf(
-        "Are you free for lunch on Friday?", "Your account has been limited", "Year 3 trip to the museum: consent form",
-        "Parents' evening booking is open", "Your council tax bill for 2026/27", "Time for your check-up", "Your new tariff starts next month",
-    )
-    private val times = listOf("09:41", "09:12", "08:55", "08:30", "08:02", "07:46", "07:15")
-    private val every = senders.mapIndexed { i, who ->
-        MailNeedsRow(
-            id = "m$i", from = who, line = "Personal · ${times[i]}", subject = subjects[i], preview = "Hi Alex, the card ending 1234",
-            business = false, spoken = "$who, ${subjects[i]}", replyLine = "To $who", scam = who == "PayPal",
-            warning = if (who == "PayPal") "⚠ Possible scam · sent from mail-x.com, not paypal.com" else null, time = times[i],
-        )
-    }
+    // Found and fixing week 5, A8: the same seven the Mail shots' phone holds, so its Life audit counts them too.
+    private val subjects = ShotMailToAnswer.emails.map { it.subject }
+    private val every = ShotMailToAnswer.rows()
     private var starts = 0
     private var notToday = 0
     private var done = 0
@@ -143,7 +131,7 @@ class NeedsYouMailBoxScreensTest {
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         draw(theme)
         if (!onScreen("Ten-minute inbox · one at a time")) fail("$name: the ten-minute inbox isn't the box's lead line")
-        if (!onScreen("1–5 of 7")) fail("$name: the box head doesn't say which page")
+        if (!onScreen("1–5 of ${ShotMailToAnswer.size}")) fail("$name: the box head doesn't say which page")
         assertEquals(NeedsYouGroupRules.PAGE_SIZE, rows(), "$name: Mail to answer shows one page of five")
         if (onScreen("card ending")) fail("$name: a thin row shows the email's body")
         if (!onScreen("Possible scam")) fail("$name: a possible scam isn't flagged on its row")
@@ -171,7 +159,7 @@ class NeedsYouMailBoxScreensTest {
         compose.onAllNodes(hasContentDescription("Next page"))[0].performSemanticsAction(SemanticsActions.OnClick)
         turns()
         assertEquals(2, rows(), "$name: › shows the last two emails")
-        if (!onScreen("6–7 of 7")) fail("$name: the page line didn't move on")
+        if (!onScreen("6–${ShotMailToAnswer.size} of ${ShotMailToAnswer.size}")) fail("$name: the page line didn't move on")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverDark() = shoot("cover-dark")

@@ -7190,3 +7190,13 @@ usual") over "Undo · protect it again" styled like the status.
   and the by-hand shot (A11: it was byte-identical to the one shot) is now taken after 19:30 and Open tonight are tapped.
 - Life audit (the other half of A8) confirmed in the code: its "emails waiting on you" count uses `MailNeedsRules.showing`,
   the same rule as Needs you's Mail to answer; the disagreement is only the Mail shots' phone having none. Left open.
+
+### Found and fixing, week 5 — slice 23 (2026-11-22): A8's Life audit
+
+Walk-through g2b 6: Mail's Life audit read "Nothing needs you from 60 days of mail ✓" while Needs you's Mail to answer
+listed 7 (a consent form, a council tax bill). The rule was already shared (slice 22's note); only the shots disagreed.
+- New shared fixture `ShotMailToAnswer` (Android tests): the seven emails of Wed 21 Oct's morning, with the possible scam.
+  `NeedsYouMailBoxScreensTest` draws its rows from it; `MailScreensTest`'s stand-in server writes the same seven as mail
+  items for the One and Many phones, which now sync before the shot.
+- `MailScreensTest` fails if the Life audit's line doesn't say "7 emails waiting on you", or if its all-clear shows beside
+  them. Test only, Fold (the Mac has no shots yet).

@@ -42,7 +42,10 @@ import os.meka.core.facade.AccountsApi
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.ConnectedAccount
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.EntityTypes
+import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
+import os.meka.core.sync.Op
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.PullRequest
 import os.meka.core.sync.PushRequest
@@ -80,7 +83,20 @@ class MailScreensTest {
 
     /** Navilife's server, as far as Mail asks it: sync and the mail accounts (never a token). */
     private inner class Server(val mail: List<MailAccountFacts>) : SyncTransport, AccountsApi {
-        val service = SyncService(InMemoryServerOpStore())
+        val ops = InMemoryServerOpStore()
+        val service = SyncService(ops)
+
+        init {
+            // Found and fixing week 5, A8: with mail connected, the phone holds the morning's seven emails to answer that
+            // Needs you's Mail to answer shows ("1–5 of 7"), so the Life audit counts them instead of saying nothing needs him.
+            if (mail.isNotEmpty()) {
+                val clock = HlcClock("server", { now })
+                var k = 0
+                ShotMailToAnswer.serverItems(now).forEach { (id, fields) ->
+                    fields.forEach { (f, v) -> ops.append(Op("srv${k++}", "hh", EntityTypes.MAIL_ITEM, id, f, v, clock.now(), emptyList(), "server")) }
+                }
+            }
+        }
         override suspend fun push(request: PushRequest) = service.push(request)
         override suspend fun pull(request: PullRequest) = service.pull(request)
         override suspend fun startConnect(provider: String, editing: Boolean): ConnectStart = ConnectStart.NotSetUp
@@ -113,7 +129,11 @@ class MailScreensTest {
             secureRandom = Random(31), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
         )
         context.useCoreForScreens(core)
-        runBlocking { core.tick() }
+        runBlocking {
+            core.tick()
+            if (server != null && !core.syncNow()) fail("the stand-in server didn't sync")
+            core.tick()
+        }
         return core
     }
 
@@ -221,6 +241,15 @@ class MailScreensTest {
         )
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
         switchesShort(name, v, cover = name.startsWith("cover"))
+        // Found and fixing week 5, A8: the Life audit counts the emails Needs you lists (its own rule), never the all-clear
+        // over them.
+        if (fill == Fill.ONE || fill == Fill.MANY) {
+            val audit = runBlocking { core.lifeAuditReview() } ?: fail("$name: no Life audit with mail connected")
+            val onYou = "${ShotMailToAnswer.size} emails waiting on you"
+            if (onYou !in audit.summary) fail("$name: the Life audit reads \"${audit.summary}\" while Needs you lists ${ShotMailToAnswer.size} to answer")
+            if (ScreenShots.anyOnScreen(compose, listOf(LifeAuditReviewRules.CLEAR, LoneWordGlue.kept(LifeAuditReviewRules.CLEAR))))
+                fail("$name: \"${LifeAuditReviewRules.CLEAR}\" beside ${ShotMailToAnswer.size} emails to answer")
+        }
         // Found and fixing week 4, A16: the all-clear is said once, not "No emails waiting on you ✓" over the life
         // audit's "Nothing needs you from 60 days of mail ✓".
         if (ScreenShots.anyOnScreen(compose, listOf(LifeAuditReviewRules.CLEAR)) &&
