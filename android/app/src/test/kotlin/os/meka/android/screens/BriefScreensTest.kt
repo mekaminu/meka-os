@@ -90,6 +90,9 @@ class BriefScreensTest {
 
     private val longTitle = ShotLife.PLANNING.title
 
+    /** Midnight UTC on 2026-10-[day], as the calendar mirror writes an all-day event's start and end. */
+    private fun utcMidnight(day: Int) = LocalDateTime(2026, 10, day, 0, 0).toInstant(TimeZone.UTC).toEpochMilliseconds()
+
     /** [minute] minutes after midnight on 2026-10-[day] in London. */
     private fun atDay(day: Int, minute: Int) = LocalDateTime(2026, 10, day, minute / 60, minute % 60).toInstant(london).toEpochMilliseconds()
 
@@ -123,8 +126,13 @@ class BriefScreensTest {
         val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
         fun event(e: ShotLife.WeekEvent) =
             mirror.commitLocal(EntityTypes.EVENT, e.id, buildMap {
-                put(EventFields.TITLE, e.title.fv()); put(EventFields.START_AT, atDay(e.day, e.startMin).fv())
-                put(EventFields.END_AT, atDay(e.day, e.endMin).fv())
+                put(EventFields.TITLE, e.title.fv())
+                if (e.allDay) {
+                    put(EventFields.START_AT, utcMidnight(e.day).fv()); put(EventFields.END_AT, utcMidnight(e.day + 1).fv())
+                    put(EventFields.ALL_DAY, true.fv())
+                } else {
+                    put(EventFields.START_AT, atDay(e.day, e.startMin).fv()); put(EventFields.END_AT, atDay(e.day, e.endMin).fv())
+                }
                 put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
                 put(EventFields.CALENDAR, e.calendar.fv())
                 e.place?.let { put(EventFields.LOCATION, it.fv()) }
@@ -133,6 +141,8 @@ class BriefScreensTest {
         if (fill != Fill.MANY) return
         // The shots' one week (ShotLife, walk-through A8): the Calendar and the bedside show these same events.
         ShotLife.WEEK.drop(1).forEach(::event)
+        // Walk-through 2026-11-22 A2: Today's Wednesday has the book fair and the late dinner too; so does the brief's.
+        (ShotLife.WEDNESDAY - ShotLife.WEEK.toSet()).forEach(::event)
         headline("top-0", "Rail fares to rise less than expected next year", "top", 40, "BBC News")
         headline("world-0", "Leaders meet to agree a new climate fund", "world", 95, "BBC News")
         headline("ai-0", "A new open model tops the coding charts", "ai", 150, "The Verge")
@@ -157,10 +167,9 @@ class BriefScreensTest {
                 core.setWorkSchedule(listOf(1, 2, 3, 4, 5), 9 * 60, 17 * 60 + 30, true)
                 core.setAboutYou(AboutField.SHOWN_NAME, "Jordan")
                 val today = core.weekBoard.value.todayEpochDay
-                core.addOnBoardSized("Order new bins", today - 1, null)
-                core.addOnBoardSized("Book the MOT", today, 30)
-                core.addOnBoardSized("Fix the gate latch", today, 60)
-                core.addOnBoardSized("Plan Saturday's football run with Sam", today, 120)
+                // Walk-through 2026-11-22 A2: Today's six tasks (ShotLife), the football run "with Alex" as Today has it
+                // and the window cleaner that Today's "1 of 6" counts; the school reply is still open at 07:40.
+                ShotLife.addWednesdayTasks(core, today)
                 core.addWaiting("Quote for the new fence", "Casey", 0)
                 core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
                 core.startFast(ShotLife.fastMinutesAt(7 * 60 + 40)) // the shots' one fast, from 03:45 (Fasting's too)
@@ -273,8 +282,23 @@ class BriefScreensTest {
                 if (focus.isEmpty()) fail("$name: an overdue task and three for today, but no Focus")
                 v.dayLines.firstOrNull { it.taskId in focus }?.let { fail("$name: \"${it.title}\" is in Focus and again under Today") }
                 if (v.habitsLine?.contains("habit") != true) fail("$name: the habits line \"${v.habitsLine}\" doesn't say habit, so it reads as tasks")
+                assertIsTodaysWednesday(name, v)
             }
         }
+    }
+
+    /**
+     * Walk-through 2026-11-22 A2 (g3a 2): the brief had four events Today's Wednesday didn't, "…football run with Sam"
+     * where Today has "with Alex", and four tasks beside Today's six. The brief's day is ShotLife's Wednesday, the one
+     * Today's full shots seed: every event and every task, by title, and the counts say so.
+     */
+    private fun assertIsTodaysWednesday(name: String, v: os.meka.core.domain.MorningBriefView) {
+        val titles = v.day.map { it.title }
+        val missing = ShotLife.WEDNESDAY.map { it.title }.filter { it !in titles } +
+            ShotLife.WEDNESDAY_TASKS.map { it.title }.filter { it !in titles }
+        if (missing.isNotEmpty()) fail("$name: Today's Wednesday has $missing, the brief doesn't (it has $titles)")
+        if (v.taskCount != ShotLife.WEDNESDAY_TASKS.size) fail("$name: the brief counts ${v.taskCount} tasks, Today's day has ${ShotLife.WEDNESDAY_TASKS.size}")
+        if (v.eventCount != ShotLife.WEDNESDAY.size) fail("$name: the brief counts ${v.eventCount} events, Today's day has ${ShotLife.WEDNESDAY.size}")
     }
 
     // ---- Shots ----

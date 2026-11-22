@@ -50,7 +50,7 @@ object ShotLife {
     /** One event of the shots' week: on 2026-10-[day], [startMin]–[endMin] minutes after midnight in London. */
     data class WeekEvent(
         val id: String, val title: String, val day: Int, val startMin: Int, val endMin: Int,
-        val calendar: String, val place: String? = null,
+        val calendar: String, val place: String? = null, val allDay: Boolean = false,
     )
 
     val SWIM = WeekEvent("ev-swim", "Swimming lesson", 21, 18 * 60 + 30, 19 * 60 + 15, "Kids", "Oakfield Leisure Centre")
@@ -72,6 +72,41 @@ object ShotLife {
      * parents' evening, only the Calendar Wednesday's call). The swim first, as a screen's "one event" shots keep only it.
      */
     val WEEK: List<WeekEvent> = listOf(SWIM, PLANNING, DENTIST, CALL, PARENTS_EVENING)
+
+    /** Wednesday's all-day event (the school's book fair) and its late dinner, as Today's Schedule card and the brief show them. */
+    val BOOK_FAIR = WeekEvent("ev-bookfair", "Book fair week", 21, 0, 24 * 60, "Kids", allDay = true)
+    val DINNER = WeekEvent("ev-dinner", "Dinner with Grandma Rose", 21, 20 * 60, 21 * 60 + 30, "Personal")
+
+    /**
+     * Wednesday as Today and the brief both show it (the walk-through 2026-11-22, A2: the brief had the planning
+     * meeting, the dentist, the call and the swimming lesson while Today's Schedule had a "Training" at Oakfield Rec in
+     * the swim's 18:30 slot and none of the others): [WEEK]'s Wednesday, the book fair all day and the dinner.
+     */
+    val WEDNESDAY: List<WeekEvent> = listOf(BOOK_FAIR) + WEEK.filter { it.day == 21 }.sortedBy { it.startMin } + DINNER
+
+    /** One of Wednesday's tasks: its title, its day ([dayOffset] from Wednesday) and its size in minutes. */
+    data class DayTask(val title: String, val dayOffset: Int, val minutes: Int?)
+
+    /** The task Today finishes by 17:15 (it is still open in the 07:40 brief). */
+    const val DONE_BY_EVENING = "Reply to Oakfield School"
+
+    /**
+     * Wednesday's tasks as Today and the brief both have them (A2: the brief's Focus was "…football run with Sam" while
+     * Today's was "…with Alex", and the brief left out the window cleaner that Today's "1 of 6" counts). Yesterday's
+     * bins first (overdue), then today's in the order they were added.
+     */
+    val WEDNESDAY_TASKS: List<DayTask> = listOf(
+        DayTask("Order new bins", -1, null),
+        DayTask("Book the MOT", 0, 30),
+        DayTask(DONE_BY_EVENING, 0, 15),
+        DayTask("Fix the gate latch", 0, 60),
+        DayTask("Pay the window cleaner", 0, 15),
+        DayTask("Plan Saturday's football run with Alex", 0, 120),
+    )
+
+    /** Adds [WEDNESDAY_TASKS] to [core] ([today] the epoch day of Wed 21 Oct) and returns their ids by title. */
+    suspend fun addWednesdayTasks(core: os.meka.core.facade.MekaCore, today: Long): Map<String, String?> =
+        WEDNESDAY_TASKS.associate { it.title to core.addOnBoardSized(it.title, today + it.dayOffset, it.minutes) }
 
     /**
      * Thursday's first thing: the task dated tomorrow at 07:00 that Tomorrow, the bedside and the brief all lead with

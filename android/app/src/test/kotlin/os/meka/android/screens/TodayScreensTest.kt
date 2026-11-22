@@ -139,24 +139,35 @@ class TodayScreensTest {
 
     /**
      * Today regression 3's re-shoot (Meka 2026-11-11 06:40: "don't like the oval outline and also the black box"): a day
-     * whose Schedule card holds every kind of row: an all-day event, the earlier fold (an assembly in work hours, a
-     * clash), work as one dim line, the commute home, two evening events from two calendars, Wed 21 Oct at 17:15.
+     * whose Schedule card holds every kind of row: an all-day event, the earlier fold (the planning meeting and the
+     * dentist in work hours, clashes), work as one dim line, the commute home, two evening events from two calendars,
+     * Wed 21 Oct at 17:15. Walk-through 2026-11-22 A2: it is ShotLife's Wednesday, the brief's ([seedWednesday]).
      */
-    private fun seedSchedule(store: ReplicaStore) {
+    private fun seedSchedule(store: ReplicaStore) = seedWednesday(store)
+
+    /**
+     * Walk-through 2026-11-22 A2 (g3a 2): the brief's Wednesday had the planning meeting, the dentist, the call and the
+     * swimming lesson while Today's had a "Training" at Oakfield Rec at 18:30 and none of the others. Both seed
+     * [ShotLife.WEDNESDAY], written as the calendar mirror does.
+     */
+    private fun seedWednesday(store: ReplicaStore) {
         var n = 0
-        val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "sched${n++}" }
-        fun event(id: String, title: String, start: Long, end: Long, calendar: String, place: String? = null, allDay: Boolean = false) =
-            mirror.commitLocal(EntityTypes.EVENT, id, buildMap {
-                put(EventFields.TITLE, title.fv()); put(EventFields.START_AT, start.fv()); put(EventFields.END_AT, end.fv())
+        val mirror = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "wed${n++}" }
+        ShotLife.WEDNESDAY.forEach { e ->
+            mirror.commitLocal(EntityTypes.EVENT, e.id, buildMap {
+                put(EventFields.TITLE, e.title.fv())
+                if (e.allDay) {
+                    put(EventFields.START_AT, utcMidnight(e.day).fv()); put(EventFields.END_AT, utcMidnight(e.day + 1).fv())
+                    put(EventFields.ALL_DAY, true.fv())
+                } else {
+                    put(EventFields.START_AT, at(e.day, e.startMin / 60, e.startMin % 60).fv())
+                    put(EventFields.END_AT, at(e.day, e.endMin / 60, e.endMin % 60).fv())
+                }
                 put(EventFields.PROVIDER, "google".fv()); put(EventFields.ACCOUNT, "jordan@example.com".fv())
-                put(EventFields.CALENDAR, calendar.fv())
-                if (allDay) put(EventFields.ALL_DAY, true.fv())
-                place?.let { put(EventFields.LOCATION, it.fv()) }
+                put(EventFields.CALENDAR, e.calendar.fv())
+                e.place?.let { put(EventFields.LOCATION, it.fv()) }
             })
-        event("sd1", SCHEDULE_TITLES[0], utcMidnight(21), utcMidnight(22), "Kids", allDay = true)
-        event("sd2", SCHEDULE_TITLES[1], at(21, 14, 30), at(21, 15, 15), "Kids", place = "Oakfield School")
-        event("sd3", SCHEDULE_TITLES[2], at(21, 18, 30), at(21, 19, 30), "Kids", place = "Oakfield Rec")
-        event("sd4", SCHEDULE_TITLES[3], at(21, 20, 0), at(21, 21, 30), "Personal")
+        }
     }
 
     private fun core(store: ReplicaStore = InMemoryReplicaStore()): MekaCore = MekaCore(
@@ -175,7 +186,7 @@ class TodayScreensTest {
         /** The Calendar screen's coming days (its ev4–ev6), seeded into the full day's shots. */
         val COMING_TITLES = listOf("Inset day", "Football training")
         /** The Schedule card's day ([seedSchedule]). */
-        val SCHEDULE_TITLES = listOf("Book fair week", "Class assembly", "Training", "Dinner with Sam")
+        val SCHEDULE_TITLES = listOf(ShotLife.BOOK_FAIR.title, ShotLife.DENTIST.title, ShotLife.SWIM.title, ShotLife.DINNER.title)
     }
 
     /** The tallest Up next / now card on screen in dp, or null when there is none. */
@@ -191,7 +202,7 @@ class TodayScreensTest {
     private fun titles(fill: Fill): List<String> = when (fill) {
         Fill.EMPTY -> emptyList()
         Fill.ONE, Fill.FASTING -> listOf("Book the MOT")
-        Fill.MANY -> listOf("Book the MOT", "Fix the gate latch", "Pay the window cleaner", "Plan Saturday's football run with Alex")
+        Fill.MANY -> ShotLife.WEDNESDAY_TASKS.filter { it.dayOffset == 0 && it.title != ShotLife.DONE_BY_EVENING }.map { it.title }
         Fill.SCHEDULE -> emptyList()
     }
 
@@ -359,6 +370,8 @@ class TodayScreensTest {
         ThemeChoice.save(context, theme)
         val store = InMemoryReplicaStore()
         if (fill == Fill.MANY) seedComingDays(store)
+        // Walk-through 2026-11-22 A2: the full day is the brief's Wednesday, events and all.
+        if (fill == Fill.MANY) seedWednesday(store)
         if (fill == Fill.SCHEDULE) seedSchedule(store)
         if (fill != Fill.EMPTY) seedThursday(store)
         val core = core(store)
@@ -376,12 +389,8 @@ class TodayScreensTest {
                     core.startFast(810)
                 }
                 Fill.MANY -> {
-                    core.addOnBoardSized("Order new bins", today - 1, null)
-                    core.addOnBoardSized("Book the MOT", today, 30)
-                    val done = core.addOnBoardSized("Reply to Oakfield School", today, 15)
-                    core.addOnBoardSized("Fix the gate latch", today, 60)
-                    core.addOnBoardSized("Pay the window cleaner", today, 15)
-                    core.addOnBoardSized("Plan Saturday's football run with Alex", today, 120)
+                    // Walk-through 2026-11-22 A2: the brief's six tasks (ShotLife), the school reply done by now.
+                    val done = ShotLife.addWednesdayTasks(core, today)[ShotLife.DONE_BY_EVENING]
                     core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
                     // Walk-through A16: the same three habits Goals has (Stretch done this morning), not one.
                     core.setHabitDone(core.addHabit("Stretch", 7, HabitTiming.MORNING, 10, null), true)
@@ -552,6 +561,27 @@ class TodayScreensTest {
         ScreenShots.assertShows(compose, "many", EveningCardRules.head(today.timeline.anytime, today.doneToday, today.upNext).label.uppercase())
         scrollUntilShown("$listed more anytime task", 400f)
         ScreenShots.assertShows(compose, "many", "$listed more anytime task")
+    }
+
+    /**
+     * Walk-through 2026-11-22 A2 (g3a 2): Today's full Wednesday had none of the brief's events (the planning meeting,
+     * the dentist, the call, the swimming lesson) and its Schedule had a "Training" in the swim's 18:30 slot. Both
+     * shots seed ShotLife's Wednesday: every event is on Today's timeline (all day, earlier or still to come) and
+     * every task is Today's, open or done.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theFullDayIsTheBriefsWednesday() {
+        val core = show(Fill.MANY)
+        val today = core.today.value
+        val t = today.timeline
+        val shown = t.allDay.map { it.title } + t.earlier.map { it.title } + t.rows.map { it.title }
+        val missing = ShotLife.WEDNESDAY.map { it.title }.filter { it !in shown }
+        if (missing.isNotEmpty()) fail("many: the brief's Wednesday has $missing, Today's timeline doesn't ($shown)")
+        if (shown.any { it == "Training" }) fail("many: a Training the brief never mentions")
+        val tasks = (listOfNotNull(today.upNext) + today.yourDay + today.doneToday + today.needsYou.map { it.task } +
+            today.fromYesterday.map { it.task }).map { it.title }.toSet()
+        val noTask = ShotLife.WEDNESDAY_TASKS.map { it.title }.filter { it !in tasks }
+        if (noTask.isNotEmpty()) fail("many: the brief's tasks $noTask aren't on Today ($tasks)")
     }
 
     /** The Today rebuild, slice 2a: at 17:15 one evening card sits under Now (shut down, plan tomorrow), not three. */
