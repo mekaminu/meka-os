@@ -160,9 +160,18 @@ object MoneyWorth {
     /**
      * The month-by-month points: from the latest first statement month among [accounts] (so every account is known on
      * every point), at most [MONTHS] months, to [today]'s month; each month ends on its last day (today for this month).
-     * [flat] (cards and typed things) is added to every point. Empty with no accounts to work back.
+     * [flat] (typed things, trading and cards without statement lines) is added to every point. Empty with no accounts
+     * to work back.
+     *
+     * Found and fixing week 5, A5 (g1a 6): a card's owed was added flat to every point, so October's card spending never
+     * moved the line and "Up … since the end of Sep" was more than October's money in less its spending. [cards] (each
+     * card as an account whose balance is minus what it owes now, with its statement lines) are worked back the same way;
+     * they don't hold the line's start back (a card's statement often starts later), and before its first line a card
+     * counts what it owed then.
      */
-    fun points(accounts: List<MoneyWorthAccount>, flat: Long, today: Long): List<MoneyWorthPoint> {
+    fun points(
+        accounts: List<MoneyWorthAccount>, flat: Long, today: Long, cards: List<MoneyWorthAccount> = emptyList(),
+    ): List<MoneyWorthPoint> {
         val known = accounts.filter { it.lines.isNotEmpty() }
         if (known.isEmpty()) return emptyList()
         val thisMonth = MoneyRules.monthOf(today)
@@ -171,7 +180,8 @@ object MoneyWorth {
             val y = m / 12
             val mo = m % 12 + 1
             val end = minOf(CivilDate.toEpochDay(y, mo, CivilDate.lengthOfMonth(y, mo)), today)
-            val total = flat + known.sumOf { balanceOn(it, end) } + accounts.filter { it.lines.isEmpty() }.sumOf { it.balance }
+            val total = flat + known.sumOf { balanceOn(it, end) } + accounts.filter { it.lines.isEmpty() }.sumOf { it.balance } +
+                cards.sumOf { balanceOn(it, end) }
             val short = Recurrence.MONTH_SHORT[mo - 1]
             MoneyWorthPoint(short, total, (if (m == thisMonth) "Now" else "End of $short $y") + " · ${signed(total)}")
         }
@@ -189,6 +199,7 @@ object MoneyWorth {
         val byAccount = lines.groupBy({ it.first }, { it.second to it.third })
         val rows = mutableListOf<MoneyWorthRow>()
         val history = mutableListOf<MoneyWorthAccount>()
+        val cardHistory = mutableListOf<MoneyWorthAccount>()
         var flat = 0L
         var missing = 0
         var cardsOwe = 0L
@@ -204,7 +215,10 @@ object MoneyWorth {
                     rows += MoneyWorthRow(a.id, a.name, CARD, "", UNKNOWN_CARD, owes = true,
                         needsBalance = card == null, removable = false, spoken = "${a.name}, card, balance unknown")
                 } else {
-                    flat -= owed
+                    val cardLines = byAccount[a.id].orEmpty()
+                    // A typed statement is what he owes now; a bank feed's balance owes as of its own day.
+                    if (cardLines.isEmpty()) flat -= owed
+                    else cardHistory += MoneyWorthAccount(a.id, -owed, if (card?.statementPence != null) today else a.balance?.day ?: today, cardLines)
                     cardsOwe += owed
                     val from = if (card?.statementPence != null) "what its statement says you owe" else "its balance, owed"
                     val credit = if (card?.statementPence == null) MoneyCards.creditFromBalance(a) else 0L
@@ -254,7 +268,7 @@ object MoneyWorth {
         val have = history.filter { it.balance > 0 }.sumOf { it.balance } + items.filter { !it.owes }.sumOf { it.pence } + tradingPence.coerceAtLeast(0)
         val owe = -history.filter { it.balance < 0 }.sumOf { it.balance } + items.filter { it.owes }.sumOf { it.pence } - tradingPence.coerceAtMost(0) + cardsOwe
         val total = have - owe
-        val points = points(history, flat, today)
+        val points = points(history, flat, today, cardHistory)
         val change = if (points.size >= 2) {
             val d = points.last().pence - points[points.size - 2].pence
             val before = points[points.size - 2].label

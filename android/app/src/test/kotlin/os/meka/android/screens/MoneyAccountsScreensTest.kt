@@ -282,6 +282,13 @@ class MoneyAccountsScreensTest {
         assertTrue(c.total == "−£3,960", "total was ${c.total}")
         assertTrue(c.breakdown == "Cash £2,040 · owed on cards ${MoneyShotMonth.OWED_ON_CARDS}", "breakdown was ${c.breakdown}")
         assertTrue(showsText(c.head) && showsText(c.total!!) && showsText(c.breakdown!!), "the total card doesn't show its words")
+        // Found and fixing week 5, A5 (g1a 6): the change since the end of September is October's money in and out on
+        // all four accounts, the cards' spending included (it read £1,989.02, the cards left out).
+        val october = MoneyShotMonth.movedAfter(kotlinx.datetime.LocalDate(2026, 9, 30))
+        assertEquals(196_723L, october)
+        val change = core.moneyView.value.worth?.changeLine
+        assertEquals("Up ${MoneyRules.fmt(october)} since the end of Sep", change)
+        assertTrue(showsText(change!!), "the change line doesn't show")
         if (showsText(MoneyWorth.HEAD) || showsText("You have ")) fail("the NET WORTH label or the have/owe line still shows")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-total"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-total")

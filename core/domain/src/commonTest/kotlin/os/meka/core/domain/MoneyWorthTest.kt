@@ -80,6 +80,38 @@ class MoneyWorthTest {
     }
 
     @Test
+    fun aCardsSpendingMovesTheLineSoTheChangeIsTheMonthsMoney() {
+        // Found and fixing week 5, A5 (g1a 6): the card's owed was flat on every point, so "Up … since the end of Sep"
+        // left out October's card spending. Now the change is exactly what came in and went out in October.
+        val accounts = listOf(
+            MoneyAccount("a-current", "Current account", "csv", 1L, MoneyBalance(150_000, today, typed = true)),
+            MoneyAccount("a-plat", "Platinum Card", "csv", 1L),
+            MoneyAccount("a-rewards", "Rewards Card", "csv", 1L),
+        )
+        val cards = listOf(
+            MoneyCard("a-plat", "Platinum Card", MoneyCards.CREDIT, statementPence = 420_000),
+            MoneyCard("a-rewards", "Rewards Card", MoneyCards.CREDIT, statementPence = 180_000),
+        )
+        val lines = listOf(
+            Triple("a-current", d(8, 20), -5_000L), Triple("a-current", d(9, 5), 250_000L), Triple("a-current", d(10, 5), 250_000L),
+            Triple("a-current", d(10, 9), -6_490L), Triple("a-current", d(10, 15), -5_000L),
+            Triple("a-plat", d(10, 6), -3_249L), Triple("a-plat", d(10, 13), -2_180L),
+            Triple("a-rewards", d(10, 15), 5_000L),
+        )
+        val v = MoneyWorth.view(accounts, cards, emptyList(), lines, today)
+        assertEquals("−£4,500", v.total)
+        val october = lines.filter { it.second > d(9, 30) }.sumOf { it.third }
+        assertEquals(238_081L, october)
+        assertEquals("Up £2,380.81 since the end of Sep", v.changeLine)
+        assertEquals(v.points[2].pence - v.points[1].pence, october)
+        // End of Aug: the current account before September's pay; the cards before their first line.
+        assertEquals(listOf(-938_081L, -688_081L, -450_000L), v.points.map { it.pence })
+        // The card statements start in October; the line still starts where the current account's does.
+        assertEquals(listOf("Aug", "Sep", "Oct"), v.points.map { it.label })
+        assertEquals("Cash £1,500 · owed on cards £6,000", MoneyTotal.card(v)!!.breakdown)
+    }
+
+    @Test
     fun aCardsBalanceIsOwedNeverMoneyYouHave() {
         // Money's wrong numbers (2): a bank card that isn't marked as one still counts as a card; a marked card with
         // nothing typed uses its balance; one with neither is unknown and the total partial. Meka 2026-11-07: from the
