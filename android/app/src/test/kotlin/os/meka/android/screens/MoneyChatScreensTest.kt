@@ -39,6 +39,7 @@ import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
+import kotlin.test.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,6 +53,8 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.MoneyCategory
 import os.meka.core.domain.MoneyChat
+import os.meka.core.domain.MoneyForecast
+import os.meka.core.domain.MoneySave
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
 import os.meka.core.facade.MekaCore
@@ -190,7 +193,9 @@ class MoneyChatScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun askObiAnswersAWhatIfAndMakesTheGoal() {
-        val core = open()
+        // Found and fixing week 5, A5 (g1a 5): this shot's own July–September left £2,220 a month, so Obi's "spare in an
+        // average month" was £50 under Plan's (£2,270 on the shared month); it opens on the shared month too.
+        val core = open(shotMonth = true)
         assertTrue(shows("money-ask-bar"), "the Ask Obi bar isn't on Spending")
         // Walk-through 2026-11-15 A14: on the cover the bar stopped at "“What"; it shows its first question whole instead.
         assertBarWhole(MoneyChat.BAR_SHORT)
@@ -211,6 +216,11 @@ class MoneyChatScreensTest {
         tap("money-chat-try-0")
         until(core) { shows("money-chat-answer-0") }
         assertTrue(showsText("a month for 6 months adds up to"), "the what-if wasn't answered")
+        val base = core.moneyView.value.save ?: fail("no save base")
+        val left = base.leftPence ?: fail("the shared month should make a forecast")
+        assertEquals(MoneyShotMonth.FORECAST_LEFT_PENCE, MoneyForecast.roundTen(left), "Obi's average month isn't Plan's")
+        val spare = os.meka.core.domain.MoneyRules.fmt(MoneySave.spareAfter(base.startPence, left))
+        assertTrue(drawn("money-chat-answer-0").contains("leaves about $spare spare"), "Obi's spare isn't Plan's $spare: ${drawn("money-chat-answer-0")}")
         // Found and fixing week 4, A16: the foot says "Not financial advice."; the answer above it doesn't say it again.
         assertFalse(drawn("money-chat-answer-0").contains("financial advice", ignoreCase = true), "the answer repeats the foot's not financial advice")
         assertTrue(shows("money-chat-act-goal-0"), "no Make it a goal under the answer")
@@ -229,7 +239,7 @@ class MoneyChatScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun askObiOnTheOpenFold() {
-        val core = open()
+        val core = open(shotMonth = true)
         // A14: with the room, the open Fold keeps both questions; either way nothing is cut.
         assertBarWhole(null)
         tap("money-ask-bar")

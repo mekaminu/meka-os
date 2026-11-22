@@ -21,6 +21,8 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlin.random.Random
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import org.junit.Rule
@@ -34,6 +36,8 @@ import os.meka.android.ask.MoneyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.MoneyForecast
+import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneySave
 import os.meka.core.domain.MoneyTab
 import os.meka.core.domain.MoneyTabs
@@ -43,7 +47,7 @@ import os.meka.core.sync.InMemoryReplicaStore
 /**
  * Money redesign, Plan (mockup): What if I save… on the Plan tab. The card shows the slider's amount and the total by
  * its month; picking 12 months moves the total and month at once; Make it a goal makes a £ goal and says so with Undo.
- * Shot on the cover screen in Dark. Invented data (rule 13).
+ * Shot on the cover screen in Dark, on [MoneyShotMonth]'s shared month. Invented data (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -60,17 +64,6 @@ class MoneySaveScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val CURRENT = "Date,Description,Amount\n" +
-            "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "15/09/2026,STREAMLY.COM,-10.99\n" +
-            "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/10/2026,TESCO STORES 2041,-64.90\n" +
-            "15/10/2026,STREAMLY.COM,-10.99\n"
-        const val CARD = "Date,Description,Amount\n" +
-            "06/10/2026,AMAZON MARKETPLACE,-32.49\n" +
-            "13/10/2026,DELIVEROO,-21.80\n"
     }
 
     private fun open(): MekaCore {
@@ -84,8 +77,9 @@ class MoneySaveScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", CURRENT).refused)
-            core.tick()
+            // Found and fixing week 5, A5 (g1a 4): this shot imported a statement of its own from 1 Sep, one whole month, so
+            // Obi said "Once two whole months are in" beside the account sheet's 1 Aug–20 Oct; it opens on the shared month.
+            MoneyShotMonth.fill(core)
         }
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -132,9 +126,11 @@ class MoneySaveScreensTest {
     fun planWorksOutWhatIfISaveAndMakesItAGoal() {
         val core = open()
         pick(MoneyTab.PLAN)
-        if (core.moneyView.value.save == null) fail("no save base on this month")
+        val start = core.moneyView.value.save?.startPence ?: fail("no save base on this month")
+        // The slider starts at half his average month (£1,125 on the shared month), as on Plan's other shots.
+        assertEquals(112_500L, start, "the slider doesn't start where Plan's other shots do")
         scrollTo("money-save-card")
-        assertTrue(showsText("£1,200"), "six months of £200 should total £1,200")
+        assertTrue(showsText(MoneyRules.fmt(start * 6)), "six months of ${MoneyRules.fmt(start)} should total ${MoneyRules.fmt(start * 6)}")
         assertTrue(showsText("by Apr 2027"))
         // Walk-through A28 slice 5: on the cover screen no month chip sits alone on its row ("24 months" under three).
         val tops = MoneySave.MONTHS.map { m ->
@@ -144,13 +140,21 @@ class MoneySaveScreensTest {
             if (tops.toSet().size > 1 && n < 2) fail("a month chip is alone on its row at y=$top: $tops")
         }
         tap("money-save-months-12")
-        assertTrue(showsText("£2,400"), "twelve months of £200 should total £2,400")
+        assertTrue(showsText(MoneyRules.fmt(start * 12)), "twelve months should total ${MoneyRules.fmt(start * 12)}")
         assertTrue(showsText("by Oct 2027"))
-        assertTrue(showsText("Once two whole months"), "Obi can't say whether it fits before two whole months are in")
+        // A5 (g1a 4, 5): the shared month has two whole months, so Obi says what's spare, from the same average month as
+        // Plan's tiles and Ask Obi (£2,270 left over less the £200).
+        val base = core.moneyView.value.save ?: fail("no save base")
+        val left = base.leftPence ?: fail("the shared month's two whole months should make a forecast")
+        assertEquals(MoneyShotMonth.FORECAST_LEFT_PENCE, MoneyForecast.roundTen(left), "Plan's average month isn't the shared month's")
+        assertFalse(showsText("Once two whole months"), "Obi still says two whole months aren't in")
+        val spare = MoneyRules.fmt(MoneySave.spareAfter(base.startPence, left))
+        assertTrue(MoneySave.obi(base.startPence, left).first.contains("leaves about $spare spare"), "Obi's sum isn't the split line's")
+        assertTrue(showsText("leaves about $spare spare"), "Obi's line isn't what's spare after the amount ($spare)")
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-plan-save-cover.png")
         tap("money-save-goal")
         // The goal is made on the core (off the main thread): give it a moment, then it's in Goals with a £ number.
-        fun made() = core.goalsView.value.goals.any { it.title == "Save £2,400 by Oct 2027" && it.metric?.unit == "£" }
+        fun made() = core.goalsView.value.goals.any { it.title == "Save ${MoneyRules.fmt(start * 12)} by Oct 2027" && it.metric?.unit == "£" }
         repeat(40) { if (!made()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }
         assertTrue(made(), "Make it a goal didn't put the goal in Goals with a £ number")
     }

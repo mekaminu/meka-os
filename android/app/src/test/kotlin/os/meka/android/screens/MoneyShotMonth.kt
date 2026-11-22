@@ -90,6 +90,14 @@ internal object MoneyShotMonth {
      */
     const val FORECAST_OUT_PENCE = 23_000L
 
+    /**
+     * Found and fixing week 5, A5 (g1a 4, 5): what [CURRENT]'s average month leaves over, as Plan rounds it (£2,500 in less
+     * £234.09 out, shown as £2,270). Plan's What if I save said "Once two whole months are in" (its own statement started
+     * on 1 Sep) beside an account sheet reading 1 Aug–20 Oct, and Obi's "spare in an average month" read £2,220 (Ask
+     * Obi's own July–September) against Plan's £2,270; both now open on this month, so every "spare" is worked from this.
+     */
+    const val FORECAST_LEFT_PENCE = 227_000L
+
     /** The biggest payee without a category first: Zebra Plover (2 × £12.60) over The Garden Shop (£24.99). */
     val UNSORTED = listOf("Zebra Plover", "The Garden Shop")
 
