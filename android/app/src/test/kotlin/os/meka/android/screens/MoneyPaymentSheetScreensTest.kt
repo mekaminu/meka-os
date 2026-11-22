@@ -50,7 +50,8 @@ import os.meka.core.sync.InMemoryReplicaStore
 /**
  * The payment sheet (Meka 2026-10-26 23:18: a tap on a payment opened an unthemed white dropdown). A tap now raises the
  * dark sheet with the payee, category chips and the toggles; a chip moves every payment from that payee and the line
- * says so under the chips with Undo; Done closes it. Shot on the cover screen in Dark and Light. Invented data (rule 13).
+ * says so under the chips with Undo; Done closes it. Shot on the cover screen in Dark and Light, on [MoneyShotMonth]'s
+ * shared month. Invented data (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -67,12 +68,6 @@ class MoneyPaymentSheetScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val STATEMENT = "Date,Description,Amount\n" +
-            "11/09/2026,CORNER STORES 2041,-58.10\n" +
-            "02/10/2026,CORNER STORES 2041,-71.25\n" +
-            "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/10/2026,COSTA COFFEE,-3.40\n" +
-            "20/10/2026,CORNER STORES 2041,-55.60\n"
     }
 
     private fun open(theme: ThemeChoice): MekaCore {
@@ -86,8 +81,10 @@ class MoneyPaymentSheetScreensTest {
         runBlocking {
             core.tick()
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", STATEMENT).refused)
-            core.tick()
+            // Found and fixing week 5, A5 (g1b 4): these shots imported a statement of their own (Corner Stores, one Costa
+            // at £3.40), so their Coffee and Other read £3.40 and £126.85 beside Spending's and Obi's month; they now open
+            // on the Money shots' shared month.
+            MoneyShotMonth.fill(core)
         }
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -147,6 +144,9 @@ class MoneyPaymentSheetScreensTest {
     fun aTapOpensTheSheetAndAChipMovesEveryPaymentFromThePayee() {
         val core = open(ThemeChoice.DARK)
         val id = tapNewest(core)
+        val payee = core.moneyView.value.month!!.txns.first { it.id == id }.merchant
+        val fromPayee = core.moneyView.value.month!!.txns.count { it.merchant == payee }
+        assertTrue(fromPayee > 1, "the newest payee has one payment, so the shot can't show every payment moving")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-payment-sheet"))
         assertTrue(shows("money-sheet"), "the payment sheet didn't open")
         assertTrue(shows("money-sheet-cat-groceries"), "no Groceries chip")
@@ -159,7 +159,7 @@ class MoneyPaymentSheetScreensTest {
         fun movedAll(): Boolean {
             val txns = core.moneyView.value.month?.txns ?: return false
             val merchant = txns.firstOrNull { it.id == id }?.takeIf { it.category == "fun" }?.merchant ?: return false
-            return txns.count { it.merchant == merchant && it.category == "fun" } == 2
+            return txns.count { it.merchant == merchant && it.category == "fun" } == fromPayee
         }
         while (!movedAll() && i++ < 160) {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
@@ -170,7 +170,7 @@ class MoneyPaymentSheetScreensTest {
         val moved = core.moneyView.value.month?.txns?.first { it.id == id } ?: fail("the payment went")
         assertEquals("fun", moved.category)
         // Every payment from the payee moved, not only the one tapped.
-        assertEquals(2, core.moneyView.value.month!!.txns.count { it.merchant == moved.merchant && it.category == "fun" })
+        assertEquals(fromPayee, core.moneyView.value.month!!.txns.count { it.merchant == moved.merchant && it.category == "fun" })
         awaitTag("money-sheet-said", "no line after the pick")
         awaitTag("money-sheet-undo", "no Undo after the pick")
         compose.onNodeWithTag("money-sheet-done", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
@@ -197,7 +197,7 @@ class MoneyPaymentSheetScreensTest {
     fun aNewCategoryOfHisOwnTakesThePayee() {
         val core = open(ThemeChoice.DARK)
         // Walk-through 2026-11-15, A13: Treats is made from Costa Coffee, as in the category's own shots (its sheet's
-        // "1 payee · £3.40 of £10"); it was made from Corner Stores' −£55.60 here.
+        // "1 payee · … of £10"); it was made from Corner Stores' −£55.60 here.
         val id = tapNewest(core, "Costa Coffee")
         assertTrue(shows("money-sheet-new"), "no + New category chip")
         tap("money-sheet-new")
@@ -314,7 +314,10 @@ class MoneyPaymentSheetScreensTest {
         assertEquals("Snacks", core.moneyView.value.ownRows.single().name, "Save didn't rename it")
     }
 
-    /** His categories in caps: MONTHLY CAP in the category's sheet; "£10" caps it and its bar shows this month against it. */
+    /**
+     * His categories in caps: MONTHLY CAP in the category's sheet; "£15" caps it and its bar shows this month against it
+     * (the shared month's October Costas: £3.20, £3.40 and £3.40).
+     */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun aMonthlyCapOnHisCategory() {
         val core = open(ThemeChoice.DARK)
@@ -332,13 +335,13 @@ class MoneyPaymentSheetScreensTest {
         tap("money-own-${own.id}")
         assertTrue(shows("money-own-cap-field"), "no MONTHLY CAP field in the category's sheet")
         val field = hasSetTextAction() and hasAnyAncestor(hasTestTag("money-own-cap-field"))
-        compose.onNode(field, useUnmergedTree = true).performTextInput("£10")
+        compose.onNode(field, useUnmergedTree = true).performTextInput("£15")
         // The field's Done reads what was typed from the last composition, so let it recompose first.
         settle()
         compose.onNode(field, useUnmergedTree = true).performImeAction()
         waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.cap != null }
         val cap = core.moneyView.value.ownRows.single().cap ?: fail("the cap didn't land")
-        assertEquals("£3.40 of £10", cap.amount)
+        assertEquals("£10 of £15", cap.amount)
         assertTrue(shows("money-own-cap"), "the cap's bar didn't show in the sheet")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-own-category-cap"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-own-category-cap")
@@ -358,12 +361,11 @@ class MoneyPaymentSheetScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun theNeedToggleAndTheNeedsView() {
         val core = open(ThemeChoice.DARK)
-        // Walk-through 2026-11-15, A13: Corner Stores is put in Groceries first, so the Needs vs wants shot isn't
-        // uncategorised money filed as a Need under "2 payments without a category" (the toggle had made Other a need).
-        val corner = core.moneyView.value.month!!.txns.first { it.merchant.startsWith("Corner") }
-        runBlocking { check(!core.setMoneyCategory(corner.id, "groceries").refused) }
-        settle()
-        val id = tapNewest(core)
+        // Walk-through 2026-11-15, A13: the Need toggle is tried on a grocery payment, so the Needs vs wants shot isn't
+        // uncategorised money filed as a Need (the toggle had made Other a need). The shared month's Tesco is Groceries.
+        val tesco = core.moneyView.value.month!!.txns.first { it.merchant.startsWith("Tesco") }
+        assertEquals("groceries", tesco.category, "the shared month's Tesco isn't Groceries")
+        val id = tapNewest(core, tesco.merchant)
         assertTrue(shows("money-sheet-mark-need"), "no Need toggle")
         val was = core.moneyView.value.month!!.txns.first { it.id == id }.need
         tap("money-sheet-mark-need")
