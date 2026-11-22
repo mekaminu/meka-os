@@ -21,6 +21,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.unit.dp
@@ -269,6 +272,41 @@ class MoneyChatScreensTest {
         assertTrue(showsText("coffee came to $coffee"), "Obi's answer isn't in the chat")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-ai"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-ask-obi-ai")
+    }
+
+    /**
+     * Found and fixing week 5, A5 (g1a 3): Obi's "coffee came to £16.85 … groceries at £191.75" matched no Spending shot,
+     * since Coffee is past the five rows Spending shows folded. On the same month, "All N ›" opens every row, and Coffee
+     * and Groceries there say exactly what Obi quotes (Coffee holds the three Costas and the Pret), shot beside his answer.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun spendingsEveryRowSaysWhatObiQuotes() {
+        val core = open(shotMonth = true)
+        val m = core.moneyView.value.month!!
+        val rows = m.spending!!.rows
+        for (key in listOf(MoneyCategory.COFFEE.key, MoneyCategory.GROCERIES.key)) {
+            val obi = m.categories.firstOrNull { it.key == key }?.amount
+            val row = rows.firstOrNull { it.key == key }?.amount
+            assertTrue(obi != null && obi == row, "Spending's $key row says $row, Obi quotes $obi")
+        }
+        compose.mainClock.autoAdvance = true
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("money-spend-card"))
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
+        // "All N ›" (the chips' row, or WHERE IT WENT's head), when the rows are folded; tapped by its words.
+        os.meka.core.domain.MoneySpending.allLabel(rows.size, open = false)?.let { all ->
+            val link = compose.onAllNodes(ScreenShots.plainText(all), useUnmergedTree = true).fetchSemanticsNodes()
+            assertTrue(link.isNotEmpty(), "no \"$all\" over Spending's ${rows.size} rows")
+            compose.onAllNodes(ScreenShots.plainText(all), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+            settle()
+        }
+        for (key in listOf(MoneyCategory.COFFEE.key, MoneyCategory.GROCERIES.key)) {
+            val r = rows.first { it.key == key }
+            assertTrue(showsText(r.label) && showsText(r.amount), "Spending's open rows don't show ${r.label} ${r.amount}")
+        }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-all-categories"))
+        ScreenShots.assertNoBrokenWords(compose, "cover-dark-all-categories")
     }
 
     /**

@@ -51,6 +51,20 @@ internal object MoneyShotMonth {
         "20/10/2026,ZEBRA PLOVER,-12.60\n" +
         "20/10/2026,TESCO STORES 2041,-55.60\n"
 
+    /**
+     * [CURRENT] as it stood at the end of [day] (2026), for shots set earlier in the month. Found and fixing week 5, A5
+     * (g1a 3): the review shots (5 Oct) imported a statement of their own, so their Coffee read £4.20 beside Obi's £16.85
+     * and their September Groceries £116.10; they now read this statement up to their day.
+     */
+    fun currentTo(day: kotlinx.datetime.LocalDate): String {
+        val lines = CURRENT.trimEnd().lines()
+        val kept = lines.drop(1).filter { l ->
+            val (d, m, y) = l.substringBefore(',').split('/').map { it.toInt() }
+            kotlinx.datetime.LocalDate(y, m, d) <= day
+        }
+        return (listOf(lines.first()) + kept).joinToString("\n", postfix = "\n")
+    }
+
     const val CARD = "Date,Description,Amount\n" +
         "06/10/2026,AMAZON MARKETPLACE,-32.49\n" +
         "13/10/2026,DELIVEROO,-21.80\n" +

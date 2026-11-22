@@ -59,22 +59,8 @@ class MoneyLayoutScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val CURRENT = "Date,Description,Amount\n" +
-            "01/08/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/08/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/08/2026,TESCO STORES 2041,-80.00\n" +
-            "15/08/2026,STREAMLY.COM,-10.99\n" +
-            "20/08/2026,PIZZA PLACE,-30.00\n" +
-            "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/09/2026,TESCO STORES 2041,-64.90\n" +
-            "15/09/2026,STREAMLY.COM,-10.99\n" +
-            "18/09/2026,PIZZA PLACE,-60.00\n" +
-            "26/09/2026,PIZZA PLACE,-45.00\n" +
-            "30/09/2026,TESCO STORES 2041,-51.20\n" +
-            "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "02/10/2026,TESCO STORES 2041,-38.40\n" +
-            "03/10/2026,CORNER CAFE,-4.20\n"
+        /** The Money shots' shared statement as it stood on this test's Mon 5 Oct (A5: one month across every shot). */
+        val CURRENT = MoneyShotMonth.currentTo(kotlinx.datetime.LocalDate(2026, 10, 5))
     }
 
     private fun open(): MekaCore {
