@@ -7066,3 +7066,17 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
 - Tests: `MoneyPlanMoreTest` (labels and spoken), `MoneySaveTest` (end), `MoneySaveScreensTest` ("saved by Apr/Oct
   2027"), `MoneyPlanMoreScreensTest` (the cover tile "LEFT BY OCT 2027" not cut), Mac `testMoneySaveOnTheMac` (end and
   goal title). Both apps through the shared core.
+
+### Found and fixing, week 5 — slice 14 (2026-11-22): A6's Review week, one week for every shot
+- g4b 1, 2: Review's "many" shots came from two tests with two different weeks: ReviewScreensTest (15 done, three
+  habits, five still open and two more, three wins) and ReviewBalanceReflectScreensTest (9 done, two habits, two still
+  open, two wins), so Reflect said "9 done · 1 of 2 habits met · 2 wins · 2 still open" above a still-open list of 7.
+  The app's own sums were right (facts count `stillOpen.size + stillOpenMore`, and "Was due" only ever names a day
+  already gone: the fixture's today is Sat 24 Oct, not ShotLife's Wednesday, so "Was due Fri 23" is yesterday). The
+  earlier weeks' saved answers repeated this week's wins ("Shipped the release notes a day early" in the week of 5 Oct,
+  "Calm handover" in the week of 12 Oct); they now went well with that week's own win (the team retro, the rota clash).
+- New `ShotReviewWeek` (test fixture): the EMPTY/ONE/MANY weeks and the five wins, read by both tests; Balance's habits
+  are the review's habits. ReviewBalanceReflectScreensTest now fails when the facts' "N still open" differs from the
+  list it heads, or when a journal week's went-well repeats a win kept in another week. Test only, Fold.
+- Left for later slices of A6: Gifts' "3 to sort soon" over Coming up 4, Errands' Waiting 3 vs 6, Appointments' Next due,
+  People's promises by hand, Trips by hand dropping Barcelona, Dinners' fifth favourite, the routine's LAST RUN Now.

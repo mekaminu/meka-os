@@ -41,6 +41,7 @@ import os.meka.core.domain.BalanceChoices
 import os.meka.core.domain.BalanceRules
 import os.meka.core.domain.BalanceView
 import os.meka.core.domain.CalendarEvent
+import os.meka.android.screens.ShotReviewWeek.Fill
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.GoalHorizon
@@ -88,14 +89,13 @@ class ReviewBalanceReflectScreensTest {
 
     private companion object { const val SETTLE_MS = 3_000L }
 
-    private enum class Fill { EMPTY, ONE, MANY }
 
     private val cal = LocalCalendar.fixedOffset(3_600_000L)
     private val work = WorkHours(WorkSchedule.DEFAULT, HolidayCalendar.NONE)
 
     /** Mon 19 Oct 2026; "now" is Saturday 24th at 14:00. */
-    private val ws = CivilDate.toEpochDay(2026, 10, 19)
-    private val today = ws + 5
+    private val ws = ShotReviewWeek.ws
+    private val today = ShotReviewWeek.today
     private val nowMin = 14 * 60
     private val nowMs = cal.toEpochMs(today, nowMin)
 
@@ -104,37 +104,8 @@ class ReviewBalanceReflectScreensTest {
     private fun ev(title: String, day: Long, h: Int, m: Int, endH: Int, endM: Int = 0) =
         CalendarEvent("e${n++}", title, at(day, h, m), at(day, endH, endM), false, null, "google", "jordan@example.com", "Personal")
 
-    private fun week(fill: Fill): WeeklyReviewView = when (fill) {
-        Fill.EMPTY -> WeeklyReviewView.EMPTY.copy(
-            weekStart = ws, rangeLabel = ReviewRules.rangeLabel(ws), canGoBack = true,
-            tiles = listOf(ReviewTile("Done", 0, "tasks"), ReviewTile("Lists", 0, "closed")),
-        )
-        Fill.ONE -> WeeklyReviewView.EMPTY.copy(
-            weekStart = ws - 7, offset = -1, title = ReviewRules.title(-1, ws - 7), rangeLabel = ReviewRules.rangeLabel(ws - 7),
-            isCurrent = false, canGoBack = true, canGoForward = true,
-            tiles = listOf(ReviewTile("Done", 1, "task")),
-            done = listOf(ReviewDone("d1", "Book the boiler service", "Thu")),
-            stillOpen = listOf(ReviewOpen("o1", "Renew the car insurance", "Was due Wed 14 Oct")),
-            reviewed = true, reviewedLine = "Reviewed Sun 18 Oct at 18:42",
-        )
-        Fill.MANY -> WeeklyReviewView.EMPTY.copy(
-            weekStart = ws, rangeLabel = ReviewRules.rangeLabel(ws), canGoBack = true,
-            tiles = listOf(ReviewTile("Done", 9, "tasks"), ReviewTile("Habit ticks", 11, "of 13")),
-            done = listOf(
-                ReviewDone("d1", "Book the boiler service", "Mon"), ReviewDone("d2", "Send the school trip form back", "Tue"),
-                ReviewDone("d3", "Call the garage about the MOT", "Wed"), ReviewDone("d4", "Pay the window cleaner", "Thu"),
-            ),
-            doneMore = 5,
-            habits = listOf(
-                ReviewHabit("h1", "Walk 10k steps", 6, 6, true, listOf(true, true, true, true, true, true, false), ReviewRules.habitLine(6, 6, true, true)),
-                ReviewHabit("h2", "Read twenty pages", 5, 7, false, listOf(true, false, true, true, false, true, false), ReviewRules.habitLine(5, 7, false, true)),
-            ),
-            stillOpen = listOf(
-                ReviewOpen("o1", "Renew the car insurance", "Was due Wed 21 Oct"),
-                ReviewOpen("o2", "Sort the loft boxes for the charity shop", "Planned Thu 22 Oct"),
-            ),
-        )
-    }
+    /** The same week Review's own shots show (ShotReviewWeek, walk-through 2026-11-22 A6: Reflect's "2 still open" sat over 7). */
+    private fun week(fill: Fill): WeeklyReviewView = ShotReviewWeek.week(fill)
 
     private fun events(fill: Fill): List<CalendarEvent> = when (fill) {
         Fill.EMPTY -> emptyList()
@@ -165,10 +136,8 @@ class ReviewBalanceReflectScreensTest {
         )
     }
 
-    private val habits = listOf(
-        "Walk 10k steps" to listOf(true, true, true, true, true, true, false),
-        "Read twenty pages" to listOf(true, false, true, true, false, true, false),
-    )
+    /** The week's habits as the review lists them, so Balance and Reflect count the same ones. */
+    private val habits = ShotReviewWeek.week(Fill.MANY).habits.map { it.title to it.days }
 
     private fun balance(fill: Fill): BalanceView = when (fill) {
         Fill.EMPTY -> BalanceRules.view(ws, nowMs, cal, work, emptyList(), emptyList(), emptyMap())
@@ -197,17 +166,7 @@ class ReviewBalanceReflectScreensTest {
      * The week's wins, kept on its Friday: the same list feeds Wins and the reflection's facts, so "2 wins" never sits over
      * WINS "Nothing yet" (walk-through 2026-11-15, A9).
      */
-    private fun wins(fill: Fill): List<Win> {
-        val start = week(fill).weekStart
-        return when (fill) {
-            Fill.EMPTY -> emptyList()
-            Fill.ONE -> listOf(Win("w1", "Fixed the rota clash", start + 4, at(start + 4, 17, 0)))
-            Fill.MANY -> listOf(
-                Win("w1", "Shipped the release notes a day early", start + 2, at(start + 2, 17, 0)),
-                Win("w2", "Closed the audit actions", start + 4, at(start + 4, 17, 0)),
-            )
-        }
-    }
+    private fun wins(fill: Fill): List<Win> = ShotReviewWeek.wins(fill)
 
     private fun winsView(fill: Fill) = WinRules.view(wins(fill), week(fill).weekStart, today, nowMin)
 
@@ -221,8 +180,8 @@ class ReviewBalanceReflectScreensTest {
         Fill.MANY -> ReflectionRules.view(
             week(fill),
             listOf(
-                saved(ws - 7, "Calm handover with the new starter", "Saying yes to every meeting", "Clear the garage"),
-                saved(ws - 14, "Shipped the release notes a day early\nThree runs", "", "Book the half-term swimming lessons"),
+                saved(ws - 7, "Fixed the rota clash", "Saying yes to every meeting", "Clear the garage"),
+                saved(ws - 14, "Ran the team retro\nThree runs", "", "Book the half-term swimming lessons"),
                 saved(ws - 21, "", "Scrolling after midnight", ""),
             ),
             winsView(fill).week.map { it.text },
@@ -262,6 +221,16 @@ class ReviewBalanceReflectScreensTest {
         // A9: the facts' wins are the Wins card's wins, one count on one screen.
         val factWins = Regex("(\\d+) wins?").find(r.facts)?.groupValues?.get(1)?.toInt() ?: 0
         if (factWins != w.week.size) fail("$fill: the reflection says ${r.facts} but Wins holds ${w.week.size} (${w.weekLine})")
+        // Walk-through 2026-11-22 A6: "2 still open" over a list of five and two more; one count for the list it heads.
+        val factOpen = Regex("(\\d+) still open").find(r.facts)?.groupValues?.get(1)?.toInt() ?: 0
+        if (factOpen != v.stillOpen.size + v.stillOpenMore) fail("$fill: the reflection says ${r.facts} but still open lists ${v.stillOpen.size} and ${v.stillOpenMore} more")
+        // ...and an earlier week's "went well" never repeats a win kept in another week.
+        val winWeek = ShotReviewWeek.wins.associate { it.text to (it.day - Math.floorMod(it.day - ws, 7L)) }
+        r.journal.forEach { j ->
+            winWeek.forEach { (text, week) ->
+                if (week != j.weekStart && j.wentWell.contains(text)) fail("$fill: \"$text\" is a win of another week but went well in ${j.label}")
+            }
+        }
         compose.setContent {
             MekaTheme {
                 Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
@@ -455,7 +424,7 @@ class ReviewBalanceReflectScreensTest {
         if (!onScreen("Week of 5 Oct")) fail("$name: the journal didn't open")
         // Walk-through 2026-11-15 A19: the week's two went-well lines are a list under their question, so "Three runs"
         // never reads as an answer with its question missing.
-        if (!onScreen("• Shipped the release notes a day early") || !onScreen("• Three runs")) {
+        if (!onScreen("• Ran the team retro") || !onScreen("• Three runs")) {
             fail("$name: a two-line answer isn't shown as a list")
         }
         shoot("cover-dark-many-journal-open")
