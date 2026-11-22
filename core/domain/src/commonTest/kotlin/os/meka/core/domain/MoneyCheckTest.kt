@@ -75,9 +75,10 @@ class MoneyCheckTest {
         val regular = MoneyTips.regular(lines, oct16)
         val v = assertNotNull(MoneyCheck.view(lines, oct16, regular, MoneyIdeaState()))
         assertEquals(listOf("interest", "habit-coffee", "rise-NETFLIX.COM", "subs"), v.ideas.map { it.id })
-        // £600 + £290 + £18 (the subscriptions add nothing).
+        // £600 + £290 + £18 (the subscriptions add nothing), so the line says three of the four add to it
+        // (walk-through 2026-11-22 A5: "from 3 ideas" was one idea's sum).
         assertEquals("£908 a year", v.total)
-        assertEquals("from 4 ideas", v.from)
+        assertEquals("from 3 of 4 ideas", v.from)
         assertNull(v.away)
         // Walk-through 2026-11-15 A16: the habit's yearly saving is its figure, so why doesn't say it a third time; Obi
         // still gets the sentence with the sum to reword, and the spoken line says it once.
@@ -114,6 +115,10 @@ class MoneyCheckTest {
         assertEquals("1 idea", MoneyCheck.headline(0, 1))
         assertEquals("£350 a year", MoneyCheck.headline(35_000, 1))
         assertEquals("from 1 idea", MoneyCheck.fromLine(35_000, 1))
+        // Walk-through 2026-11-22 A5: one idea's sum over three ideas says so; all of them adding reads as before.
+        assertEquals("from 1 of 3 ideas", MoneyCheck.fromLine(30_000, 3, 1))
+        assertEquals("from 3 ideas", MoneyCheck.fromLine(30_000, 3, 3))
+        assertEquals(MoneyCheck.NO_SUM, MoneyCheck.fromLine(0, 3, 0))
         assertNull(MoneyCheck.headline(0, 0))
         assertEquals("", MoneyCheck.fromLine(0, 0))
         // Groceries well over its usual this month, nothing else: one idea with no sum, and the head says so.

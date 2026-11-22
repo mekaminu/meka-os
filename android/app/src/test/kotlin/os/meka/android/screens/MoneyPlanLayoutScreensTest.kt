@@ -146,6 +146,14 @@ class MoneyPlanLayoutScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-plan-layout"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-plan-layout")
         assertTrue(shows("money-check-total"), "the money check leads with what the ideas save a year")
+        // Walk-through 2026-11-22 A5: "£300 a year from 3 ideas" was the coffee idea alone; the line says how many add to it.
+        run {
+            val c = v.check ?: fail("no money check")
+            val withSum = c.ideas.count { it.savePence > 0 }
+            val expect = if (withSum < c.ideas.size) "from $withSum of ${c.ideas.size} ideas" else "from ${c.ideas.size} ideas"
+            assertTrue(withSum in 1..c.ideas.size && c.from == expect, "the money check's line is \"${c.from}\", not \"$expect\"")
+            assertTrue(showsText(c.from), "\"${c.from}\" isn't on the card")
+        }
         val lead = v.check?.ideas?.firstOrNull() ?: fail("no lead idea")
         assertTrue(shows("money-check-lead") && showsText(lead.why), "the lead idea is its own card with its why")
         assertTrue(shows("money-lead-remind") && shows("money-lead-not-for-me"), "the lead card has Remind me and Not for me")

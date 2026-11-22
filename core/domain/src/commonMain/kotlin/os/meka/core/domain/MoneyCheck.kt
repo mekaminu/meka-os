@@ -48,7 +48,7 @@ data class MoneyIdea(
 data class MoneyIdeaState(val notFor: Set<String> = emptySet(), val until: Map<String, Long> = emptyMap())
 
 /**
- * OBI'S MONEY CHECK: [total] "£1,960 a year" ("2 ideas" when none saves a sum, null with none) over [from] "from 4 ideas", the [ideas]
+ * OBI'S MONEY CHECK: [total] "£1,960 a year" ("2 ideas" when none saves a sum, null with none) over [from] "from 4 ideas" ("from 1 of 3 ideas" when only one adds to it), the [ideas]
  * (empty with [empty] said instead, and [from] then blank so the card says it once: walk-through A19), and [away] "2 put away" with Show them again when any are put away.
  */
 data class MoneyCheckView(
@@ -263,7 +263,7 @@ object MoneyCheck {
         val n = shown.size
         return MoneyCheckWords.apply(MoneyCheckView(
             total = headline(save, n),
-            from = fromLine(save, n),
+            from = fromLine(save, n, shown.count { it.savePence > 0 }),
             ideas = shown, empty = if (n == 0) EMPTY else null, away = awayLine(awayN),
         ), words)
     }
@@ -279,10 +279,17 @@ object MoneyCheck {
     }
 
     /** The line under [headline]: "from 2 ideas" under a sum, "to look at this month" under a count, blank with none. */
-    fun fromLine(savePence: Long, n: Int): String = when {
+    fun fromLine(savePence: Long, n: Int): String = fromLine(savePence, n, n)
+
+    /**
+     * As [fromLine], with [withSum] of the [n] ideas adding to the sum: walk-through 2026-11-22 A5, "£300 a year from 3
+     * ideas" was the coffee idea alone (over usual adds nothing), so it reads "from 1 of 3 ideas".
+     */
+    fun fromLine(savePence: Long, n: Int, withSum: Int): String = when {
         n == 0 -> ""
-        savePence > 0 -> "from $n idea${if (n == 1) "" else "s"}"
-        else -> NO_SUM
+        savePence <= 0 -> NO_SUM
+        withSum in 1 until n -> "from $withSum of $n ideas"
+        else -> "from $n idea${if (n == 1) "" else "s"}"
     }
 
     const val NO_SUM = "to look at this month"
