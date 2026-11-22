@@ -98,8 +98,10 @@ private fun EveningStepRow(index: Int, step: EveningStep, onOpen: () -> Unit) {
             Text(step.title, style = MekaType.body, color = if (step.done) Meka.colors.textSecondary else Meka.colors.textPrimary, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
             // Walk-through 2026-11-15, A15 (g3a 15): "Plan tomorrow · Thu 22 Oct · 1 event · first 1…" was cut on the
-            // cover with room below; the line wraps to a second line, its last words going down whole.
-            Text(LoneWordGlue.kept(step.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2,
+            // cover with room below; the line wraps to a second line, its last words going down whole. Walk-through
+            // 2026-11-22 A1: a full Thursday ("1 event · 2 tasks · 1 bill due · first 07:00 Gym before work") needs a third
+            // on the cover, so it may take three.
+            Text(LoneWordGlue.kept(step.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 3,
                 overflow = TextOverflow.Ellipsis)
         }
         Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
