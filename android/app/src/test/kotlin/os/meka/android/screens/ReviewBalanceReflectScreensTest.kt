@@ -297,8 +297,10 @@ class ReviewBalanceReflectScreensTest {
     /** Quality gate slice 64: the suggestions' rows touch (each chip's 48 dp touch is the gap), no spacing added. */
     private fun assertHintRowsTight(name: String) {
         val d = compose.density.density
+        // Only chips wholly on screen: one scrolled half off the top is clipped there (its top at the screen's edge), and
+        // measuring it made a gap that isn't drawn (slice 14's longer still-open list put one across the edge).
         val rows = compose.onAllNodesWithTag("reflect-hint", useUnmergedTree = true).fetchSemanticsNodes()
-            .map { it.boundsInRoot }.groupBy { it.top }.toSortedMap().values.map { r -> r.first().top / d to r.maxOf { it.bottom } / d }
+            .map { it.boundsInRoot }.filter { it.height / d >= 47.5f }.groupBy { it.top }.toSortedMap().values.map { r -> r.first().top / d to r.maxOf { it.bottom } / d }
         val gaps = rows.zipWithNext { a, b -> b.first - a.second }.filter { it > 0.5f && it < 60f }
         if (gaps.isNotEmpty()) fail("$name: ${gaps.map { it.toInt() }} dp added between suggestion rows (their 48 dp touch is enough)")
     }
