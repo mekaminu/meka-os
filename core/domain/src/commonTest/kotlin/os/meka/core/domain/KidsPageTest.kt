@@ -50,7 +50,7 @@ class KidsPageTest {
         ))
         val v = KidsView("summary", listOf(a, s), null, null, week)
         val p = KidsPageRules.page(v, today)
-        assertEquals(listOf("This week", "Children", "Club fees", "Chores and pocket money"), p.cards.map { it.title })
+        assertEquals(listOf("Next 7 days", "Children", "Club fees", "Chores and pocket money"), p.cards.map { it.title })
 
         // The numbers: three things this week (lit: kit for tomorrow), Alex's football in 2 days (lit), a size check due.
         assertEquals("3", p.tiles[0].number); assertTrue(p.tiles[0].lit)

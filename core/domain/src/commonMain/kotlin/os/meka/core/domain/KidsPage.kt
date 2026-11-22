@@ -40,6 +40,8 @@ object KidsPageRules {
     fun spokenHint(choice: String): String =
         "${ADD_CHOICES.firstOrNull { it.key == choice }?.label ?: ADD_CHOICES.first().label}, for example ${hint(choice)}"
 
+    /** Walk-through 2026-11-22, A7: the card holds the next 7 days (half term next Monday), never "This week". */
+    const val WEEK_TITLE = "Next 7 days"
     const val WEEK_EMPTY = "Nothing they need in the next 7 days"
     /** The header already says to add them in About you, so the card doesn't say it again (A15/A16: "you first" alone). */
     const val CHILDREN_EMPTY = "No children yet"
@@ -134,7 +136,7 @@ object KidsPageRules {
 
     /** The card's title for See all's sheet. */
     fun cardTitle(cardKey: String): String = when (cardKey) {
-        WEEK -> "This week"
+        WEEK -> WEEK_TITLE
         CHILDREN -> "Children"
         FEES -> "Club fees"
         MONEY -> "Chores and pocket money"

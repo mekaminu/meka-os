@@ -157,6 +157,8 @@ class KeptPlacesScreensTest {
                     check(core.addLeave("2–3 Jul")?.refused == false)
                     check(core.addSchool("Half term 26–30 Oct") != null)
                     check(core.addSchool("Christmas holidays 21 Dec – 1 Jan") != null)
+                    // Walk-through 2026-11-22, A7: School's INSET day the Monday back is a holiday here too.
+                    check(core.addSchool("INSET 2 Nov") != null)
                 }
             }
             Place.EMERGENCY -> {
@@ -481,6 +483,10 @@ class KeptPlacesScreensTest {
         tap(p, name, "Remove", hasContentDescription("Remove ${row.title}"))
         until { v().booked.none { it.id == row.id } }
         if (v().booked.any { it.id == row.id }) fail("$name: Remove left ${row.title}")
+        // A7: with Spain gone nothing is booked over Christmas, so it never reads "Part booked".
+        v().holidays.filter { it.note == "Not booked" }.forEach { h ->
+            if (LeavePageRules.holidayWhen(h) == "Part booked") fail("$name: ${h.title} reads Part booked with none booked")
+        }
         until { !shows(sheet) }
         val count = v().booked.size + v().taken.size
         tap(p, name, "+ Add", hasContentDescription("Add"))

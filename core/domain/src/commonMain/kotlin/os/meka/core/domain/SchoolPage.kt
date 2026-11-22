@@ -142,10 +142,11 @@ object SchoolPageRules {
     private fun lowerFirst(s: String): String = if (s.length > 1 && s[1].isUpperCase()) s else s.replaceFirstChar { it.lowercase() }
 
     private fun middleTile(view: SchoolView, today: Long): PageTile {
-        // The office days still to cover across every day off waiting on its question (a 5-day half term over five
-        // office days is 5, never "1 day off"; the days he works from home anyway don't need covering).
-        val n = view.covers.sumOf { it.days.size }
-        if (n > 0) return PageTile("$n", if (n == 1) "office day to cover" else "office days to cover", true)
+        // The office days still to cover over the next two weeks across every day off not answered yet (a 5-day half
+        // term over five office days is 5, never "1 day off"; home days, trips and booked leave don't need covering, so
+        // it agrees with Annual leave: walk-through 2026-11-22, A7). Lit while a day off is asking who's covering.
+        val n = view.toCover
+        if (n > 0) return PageTile("$n", if (n == 1) "office day to cover" else "office days to cover", view.covers.isNotEmpty())
         val d = view.dates.size
         if (d == 0) return LifePageRules.none("school dates ahead")
         val soon = view.dates.any { r -> r.startDay?.let { it - today in 0..SOON_DAYS.toLong() } == true }

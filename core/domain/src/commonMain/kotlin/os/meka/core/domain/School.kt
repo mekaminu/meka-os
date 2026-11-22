@@ -152,6 +152,12 @@ data class SchoolView(
     val terms: SchoolTermCard? = null,
     /** Where the school's INSET days are, with its website from About you (slice 3); set by the facade. */
     val inset: SchoolInsetLink? = null,
+    /**
+     * Walk-through 2026-11-22, A7: the office days still to cover over the next [SchoolRules.COVER_TILE_DAYS], across
+     * every day off not answered yet (an INSET day a week past the question's lead counts too). Booked leave, home days
+     * and trips are not office days ([WorkHours.atOffice]), so it agrees with Annual leave.
+     */
+    val toCover: Int = 0,
 ) {
     val isEmpty: Boolean get() = off.isEmpty() && dates.isEmpty() && weekly.isEmpty()
 
@@ -491,8 +497,18 @@ object SchoolRules {
             offRows, dateRows, weeklyRows, covers(off, today, hours), summary,
             firstOff?.title, firstOff?.let { maxOf(it.startDay, today) },
             SchoolTerms.card(items, today, known),
+            toCover = toCover(off, today, hours),
         )
     }
+
+    /** School's middle number looks this far ahead (two weeks) for office days to cover. */
+    const val COVER_TILE_DAYS = 14
+
+    /** The office days still to cover over the next [COVER_TILE_DAYS] across every day off not answered yet. */
+    fun toCover(items: List<SchoolItem>, today: Long, hours: WorkHours): Int =
+        items.filter { it.kind == SchoolKind.OFF && it.cover == null && it.endDay >= today }
+            .flatMap { o -> (maxOf(o.startDay, today)..minOf(o.endDay, today + COVER_TILE_DAYS)).filter { hours.atOffice(it) } }
+            .distinct().size
 
     /**
      * The week-ahead questions: each day off not answered yet that falls on office days (work days that aren't

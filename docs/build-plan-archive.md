@@ -7112,3 +7112,16 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   another goes, and reads **First run** (`RoutineRules.FIRST_RUN_TILE`, replacing `LAST_NOW`) while the first one goes.
   Tests: `RoutinesTest` (First run, then a second run keeps "Yesterday"), `RoutinesScreensTest` running (no lone "Now",
   no "Not yet"), Swift bridge test.
+
+### Found and fixing, week 5 — slice 18 (2026-11-22): A7, School and Leave agree
+- Confirmed in the code: School's cover questions already skip booked leave (`WorkHours.atOffice`); the School shots just
+  booked none while Annual leave's booked Tue 27 – Fri 30 Oct. The middle tile summed only the questions already asked,
+  so the INSET day 12 days out never counted.
+- `SchoolView.toCover` / `SchoolRules.toCover`: office days over the next `COVER_TILE_DAYS` (14) across every unanswered
+  day off; the tile is lit while a question is waiting. `SchoolPageTest.theDaysToCoverLeaveOutBookedLeaveAndCountTheInsetDayAfter`.
+- Real bug: `LeavePageRules.holidayWhen` read any note ending " booked" as "Part booked", so "Not booked" (Christmas after
+  Spain was removed) did; it now matches "N of M booked" only. `LeavePageTest.aHolidayWithNothingBookedNeverReadsPartBooked`.
+- Kids' week card is titled "Next 7 days" (`KidsPageRules.WEEK_TITLE`), matching its empty line.
+- Shots: School many books the same leave (tile must read 2); Annual leave many adds the INSET day; leave-by-hand fails
+  if a holiday with nothing booked reads Part booked.
+

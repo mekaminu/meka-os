@@ -137,6 +137,8 @@ class AdminPlacesScreensTest {
                 check(core.addSchool("INSET 2 Nov") != null)
                 if (fill == Fill.MANY) {
                     check(core.addSchool("Half term 26–30 Oct") != null)
+                    // Walk-through 2026-11-22, A7: the same leave Annual leave's shots book, so both pages agree.
+                    check(core.addLeave("27–30 Oct")?.refused == false)
                     check(core.addSchool("Alex PE Tue") != null)
                     check(core.addSchool("Sam's trip to the science museum with a packed lunch 20 Nov") != null)
                     check(core.addSchool("Trip payment by 14 Nov") != null)
@@ -187,6 +189,8 @@ class AdminPlacesScreensTest {
                 // The page shape (slice 10): the three numbers, and To book's first row (or its empty line).
                 val page = core.appointmentsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                // A7: half term's Mon 26 Oct (Tue–Fri are booked leave) and the INSET day the Monday back.
+                if (fill == Fill.MANY && page.tiles[1].number != "2") fail("$name: \"${page.tiles[1].number} ${page.tiles[1].label}\", not the 2 days Annual leave leaves open")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 assertToBookTileAgrees(name, page)
@@ -206,6 +210,8 @@ class AdminPlacesScreensTest {
                 // The page shape (slice 15): the three numbers, and the first card's first row (or its empty line).
                 val page = core.kidsPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                // A7: half term's Mon 26 Oct (Tue–Fri are booked leave) and the INSET day the Monday back.
+                if (fill == Fill.MANY && page.tiles[1].number != "2") fail("$name: \"${page.tiles[1].number} ${page.tiles[1].label}\", not the 2 days Annual leave leaves open")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
@@ -228,6 +234,8 @@ class AdminPlacesScreensTest {
                 // The page shape (slice 14): the three numbers, and Days off's first row (or its empty line).
                 val page = core.schoolPage(v)
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                // A7: half term's Mon 26 Oct (Tue–Fri are booked leave) and the INSET day the Monday back.
+                if (fill == Fill.MANY && page.tiles[1].number != "2") fail("$name: \"${page.tiles[1].number} ${page.tiles[1].label}\", not the 2 days Annual leave leaves open")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }

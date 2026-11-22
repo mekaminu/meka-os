@@ -43,10 +43,13 @@ object LeavePageRules {
     /** A stretch this near (days) is lit on its row. */
     const val SOON_DAYS = 7
 
+    private val partRe = Regex("""\d+ of \d+ booked""")
+
     /** On a holiday's row, right: "Booked", "Part booked", "Book soon", "Covered", "From home", or "". */
     fun holidayWhen(h: LeaveHoliday): String = when {
         h.bookLabel == null -> "Booked"
-        h.note.endsWith(" booked") -> "Part booked"
+        // "2 of 5 booked"; never "Not booked" (walk-through 2026-11-22, A7: Christmas read Part booked with none booked).
+        partRe.matches(h.note) -> "Part booked"
         h.nudge -> "Book soon"
         h.note == "Covered" -> "Covered"
         h.note == "You're working from home" -> "From home"

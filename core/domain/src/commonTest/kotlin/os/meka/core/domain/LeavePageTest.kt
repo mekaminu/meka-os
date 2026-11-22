@@ -102,6 +102,17 @@ class LeavePageTest {
     }
 
     @Test
+    fun aHolidayWithNothingBookedNeverReadsPartBooked() {
+        // Walk-through 2026-11-22, A7: with Spain removed, Christmas said "Part booked" with no December leave.
+        val rows = LeavePageRules.page(view(items = listOf(octLeave, august)), sat).cards.first { it.key == LeavePageRules.HOLIDAYS }.rows
+        val xmas = rows.single { it.name == "Christmas holidays" }
+        assertEquals("", xmas.whenText)
+        val v = view(items = listOf(octLeave, august)).holidays.single { it.title == "Christmas holidays" }
+        assertEquals("Not booked", v.note)
+        assertEquals("Part booked", LeavePageRules.holidayWhen(v.copy(note = "3 of 7 booked")))
+    }
+
+    @Test
     fun aHolidaySaysBookedPartBookedOrBookSoonOnTheRight() {
         val rows = LeavePageRules.page(view(), sat).cards.first { it.key == LeavePageRules.HOLIDAYS }.rows
         assertEquals(listOf("Half term", "INSET day", "Christmas holidays"), rows.map { it.name })

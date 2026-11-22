@@ -135,6 +135,27 @@ class SchoolPageTest {
     }
 
     @Test
+    fun theDaysToCoverLeaveOutBookedLeaveAndCountTheInsetDayAfter() {
+        // Walk-through 2026-11-22, A7: School said "5 office days to cover" for half term while Annual leave had Tue 27 –
+        // Fri 30 Oct booked, and left out the INSET day on the Monday back. Booked leave isn't an office day.
+        val wed = d(10, 21)
+        val items = listOf(item(SchoolKind.OFF, "Half term", d(10, 26), d(10, 30)), item(SchoolKind.OFF, "INSET day", d(11, 2)))
+        val leave = (d(10, 27)..d(10, 30)).toSet()
+        val v = SchoolRules.view(items, wed, WorkHours(WorkSchedule.DEFAULT, leaveDays = leave))
+        assertEquals(listOf(d(10, 26)), v.covers.single().days)
+        assertEquals(2, v.toCover)
+        assertEquals(PageTile("2", "office days to cover", true), SchoolPageRules.page(v, wed).tiles[1])
+        // Beyond two weeks a day off isn't counted yet; an answered one never is.
+        val later = SchoolRules.view(listOf(item(SchoolKind.OFF, "INSET day", d(11, 20))), wed, work)
+        assertEquals(0, later.toCover)
+        val answered = SchoolRules.view(listOf(item(SchoolKind.OFF, "INSET day", d(10, 26), cover = SchoolRules.COVER_COVERED)), wed, work)
+        assertEquals(0, answered.toCover)
+        // Not asked yet (12 days away), so it isn't lit.
+        val notAsked = SchoolRules.view(listOf(item(SchoolKind.OFF, "INSET day", d(11, 2))), wed, work)
+        assertEquals(PageTile("1", "office day to cover", false), SchoolPageRules.page(notAsked, wed).tiles[1])
+    }
+
+    @Test
     fun aHalfTermWaitingOnItsQuestionCountsItsOfficeDaysAndKeepsItsDates() {
         // Walk-through 2026-11-15, A10: a five-day half term said "1 day off to cover" and its row "5 days" alone.
         val mon = d(10, 19)
