@@ -7211,8 +7211,9 @@ listed 7 (a consent form, a council tax bill). The rule was already shared (slic
 - Core test `MailTidiedBulkTest.mailHeaderAndTrashConfirmTellTheSameStoryAboutTrash`: both lines say 30 days and neither
   says "for good".
 - Fixtures: the tidied-mail shots' sender domains are built as an address gives them ("alexbooks.example",
-  "samsdeli.example"), never from the display name; the paged shots' eight "Sender 8 · Weekend sale p8" placeholders
-  are eight invented shops with their own subjects. `ArchivedAllPagesScreensTest` fails if a domain reads like a
-  display name. Core change, both apps through the shared core; Mac checked nightly.
-- Still open in A9: the Mail tile's "71 promos" vs the sheet's counts and its TODAY header under the lit All chip; the
+  "samsdeli.example"), never from the display name ("sender8.example" on the paged shots). A first try at eight invented shops with their
+  own subjects on the paged shots hung `ArchivedAllPagesScreensTest` at its pager scroll after Select all on this page
+  (ci runs 45083546847 and 45084901801), so the paged placeholders stay for a later slice. Core change, both apps
+  through the shared core; Mac checked nightly.
+- Still open in A9: the paged shots' "Sender 8 · Weekend sale p8" placeholders (watch the pager scroll); the Mail tile's "71 promos" vs the sheet's counts and its TODAY header under the lit All chip; the
   possible scam counted as tidied beside "Nothing to decide"; "At work until 17:30 · 37 held" over later messages.
