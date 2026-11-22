@@ -7200,3 +7200,19 @@ listed 7 (a consent form, a council tax bill). The rule was already shared (slic
   items for the One and Many phones, which now sync before the shot.
 - `MailScreensTest` fails if the Life audit's line doesn't say "7 emails waiting on you", or if its all-clear shows beside
   them. Test only, Fold (the Mac has no shots yet).
+
+### Found and fixing, week 5 — slice 24 (2026-11-22): A9's Trash words and sender domains
+
+- Mail's header (`MailAccountRules.HEADER`, both apps) no longer promises "Nothing is ever deleted for good" beside
+  Trash's 30 days: "Navilife reads and tidies your mail and sends only when you tap Send. It never deletes mail itself:
+  what it moves to Trash can be put back for 30 days."
+- Trash all's confirm (`MailTidiedBulkRules.TRASH_BODY`): "They go to Gmail's or Outlook's Trash, where they can be put
+  back for 30 days; after that Gmail or Outlook empties them. Their senders aren't blocked."
+- Core test `MailTidiedBulkTest.mailHeaderAndTrashConfirmTellTheSameStoryAboutTrash`: both lines say 30 days and neither
+  says "for good".
+- Fixtures: the tidied-mail shots' sender domains are built as an address gives them ("alexbooks.example",
+  "samsdeli.example"), never from the display name; the paged shots' eight "Sender 8 · Weekend sale p8" placeholders
+  are eight invented shops with their own subjects. `ArchivedAllPagesScreensTest` fails if a domain reads like a
+  display name. Core change, both apps through the shared core; Mac checked nightly.
+- Still open in A9: the Mail tile's "71 promos" vs the sheet's counts and its TODAY header under the lit All chip; the
+  possible scam counted as tidied beside "Nothing to decide"; "At work until 17:30 · 37 held" over later messages.

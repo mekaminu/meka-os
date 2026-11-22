@@ -119,7 +119,8 @@ data class MailAccountsView(
 object MailAccountRules {
     const val TITLE = "Mail"
     const val ROW_LINE = "Gmail and Outlook · read, tidied, sent only on your tap"
-    const val HEADER = "Navilife reads and tidies your mail and sends only when you tap Send. Nothing is ever deleted for good."
+    const val HEADER = "Navilife reads and tidies your mail and sends only when you tap Send. It never deletes mail itself: " +
+        "what it moves to Trash can be put back for 30 days."
     const val EMPTY = "No mail connected yet. Connect each account: your personal Gmail, Outlook and the business Gmail."
     const val OFFLINE = "Couldn't reach your server. Your accounts are still connected; try again."
     /** The label chips, always in this order (both apps). */

@@ -78,7 +78,7 @@ class ArchivedAllBulkScreensTest {
 
     private fun promo(id: String, from: String, minsAgo: Int) = MailTidiedEmail(
         MailTidiedRules.key("acc", id), MailTidy.ARCHIVE, MailSort.PROMO, now - minsAgo * 60_000L, from,
-        "${from.lowercase()}.example", "Weekend sale $id", null,
+        "${from.lowercase().filter { it.isLetterOrDigit() }}.example", "Weekend sale $id", null,
     )
 
     private var said: String? = null
@@ -137,7 +137,7 @@ class ArchivedAllBulkScreensTest {
         compose.onNodeWithText("Trash all 3 promos").performClick()
         turns(800)
         compose.onNodeWithTag(ARCHIVED_ALL_CONFIRM_TAG, useUnmergedTree = true).assertExists()
-        listOf("Move 3 promos to Trash?", "30 days", "Nothing is deleted for good", "Move 3 to Trash", "Cancel")
+        listOf("Move 3 promos to Trash?", "can be put back for 30 days", "Move 3 to Trash", "Cancel")
             .forEach { if (!onScreen(it)) fail("the confirm should say $it") }
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "tidied-trash-all-cover-dark"))
         compose.onNodeWithText("Move 3 to Trash").performClick()

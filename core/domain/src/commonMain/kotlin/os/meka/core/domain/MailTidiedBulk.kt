@@ -35,7 +35,7 @@ data class ArchivedTrashAll(
     val label: String,
     /** "Move 38 promos to Trash?" */
     val confirmTitle: String,
-    /** "They go to Gmail's or Outlook's Trash, where they're kept for 30 days … Nothing is deleted for good." */
+    /** "They go to Gmail's or Outlook's Trash, where they can be put back for 30 days …" (never "not deleted for good"). */
     val confirmBody: String,
     /** "Move 38 to Trash". */
     val confirmButton: String,
@@ -49,8 +49,8 @@ object MailTidiedBulkRules {
     const val CLEAR = "Clear"
     const val CANCEL = "Cancel"
     const val NONE_SELECTED = "Tap emails to select them"
-    const val TRASH_BODY = "They go to Gmail's or Outlook's Trash, where they're kept for 30 days and can be put back from " +
-        "there. Nothing is deleted for good, and their senders aren't blocked."
+    const val TRASH_BODY = "They go to Gmail's or Outlook's Trash, where they can be put back for 30 days; after that " +
+        "Gmail or Outlook empties them. Their senders aren't blocked."
 
     private fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
 

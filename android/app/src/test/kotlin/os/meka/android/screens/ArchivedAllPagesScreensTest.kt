@@ -78,9 +78,20 @@ class ArchivedAllPagesScreensTest {
         ops.append(Op("srvpg${k++}", "hh", EntityTypes.MAIL_TIDY, id, f, v, clock.now(), emptyList(), "server"))
     }
 
-    private fun promo(id: String, from: String, minsAgo: Int) = MailTidiedEmail(
+    /** Eight invented shops, oldest first, each with its own subject (A9: no "Sender 8 · Weekend sale p8" placeholders). */
+    private val shops = listOf(
+        "Oakfield Shoes" to "Boots from £40 this weekend", "Sam's Deli" to "Christmas hampers are back",
+        "Alex Books" to "Three for two on paperbacks", "Riverside Garden Centre" to "Bulbs half price",
+        "Corner Cycles" to "Winter service, book now", "Hilltop Coffee" to "Your loyalty stamps",
+        "Northgate Toys" to "Early Christmas deals", "Bramble Homeware" to "New candles in",
+    )
+
+    /** The sender's domain as an address would give it: "sam's deli" → "samsdeli.example", never a display name. */
+    private fun domain(from: String) = from.lowercase().filter { it.isLetterOrDigit() } + ".example"
+
+    private fun promo(id: String, from: String, subject: String, minsAgo: Int) = MailTidiedEmail(
         MailTidiedRules.key("acc", id), MailTidy.ARCHIVE, MailSort.PROMO, now - minsAgo * 60_000L, from,
-        "${from.lowercase()}.example", "Weekend sale $id", null,
+        domain(from), subject, null,
     )
 
     private var said: String? = null
@@ -94,7 +105,7 @@ class ArchivedAllPagesScreensTest {
 
     private fun open(): MekaCore {
         ThemeChoice.save(ApplicationProvider.getApplicationContext<ShotApplication>(), ThemeChoice.DARK)
-        val emails = (1..8).map { promo("p$it", "Sender $it", 100 - it * 5) }
+        val emails = shops.mapIndexed { i, (from, subject) -> promo("p${i + 1}", from, subject, 100 - (i + 1) * 5) }
         serverWrite("mt1", MailAutopilotRules.batchFields(now - 2 * 60_000L, "Personal", mapOf(MailTidy.ARCHIVE to 8)) + MailTidiedRules.fields(emails))
         val core = MekaCore(
             householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
@@ -127,11 +138,14 @@ class ArchivedAllPagesScreensTest {
         turns(600)
     }
 
-    /** Every sender whose row is on the page (its "Sender 3 · sender 3.example" line, not the chips), top to bottom. */
+    /** Every sender whose row is on the page (its "Alex Books · alexbooks.example" line, not the chips), top to bottom. */
     private fun senders(): Set<String> {
         toTop()
         val seen = mutableSetOf<String>()
-        fun read() = ScreenShots.texts(compose).forEach { t -> Regex("(Sender \\d) · sender").findAll(t).forEach { seen += it.groupValues[1] } }
+        fun read() = ScreenShots.texts(compose).forEach { t ->
+            shops.forEach { (from, _) -> if ("$from · ${domain(from)}" in t) seen += from }
+            if (Regex("[a-z]+ [a-z'’ ]*\\.example").containsMatchIn(t)) fail("a sender's domain reads like a display name: $t")
+        }
         read()
         compose.onNodeWithTag("archived-all").performScrollToIndex(7)
         turns(300)
@@ -145,7 +159,7 @@ class ArchivedAllPagesScreensTest {
     fun fiveAPageWithThePagerAndSelectAllOnThisPage() {
         open()
         val first = senders()
-        if (first != (4..8).map { "Sender $it" }.toSet()) fail("page one should hold the newest five, held $first")
+        if (first != shops.drop(3).map { it.first }.toSet()) fail("page one should hold the newest five, held $first")
         toPager()
         if (!onScreen("1–5 of 8")) fail("the pager should say 1–5 of 8")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "tidied-pages-cover-dark"))
@@ -154,7 +168,7 @@ class ArchivedAllPagesScreensTest {
         toPager()
         if (!onScreen("6–8 of 8")) fail("› should open 6–8 of 8")
         val second = senders()
-        if (second != (1..3).map { "Sender $it" }.toSet()) fail("page two should hold the oldest three, held $second")
+        if (second != shops.take(3).map { it.first }.toSet()) fail("page two should hold the oldest three, held $second")
         toPager()
         compose.onNodeWithContentDescription("Previous page").performClick()
         turns(1_000)

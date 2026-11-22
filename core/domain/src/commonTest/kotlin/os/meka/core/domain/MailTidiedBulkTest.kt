@@ -96,7 +96,7 @@ class MailTidiedBulkTest {
         assertEquals("Trash all 3 promos", t.label)
         assertEquals("Move 3 promos to Trash?", t.confirmTitle)
         assertEquals("Move 3 to Trash", t.confirmButton)
-        assertTrue("30 days" in t.confirmBody && "Nothing is deleted for good" in t.confirmBody)
+        assertTrue("can be put back for 30 days" in t.confirmBody && "for good" !in t.confirmBody)
         assertEquals(3, t.ids.size)
         // A sender within the kind: theirs only.
         val d = assertNotNull(ArchivedAllRules.list(listOf(b), "deliveroo", now, cal, TidiedKind.PROMOS.id).trashAll)
@@ -111,5 +111,14 @@ class MailTidiedBulkTest {
         assertNull(ArchivedAllRules.list(listOf(asked), null, now, cal, TidiedKind.PROMOS.id).trashAll)
         assertFalse(MailTidiedBulkRules.split("x|y") == null)
         assertNull(MailTidiedBulkRules.split("|y"))
+    }
+
+    /** Walk-through week 5, A9: Mail's header promised "Nothing is ever deleted for good" while Trash's confirm says 30 days. */
+    @Test
+    fun mailHeaderAndTrashConfirmTellTheSameStoryAboutTrash() {
+        for (line in listOf(MailAccountRules.HEADER, MailTidiedBulkRules.TRASH_BODY)) {
+            assertTrue("30 days" in line, "every word about Trash should say how long it keeps mail: $line")
+            assertTrue("for good" !in line, "no promise that Trash keeps mail for ever: $line")
+        }
     }
 }
