@@ -7169,4 +7169,7 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   connected shot says it isn't connected or a not-connected one reads the AI as on.
 - Tests: core `MotionCheckTest` (row agrees with the lit chip and the result, phone and Mac). Both apps through the
   shared core; Mac checked nightly.
+- Its first push failed `settingsCoverAppearance`: the AI's longer row put Play the opening just under the list's edge,
+  where `boundsInRoot` is clipped to a zero-height line that `ScreenShots.shootBelow` counted as on screen; it now needs
+  a height. ci run 45066303269 green.
 - Still in A8: Protected time, Life audit vs Needs you.
