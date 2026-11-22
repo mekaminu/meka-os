@@ -24,7 +24,7 @@ class GiftsPageTest {
         assertEquals("Gifts", p.title)
         assertEquals(3, p.tileCount)
         assertEquals(PageTile("Sat", "Theo's birthday", true), p.tileAt(0))
-        assertEquals(PageTile("1", "gift to sort soon", true), p.tileAt(1))
+        assertEquals(PageTile("1", GiftsPageRules.SORT_ONE, true), p.tileAt(1))
         assertEquals(PageTile("3", "gift ideas noted", false), p.tileAt(2))
         // A9: the ideas counted are named on their occasions' rows.
         val all = p.cardAt(1).rows
@@ -96,5 +96,21 @@ class GiftsPageTest {
         val read = GiftRules.read(GiftsPageRules.entry("anniversary", "Wedding 20 Aug 2015"), 2026)
         assertEquals(OccasionKind.ANNIVERSARY, read?.kind)
         assertEquals(OccasionKind.ANNIVERSARY, GiftRules.read(GiftsPageRules.entry("anniversary", "Alex and Sam 3 May"), 2026)?.kind)
+    }
+
+    @Test
+    fun theSecondNumberIsTheLitRowsOnComingUp() {
+        // Found and fixing, week 5, A6: "3 gifts to sort soon" over Coming up 4; one is 16 days off, past two weeks.
+        val p = GiftsPageRules.page(
+            view(occ("a", "Priya", 10, 14), occ("b", "Theo", 10, 22), occ("c", "Sam", 10, 25), occ("d", "Rose", 10, 28)),
+            today,
+        )
+        val coming = p.cardAt(0)
+        assertEquals(4, coming.count)
+        assertEquals(PageTile("3", "to sort, next two weeks", true), p.tileAt(1))
+        assertEquals(3, coming.rows.count { it.lit })
+        // The one whose order-by day has passed is counted, the most urgent.
+        assertTrue(coming.rows[0].line.startsWith("Order-by day passed"))
+        assertTrue(coming.rows[0].lit)
     }
 }

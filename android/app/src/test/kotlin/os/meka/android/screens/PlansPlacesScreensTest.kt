@@ -212,6 +212,9 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 (page.cards.first().rows.firstOrNull() ?: page.cards[1].rows.firstOrNull())?.let { ScreenShots.assertShows(compose, name, it.name) }
+                // Found and fixing, week 5, A6: the second number is the unsorted gifts lit on Coming up, said as two weeks.
+                val lit = page.cards.first().rows.count { it.lit && it.whenText != GiftsPageRules.SORTED }
+                if (lit > 0 && page.tiles[1].number != "$lit") fail("$name: \"${page.tiles[1].number} ${page.tiles[1].label}\" over $lit lit on Coming up")
                 if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(GiftsPageRules.COMING_EMPTY))
             }
             Place.BINS -> {

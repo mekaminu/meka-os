@@ -65,7 +65,9 @@ object ErrandsPageRules {
             PageTile(if (done > 0) "$done" else "None", "done this week", false),
         )
         val cards = buildList {
-            add(LifePageRules.card(WAITING, WAITING, allRows(view, WAITING), empty = WAITING_EMPTY))
+            // Found and fixing, week 5, A6: Waiting's pill counted places ("Waiting 3") beside "6 errands waiting"; it
+            // counts the errands, the sum of its rows' "n to do".
+            add(LifePageRules.card(WAITING, WAITING, allRows(view, WAITING), empty = WAITING_EMPTY, count = waiting))
             add(LifePageRules.card(DONE, DONE, allRows(view, DONE), empty = DONE_EMPTY))
             if (near != null) {
                 add(LifePageRules.settings(NEAR, NEAR, listOf(PageRow(KEY_NEAR, NEAR, near.statusLine, if (nearOn(near)) "On" else "Off", near.lit))))

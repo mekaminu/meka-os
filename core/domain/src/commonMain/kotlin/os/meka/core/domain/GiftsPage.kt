@@ -21,6 +21,9 @@ object GiftsPageRules {
     const val COMING_DAYS = 60L
     /** What a sorted row says on the right in Coming up. */
     const val SORTED = "✓ sorted"
+    /** The second number's words: the unsorted occasions in the next two weeks, the rows lit on Coming up. */
+    const val SORT_ONE = "to sort, next two weeks"
+    const val SORT_MANY = "to sort, next two weeks"
 
     const val ADD_BIRTHDAY = "birthday"
     const val ADD_ANNIVERSARY = "anniversary"
@@ -59,7 +62,9 @@ object GiftsPageRules {
         } else PageTile("No dates", "added yet", false)
         val toOrder = rows.count { it.noteLit }
         val orderTile = when {
-            toOrder > 0 -> PageTile("$toOrder", if (toOrder == 1) "gift to sort soon" else "gifts to sort soon", true)
+            // Found and fixing, week 5, A6: "3 gifts to sort soon" sat over Coming up's four; it counts the unsorted ones
+            // in the next two weeks (lit on Coming up), so it says so, as "All sorted for the next two weeks" does.
+            toOrder > 0 -> PageTile("$toOrder", if (toOrder == 1) SORT_ONE else SORT_MANY, true)
             rows.isEmpty() -> PageTile("Nothing", "to order yet", false)
             else -> PageTile("All sorted", "for the next two weeks", false)
         }

@@ -42,6 +42,15 @@ class ErrandsPageTest {
     }
 
     @Test
+    fun waitingsPillCountsTheErrandsTheTileDoes() {
+        // Found and fixing, week 5, A6: "Waiting 3" (places) sat beside "6 errands waiting".
+        val p = ErrandsPageRules.page(view)
+        assertEquals(p.tileAt(0).number, "${p.cardAt(0).count}")
+        assertEquals(3, p.cardAt(0).count)
+        assertEquals(2, p.cardAt(0).rowCount)
+    }
+
+    @Test
     fun emptyCardsSayWhatToDo() {
         val p = ErrandsPageRules.page(ErrandView.EMPTY)
         assertEquals(ErrandsPageRules.WAITING_EMPTY, p.cardAt(0).empty)

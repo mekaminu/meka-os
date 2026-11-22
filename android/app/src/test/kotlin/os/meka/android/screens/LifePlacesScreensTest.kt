@@ -193,6 +193,9 @@ class LifePlacesScreensTest {
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                // Found and fixing, week 5, A6: Waiting's pill counts the errands the first number does, not the places.
+                val waiting = page.cards.first()
+                if (waiting.showsCount && "${waiting.count}" != page.tiles.first().number) fail("$name: Waiting ${waiting.count} beside \"${page.tiles.first().number} ${page.tiles.first().label}\"")
                 if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(ErrandsPageRules.WAITING_EMPTY))
                 rows.forEach { r -> if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case") }
                 val raw = rows.map { it.title }.filter { it.first().isLowerCase() }.toSet()
