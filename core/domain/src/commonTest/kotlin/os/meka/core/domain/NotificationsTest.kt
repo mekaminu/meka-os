@@ -198,18 +198,40 @@ class NotificationsTest {
     @Test
     fun theExplainLineNamesTheDigestTimesAsSet() {
         assertEquals(
-            "Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            "Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions come at once outside quiet hours; critical things always do.",
             Governor.preview(emptyList(), settings.copy(digestMinutes = listOf(18 * 60, 12 * 60 + 30)), at(9), cal).explainLine,
         )
         assertEquals(
-            "Most things wait for the digests at 08:00, 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            "Most things wait for the digests at 08:00, 12:30 and 18:00, so quiet in between is normal. Decisions come at once outside quiet hours; critical things always do.",
             Governor.explainLine(settings.copy(digestMinutes = listOf(8 * 60, 12 * 60 + 30, 18 * 60))),
         )
         assertEquals(
-            "Most things wait for the digest at 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            "Most things wait for the digest at 18:00, so quiet in between is normal. Decisions come at once outside quiet hours; critical things always do.",
             Governor.explainLine(settings.copy(digestMinutes = listOf(18 * 60))),
         )
-        assertTrue(Governor.explainLine(settings.copy(digestMinutes = emptyList())).startsWith("Digests are off: heads-ups come as they happen"))
+        assertTrue(Governor.explainLine(settings.copy(digestMinutes = emptyList())).startsWith("Digests are off: heads-ups and decisions come as they happen"))
+    }
+
+    /** Found and fixing week 5 (A8): the page's notes follow quiet hours and digests as set, as the governor does. */
+    @Test
+    fun theNotesAgreeWithQuietHoursAndDigestsAsSet() {
+        val noQuiet = settings.copy(quiet = settings.quiet.copy(enabled = false))
+        assertEquals("Digests are off: heads-ups come as they happen. Decisions and urgent things come at once.",
+            Governor.explainLine(noQuiet.copy(digestMinutes = emptyList())))
+        assertEquals("Most things wait for the digest at 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            Governor.explainLine(noQuiet.copy(digestMinutes = listOf(18 * 60))))
+        assertEquals("Digests are off: heads-ups and decisions come as they happen, or when quiet hours end. Critical things always come at once.",
+            Governor.explainLine(settings.copy(digestMinutes = emptyList())))
+        assertFalse(NotifyRules.quietNote(digestsOn = false).contains("digest"))
+        assertTrue(NotifyRules.quietNote(digestsOn = true).contains("wait for the next digest"))
+        // The governor does what the notes say: with digests off, a heads-up at 23:00 posts when quiet hours end.
+        val off = settings.copy(digestMinutes = emptyList())
+        val night = heads("late", at(23))
+        assertTrue(eval(listOf(night), at(23), s = off).post.isEmpty())
+        assertEquals(listOf("late"), eval(listOf(night), at(7, d = day + 1), s = off).post.map { it.key })
+        assertEquals("Notifications are off for Navilife in Android's settings, so nothing can reach this phone.", NotifyRules.phoneOffLine(false, false))
+        assertEquals("This phone is set to Off below, so Navilife posts nothing here.", NotifyRules.phoneOffLine(true, true))
+        assertNull(NotifyRules.phoneOffLine(true, false))
     }
 
     @Test

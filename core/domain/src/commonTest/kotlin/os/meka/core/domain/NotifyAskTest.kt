@@ -37,7 +37,7 @@ class NotifyAskTest {
         val lines = NotifyAskRules.askLines(healthy, settings, now, cal)
         assertEquals("Notifications on this phone · on for Navilife", lines[0])
         assertEquals("Last notification · sent today at 20:11 on Heads-ups", lines[1])
-        assertEquals("Digests · Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.", lines[2])
+        assertEquals("Digests · Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions come at once outside quiet hours; critical things always do.", lines[2])
         assertEquals("Quiet hours · 22:00–07:00", lines[3])
         assertEquals("Trace · ${CivilDate.shortLabel(day)} 20:31 · Looked · nothing due · next look 21:10", lines[4])
         assertEquals(6, lines.size)
@@ -68,7 +68,7 @@ class NotifyAskTest {
         assertTrue(NotifyAskRules.localAnswer(healthy.copy(phoneOff = true), settings, now, cal)!!.startsWith("This phone is set to Off"))
         assertTrue(NotifyAskRules.localAnswer(healthy.copy(channels = healthy.channels.map { it.copy(on = false) }), settings, now, cal)!!.startsWith("Every Navilife category is switched off"))
         assertEquals(
-            "The last one went today at 20:11, on Heads-ups. Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            "The last one went today at 20:11, on Heads-ups. Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions come at once outside quiet hours; critical things always do.",
             NotifyAskRules.localAnswer(healthy, settings, now, cal),
         )
         val failed = healthy.copy(trace = listOf(NotifyTraceEntry(now - 5 * HealthRules.MIN, NotifyTraceKind.FAILED, "governor · SecurityException")) + healthy.trace)
@@ -76,7 +76,7 @@ class NotifyAskTest {
         val never = NotificationHealth(allowed = true, channels = emptyList(), trace = emptyList())
         val night = day * CivilDate.DAY_MS + 23 * HealthRules.HOUR
         assertEquals(
-            "Navilife hasn't sent a notification from this phone yet. It's quiet hours until 07:00, so only urgent things come now. Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions and urgent things come at once.",
+            "Navilife hasn't sent a notification from this phone yet. It's quiet hours until 07:00, so only urgent things come now. Most things wait for the digests at 12:30 and 18:00, so quiet in between is normal. Decisions come at once outside quiet hours; critical things always do.",
             NotifyAskRules.localAnswer(never, settings, night, cal),
         )
     }

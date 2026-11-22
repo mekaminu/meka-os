@@ -7125,3 +7125,20 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
 - Shots: School many books the same leave (tile must read 2); Annual leave many adds the INSET day; leave-by-hand fails
   if a holiday with nothing booked reads Part booked.
 
+
+### Found and fixing, week 5 — slice 19 (2026-11-22): A8's Notifications, the page agrees with Health and itself
+- Confirmed in the code: the Fold's Notifications only drew an "Allow notifications" button when Android blocked
+  Navilife, while Health's row read "Off for Navilife · nothing can reach you". `NotifyRules.phoneOffLine(allowed,
+  phoneOff)` gives the page the same red line ("Notifications are off for Navilife in Android's settings, so nothing
+  can reach this phone." / "This phone is set to Off below…"), unfolding above This phone; the Mac already had
+  `MacNotifyRules.offLine`.
+- Real wording bug, checked against `Governor.evaluate`: with both digests off, quiet hours' note still said heads-ups
+  "wait for the next digest" (they post when quiet hours end). `NotifyRules.quietNote(digestsOn)` replaces `QUIET_NOTE`
+  on both apps. `Governor.explainLine` follows quiet hours: no "except in quiet hours" over No quiet hours, and with
+  quiet hours on it says decisions come at once outside them (critical things always do), instead of "always".
+- Tests: core `NotificationsTest.theNotesAgreeWithQuietHoursAndDigestsAsSet` (incl. the governor posting a 23:00
+  heads-up at 07:00 with digests off), `NotifyAskTest` wording; `NotificationsScreensTest` fails when Navilife is
+  blocked and the page doesn't say so, when the explain line names quiet hours that are off, or the note promises a digest
+  that's off. Both apps through the shared core; Mac checked nightly.
+- Still in A8: Health vs Setup (call screening, Outlook), Settings' Motion check and "connected" AI row, Protected time,
+  Life audit vs Needs you.

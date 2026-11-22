@@ -176,8 +176,17 @@ class NotificationsScreensTest {
         val p = core.notificationPreview.value
         val s = core.notificationSettings.value
         val lines = listOfNotNull(p.quietLine, p.digestLine, p.explainLine.ifEmpty { null }, NotifyRules.DIGEST_NOTE, NotifyRules.TIER_NOTE) +
-            (if (s.quiet.enabled) listOf(NotifyRules.QUIET_NOTE) else emptyList())
+            (if (s.quiet.enabled) listOf(NotifyRules.quietNote(s.digestsOn)) else emptyList())
         lines.forEach { if (!onScreen(it)) fail("$name: \"$it\" isn't on screen") }
+        // Found and fixing week 5 (A8): the page agrees with Health and with itself.
+        val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        NotifyRules.phoneOffLine(os.meka.android.work.WorkAlerts.canPost(ctx), false)?.let {
+            if (!onScreen(it)) fail("$name: notifications are off for Navilife (Health says nothing can reach you) but the page doesn't say so")
+        }
+        if (!s.quiet.enabled && p.explainLine.contains("quiet hours")) fail("$name: \"${p.explainLine}\" over No quiet hours")
+        if (s.quiet.enabled && p.explainLine.contains("always come at once") && p.explainLine.contains("Decisions and urgent"))
+            fail("$name: \"${p.explainLine}\" says decisions always come at once, but quiet hours hold them")
+        if (s.quiet.enabled && !s.digestsOn && onScreen("wait for the next digest")) fail("$name: quiet hours promise the next digest with both digests off")
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         val chips = DeviceAlerts.entries.map { it.label }.toSet() + NoticeSource.CHOICES.map { it.label }
@@ -217,7 +226,7 @@ class NotificationsScreensTest {
         tap(NotifyRules.QUIET_OFF)
         until { core.notificationSettings.value.quiet.enabled && onScreen("22:00–07:00") }
         if (!core.notificationSettings.value.quiet.enabled) fail("$name: the switch left quiet hours off")
-        if (!onScreen(NotifyRules.QUIET_NOTE)) fail("$name: quiet hours on didn't unfold the times")
+        if (!onScreen(NotifyRules.quietNote(core.notificationSettings.value.digestsOn))) fail("$name: quiet hours on didn't unfold the times")
 
         tap("Until 15 minutes later")
         until { core.notificationSettings.value.quiet.endMinute == 7 * 60 + 15 && onScreen("22:00–07:15") }

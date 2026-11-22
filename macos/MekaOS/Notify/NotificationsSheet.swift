@@ -84,7 +84,7 @@ struct NotificationsSheet: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     stepper("From", value: quietStart) { model.setQuietHours(enabled: true, start: $0, end: quietEnd) }
                     stepper("Until", value: quietEnd) { model.setQuietHours(enabled: true, start: quietStart, end: $0) }
-                    Text(LoneWordGlue.shared.kept(line: NotifyRules.shared.QUIET_NOTE))
+                    Text(LoneWordGlue.shared.kept(line: NotifyRules.shared.quietNote(digestsOn: model.notifySettings?.digestsOn ?? true)))
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

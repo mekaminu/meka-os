@@ -133,6 +133,17 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
 
+        // Found and fixing week 5 (A8): say plainly when nothing can reach this phone, as Health does.
+        val offLine = NotifyRules.phoneOffLine(allowed, device == DeviceAlerts.OFF)
+        AnimatedVisibility(
+            offLine != null,
+            enter = if (Meka.reducedMotion) fadeIn() else expandVertically() + fadeIn(),
+            exit = if (Meka.reducedMotion) fadeOut() else shrinkVertically() + fadeOut(),
+        ) {
+            Text(LoneWordGlue.kept(offLine.orEmpty()), style = MekaType.itemMeta, color = Meka.colors.critical,
+                modifier = Modifier.testTag("notify-off-line").padding(top = MekaSpace.xs))
+        }
+
         Spacer(Modifier.height(MekaSpace.m))
         Label("This phone", 1)
         ChipRow(DeviceAlerts.entries.map { it.label }, DeviceAlerts.entries.indexOf(device), Modifier.appear(rememberAppearance(1))) {
@@ -191,7 +202,7 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             Column {
                 TimeStepper("From", quiet.startMinute) { saveQuiet(start = it) }
                 TimeStepper("Until", quiet.endMinute) { saveQuiet(end = it) }
-                Text(LoneWordGlue.kept(NotifyRules.QUIET_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(NotifyRules.quietNote(settings.digestsOn)), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
 

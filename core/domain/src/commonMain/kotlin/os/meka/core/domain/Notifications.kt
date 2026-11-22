@@ -664,15 +664,24 @@ object Governor {
         return NotificationPreview(quietLine, digestLine, explainLine(settings))
     }
 
-    /** [NotificationPreview.explainLine]: the digest times as set, so silence between them isn't mistaken for broken. */
+    /**
+     * [NotificationPreview.explainLine]: the digest times as set, so silence between them isn't mistaken for broken.
+     * Found and fixing week 5 (A8): it follows quiet hours as set, so it never says "except in quiet hours" over
+     * "No quiet hours", nor "decisions always come at once" beside quiet hours that hold them.
+     */
     fun explainLine(settings: NotificationSettings): String {
         val times = settings.digestMinutes.sorted().map { LocalClock.formatMinute(it) }
-        if (times.isEmpty()) return "Digests are off: heads-ups come as they happen, except in quiet hours. Decisions and urgent things always come at once."
+        val quiet = settings.quiet.enabled
+        if (times.isEmpty()) {
+            return if (quiet) "Digests are off: heads-ups and decisions come as they happen, or when quiet hours end. Critical things always come at once."
+            else "Digests are off: heads-ups come as they happen. Decisions and urgent things come at once."
+        }
         val at = when (times.size) {
             1 -> "the digest at ${times[0]}"
             else -> "the digests at ${times.dropLast(1).joinToString(", ")} and ${times.last()}"
         }
-        return "Most things wait for $at, so quiet in between is normal. Decisions and urgent things come at once."
+        val atOnce = if (quiet) "Decisions come at once outside quiet hours; critical things always do." else "Decisions and urgent things come at once."
+        return "Most things wait for $at, so quiet in between is normal. $atOnce"
     }
 
     fun effectiveTier(n: Notice, settings: NotificationSettings): NoticeTier {
@@ -1193,7 +1202,24 @@ object NotifyRules {
 
     /** Quiet hours' switch row: "21:30–06:45" beside the On pill (walk-through A29: it read "On · …" beside "On"), else [QUIET_OFF]. */
     fun quietRow(enabled: Boolean, summary: String): String = if (enabled) summary else QUIET_OFF
-    const val QUIET_NOTE = "Heads-ups that fall in quiet hours wait for the next digest. Only critical things come through."
+    /**
+     * The note under quiet hours' times, true to the governor: with digests on, a heads-up in quiet hours rides in the
+     * next digest; with them off (found and fixing week 5, A8: it promised "the next digest" with both off) heads-ups and
+     * decisions wait until quiet hours end. Critical things post either way.
+     */
+    fun quietNote(digestsOn: Boolean): String =
+        if (digestsOn) "Heads-ups that fall in quiet hours wait for the next digest, decisions until quiet hours end. Only critical things come through."
+        else "Heads-ups and decisions that fall in quiet hours wait until they end. Only critical things come through."
+
+    /**
+     * The red line at the top of the phone's Notifications (found and fixing week 5, A8): Health said "Off for Navilife ·
+     * nothing can reach you" while this page showed Everything lit with only an Allow button. Null when all is well.
+     */
+    fun phoneOffLine(allowed: Boolean, phoneOff: Boolean): String? = when {
+        !allowed -> "Notifications are off for Navilife in Android's settings, so nothing can reach this phone."
+        phoneOff -> "This phone is set to Off below, so Navilife posts nothing here."
+        else -> null
+    }
     const val DIGEST_NOTE = "One quiet round-up of what's due: renewals, things to chase, decisions to review, overdue tasks."
     const val TIER_NOTE = "Heads-up: a notification at the time. Digest: in the midday or evening round-up. App only: never a " +
         "notification. Nothing here sends anything for you."
