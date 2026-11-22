@@ -65,17 +65,6 @@ internal object MoneyShotMonth {
         return (listOf(lines.first()) + kept).joinToString("\n", postfix = "\n")
     }
 
-    /**
-     * What moved on all four accounts after [day] (2026), in pence: Found and fixing week 5, A5 (g1a 6), net worth's
-     * "Up … since the end of Sep" is exactly October's money in and out on every account, cards included.
-     */
-    fun movedAfter(day: kotlinx.datetime.LocalDate): Long = listOf(CURRENT, CARD, REWARDS, SAVINGS).sumOf { csv ->
-        csv.trimEnd().lines().drop(1).sumOf { l ->
-            val (d, m, y) = l.substringBefore(',').split('/').map { it.toInt() }
-            if (kotlinx.datetime.LocalDate(y, m, d) > day) Math.round(l.substringAfterLast(',').toDouble() * 100) else 0L
-        }
-    }
-
     const val CARD = "Date,Description,Amount\n" +
         "06/10/2026,AMAZON MARKETPLACE,-32.49\n" +
         "13/10/2026,DELIVEROO,-21.80\n" +

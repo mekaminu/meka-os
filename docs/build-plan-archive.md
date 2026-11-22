@@ -7051,5 +7051,6 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   back like accounts (balance = minus what's owed now, a typed statement as of today, a feed balance as of its day);
   they don't hold the line's start back. Cards without lines stay flat. (The review's "Came in £0" was the 5 Oct review
   shots' old statement, fixed by slice 9; October has the 5 Oct pay.)
-- Tests: `MoneyWorthTest.aCardsSpendingMovesTheLineSoTheChangeIsTheMonthsMoney` (core); the accounts-total shot asserts
-  the change line equals `MoneyShotMonth.movedAfter(30 Sep)` across all four accounts (£1,967.23).
+- Tests: `MoneyWorthTest.aCardsSpendingMovesTheLineSoTheChangeIsTheMonthsMoney` (core). The accounts-total shot no longer
+  shows a change at all: since slice 8 added Savings (its statement starts 1 Oct) the line waits for every account's
+  second month; the shot asserts no change line and the "line starts once a second month is in" words.
