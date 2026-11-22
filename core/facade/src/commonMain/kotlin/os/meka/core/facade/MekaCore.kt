@@ -5991,7 +5991,7 @@ class MekaCore(
     }
 
     /**
-     * Protected time, slice 4: "Not protected tonight" ([open] true) lifts today's protected time just this once; false
+     * Protected time, slice 4: "Open tonight, just this once" ([open] true) lifts today's protected time just this once; false
      * (Undo) puts it back. Returns the line to show, or null when nothing changed (or today has nothing to lift).
      */
     suspend fun setProtectedOpenToday(open: Boolean): String? = onCore {

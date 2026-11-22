@@ -46,17 +46,19 @@ class ProtectedOpenTodayTest {
         assertEquals(at(mon, 7), ProtectedRules.protectedUntil(open, at(sun, 10), nineToFive, none, cal))
 
         val before = ProtectedRules.view(both, sat, nineToFive, none)
-        assertEquals("Not protected today", before.openAction)
+        assertEquals("Open today, just this once", before.openAction)
+        assertNull(before.undoAction)
         assertFalse(before.openToday)
         val after = ProtectedRules.view(open, sat, nineToFive, none)
         assertNull(after.openAction)
         assertTrue(after.openToday)
-        assertEquals("Not protected today · you opened it · the planner and work mail as usual", after.todayLine)
+        assertEquals("Protect today again", after.undoAction)
+        assertEquals("Today is open, just this once · the planner may use it and work mail shows as it comes", after.todayLine)
         assertEquals("Protected today · none · he opened today himself, just this once",
             ProtectedRules.askLines(open, sat, nineToFive, none)[1])
         // A lift on a past day changes nothing today; nothing to lift on a day without protected time.
         val stale = both.copy(openDay = sat)
-        assertEquals("Not protected tonight", ProtectedRules.view(stale, tue, nineToFive, none).openAction)
+        assertEquals("Open tonight, just this once", ProtectedRules.view(stale, tue, nineToFive, none).openAction)
         assertNull(ProtectedRules.lifted(both.copy(evenings = false), tue, nineToFive, none))
         assertNull(ProtectedRules.view(null, tue, nineToFive, none).openAction)
     }
@@ -66,5 +68,21 @@ class ProtectedOpenTodayTest {
         val r = ProtectedRules.read(mapOf(ProtectedFields.OPEN_DAY to os.meka.core.sync.FieldValue.Int64(tue)))
         assertEquals(tue, r?.openDay)
         assertNull(ProtectedRules.read(mapOf(ProtectedFields.OPEN_DAY to os.meka.core.sync.FieldValue.Int64(0)))?.openDay)
+    }
+
+    /**
+     * Week 5 A8 (walk-through 2026-11-22): "Protected from 19:00 tonight" sat over a "Not protected tonight" button in
+     * the same gold, so the pane read as two opposite statuses. Each button is a verb that no status line starts with.
+     */
+    @Test
+    fun theButtonNeverReadsAsAStatus() {
+        val statusStarts = listOf("Protected", "Not protected", "Today is", "Tonight is")
+        ProtectedRules.Lifted.entries.forEach { l ->
+            listOf(l.action, l.undo).forEach { button ->
+                assertTrue(statusStarts.none { button.startsWith(it) }, "$button reads as a status")
+                assertTrue(button.startsWith("Open") || button.startsWith("Protect "), button)
+            }
+            assertFalse(l.line.contains(" as usual"), l.line)
+        }
     }
 }

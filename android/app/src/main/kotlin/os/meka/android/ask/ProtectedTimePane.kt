@@ -63,9 +63,9 @@ import os.meka.core.facade.MekaCore
  * Slice 3: WORK MAIL (Waits till morning · Shows as it comes) unfolds once something is protected, with "Held now ·
  * 2 business emails till tomorrow 07:00" cross-fading in while some wait.
  *
- * Slice 4: under today's line, "Not protected tonight" (or "… today" on a protected whole day) in the accent lifts
- * today's protected time just this once; it cross-fades to "Undo · protect it again" with the line below saying what
- * changed. Tick haptic; reduced motion: cross-fades.
+ * Slice 4: under today's line, "Open tonight, just this once" (or "… today" on a protected whole day) in the accent
+ * lifts today's protected time just this once; it cross-fades to "Protect tonight again" with the line below saying what
+ * changed (week 5 A8: verbs, so the button never reads as a status opposite today's line, which is in the text colour). Tick haptic; reduced motion: cross-fades.
  *
  * Quality gate slice 49: the chips wrap onto a second line instead of scrolling sideways (on the cover screen the
  * evening's From 19:30 and From 20:00 sat off the edge), each answers a 48 dp touch with its pill drawn as before, and
@@ -116,13 +116,14 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
         item(key = "today") {
             AnimatedVisibility(v.todayLine != null, enter = unfold(), exit = fold()) {
                 Crossfade(v.todayLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "protected-today") { line ->
-                    Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.accent)
+                    // Week 5 A8: today's status reads in the text colour; only the button below is in the accent.
+                    Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textPrimary)
                 }
             }
         }
         item(key = "open") {
             // Slice 4: not protected tonight, just this once (Undo puts it back).
-            val action = v.openAction ?: if (v.openToday) "Undo · protect it again" else null
+            val action = v.openAction ?: v.undoAction
             AnimatedVisibility(action != null, enter = unfold(), exit = fold()) {
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     Crossfade(action.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "protected-open") { label ->

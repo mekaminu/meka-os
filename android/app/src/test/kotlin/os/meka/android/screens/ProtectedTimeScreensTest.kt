@@ -45,7 +45,7 @@ import kotlin.test.fail
  * once, each on the Fold's cover and inner screens, Dark (and the full one in Light). Saved under `protected/` and read
  * for nonsense, cut lines, broken words, split dates, times and numbers, the pane's own lines leaving a word alone or
  * starting a line with a dot, every chip whole on one line and in view (they wrap, never scroll off the edge), and every
- * button answering a 48 dp touch. By hand: 19:30 moves the evening; Not protected tonight lifts tonight and says
+ * button answering a 48 dp touch. By hand: 19:30 moves the evening; Open tonight, just this once lifts tonight and says
  * so, and Undo puts it back. Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -150,7 +150,7 @@ class ProtectedTimeScreensTest {
         if (rows > 2) fail("$name: the evening's chips take $rows rows (at most 2)")
     }
 
-    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
+    private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, shoot: Boolean = true): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         val core = core()
@@ -169,7 +169,7 @@ class ProtectedTimeScreensTest {
         turns()
         compose.waitForIdle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("protected", name))
+        if (shoot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("protected", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -197,12 +197,14 @@ class ProtectedTimeScreensTest {
             }
             Fill.ONE -> {
                 if (v.todayLine != "Protected from 19:00 tonight") fail("$name: today's line reads \"${v.todayLine}\"")
-                ScreenShots.assertShows(compose, name, "Not protected tonight")
+                // Week 5 A8: the button is a verb, not a status reading as the opposite of today's line.
+                ScreenShots.assertShows(compose, name, "Open tonight, just this once")
+                if (onScreen("Not protected tonight")) fail("$name: \"Not protected tonight\" sits under \"${v.todayLine}\"")
                 ScreenShots.assertShows(compose, name, ProtectedMailRules.ON)
             }
             Fill.MANY -> {
                 if (!v.openToday) fail("$name: tonight isn't lifted ($v)")
-                ScreenShots.assertShows(compose, name, "Undo · protect it again")
+                ScreenShots.assertShows(compose, name, "Protect tonight again")
                 ScreenShots.assertShows(compose, name, LoneWordGlue.kept(ProtectedRules.Lifted.EVENING.line))
             }
         }
@@ -210,8 +212,8 @@ class ProtectedTimeScreensTest {
     }
 
     /**
-     * Works by hand: 19:30 moves the evening (the summary follows); Not protected tonight lifts tonight and says
-     * what changed; Undo · protect it again puts it back.
+     * Works by hand: 19:30 moves the evening (the summary follows); Open tonight, just this once lifts tonight and says
+     * what changed; Protect tonight again puts it back.
      */
     private fun byHand(core: MekaCore) {
         val name = "protected-by-hand"
@@ -223,20 +225,24 @@ class ProtectedTimeScreensTest {
         if (core.protectedView.value.fromMin != 19 * 60 + 30) fail("$name: 19:30 left the evening at ${core.protectedView.value.fromMin}")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(ProtectedRules.summary(os.meka.core.domain.ProtectedSetting(true, 19 * 60 + 30, false))))
 
-        val lift = compose.onAllNodes(hasText("Not protected tonight") and hasClickAction())
-        if (lift.fetchSemanticsNodes().isEmpty()) fail("$name: no Not protected tonight")
+        val lift = compose.onAllNodes(hasText("Open tonight, just this once") and hasClickAction())
+        if (lift.fetchSemanticsNodes().isEmpty()) fail("$name: no Open tonight, just this once")
         lift[0].performSemanticsAction(SemanticsActions.OnClick)
         val done = LoneWordGlue.kept(ProtectedRules.Lifted.EVENING.done)
         until { core.protectedView.value.openToday && onScreen(done) }
-        if (!core.protectedView.value.openToday) fail("$name: Not protected tonight left tonight protected")
+        if (!core.protectedView.value.openToday) fail("$name: Open tonight left tonight protected")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(ProtectedRules.Lifted.EVENING.done))
+        // Week 5 A11: the by-hand shot shows what the taps did (19:30, tonight opened), not the one state again.
+        turns()
+        compose.waitForIdle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("protected", name))
 
-        val undo = compose.onAllNodes(hasText("Undo · protect it again") and hasClickAction())
+        val undo = compose.onAllNodes(hasText("Protect tonight again") and hasClickAction())
         if (undo.fetchSemanticsNodes().isEmpty()) fail("$name: no Undo once tonight is lifted")
         undo[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { !core.protectedView.value.openToday && onScreen("Not protected tonight") }
+        until { !core.protectedView.value.openToday && onScreen("Open tonight, just this once") }
         if (core.protectedView.value.openToday) fail("$name: Undo left tonight lifted")
-        ScreenShots.assertShows(compose, name, "Not protected tonight")
+        ScreenShots.assertShows(compose, name, "Open tonight, just this once")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
@@ -245,5 +251,5 @@ class ProtectedTimeScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { pane("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerEmpty() { pane("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { pane("inner-dark-many", Fill.MANY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.ONE, shoot = false)) }
 }

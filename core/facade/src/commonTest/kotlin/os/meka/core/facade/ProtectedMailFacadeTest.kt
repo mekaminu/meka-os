@@ -87,7 +87,7 @@ class ProtectedMailFacadeTest {
         // Nothing to lift while protected time is off.
         assertNull(fold.setProtectedOpenToday(true))
         fold.setProtectedTime(evenings = true, fromMin = 19 * 60, weekends = true)
-        assertEquals("Not protected today", fold.protectedView.value.openAction)
+        assertEquals("Open today, just this once", fold.protectedView.value.openAction)
         assertNull(fold.mailNeeds.value?.rows?.firstOrNull { it.id == business })
 
         assertEquals(os.meka.core.domain.ProtectedRules.Lifted.DAY.done, fold.setProtectedOpenToday(true))
@@ -100,7 +100,7 @@ class ProtectedMailFacadeTest {
 
         // Undo on the Mac: protected again on both.
         assertEquals(os.meka.core.domain.ProtectedRules.Lifted.DAY.again, mac.setProtectedOpenToday(false))
-        assertEquals("Not protected today", mac.protectedView.value.openAction)
+        assertEquals("Open today, just this once", mac.protectedView.value.openAction)
         mac.syncNow(); fold.syncNow(); fold.tick()
         assertEquals(false, fold.protectedView.value.openToday)
         assertNull(fold.mailNeeds.value?.rows?.firstOrNull { it.id == business })

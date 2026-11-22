@@ -7173,3 +7173,20 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   where `boundsInRoot` is clipped to a zero-height line that `ScreenShots.shootBelow` counted as on screen; it now needs
   a height. ci run 45066303269 green.
 - Still in A8: Protected time, Life audit vs Needs you.
+
+### Found and fixing, week 5 — slice 22 (2026-11-22): A8's Protected time
+
+Walk-through g5a 5: "Protected from 19:00 tonight" sat directly over "Not protected tonight" in the same gold; the second
+was a button but read as the opposite status, and once opened the line was a fragment ("… the planner and work mail as
+usual") over "Undo · protect it again" styled like the status.
+- `ProtectedRules.Lifted` now carries `action` ("Open tonight, just this once" / "Open today, just this once"), `status`
+  (the brief's "Not protected tonight · you opened it", unchanged), `line` ("Tonight is open, just this once · the planner
+  may use it and work mail shows as it comes"), `done` ("Opened for tonight only"), `again` and `undo` ("Protect tonight
+  again"). `ProtectedView.undoAction` (additive) replaces the apps' hard-coded "Undo · protect it again".
+- Fold `ProtectedTimePane` and Mac `ProtectedTimeSheet`: today's line in the text colour, only the button in the accent.
+- Help's Protected time tip follows the new words.
+- Tests: `ProtectedOpenTodayTest.theButtonNeverReadsAsAStatus` (no button starts like a status line; no "as usual"
+  fragment), updated facade test; `ProtectedTimeScreensTest` fails if "Not protected tonight" shows under today's line,
+  and the by-hand shot (A11: it was byte-identical to the one shot) is now taken after 19:30 and Open tonight are tapped.
+- Life audit (the other half of A8) confirmed in the code: its "emails waiting on you" count uses `MailNeedsRules.showing`,
+  the same rule as Needs you's Mail to answer; the disagreement is only the Mail shots' phone having none. Left open.

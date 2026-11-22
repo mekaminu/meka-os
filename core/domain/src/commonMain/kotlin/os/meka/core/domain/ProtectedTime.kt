@@ -31,8 +31,8 @@ import os.meka.core.sync.fv
  * their own in the morning. A security alert, a reply he already sent or one that didn't send, and notes to self are
  * never held. One more additive field, `holdMail` (Bool, absent = on); Off in the pane shows them as before.
  *
- * Slice 4 (2026-10-18): **not protected tonight, just this once.** One tap in the pane ("Not protected tonight", or
- * "Not protected today" on a protected whole day) lifts today's protected time only: the planner and Move to later may
+ * Slice 4 (2026-10-18): **not protected tonight, just this once.** One tap in the pane ("Open tonight, just this once", or
+ * "Open today, just this once" on a protected whole day) lifts today's protected time only: the planner and Move to later may
  * use it, the business mail isn't held tonight (nor in the small hours after), Ask is told; **Undo** puts it back. One
  * more additive field, `openDay` (epoch day, 0 = none); a day that has passed simply stops mattering.
  *
@@ -83,10 +83,12 @@ data class ProtectedView(
     val holdMail: Boolean = true,
     /** Slice 3: "Held now · 2 business emails wait till 07:00" while some are held, else null. */
     val mailLine: String? = null,
-    /** Slice 4: "Not protected tonight" / "Not protected today" while today has protected time he could lift, else null. */
+    /** Slice 4: "Open tonight, just this once" / "Open today, just this once" while today has protected time he could lift, else null. */
     val openAction: String? = null,
-    /** Slice 4: true when he lifted today's protected time (the pane then offers Undo). */
+    /** Slice 4: true when he lifted today's protected time (the pane then offers [undoAction]). */
     val openToday: Boolean = false,
+    /** Week 5 A8: "Protect tonight again" / "Protect today again" while today is lifted, else null. */
+    val undoAction: String? = null,
 ) {
     val on: Boolean get() = evenings || weekends
 
@@ -207,19 +209,27 @@ object ProtectedRules {
         return "Protected from ${LocalClock.formatMinute(from)} tonight"
     }
 
-    /** Slice 4: what lifting [day] means, worked out as if it weren't lifted. */
-    enum class Lifted(val action: String, val line: String, val done: String, val again: String) {
+    /**
+     * Slice 4: what lifting [day] means, worked out as if it weren't lifted. Week 5 A8 (2026-11-22): the pane's button
+     * is a verb ([action], "Open tonight, just this once"; [undo], "Protect tonight again"), never a status that reads
+     * as the opposite of the line above it; [status] is the brief's short status and [line] the pane's full sentence.
+     */
+    enum class Lifted(val action: String, val status: String, val line: String, val done: String, val again: String, val undo: String) {
         EVENING(
+            "Open tonight, just this once",
             "Not protected tonight",
-            "Not protected tonight · you opened it · the planner and work mail as usual",
-            "Tonight isn't protected · the planner may use it and work mail shows · Undo puts it back",
+            "Tonight is open, just this once · the planner may use it and work mail shows as it comes",
+            "Opened for tonight only",
             "Protected again tonight",
+            "Protect tonight again",
         ),
         DAY(
+            "Open today, just this once",
             "Not protected today",
-            "Not protected today · you opened it · the planner and work mail as usual",
-            "Today isn't protected · the planner may use it and work mail shows · Undo puts it back",
+            "Today is open, just this once · the planner may use it and work mail shows as it comes",
+            "Opened for today only",
             "Protected again today",
+            "Protect today again",
         ),
     }
 
@@ -344,7 +354,7 @@ object ProtectedRules {
      */
     fun briefLine(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar): String? {
         if (s == null || !s.on) return null
-        if (s.openDay == today) lifted(s, today, schedule, holidays)?.let { return "${it.action} · you opened it" }
+        if (s.openDay == today) lifted(s, today, schedule, holidays)?.let { return "${it.status} · you opened it" }
         if (wholeDay(s, today, schedule, holidays)) return "Protected all day · tasks wait for ${openLabel(s, today, schedule, holidays)}"
         val from = eveningFrom(s, today, schedule, holidays) ?: return null
         return "Protected from ${LocalClock.formatMinute(from)} tonight"
@@ -375,6 +385,7 @@ object ProtectedRules {
             mailLine = mailLine,
             openAction = lifted(s, today, schedule, holidays)?.takeIf { s?.openDay != today }?.action,
             openToday = s?.openDay == today && lifted(s, today, schedule, holidays) != null,
+            undoAction = lifted(s, today, schedule, holidays)?.takeIf { s?.openDay == today }?.undo,
         )
 
     /**

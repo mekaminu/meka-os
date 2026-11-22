@@ -9,8 +9,9 @@ import SwiftUI
 /// Motion: the sheet scale-fades (system); the summary and today's line cross-fade; the sections stagger in; a chip's
 /// fill blends as it is chosen (tick haptic); today's line arrives on the expand spring. Reduce Motion: cross-fades.
 /// Slice 3: WORK MAIL (Waits till morning · Shows as it comes) arrives on the expand spring once something is protected.
-/// Slice 4: "Not protected tonight" (or "… today") under today's line lifts today's protected time just this once; it
-/// cross-fades to "Undo · protect it again". Only a Bool crosses to the core.
+/// Slice 4: "Open tonight, just this once" (or "… today") under today's line lifts today's protected time just this
+/// once; it cross-fades to "Protect tonight again" (week 5 A8: verbs; today's line is in the text colour). Only a Bool
+/// crosses to the core.
 /// Quality gate slice 49: the sheet's lines keep their last words and dots together (LoneWordGlue), like the Fold's.
 struct ProtectedTimeSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -29,12 +30,12 @@ struct ProtectedTimeSheet: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
             if let today = v.todayLine {
-                Text(LoneWordGlue.shared.kept(line: today)).font(MekaType.caption).foregroundStyle(palette.accent)
+                Text(LoneWordGlue.shared.kept(line: today)).font(MekaType.caption).foregroundStyle(palette.textPrimary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: today)
                     .transition(.opacity)
             }
-            if let action = v.openAction ?? (v.openToday ? "Undo · protect it again" : nil) {
+            if let action = v.openAction ?? v.undoAction {
                 let open = !v.openToday
                 Button(action) { model.setProtectedOpenToday(open: open) }
                     .buttonStyle(.plain)

@@ -6812,7 +6812,7 @@ final class CoreModel {
         run { _ = try await $0.setProtectedMail(hold: hold) }
     }
 
-    /// Protected time, slice 4: "Not protected tonight" (`open`) lifts today's protected time just this once; false is
+    /// Protected time, slice 4: "Open tonight, just this once" (`open`) lifts today's protected time just this once; false is
     /// Undo. Only a Bool crosses.
     func setProtectedOpenToday(open: Bool) {
         MekaHaptics.tick()
