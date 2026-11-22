@@ -5497,6 +5497,18 @@ class MekaCore(
     suspend fun removeMeal(id: String): Boolean = onCore { mealPlan.remove(id) }
 
     /**
+     * Walk-through 2026-11-22 A6: Remove on a favourite's sheet with Undo on both apps. Removes it and returns the line
+     * to show ("Removed Pasta bake"); null when it isn't there. [undoRemoveMeal] puts it back.
+     */
+    suspend fun removeMealForUndo(id: String): String? = onCore {
+        val title = mealPlan.meals().firstOrNull { it.id == id }?.title ?: return@onCore null
+        if (mealPlan.remove(id)) os.meka.core.domain.MealRules.removedLine(title) else null
+    }
+
+    /** Undo after [removeMealForUndo]: the favourite, its ingredients and the days it was planned on come back. */
+    suspend fun undoRemoveMeal(id: String): Boolean = onCore { mealPlan.restore(id) }
+
+    /**
      * Plans the favourite [mealId] for [day] (an epoch day, today up to two weeks on), or clears the day with null.
      * Returns the line to show ("Chilli for tonight"), or null when nothing changed.
      */

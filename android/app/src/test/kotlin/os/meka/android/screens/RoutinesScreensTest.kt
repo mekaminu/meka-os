@@ -241,9 +241,12 @@ class RoutinesScreensTest {
         // Walk-through 2026-11-15 A8: LAST TIME never says it hasn't run while its first run is going.
         if (onScreen("It hasn't run yet")) fail("$name: LAST TIME says it hasn't run beside Running now")
         if (page()?.history != RoutineRules.FIRST_RUN_HISTORY) fail("$name: LAST TIME reads \"${page()?.history}\"")
-        // Walk-through A12: the bar shows the step it's on, and LAST RUN says Now beside Running now, not "Not yet".
+        // Walk-through A12: the bar shows the step it's on, and LAST RUN beside Running now isn't "Not yet"; walk-through
+        // 2026-11-22 A6: nor "Now", as no run has finished: it says First run.
         if (c.fraction <= 0f) fail("$name: step 1's bar is empty")
-        if (!onScreen(RoutineRules.LAST_NOW) || onScreen(RoutineRules.NOT_YET)) fail("$name: LAST RUN doesn't say Now while it runs")
+        if (!onScreen(RoutineRules.FIRST_RUN_TILE) || onScreen(RoutineRules.NOT_YET) || ScreenShots.texts(compose).any { DateGlue.plain(it) == "Now" }) {
+            fail("$name: LAST RUN doesn't say First run while its first run goes")
+        }
         tap("${RoutineRules.CARRY_ON}: ${c.stepTitle}")
         until { page()?.running?.progress == "Step 2 of 4" }
         tap("${RoutineRules.CARRY_ON}: ${page()!!.running!!.stepTitle}")

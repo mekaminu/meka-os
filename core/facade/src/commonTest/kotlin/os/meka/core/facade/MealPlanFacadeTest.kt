@@ -10,6 +10,7 @@ import os.meka.core.sync.SyncService
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -64,6 +65,18 @@ class MealPlanFacadeTest {
         now += 6 * 3_600_000L // 16:00
         fold.syncNow()
         assertEquals("Dinner tonight: Chilli", fold.today.value.dinner?.text)
+
+        // Walk-through 2026-11-22 A6: Remove says what went, and Undo brings it back planned where it was.
+        assertEquals("Removed Chilli", fold.removeMealForUndo(chilli))
+        assertTrue(fold.mealsView.value.favourites.none { it.id == chilli })
+        assertNull(fold.today.value.dinner)
+        assertNull(fold.removeMealForUndo(chilli)) // already gone
+        assertTrue(fold.undoRemoveMeal(chilli))
+        assertFalse(fold.undoRemoveMeal(chilli)) // already back
+        assertTrue(fold.mealsView.value.favourites.any { it.id == chilli })
+        assertEquals("Dinner tonight: Chilli", fold.today.value.dinner?.text)
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.mealsView.value.favourites.any { it.id == chilli })
 
         assertEquals("Nothing planned for tonight", fold.planMeal(sat, null))
         assertTrue(fold.removeMeal(stirFry))

@@ -369,6 +369,12 @@ class PlansPlacesScreensTest {
         tap(p, name, "Remove trip", hasContentDescription("Remove Barcelona and its bookings"))
         until { core.tripsView.value.rows.none { it.id == trip.id } }
         if (core.tripsView.value.rows.any { it.id == trip.id }) fail("$name: Remove trip left Barcelona")
+        // Walk-through 2026-11-22 A6: Remove trip's Undo puts Barcelona back, so the shot after + Add shows every trip
+        // the many state had plus the one added ("Your trips 4"), not Rome in Barcelona's place.
+        tap(p, name, "Undo", hasContentDescription("Undo:", substring = true))
+        until { core.tripsView.value.rows.any { it.id == trip.id } }
+        if (core.tripsView.value.rows.none { it.id == trip.id }) fail("$name: Undo didn't put Barcelona back")
+        val tripsBefore = core.tripsView.value.rows.map { it.name }
         // A booking's own row: the next trip's first booking, opened from Booked and removed from its sheet.
         val v = core.tripsView.value
         val booked = core.tripsPage(v).cards.firstOrNull { it.key == TripsPageRules.BOOKED }?.rows?.firstOrNull()
@@ -388,6 +394,10 @@ class PlansPlacesScreensTest {
         type(p, name, TripsPageRules.spokenHint(TripsPageRules.ADD_TRIP), ShotLife.LATER_TRIP)
         until { core.tripsView.value.rows.any { it.name == "Rome" } }
         if (core.tripsView.value.rows.none { it.name == "Rome" }) fail("$name: Done on the field added no trip")
+        val tripsAfter = core.tripsView.value.rows.map { it.name }
+        if (tripsAfter.size != tripsBefore.size + 1 || !tripsAfter.containsAll(tripsBefore)) {
+            fail("$name: adding Rome should keep $tripsBefore and add one, but Trips shows $tripsAfter")
+        }
         reach(p, name, hasText("Rome"), "new trip on screen")
     }
 

@@ -442,9 +442,17 @@ class LifePlacesScreensTest {
         tap(p, name, gone.title, hasText(gone.line) and !sheet)
         until { shows(hasContentDescription("Remove ${gone.title}")) }
         tap(p, name, "Remove", hasContentDescription("Remove ${gone.title}"))
-        until { core.mealsView.value.favourites.none { it.id == gone.id } }
+        // Walk-through 2026-11-22 A6 ("Added Leek soup" with no 5th favourite): Remove says what went and Undo brings
+        // it back, so the shot after + Add shows the many state's favourites plus Leek soup. One wait only: Undo
+        // folds away after MealRules.UNDO_MS, and each wait settles for SETTLE_MS.
+        val undo = hasContentDescription("Undo: ${MealRules.removedLine(gone.title)}")
+        until { shows(undo) && !shows(sheet) }
         if (core.mealsView.value.favourites.any { it.id == gone.id }) fail("$name: Remove left ${gone.title}")
-        until { !shows(sheet) }
+        if (!shows(undo)) fail("$name: Remove didn't offer Undo for ${gone.title}")
+        tap(p, name, "Undo", undo)
+        until { core.mealsView.value.favourites.any { it.id == gone.id } }
+        if (core.mealsView.value.favourites.none { it.id == gone.id }) fail("$name: Undo didn't put ${gone.title} back")
+        val favsBefore = core.mealsView.value.favourites.map { it.id }
         tap(p, name, "+ Add", hasContentDescription("Add"))
         until { shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         compose.onAllNodes(hasText(MealRules.ADD_HINT, substring = false), useUnmergedTree = true).fetchSemanticsNodes().forEach { n ->
@@ -456,9 +464,13 @@ class LifePlacesScreensTest {
         type(p, name, MealRules.ADD_HINT, "Leek soup: leeks, potatoes, stock")
         until { core.mealsView.value.favourites.any { it.title.startsWith("Leek soup") } }
         if (core.mealsView.value.favourites.none { it.title.startsWith("Leek soup") }) fail("$name: Done on the field added no favourite")
+        val favsAfter = core.mealsView.value.favourites.map { it.id }
+        if (favsAfter.size != favsBefore.size + 1 || !favsAfter.containsAll(favsBefore)) {
+            fail("$name: adding Leek soup should keep ${favsBefore.size} favourites and add one, but there are ${favsAfter.size}")
+        }
         until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }
         // Walk-through 2026-11-15 A12 ("dinners by-hand = many"): the shot was Many's opening screen; now it shows the
-        // week after the hand, the unplanned day planned with a favourite and Pasta off the favourites.
+        // week after the hand, the unplanned day planned with a favourite and Leek soup added (Pasta's Remove undone).
         ScreenShots.reshootAfterHand(compose, p.area, "cover-dark-dinners-by-hand")
     }
 

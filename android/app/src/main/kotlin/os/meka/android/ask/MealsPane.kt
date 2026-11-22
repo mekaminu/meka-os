@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -89,6 +91,10 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
     var addChosen by remember { mutableStateOf<String?>(null) }
     var allCard by remember { mutableStateOf<String?>(null) }
     var rowKey by remember { mutableStateOf<String?>(null) }
+    // Walk-through 2026-11-22 A6: the favourite the last Remove took (its id and "Removed Pasta bake"), offered back with
+    // Undo for a few seconds, so a later "Added …" beside an unchanged count says why.
+    var removed by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(removed) { if (removed != null) { delay(MealRules.UNDO_MS); removed = null } }
     val refused = said == MealRules.NOT_READ
     val saidColor by animateColorAsState(
         if (refused) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "meals-said",
@@ -123,9 +129,25 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
                         Text(LifePageRules.shown(s), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                     // What the last add or Add to shopping said, while no sheet is open.
-                    val line = if (addOpen || rowKey != null) null else said ?: shopped?.line
+                    val line = if (addOpen || rowKey != null) null else said ?: removed?.second ?: shopped?.line
                     Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "meals-line") { l ->
                         l?.let { Text(it, style = MekaType.caption, color = saidColor) }
+                    }
+                    // Remove's Undo, unfolding under its line while no sheet is open.
+                    AnimatedVisibility(removed != null && said == null && !addOpen && rowKey == null, enter = unfold(), exit = fold()) {
+                        removed?.let { (id, l) ->
+                            Text(
+                                "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) {
+                                        haptics.light()
+                                        removed = null
+                                        scope.launch { runCatching { core.undoRemoveMeal(id) } }
+                                    }
+                                    .semantics { contentDescription = "Undo: $l" }
+                                    .minTouch().padding(MekaSpace.xs),
+                            )
+                        }
                     }
                 }
             }
@@ -227,7 +249,9 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
                                 .clickable(role = Role.Button) {
                                     haptics.tick()
                                     rowKey = null
-                                    scope.launch { runCatching { core.removeMeal(meal.id) } }
+                                    said = null
+                                    val id = meal.id
+                                    scope.launch { runCatching { core.removeMealForUndo(id) }.getOrNull()?.let { removed = id to it } }
                                 }
                                 .semantics { contentDescription = "Remove ${meal.title}" }
                                 .minTouch()

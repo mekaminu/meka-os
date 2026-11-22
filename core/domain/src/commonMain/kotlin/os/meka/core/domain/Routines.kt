@@ -233,7 +233,7 @@ data class RoutineDetail(
     val next: String,
     /** The STEPS tile: "4". */
     val stepCount: String,
-    /** The LAST RUN tile: "Not yet", "Now" (while it runs), "Today 19:02", "Yesterday", "Sun 1 Nov". */
+    /** The LAST RUN tile: "Not yet", "First run" (while its first run goes), "Today 19:02", "Yesterday", "Sun 1 Nov". */
     val lastRun: String,
     val steps: List<RoutineStepRow>,
     /** LAST TIME: what happened the last time it ran ("Sun 1 Nov at 19:02 · 3 done, 1 skipped"). */
@@ -574,7 +574,7 @@ object RoutineRules {
         val last = r.lastRun
         return RoutineDetail(
             r.id, r.name, whenLine(r.schedule), nextTile(r, today, nowMinute, payday), "${steps.size}",
-            if (card != null) LAST_NOW else last?.let { lastTile(it.atMs, today, cal) } ?: NOT_YET, steps,
+            last?.let { lastTile(it.atMs, today, cal) } ?: if (card != null) FIRST_RUN_TILE else NOT_YET, steps,
             last?.let { historyLine(it, today, cal) } ?: if (card != null) FIRST_RUN_HISTORY else NO_HISTORY, r.on, STEPS_NOTE,
             lastSteps = last?.log.orEmpty(),
             running = card,
@@ -606,8 +606,11 @@ object RoutineRules {
     fun barFraction(step: Int, count: Int): Float =
         if (count <= 0) 0f else ((step.coerceIn(0, count - 1) + 0.5f) / count)
 
-    /** The LAST RUN tile while a run is going (walk-through A12: never "Not yet" beside Running now). */
-    const val LAST_NOW = "Now"
+    /**
+     * The LAST RUN tile while its first run is going (walk-through A12: never "Not yet" beside Running now; walk-through
+     * 2026-11-22 A6: never "Now" either, as no run has finished). A later run keeps the last finished one's day.
+     */
+    const val FIRST_RUN_TILE = "First run"
 
     /** The LAST RUN tile: "Today 19:02", "Yesterday", "Sun 1 Nov". */
     fun lastTile(atMs: Long, today: Long, cal: LocalCalendar): String {

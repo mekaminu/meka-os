@@ -6721,6 +6721,28 @@ final class CoreModel {
 
     func removeMeal(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeMeal(id: id) } }
 
+    /// Walk-through 2026-11-22 A6: what a favourite's Remove took ("Removed Pasta bake"), offered back with Undo.
+    struct MealUndo: Equatable {
+        let id: String
+        let line: String
+    }
+
+    /// Removes a favourite and says what went; only a String crosses each way.
+    func removeMealForUndo(_ id: String) async -> MealUndo? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            guard let line = try await core.removeMealForUndo(id: id) else { return nil }
+            return MealUndo(id: id, line: line)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Undo after [removeMealForUndo]: the favourite and the days it was planned on come back.
+    func undoRemoveMeal(_ id: String) { MekaHaptics.light(); run { _ = try await $0.undoRemoveMeal(id: id) } }
+
     /// Plans a favourite for a day (nil clears it); only an Int64 and a String cross.
     func planMeal(day: Int64, mealId: String?) { MekaHaptics.tick(); run { _ = try await $0.planMeal(day: day, mealId: mealId) } }
 

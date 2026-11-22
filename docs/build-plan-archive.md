@@ -7095,3 +7095,20 @@ Walk-through 2026-11-22: 521 changed shots (screens 8bfad1f3 → 78760394, CI ru
   promise or waiting-for just added) on both apps (`PeoplePane`, Mac `PeopleSheet` with `CoreModel.addPromiseId` /
   `addWaitingId` returning the id). `LifePlacesScreensTest` people-by-hand checks the summary is shown with the line, taps
   Undo, checks the promise is gone, and adds it again before the reshoot.
+
+### Found and fixing, week 5 — slice 17 (2026-11-22): A6 finished, Trips, Dinners and the routine's LAST RUN
+- g6c (Trips by hand): "Added Rome" over "Your trips 3" without Barcelona was the by-hand test's own Remove trip (the sums
+  were right), but the reshoot read as Rome replacing Barcelona. `PlansPlacesScreensTest` trips-by-hand now taps Remove
+  trip's Undo, checks Barcelona is back, and fails unless adding Rome keeps every trip and adds one ("Your trips 4").
+- g6c 13 (Dinners by hand): "Added Leek soup" over an unchanged 4 favourites came from the test removing Pasta first,
+  which said nothing and had no Undo. A favourite's Remove now says "Removed Pasta bake" under the summary with **Undo**
+  for `MealRules.UNDO_MS` (6 s) on both apps: core `MealPlan.restore`, `MealRules.removedLine`, facade
+  `removeMealForUndo` / `undoRemoveMeal` (the days it was planned on come back, as they kept its id); Fold `MealsPane`
+  (Undo unfolds under the line), Mac `MealsSheet` + `CoreModel.removeMealForUndo` (only Strings cross). Tests:
+  `MealPlanFacadeTest` (Removed Chilli, gone from Today's dinner, Undo brings it back, second Undo refused, synced to the
+  Mac), `LifePlacesScreensTest` dinners-by-hand taps Undo and fails unless Leek soup makes it one more, Swift
+  `testMealPlanReachesSwift`.
+- g5-ask-02 2 (Routines): "LAST RUN Now" beside the first run going. LAST RUN now keeps the last finished run's day while
+  another goes, and reads **First run** (`RoutineRules.FIRST_RUN_TILE`, replacing `LAST_NOW`) while the first one goes.
+  Tests: `RoutinesTest` (First run, then a second run keeps "Yesterday"), `RoutinesScreensTest` running (no lone "Now",
+  no "Not yet"), Swift bridge test.

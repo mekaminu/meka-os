@@ -21,6 +21,8 @@ struct MealsSheet: View {
     @State private var text = ""
     /// What the last Add said, while the sheet is open.
     @State private var said: String?
+    /// Walk-through 2026-11-22 A6: what the last Remove took, offered back with Undo for a few seconds.
+    @State private var removed: CoreModel.MealUndo?
     /// The row that's open, if any (its key: "day:…", "shop" or "meal:…").
     @State private var open: String?
     /// The card whose rows are all shown (See all), if any.
@@ -72,12 +74,27 @@ struct MealsSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: summary)
-                    if !adding, let line = said ?? model.mealsShoppedLine {
+                    if !adding, let line = said ?? removed?.line ?? model.mealsShoppedLine {
                         Text(line).font(MekaType.caption)
                             .foregroundStyle(line == MealRules.shared.NOT_READ ? palette.accent : palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .contentTransition(.opacity)
                             .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                    }
+                    if !adding, said == nil, let gone = removed {
+                        Button("Undo") {
+                            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { removed = nil }
+                            model.undoRemoveMeal(gone.id)
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.accent)
+                        .accessibilityLabel("Undo: \(gone.line)")
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                        .task(id: gone) {
+                            try? await Task.sleep(for: .milliseconds(MealRules.shared.UNDO_MS))
+                            if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { removed = nil } }
+                        }
                     }
                 }
                 .staggeredAppear(1)
@@ -173,7 +190,12 @@ struct MealsSheet: View {
                 }
                 Button("Remove") {
                     withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open = nil }
-                    model.removeMeal(id)
+                    said = nil
+                    let m = model
+                    Task {
+                        let r = await m.removeMealForUndo(id)
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { removed = r }
+                    }
                 }
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)

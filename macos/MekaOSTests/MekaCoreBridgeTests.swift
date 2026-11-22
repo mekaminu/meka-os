@@ -438,9 +438,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         let row = try XCTUnwrap(core.routinesView.value.rows.first)
         XCTAssertEqual(row.name, "Sunday evening")
         XCTAssertEqual(core.routinesView.value.detail(id: row.id)?.steps[1].badge, "Just show")
-        // Walk-through A12: Running now's bar lights half the step it's on, and LAST RUN says Now while it runs.
+        // Walk-through A12: Running now's bar lights half the step it's on; LAST RUN says First run while the first
+        // run goes (walk-through 2026-11-22 A6: never "Now", no run has finished).
         XCTAssertEqual(RoutineRules.shared.barFraction(step: 0, count: 4), 0.125, accuracy: 0.0001)
-        XCTAssertEqual(RoutineRules.shared.LAST_NOW, "Now")
+        XCTAssertEqual(RoutineRules.shared.FIRST_RUN_TILE, "First run")
         // Walk-through 2026-11-15 A8: the Sunday evening just saved is Sunday reset in his words, so the Mac's START
         // WITH ONE doesn't offer it again, and a first run going never says it hasn't run.
         XCTAssertFalse(core.routinesView.value.starters.contains { $0.key == "sunday-reset" })
@@ -3008,6 +3009,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.plannedLine(day: sat, today: sat, title: "Chilli"), "Chilli for tonight")
         XCTAssertEqual(MealPlanView.companion.EMPTY.summary, rules.NO_FAVOURITES)
         XCTAssertNil(MealPlanView.companion.EMPTY.shoppingLabel)
+        // Walk-through 2026-11-22 A6: a favourite's Remove says what went, with Undo for a few seconds.
+        XCTAssertEqual(rules.removedLine(title: "Chilli"), "Removed Chilli")
+        XCTAssertGreaterThan(rules.UNDO_MS, 0)
     }
 
     func testDateNightReachesSwift() {

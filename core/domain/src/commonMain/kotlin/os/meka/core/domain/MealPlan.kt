@@ -111,6 +111,8 @@ object MealRules {
     const val SHARED = "Favourites and the week's dinners are on the Fold, the Mac and your partner's family page, where they can add favourites. Ingredients go on the shopping list you share."
     /** Most favourites the family page lets the list grow to (Meka's own apps aren't limited). */
     const val MAX_FAVOURITES = 100
+    /** How long a favourite's Remove offers Undo (walk-through 2026-11-22 A6). */
+    const val UNDO_MS = 6_000L
 
     /** Separators between a dinner's name and its ingredients, in the order they're looked for. */
     private val SEPARATORS = listOf(":", " - ", " – ", " — ")
@@ -282,6 +284,12 @@ object MealRules {
     fun addedLine(e: MealEntry, updated: Boolean): String =
         "${if (updated) "Updated" else "Added"} ${e.title} · ${ingredientsLine(e.ingredients).replaceFirstChar { it.lowercase() }}"
 
+    /**
+     * Walk-through 2026-11-22 A6: after a favourite's Remove, "Removed Pasta bake" with Undo, so a later "Added …" can't
+     * read as a fifth favourite when one went just before (the count stays honest and says why).
+     */
+    fun removedLine(title: String): String = "Removed $title"
+
     /** "Chilli for tonight", "Nothing planned for Mon 12 Oct". */
     fun plannedLine(day: Long, today: Long, title: String?): String {
         val label = dayLabel(day, today)
@@ -348,6 +356,16 @@ class MealPlan(
     fun remove(id: String): Boolean {
         replica.entity(EntityTypes.MEAL, id)?.takeIf { it[MealFields.DELETED].boolOrNull != true } ?: return false
         replica.commitLocal(EntityTypes.MEAL, id, mapOf(MealFields.DELETED to true.fv()))
+        return true
+    }
+
+    /**
+     * Undo after [remove]: the favourite comes back as it was (its ingredients, and the days it was planned on, which
+     * kept its id). False when it isn't there or isn't removed.
+     */
+    fun restore(id: String): Boolean {
+        replica.entity(EntityTypes.MEAL, id)?.takeIf { it[MealFields.DELETED].boolOrNull == true } ?: return false
+        replica.commitLocal(EntityTypes.MEAL, id, mapOf(MealFields.DELETED to false.fv()))
         return true
     }
 
