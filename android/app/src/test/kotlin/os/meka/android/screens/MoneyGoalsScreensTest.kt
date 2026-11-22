@@ -65,16 +65,6 @@ class MoneyGoalsScreensTest {
 
     private companion object {
         const val SETTLE_MS = 3_000L
-        const val CURRENT = "Date,Description,Amount\n" +
-            "01/09/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/09/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "15/09/2026,STREAMLY.COM,-10.99\n" +
-            "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
-            "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
-            "09/10/2026,TESCO STORES 2041,-64.90\n"
-        const val SAVINGS = "Date,Description,Amount,Balance\n" +
-            "01/10/2026,TRANSFER FROM CURRENT,200.00,600.00\n" +
-            "12/10/2026,TRANSFER FROM CURRENT,200.00,800.00\n"
     }
 
     private lateinit var christmas: String
@@ -97,8 +87,11 @@ class MoneyGoalsScreensTest {
             holiday = core.addGoal("Holiday 2027", null, GoalHorizon.YEAR)
             check(core.setGoalNumber(holiday, "£3,000"))
             core.openMoney()
-            check(!core.importMoneyStatement("Current account", CURRENT).refused)
-            check(!core.importMoneyStatement("Savings", SAVINGS).refused)
+            // Found and fixing week 5, A5 (g1a 2): the goal follows the Money shots' own Savings, the account every
+            // Accounts shot lists, not a Savings only this shot imported.
+            MoneyShotMonth.fill(core)
+            val savings = core.moneyView.value.accounts.first { it.name == MoneyShotMonth.SAVINGS_NAME }
+            check(!core.moneyBalance(savings.id, MoneyShotMonth.SAVINGS_BALANCE).refused)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
@@ -159,7 +152,7 @@ class MoneyGoalsScreensTest {
         tap("money-goal-$holiday")
         assertTrue(shows("money-goal-sheet"), "a tap should open the goal's sheet")
         assertTrue(showsText(MoneyGoals.NOT_FOLLOWING))
-        val savings = core.moneyView.value.accounts.first { it.name == "Savings" }.id
+        val savings = core.moneyView.value.accounts.first { it.name == MoneyShotMonth.SAVINGS_NAME }.id
         tap("money-goal-follow-$savings")
         fun follows() = core.moneyView.value.goals?.rows?.firstOrNull { it.id == holiday }?.followsName == "Savings"
         repeat(40) { if (!follows()) { Thread.sleep(50); runBlocking { core.tick() }; settle() } }

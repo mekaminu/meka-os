@@ -14,6 +14,9 @@ import os.meka.core.facade.MekaCore
  * Plan; Accounts' shots open on this month too, and its card is the Platinum Card, marked a card. Walk-through 2026-11-15
  * A13 (g1a 10): Plan's Clear my cards listed a "Rewards card" that no Accounts or Bills shot had; the Rewards Card is now
  * this month's second card everywhere, its statement only a repayment (a transfer, so no spending or income moves).
+ * Found and fixing week 5, A5 (g1a 2): the Holiday goal's sheet followed a "Savings" account that only its own shot
+ * imported, while every Accounts shot listed three accounts; Savings is now this month's fourth account everywhere, fed by
+ * two £200 moves from the current account (transfers on both sides, so no spending or income moves).
  * Invented data (rule 13).
  */
 internal object MoneyShotMonth {
@@ -31,6 +34,7 @@ internal object MoneyShotMonth {
         "18/09/2026,TFL TRAVEL CH,-38.50\n" +
         "25/09/2026,COSTA COFFEE,-3.20\n" +
         "01/10/2026,OAKFIELD COUNCIL TAX,-142.00\n" +
+        "01/10/2026,TRANSFER TO SAVINGS,-200.00\n" +
         "02/10/2026,TESCO STORES 2041,-71.25\n" +
         "03/10/2026,COSTA COFFEE,-3.20\n" +
         "05/10/2026,SALARY OAKFIELD LTD,2500.00\n" +
@@ -38,6 +42,7 @@ internal object MoneyShotMonth {
         "08/10/2026,ZEBRA PLOVER,-12.60\n" +
         "09/10/2026,TESCO STORES 2041,-64.90\n" +
         "12/10/2026,TFL TRAVEL CH,-41.20\n" +
+        "12/10/2026,TRANSFER TO SAVINGS,-200.00\n" +
         "14/10/2026,COSTA COFFEE,-3.40\n" +
         "15/10/2026,NETFLIX.COM,-10.99\n" +
         "16/10/2026,SHELL FORECOURT 112,-58.00\n" +
@@ -55,6 +60,14 @@ internal object MoneyShotMonth {
     const val REWARDS = "Date,Description,Amount\n" +
         "15/10/2026,PAYMENT THANK YOU,50.00\n"
 
+    /** The savings account: the current account's two £200 moves in, so a goal on Plan can follow it. */
+    const val SAVINGS = "Date,Description,Amount\n" +
+        "01/10/2026,TRANSFER FROM CURRENT,200.00\n" +
+        "12/10/2026,TRANSFER FROM CURRENT,200.00\n"
+
+    /** Savings' balance, as the shots that type balances type it (the goal it follows reads "£800 of £3,000"). */
+    const val SAVINGS_BALANCE = "£800"
+
     /**
      * Walk-through 2026-11-15 A13 (g1b 4): Forecast's OUT / MONTH read £230 on the open Fold's Plan, £280 on Plan's
      * layout shots and £270 on the plan-* shots, each from its own statement. Plan's shots import [CURRENT] (the plan-*
@@ -70,6 +83,7 @@ internal object MoneyShotMonth {
     const val CURRENT_NAME = "Current account"
     const val CARD_NAME = "Platinum Card"
     const val REWARDS_NAME = "Rewards Card"
+    const val SAVINGS_NAME = "Savings"
 
     /** Both cards, as Bills' CARDS, Accounts and Plan's Clear my cards list them. */
     val CARD_NAMES = listOf(CARD_NAME, REWARDS_NAME)
@@ -96,7 +110,7 @@ internal object MoneyShotMonth {
     }
 
     /**
-     * Imports the month into [core] (Money already open) and marks both cards cards; [pension] adds the £42,000 pension
+     * Imports the month into [core] (Money already open), the savings account with it, and marks both cards cards; [pension] adds the £42,000 pension
      * net worth counts (Accounts' shots that start from an empty total leave it out).
      */
     suspend fun fill(core: MekaCore, pension: Boolean = true) {
@@ -106,6 +120,7 @@ internal object MoneyShotMonth {
         val card = core.moneyView.value.accounts.firstOrNull { it.name == CARD_NAME } ?: error("no card account")
         check(!core.moneyCardKind(card.id, card = true, charge = false).refused)
         addRewards(core)
+        check(!core.importMoneyStatement(SAVINGS_NAME, SAVINGS).refused)
         if (pension) check(!core.moneyWorthAdd("Pension £42,000").refused)
         core.tick()
     }

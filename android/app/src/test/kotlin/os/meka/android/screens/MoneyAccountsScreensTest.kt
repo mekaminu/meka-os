@@ -135,8 +135,10 @@ class MoneyAccountsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-list")
         val v = core.moneyView.value
         val items = MoneyAccountList.items(v)
-        // The Money shots' month: the current account and its two cards (walk-through 2026-11-15 A13, the Rewards card too).
-        assertTrue(items.size == 1 + MoneyShotMonth.CARD_NAMES.size, "expected the current account and both cards, got ${items.map { it.name }}")
+        // The Money shots' month: the current account, its two cards (walk-through 2026-11-15 A13, the Rewards card too) and
+        // the savings account Plan's Holiday goal follows (Found and fixing week 5, A5).
+        assertTrue(items.size == 2 + MoneyShotMonth.CARD_NAMES.size, "expected the current account, both cards and Savings, got ${items.map { it.name }}")
+        assertTrue(items.any { it.name == MoneyShotMonth.SAVINGS_NAME }, "Savings, which Plan's Holiday goal follows, isn't in the list")
         items.forEach { assertTrue(showsText(it.name), "\"${it.name}\" isn't in the list") }
         // A13 (g1b 6): the current account says how far its statement reaches, the day Challenges counts to, not the
         // day it was imported (a second, later date beside it).
@@ -266,17 +268,19 @@ class MoneyAccountsScreensTest {
         if (showsText(MoneyWorth.EMPTY)) fail("the old set-up sentence still shows")
         val v0 = core.moneyView.value
         val current = v0.accounts.first { it.name == "Current account" }
+        val savings = v0.accounts.first { it.name == MoneyShotMonth.SAVINGS_NAME }
         // Found and fixing week 5, A5 (g1a 2): the cards owe what Plan's Clear my cards clears (MoneyShotMonth's statements),
         // not a £300 of this shot's own beside Plan's £4,200 and £1,800.
         runBlocking {
             check(!core.moneyBalance(current.id, "£1,240").refused)
+            check(!core.moneyBalance(savings.id, MoneyShotMonth.SAVINGS_BALANCE).refused)
             MoneyShotMonth.typeCardStatements(core)
         }
         settle()
         val c = MoneyTotal.card(core.moneyView.value.worth)!!
-        assertTrue(c.head == "Across 3 accounts", "head was ${c.head}")
-        assertTrue(c.total == "−£4,760", "total was ${c.total}")
-        assertTrue(c.breakdown == "Cash £1,240 · owed on cards ${MoneyShotMonth.OWED_ON_CARDS}", "breakdown was ${c.breakdown}")
+        assertTrue(c.head == "Across 4 accounts", "head was ${c.head}")
+        assertTrue(c.total == "−£3,960", "total was ${c.total}")
+        assertTrue(c.breakdown == "Cash £2,040 · owed on cards ${MoneyShotMonth.OWED_ON_CARDS}", "breakdown was ${c.breakdown}")
         assertTrue(showsText(c.head) && showsText(c.total!!) && showsText(c.breakdown!!), "the total card doesn't show its words")
         if (showsText(MoneyWorth.HEAD) || showsText("You have ")) fail("the NET WORTH label or the have/owe line still shows")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-total"))
