@@ -129,7 +129,7 @@ fun PeoplePane(core: MekaCore, onClose: () -> Unit) {
                                                 }
                                                 lastAdded = null; said = null
                                             }
-                                        }.minTouch().padding(start = MekaSpace.s))
+                                        }.minTouch().padding(start = MekaSpace.xs))
                                 }
                             }
                         }

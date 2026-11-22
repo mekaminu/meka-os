@@ -124,7 +124,7 @@ struct PeopleSheet: View {
             Text(model.people?.summary ?? PeopleRules.shared.EMPTY_LINE)
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
             if let said {
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     Text(said).font(MekaType.caption).foregroundStyle(refused ? palette.accent : palette.textSecondary)
                     if let added = lastAdded, !refused {
                         Button("Undo") { undoAdded(added.kind, added.id) }
