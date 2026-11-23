@@ -86,14 +86,23 @@ class NeedsYouGroupsScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private val fyi = listOf("Alex", "Sam", "Jo", "Kim", "Robin", "Casey", "Morgan").mapIndexed { i, who ->
-        NeedsYouFyiRow("f$i", who, "Says thanks for Saturday", "$who: Says thanks for Saturday. No reply needed.")
-    }
+    // Walk-through 2026-11-22 A9: each FYI says its own thing (seven "Says thanks for Saturday" read as duplicates).
+    private val fyi = listOf(
+        "Alex" to "Says thanks for Saturday", "Sam" to "Is running ten minutes late", "Jo" to "Sent the photos from the party",
+        "Kim" to "Got home safely", "Robin" to "Booked the table for Friday", "Casey" to "Loved your message",
+        "Morgan" to "Shared the parking details",
+    ).mapIndexed { i, (who, what) -> NeedsYouFyiRow("f$i", who, what, "$who: $what. No reply needed.") }
 
     // Week 4, A7: Messages opens onto its three chats (it showed open with nothing under it); one to reply each, as the header says.
-    private val messages = listOf("Alex" to "AL", "Game testing group" to "GT", "Sam" to "SA").mapIndexed { i, (who, letters) ->
-        NeedsYouMessageRow("m$i", letters, who, "1${7 + i}:0$i", "Can you send the times for Saturday?", "1 to reply", true,
-            "$who: Can you send the times for Saturday? 1 to reply.")
+    // Walk-through 2026-11-22 A9: the shot is at work until 17:30, so its chats came in during the day (they read 18:01 and
+    // 19:02 under "At work until 17:30 · 37 held for later"), and each says its own thing, not one shared preview.
+    private val messages = listOf(
+        Triple("Alex", "AL", "Can you send the times for Saturday?"),
+        Triple("Game testing group", "GT", "Who's bringing the controllers on Friday?"),
+        Triple("Sam", "SA", "Are we still on for lunch tomorrow?"),
+    ).mapIndexed { i, (who, letters, line) ->
+        NeedsYouMessageRow("m$i", letters, who, listOf("12:10", "13:25", "14:40")[i], line, "1 to reply", true,
+            "$who: $line 1 to reply.")
     }
 
     // Slice 2: the lists card as To decide's one row, the after-work card as its foot line.
@@ -103,9 +112,9 @@ class NeedsYouGroupsScreensTest {
         yes = DecisionEffect.OPEN_LISTS, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_LISTS, urgent = false,
     )
     private val held = AfterWorkSummary(listOf(PersonSummary(
-        personName = "Alex", isFamily = false, urgent = false, messages = 37, missedCalls = 0,
+        personName = "Riley", isFamily = false, urgent = false, messages = 37, missedCalls = 0,
         apps = listOf(CaptureApp.WHATSAPP), firstAtMs = 0, latestAtMs = 0, latestText = null,
-        items = listOf(CapturedItem("i-alex", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Alex", "Hi", null, 0L)),
+        items = listOf(CapturedItem("i-riley", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Riley", "Hi", null, 0L)),
     )))
     private val foot = NeedsYouGroupRules.afterWorkFoot(held, "At work until 17:30 · 37 held for later")!!
     private var goThrough = 0
@@ -197,6 +206,11 @@ class NeedsYouGroupsScreensTest {
         if (!onScreen(peeks.getValue(NeedsYouGroup.TIDIED))) fail("$name: a closed box doesn't peek")
         if (!onScreen("1 renewal due · from your lists")) fail("$name: From your lists isn't one row inside To decide")
         if (!onScreen("At work until 17:30 · 37 held for later ›")) fail("$name: the after-work foot line is missing")
+        // Walk-through 2026-11-22 A9: no chat shown under the at-work line came in after work ends, and no two say the same.
+        val until = Regex("until (\\d{2}:\\d{2})").find(foot)!!.groupValues[1]
+        messages.forEach { if (it.time >= until) fail("$name: ${it.name}'s ${it.time} is after work ends at $until, under \"$foot\"") }
+        if (messages.map { it.line }.toSet().size != messages.size) fail("$name: two chats show the same preview")
+        if (fyi.map { it.what }.toSet().size != fyi.size) fail("$name: two FYI rows say the same thing")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "groups-$name"))
         compose.onAllNodes(hasText("Go through"))[0].performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag(NEEDS_YOU_FOOT_TAG).performSemanticsAction(SemanticsActions.OnClick)

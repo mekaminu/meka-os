@@ -7223,3 +7223,13 @@ listed 7 (a consent form, a council tax bill). The rule was already shared (slic
 - Fold: `NeedsYouRoute` both empty states use them (`scamCount` from the tidied box's possible scams). Screen test `NeedsYouScamScreensTest` fails if the scam shots still say "Approvals, replies and decisions land here".
 - Mac: `CoreModel.mailWaitingElsewhere` counts the scams, new `emptyCaption`, used by ShellView's empty state; bridge test in `testNeedsYouEmptyStateReachesSwift`. Mac checked nightly.
 - The possible scams stay in Mail tidied today (Meka's choice, 2026-11-18); the reviewer's "counted as tidied" is answered by the caption naming them as waiting.
+
+### Found and fixing, week 5 — slice 26 (2026-11-23): A9's work-hours hold line
+
+The walk-through's g2-needs-00 finding 5: the grouped Needs you shots read "At work until 17:30 · 37 held for later" over
+Messages rows timed 18:01 and 19:02, and every chat shared "Can you send the times f…" and FYI repeated "Says thanks
+for Saturday". The app itself was right: NeedsYouRoute only passes the held label while `workNow.atWork`, so the fault
+was the fixture in `NeedsYouGroupsScreensTest`. Its chats now come in at 12:10, 13:25 and 14:40, each with its own
+line; the seven FYI rows say seven things; the held messages come from a person not in Messages. The test fails if a
+chat's time is at or after the foot line's "until" time, or if two chats or two FYI rows repeat. Test only, Fold.
+
