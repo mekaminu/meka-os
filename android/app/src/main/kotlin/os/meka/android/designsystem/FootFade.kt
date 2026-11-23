@@ -38,7 +38,7 @@ fun Modifier.footFade(): Modifier = this
  * Walk-through week 5, A12: [more] says whether anything is still below (a sheet's body over its fixed Cancel · Save
  * foot), so the foot fades only while there is more to scroll to and the last line sits crisp at the end.
  */
-fun Modifier.edgeFades(scrolled: () -> Boolean, more: () -> Boolean = { true }): Modifier = this
+fun Modifier.edgeFades(more: () -> Boolean = { true }, scrolled: () -> Boolean): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
