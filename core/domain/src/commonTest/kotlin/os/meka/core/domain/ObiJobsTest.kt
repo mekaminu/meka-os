@@ -184,9 +184,18 @@ class ObiJobsTest {
         assertFalse(row.canCopy)
         assertEquals(ObiJobRules.REDRAFTING, row.draftFoot)
         assertEquals("Tuesday morning", row.youSaid)
+        // Week 5 (A10): the old words aren't shown under his answer, only the line saying a new draft is coming.
+        assertNull(row.draftShown)
+        assertEquals("Could you come next week?", row.draft)
         // Only thanks: the draft stands and can be copied.
         row = ObiJobRules.row(waiting.copy(answer = "Thanks", answeredAtMs = 5L), 10L, LocalCalendar.UTC)
         assertTrue(row.canCopy)
         assertEquals(ObiJobRules.DRAFT_FOOT, row.draftFoot)
+        assertEquals("Could you come next week?", row.draftShown)
+        // The new draft taken in: shown again, with Copy.
+        val redrafted = answered.copy(draft = "Could you come on Tuesday morning?", answerTakenMs = 8L)
+        row = ObiJobRules.row(redrafted, 10L, LocalCalendar.UTC)
+        assertEquals("Could you come on Tuesday morning?", row.draftShown)
+        assertTrue(row.canCopy)
     }
 }

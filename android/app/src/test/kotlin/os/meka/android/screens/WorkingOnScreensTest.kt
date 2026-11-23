@@ -42,6 +42,7 @@ import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MekaSchema
+import os.meka.core.domain.ObiHeard
 import os.meka.core.domain.ObiJobFields
 import os.meka.core.domain.ObiJobRules
 import os.meka.core.domain.ObiJobState
@@ -85,7 +86,7 @@ class WorkingOnScreensTest {
         const val SETTLE_MS = 3_000L
     }
 
-    private enum class Fill { EMPTY, ONE, MANY, ERRANDS, CALL, FOUND }
+    private enum class Fill { EMPTY, ONE, MANY, ERRANDS, CALL, FOUND, REDRAFTED }
 
     private var opened: HelpPlace? = null
 
@@ -214,6 +215,32 @@ class WorkingOnScreensTest {
     }
 
     /**
+     * Week 5's walk-through (A10): the boiler errand after Obi took "Tuesday morning" and wrote the new draft with it,
+     * as Navilife's server leaves it. Invented data only.
+     */
+    private fun seedRedrafted(store: ReplicaStore) {
+        var k = 0
+        val server = Replica("hh", "server", HlcClock("server", { now }), store, MekaSchema) { "seed${k++}" }
+        server.commitLocal(EntityTypes.OBI_JOB, "job-boiler", mapOf(
+            ObiJobFields.ASK to "Find someone to service the boiler".fv(), ObiJobFields.ASKED_AT to (now - 3_600_000L).fv(),
+            ObiJobFields.STATE to ObiJobState.NEEDS_YOU.code.fv(),
+            ObiJobFields.STEPS to ObiJobRules.encodeSteps(listOf(
+                ObiStep(ObiStepKind.SEARCH, "Find boiler engineers near home", "Gas Safe boiler service", true),
+                ObiStep(ObiStepKind.WORK, "Compare what they charge", done = true),
+                ObiStep(ObiStepKind.DRAFT, "Draft a booking request", done = true),
+                ObiStep(ObiStepKind.DRAFT, ObiJobRules.REDRAFT_TITLE, done = true),
+            )).fv(),
+            ObiJobFields.FOUND to "Two Gas Safe engineers nearby offer a yearly service from £85; Oakfield Heating has slots next week.".fv(),
+            ObiJobFields.NEED to "Send it to Oakfield Heating when you're ready, or tell me what to change".fv(),
+            ObiJobFields.DRAFT to "Hello, I'd like to book a yearly boiler service next Tuesday morning. Could you let me know what time you could come? Thanks, Jordan".fv(),
+            ObiJobFields.ANSWER to "Tuesday morning".fv(), ObiJobFields.ANSWERED_AT to (now - 900_000L).fv(),
+            ObiJobFields.ANSWER_TAKEN to (now - 840_000L).fv(),
+            ObiJobFields.HEARD to ObiJobRules.encodeHeard(listOf(ObiHeard("Which morning next week suits you for the engineer?", "Tuesday morning"))).fv(),
+            ObiJobFields.DID_AT to (now - 600_000L).fv(),
+        ))
+    }
+
+    /**
      * Try again: a booking call that wasn't booked, as the server leaves it (written here as Navilife's server would):
      * Rosa's Kitchen full at 7 on Saturday, with what they offered. Invented data only.
      */
@@ -254,6 +281,7 @@ class WorkingOnScreensTest {
         if (fill == Fill.ERRANDS) seedErrands(store)
         if (fill == Fill.CALL) seedNotBooked(store)
         if (fill == Fill.FOUND) seedFound(store)
+        if (fill == Fill.REDRAFTED) seedRedrafted(store)
         val core = core(store)
         context.useCoreForScreens(core)
         runBlocking {
@@ -468,6 +496,8 @@ class WorkingOnScreensTest {
         if (compose.onAllNodes(hasTestTag("errand-you-said"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no YOU SAID")
         // Week 3's walk-through (A24): the old draft ("next week") isn't offered to copy while Obi puts the answer in.
         if (!onScreen(ObiJobRules.REDRAFTING)) fail("$name: the draft doesn't say Obi is putting the answer in")
+        // Week 5's walk-through (A10): the old draft's words aren't shown under his answer, as if it were ignored.
+        if (onScreen("ideally a morning")) fail("$name: the old draft is still shown under his answer")
         if (compose.onAllNodes(hasContentDescription("${ObiJobRules.COPY} the draft: Find someone to service the boiler") and hasClickAction())
                 .fetchSemanticsNodes().isNotEmpty()) fail("$name: the old draft can still be copied")
         // Walk-through 2026-11-08 A29: the card says Obi has the answer; the line under the ask row doesn't say it again.
@@ -482,6 +512,15 @@ class WorkingOnScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverErrandsLight() { pane("cover-light-errands", Fill.ERRANDS, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerErrands() { pane("inner-dark-errands", Fill.ERRANDS) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun errandsByHand() { errandsByHand(pane("cover-dark-errands-by-hand", Fill.ERRANDS, shot = false)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun coverRedrafted() {
+        pane("cover-dark-redrafted", Fill.REDRAFTED)
+        val name = "working-on-redrafted"
+        // Week 5's walk-through (A10): the new draft carries his answer, with Copy back, and no "new draft coming" line.
+        if (!onScreen("next Tuesday morning")) fail("$name: the new draft doesn't carry his answer")
+        if (onScreen(ObiJobRules.REDRAFTING)) fail("$name: it still says a new draft is coming")
+        if (compose.onAllNodes(hasContentDescription("${ObiJobRules.COPY} the draft: Find someone to service the boiler") and hasClickAction())
+                .fetchSemanticsNodes().isEmpty()) fail("$name: the new draft can't be copied")
+    }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverNotBooked() { pane("cover-dark-not-booked", Fill.CALL) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverNotBookedLight() { pane("cover-light-not-booked", Fill.CALL, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerNotBooked() { pane("inner-dark-not-booked", Fill.CALL) }

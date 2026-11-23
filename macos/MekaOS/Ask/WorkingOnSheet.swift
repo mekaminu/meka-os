@@ -127,7 +127,8 @@ struct WorkingOnSheet: View {
 
     private func jobCard(_ j: ObiJobRow) -> some View {
         let id = j.id
-        let draft = j.draft
+        let hasDraft = j.draft != nil
+        let draft = j.draftShown
         let need = j.need ?? ""
         let canAnswer = j.canAnswer
         let canCarryOn = j.canCarryOn
@@ -151,15 +152,18 @@ struct WorkingOnSheet: View {
                 Text(LoneWordGlue.shared.kept(line: youSaid)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let draft {
+            if hasDraft {
                 label(ObiJobRules.shared.DRAFT_LABEL).padding(.top, MekaSpace.xs)
-                // Week 3's walk-through (A24): a draft his answer hasn't reached yet is dimmed, says so, and has no Copy.
-                Text(draft).font(MekaType.body).foregroundStyle(canCopy ? palette.textPrimary : palette.textSecondary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(MekaSpace.xs)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                // Week 3's walk-through (A24): a draft his answer hasn't reached yet has no Copy; week 5's (A10): nor
+                // are its old words shown, only the line saying the new draft is coming.
+                if let draft {
+                    Text(draft).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(MekaSpace.xs)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+                }
                 Text(LoneWordGlue.shared.kept(line: j.draftFoot)).font(MekaType.caption)
                     .foregroundStyle(canCopy ? palette.textTertiary : palette.accent)
                     .fixedSize(horizontal: false, vertical: true)

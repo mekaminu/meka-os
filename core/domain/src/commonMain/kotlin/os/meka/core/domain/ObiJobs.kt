@@ -157,6 +157,13 @@ data class ObiJobRow(
     val canCopy: Boolean = draft != null,
 ) {
     val needsYou: Boolean get() = need != null
+
+    /**
+     * Week 5's walk-through (A10): the draft's words to show. While Obi puts his answer in, none: the old draft
+     * ("next week, ideally a morning" under YOU SAID "Tuesday morning") read as if his answer had been ignored, so the
+     * card shows only the label and [ObiJobRules.REDRAFTING] until the new draft lands.
+     */
+    val draftShown: String? get() = draft?.takeIf { canCopy }
 }
 
 /** Non-AI, pure. */
@@ -213,7 +220,7 @@ object ObiJobRules {
     const val ANSWER_GONE = "That errand isn't waiting for you any more"
     const val ANSWER_STATUS = "Working · Obi has your answer"
     /** Week 3's walk-through (A24): under a draft his answer hasn't reached yet. */
-    const val REDRAFTING = "Obi is putting your answer into this draft · copy it once he has"
+    const val REDRAFTING = "Obi is writing a new draft with your answer · it shows here once he has"
     /** The step the server adds when his answer should reach a draft and nothing planned would redraft it. */
     const val REDRAFT_TITLE = "Put your answer into the draft"
 

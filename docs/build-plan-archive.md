@@ -7258,3 +7258,15 @@ screen. The first try (slice 24) hung at the pager after Select all: `performScr
 settled with the clock held and the shops' longer rows (ci run 45084901801; its other run was a Maven 429), so
 `toPager` now scrolls straight to the "pager" item with `performScrollToKey` and checks the pager is drawn. Test only,
 Fold, no app change. A9 is finished.
+
+### Found and fixing, week 5 — slice 29 (2026-11-23): A10, the answered errand's old draft
+
+g2-needs-01 4 (A24 still): after YOU SAID "Tuesday morning" the card still showed the old "…next week, ideally a
+morning…" draft (dimmed) under "Obi is putting your answer into this draft". Confirmed in the code: A24 dimmed the stale
+draft and hid Copy, but `WorkingOnPane` and the Mac's `WorkingOnSheet` still drew its words. Core `ObiJobRow.draftShown`
+is the draft only when it can be copied, so while Obi redrafts the card shows the draft label and
+`ObiJobRules.REDRAFTING` ("Obi is writing a new draft with your answer · it shows here once he has") and no old words;
+Copy follows `draftShown` too. New shot `working-on/cover-dark-redrafted` (the server's new draft with "next Tuesday
+morning", Copy back, no redrafting line); `errandsByHand` fails if "ideally a morning" is on screen after the answer.
+Tests: core `ObiJobsTest.anOldDraftIsNotCopiedWhileHisAnswerIsOnItsWay` (draftShown null while redrafting, the new one
+shown once taken), `WorkingOnScreensTest.coverRedrafted`. Both apps; Mac checked nightly.

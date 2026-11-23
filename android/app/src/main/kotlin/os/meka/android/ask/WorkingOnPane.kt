@@ -361,13 +361,16 @@ private fun JobCard(
                 modifier = Modifier.padding(top = MekaSpace.xs))
             Text(LoneWordGlue.kept(said), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.testTag("errand-you-said"))
         }
-        j.draft?.let { draft ->
+        if (j.draft != null) {
             Text(ObiJobRules.DRAFT_LABEL.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.xs))
-            // Week 3's walk-through (A24): a draft his answer hasn't reached yet is dimmed, says so, and has no Copy.
-            Text(draft, style = MekaType.body, color = if (j.canCopy) Meka.colors.textPrimary else Meka.colors.textSecondary,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
-                    .padding(MekaSpace.xs).testTag("errand-draft"))
+            // Week 3's walk-through (A24): a draft his answer hasn't reached yet has no Copy; week 5's (A10): nor are
+            // its old words shown, only the line saying the new draft is coming.
+            j.draftShown?.let { draft ->
+                Text(draft, style = MekaType.body, color = Meka.colors.textPrimary,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+                        .padding(MekaSpace.xs).testTag("errand-draft"))
+            }
             Text(LoneWordGlue.kept(j.draftFoot), style = MekaType.caption,
                 color = if (j.canCopy) Meka.colors.textTertiary else Meka.colors.accent, modifier = Modifier.testTag("errand-draft-foot"))
         }
@@ -382,7 +385,7 @@ private fun JobCard(
                 TouchPill(ObiJobRules.ANSWER, Meka.colors.accent, Meka.colors.onAccent, spoken = "${ObiJobRules.ANSWER}: ${j.title}",
                     modifier = Modifier.testTag("errand-answer"), onClick = onAnswer)
             }
-            j.draft?.takeIf { j.canCopy }?.let { draft ->
+            j.draftShown?.let { draft ->
                 TouchPill(ObiJobRules.COPY, Meka.colors.surface, Meka.colors.accent, spoken = "${ObiJobRules.COPY} the draft: ${j.title}") { onCopy(draft) }
             }
             if (j.canStop) {
