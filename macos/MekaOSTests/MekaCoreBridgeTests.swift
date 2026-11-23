@@ -946,6 +946,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Walk-through A22: beside mail to answer or renewals found, nothing is left to decide, not "nothing needs you".
         XCTAssertEqual(NeedsYouStackRules.shared.emptyLineBeside(toCatchUp: 0, waitingElsewhere: 4), "Nothing to decide")
         XCTAssertEqual(NeedsYouStackRules.shared.emptyLineBeside(toCatchUp: 0, waitingElsewhere: 0), "Nothing needs you")
+        // Walk-through 2026-11-22 A9: the caption names a possible scam still waiting, never "nothing".
+        XCTAssertEqual(NeedsYouStackRules.shared.captionBeside(toAnswer: 2, renewals: 0, scams: 1),
+                       "Still waiting on you: 2 emails to answer · 1 possible scam to check")
+        XCTAssertEqual(NeedsYouStackRules.shared.waitingElsewhere(toAnswer: 0, renewals: 0, scams: 1), 1)
         XCTAssertEqual(AfterWorkSummary.companion.OPEN_LABEL, "Open")
         XCTAssertNil(AfterWorkSummary(people: []).namesLine)
         XCTAssertEqual(AfterWorkSummary(people: []).toCatchUp, 0)

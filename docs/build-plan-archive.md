@@ -7217,3 +7217,9 @@ listed 7 (a consent form, a council tax bill). The rule was already shared (slic
   through the shared core; Mac checked nightly.
 - Still open in A9: the paged shots' "Sender 8 · Weekend sale p8" placeholders (watch the pager scroll); the Mail tile's "71 promos" vs the sheet's counts and its TODAY header under the lit All chip; the
   possible scam counted as tidied beside "Nothing to decide"; "At work until 17:30 · 37 held" over later messages.
+
+### Found and fixing, week 5 · slice 25 (2026-11-23, A9: the scam beside "Nothing to decide")
+- Core `NeedsYouStackRules.captionBeside(toAnswer, renewals, scams)` and `waitingElsewhere(...)` (NeedsYouStack.kt): the empty state's caption names the mail still waiting ("Still waiting on you: 2 emails to answer · 1 renewal · 1 possible scam to check"), `EMPTY_CAPTION` only when nothing waits; possible scams count towards "Nothing to decide". Test `NeedsYouReviewTest.emptyCaptionNamesTheMailStillWaiting`.
+- Fold: `NeedsYouRoute` both empty states use them (`scamCount` from the tidied box's possible scams). Screen test `NeedsYouScamScreensTest` fails if the scam shots still say "Approvals, replies and decisions land here".
+- Mac: `CoreModel.mailWaitingElsewhere` counts the scams, new `emptyCaption`, used by ShellView's empty state; bridge test in `testNeedsYouEmptyStateReachesSwift`. Mac checked nightly.
+- The possible scams stay in Mail tidied today (Meka's choice, 2026-11-18); the reviewer's "counted as tidied" is answered by the caption naming them as waiting.

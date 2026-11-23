@@ -39,6 +39,7 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailNotScamRules
 import os.meka.core.domain.MailScamListRules
+import os.meka.core.domain.NeedsYouStackRules
 import os.meka.core.domain.MailScamTrashRules
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.domain.NeedsYouGroup
@@ -163,6 +164,10 @@ class NeedsYouScamScreensTest {
         ScreenShots.assertSensible(compose, name)
         // The headline is the section label, drawn in capitals.
         if (!onScreen(MailScamListRules.headline(1).uppercase())) fail("$name: no \"${MailScamListRules.headline(1)}\" line")
+        // Walk-through 2026-11-22 A9: the empty state beside the scam and the mail to answer says what still waits,
+        // never "Approvals, replies and decisions land here" as if nothing were pending.
+        reach(name, ScreenShots.plainText(NeedsYouStackRules.STILL_WAITING, substring = true), "the empty state's still-waiting line")
+        if (onScreen(NeedsYouStackRules.EMPTY_CAPTION.substringBefore(" land"))) fail("$name: the empty state still says ${NeedsYouStackRules.EMPTY_CAPTION}")
         if (!byHand) return
         reach(name, hasTestTag("$NEEDS_YOU_MAIL_ROW_TAG-$scam") and hasClickAction(), "the possible scam's row")[0]
             .performSemanticsAction(SemanticsActions.OnClick)

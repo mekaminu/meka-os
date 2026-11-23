@@ -26,6 +26,18 @@ class NeedsYouReviewTest {
     }
 
     @Test
+    fun emptyCaptionNamesTheMailStillWaiting() {
+        // Walk-through 2026-11-22 A9: a possible scam waiting is never "nothing" beside the empty state.
+        assertEquals(NeedsYouStackRules.EMPTY_CAPTION, NeedsYouStackRules.captionBeside(0, 0, 0))
+        assertEquals("Still waiting on you: 1 possible scam to check", NeedsYouStackRules.captionBeside(0, 0, 1))
+        assertEquals("Still waiting on you: 2 emails to answer · 1 renewal · 1 possible scam to check",
+            NeedsYouStackRules.captionBeside(2, 1, 1))
+        assertEquals("Still waiting on you: 1 email to answer · 3 renewals", NeedsYouStackRules.captionBeside(1, 3, 0))
+        assertEquals(1, NeedsYouStackRules.waitingElsewhere(0, 0, 1))
+        assertEquals("Nothing to decide", NeedsYouStackRules.emptyLineBeside(0, NeedsYouStackRules.waitingElsewhere(0, 0, 1)))
+    }
+
+    @Test
     fun nothingToDecideSaysWhatIsWaiting() {
         assertEquals("Nothing needs you", NeedsYouStackRules.emptyLine(0))
         assertEquals("Nothing to decide · 1 message to catch up on", NeedsYouStackRules.emptyLine(1))

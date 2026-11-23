@@ -117,6 +117,27 @@ object NeedsYouStackRules {
         if (toCatchUp <= 0 && waitingElsewhere > 0) NOTHING_TO_DECIDE else emptyLine(toCatchUp)
 
     /**
+     * The empty state's caption beside mail still waiting on him (walk-through 2026-11-22 A9: "Nothing to decide /
+     * Approvals, replies and decisions land here" sat beside a possible scam to check and two emails to answer, so the
+     * page read as if nothing was pending). With nothing waiting it is [EMPTY_CAPTION]; otherwise it names what still
+     * waits, in the order the boxes show it: "Still waiting on you: 2 emails to answer · 1 renewal · 1 possible scam to
+     * check". The possible scams are named on their own, so they never read as mail already tidied.
+     */
+    fun captionBeside(toAnswer: Int, renewals: Int, scams: Int): String {
+        val parts = buildList {
+            if (toAnswer > 0) add(if (toAnswer == 1) "1 email to answer" else "$toAnswer emails to answer")
+            if (renewals > 0) add(if (renewals == 1) "1 renewal" else "$renewals renewals")
+            if (scams > 0) add(MailScamListRules.headline(scams))
+        }
+        return if (parts.isEmpty()) EMPTY_CAPTION else "$STILL_WAITING ${parts.joinToString(" · ")}"
+    }
+
+    const val STILL_WAITING = "Still waiting on you:"
+
+    /** What [emptyLineBeside] counts as waiting elsewhere: mail to answer, renewals and possible scams to check. */
+    fun waitingElsewhere(toAnswer: Int, renewals: Int, scams: Int): Int = toAnswer + renewals + scams
+
+    /**
      * Today's Needs you (conflicts, overdue, due today unscheduled, in that order), then the lists card. A lit [credit]
      * card (the call assistant paused or under £2) goes first; a merely low one after the tasks.
      */

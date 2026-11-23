@@ -642,6 +642,7 @@ internal fun NeedsYouColumn(
     val decideCount = approvals.size + looseRequests.size + asks + cards.size
     val mailCount = mailNeeds?.count ?: 0  // the card headline's figure, never just the rows shown
     val renewalCount = mailFinds?.rows?.size ?: 0  // the Renewals box's own figure
+    val scamCount = mailScams?.count ?: 0  // the possible scams waiting in the tidied box (A9, 2026-11-22)
     fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section) && NeedsYouLayoutRules.inPart(part, section)
     val mailAny = mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null || mailScams != null
     // Needs you grouped and folding (APPROVED 2026-11-10 21:51, needs-you-grouped.dc.html), slice 1: on the folded Fold
@@ -947,8 +948,8 @@ internal fun NeedsYouColumn(
                     verticalAlignment = Alignment.CenterVertically) {
                     BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
                     Column {
-                        Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, mailCount + renewalCount), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
-                        if (!compact) Text(needsShown(NeedsYouStackRules.EMPTY_CAPTION), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                        Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, NeedsYouStackRules.waitingElsewhere(mailCount, renewalCount, scamCount)), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
+                        if (!compact) Text(needsShown(NeedsYouStackRules.captionBeside(mailCount, renewalCount, scamCount)), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }
             }
@@ -1383,8 +1384,8 @@ internal fun NeedsYouColumn(
                     verticalAlignment = Alignment.CenterVertically) {
                     BreathingRing(Modifier.padding(end = MekaSpace.m), size = if (compact) 22.dp else 28.dp, check = true)
                     Column {
-                        Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, mailCount + renewalCount), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
-                        if (!compact) Text(needsShown(NeedsYouStackRules.EMPTY_CAPTION), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                        Text(NeedsYouStackRules.emptyLineBeside(afterWork.toCatchUp, NeedsYouStackRules.waitingElsewhere(mailCount, renewalCount, scamCount)), style = if (compact) MekaType.itemMeta else MekaType.body, color = Meka.colors.textPrimary)
+                        if (!compact) Text(needsShown(NeedsYouStackRules.captionBeside(mailCount, renewalCount, scamCount)), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     }
                 }
             }

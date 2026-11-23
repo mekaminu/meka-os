@@ -396,7 +396,7 @@ struct NeedsYouView: View {
                     Text(NeedsYouStackRules.shared.emptyLineBeside(toCatchUp: model.afterWork?.toCatchUp ?? 0,
                                                                   waitingElsewhere: model.mailWaitingElsewhere))
                         .font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text(LoneWordGlue.shared.measured(line: NeedsYouStackRules.shared.EMPTY_CAPTION))
+                    Text(LoneWordGlue.shared.measured(line: model.emptyCaption))
                         .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 }
             }
