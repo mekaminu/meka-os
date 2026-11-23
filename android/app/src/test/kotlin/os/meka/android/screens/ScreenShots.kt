@@ -293,6 +293,45 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-22 A12 (Money's donut): "£91 over September by the 21st" was wider than the ring's hole, so its
+     * "£" and "t" sat on the ring. Fails unless every drawn line inside the ring tagged [tag] has all four corners inside
+     * the hole ([MoneySpending.ringHole] of [MoneySpending.RING_DP]). Does nothing when the shot has no ring.
+     */
+    fun assertInsideRing(compose: ComposeContentTestRule, name: String, tag: String = "money-ring"): Int {
+        val rings = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
+        val out = mutableListOf<String>()
+        var lines = 0
+        for (ring in rings) {
+            val cx = ring.positionInRoot.x + ring.size.width / 2f
+            val cy = ring.positionInRoot.y + ring.size.height / 2f
+            val hole = ring.size.width / 2f * (os.meka.core.domain.MoneySpending.ringHole / (os.meka.core.domain.MoneySpending.RING_DP / 2)).toFloat()
+            fun walk(n: SemanticsNode) {
+                val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+                val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+                if (text != null && action != null && text.isNotBlank()) {
+                    val results = mutableListOf<TextLayoutResult>()
+                    action(results)
+                    val layout = results.firstOrNull()
+                    if (layout != null) for (i in 0 until layout.lineCount) {
+                        if (layout.getLineEnd(i, visibleEnd = true) <= layout.getLineStart(i)) continue
+                        lines++
+                        val x0 = n.positionInRoot.x + layout.getLineLeft(i)
+                        val x1 = n.positionInRoot.x + layout.getLineRight(i)
+                        val y0 = n.positionInRoot.y + layout.getLineTop(i)
+                        val y1 = n.positionInRoot.y + layout.getLineBottom(i)
+                        val far = listOf(x0 to y0, x1 to y0, x0 to y1, x1 to y1).maxOf { (x, y) -> kotlin.math.hypot(x - cx, y - cy) }
+                        if (far > hole) out += "\"${text.substring(layout.getLineStart(i), layout.getLineEnd(i, visibleEnd = true))}\" reaches ${"%.0f".format(far - hole)}px onto the ring"
+                    }
+                }
+                n.children.forEach { walk(it) }
+            }
+            ring.children.forEach { walk(it) }
+        }
+        if (out.isNotEmpty()) fail("$name: the ring's middle is wider than its hole:\n" + out.joinToString("\n") { "- $it" })
+        return lines
+    }
+
+    /**
      * The quality gate's "an icon on its name's first line" (Ask's re-shot, 2026-10-22: the Goals tile's icon sat centred
      * beside its two-line name "Goals and / habits"): fails unless the icon tagged [tag] just left of [text] has its
      * middle within the text's first line.

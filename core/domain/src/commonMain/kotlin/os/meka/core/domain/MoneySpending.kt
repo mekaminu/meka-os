@@ -1,6 +1,7 @@
 package os.meka.core.domain
 
 import kotlin.math.roundToLong
+import kotlin.math.sqrt
 
 /**
  * Money redesign (B), slice 2 (mockup v4, approved by Meka 2026-10-25 09:30): the Spending tab's new look. The month's
@@ -261,6 +262,42 @@ object MoneySpending {
         }
         return MoneyRingCentre(top, big, sub, tone, "$top, $big, $sub")
     }
+
+    /**
+     * Walk-through 2026-11-22 A12 (Money's donut): "£91 over September by the 21st" was wider than the ring's hole, so
+     * its "£" and "t" sat on the ring. The middle's lines are now no wider than the hole's chord at the block's lower
+     * edge, less [RING_TEXT_MARGIN] each side, so a long line wraps inside the hole ("£91 over September / by the
+     * 21st"). The Fold's ring is [RING_DP] across with an [RING_BAND_DP] band [RING_INSET_DP] in from its edge; the Mac's
+     * is [MAC_RING_DP] with a [MAC_RING_BAND_DP] band centred on its edge.
+     */
+    const val RING_DP = 236.0
+    const val RING_BAND_DP = 18.0
+    const val RING_INSET_DP = 2.0
+    const val MAC_RING_DP = 200.0
+    const val MAC_RING_BAND_DP = 16.0
+    const val RING_TEXT_MARGIN = 8.0
+
+    /** Half the height of the middle's block with a two-line [MoneyRingCentre.sub] (top, figure, two lines, two gaps). */
+    const val RING_TEXT_HALF_HEIGHT = 50.0
+    const val MAC_RING_TEXT_HALF_HEIGHT = 40.0
+
+    /** The Fold's hole: from the middle to the band's inner edge. */
+    val ringHole: Double get() = RING_DP / 2 - RING_INSET_DP - RING_BAND_DP
+
+    /** The Mac's hole: its band is stroked on the circle's edge, so half of it sits inside. */
+    val macRingHole: Double get() = MAC_RING_DP / 2 - MAC_RING_BAND_DP / 2
+
+    /** The widest a line in the middle may be: the hole's chord [halfHeight] from the middle, less the margin each side. */
+    fun ringTextWidth(hole: Double, halfHeight: Double, margin: Double = RING_TEXT_MARGIN): Double {
+        val h = halfHeight.coerceIn(0.0, hole)
+        return (2 * sqrt(hole * hole - h * h) - 2 * margin).coerceAtLeast(0.0)
+    }
+
+    /** The Fold's middle, in dp (whole, rounded down). */
+    val ringTextDp: Int get() = ringTextWidth(ringHole, RING_TEXT_HALF_HEIGHT).toInt()
+
+    /** The Mac's middle, in points. */
+    val macRingTextPt: Int get() = ringTextWidth(macRingHole, MAC_RING_TEXT_HALF_HEIGHT).toInt()
 
     /** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st, 22nd, 23rd, 24th … 31st. */
     fun ordinal(n: Int): String {

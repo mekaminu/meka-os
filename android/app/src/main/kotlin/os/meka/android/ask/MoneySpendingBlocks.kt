@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -150,14 +151,14 @@ internal fun MoneyRing(s: MoneySpendingView, focus: String?, modifier: Modifier 
     }
     val centre = MoneySpending.focus(s, focus)
     Box(
-        modifier.size(236.dp).clip(RoundedCornerShape(MekaRadius.pill))
+        modifier.size(MoneySpending.RING_DP.dp).clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(enabled = focus != null, role = Role.Button, onClick = onClear)
-            .semantics(mergeDescendants = true) { contentDescription = centre.spoken },
+            .semantics(mergeDescendants = true) { contentDescription = centre.spoken }.testTag("money-ring"),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val band = 18.dp.toPx()
-            val r = size.minDimension / 2 - band / 2 - 2.dp.toPx()
+            val band = MoneySpending.RING_BAND_DP.dp.toPx()
+            val r = size.minDimension / 2 - band / 2 - MoneySpending.RING_INSET_DP.dp.toPx()
             val tl = Offset(center.x - r, center.y - r)
             val box = Size(r * 2, r * 2)
             drawArc(track, 0f, 360f, false, tl, box, style = Stroke(band))
@@ -170,13 +171,14 @@ internal fun MoneyRing(s: MoneySpendingView, focus: String?, modifier: Modifier 
             }
         }
         androidx.compose.animation.Crossfade(centre, animationSpec = MekaMotion.appear(reduced), label = "money-centre") { c ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            // Walk-through A12 (2026-11-22): every line inside the hole, a long one wrapping ("£91 over September /
+            // by the 21st"), never on the ring.
+            Column(Modifier.widthIn(max = MoneySpending.ringTextDp.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text(moneyShown(c.top), style = MekaType.caption, color = Meka.colors.textSecondary, textAlign = TextAlign.Center)
                 Text(c.big, style = MekaType.greeting, color = Meka.colors.textPrimary)
                 c.sub?.let { sub ->
-                    Text(moneyShown(sub), style = MekaType.caption, textAlign = TextAlign.Center,
-                        color = toneColor(c.tone, Meka.colors.success, Meka.colors.accent, Meka.colors.textSecondary),
-                        modifier = Modifier.padding(horizontal = MekaSpace.l))
+                    Text(moneyShown(sub), style = MekaType.caption.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading), textAlign = TextAlign.Center,
+                        color = toneColor(c.tone, Meka.colors.success, Meka.colors.accent, Meka.colors.textSecondary))
                 }
             }
         }

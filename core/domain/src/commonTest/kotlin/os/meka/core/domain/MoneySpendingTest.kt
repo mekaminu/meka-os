@@ -59,6 +59,24 @@ class MoneySpendingTest {
     }
 
     @Test
+    fun theMiddlesLinesStayInsideTheRingsHole() {
+        // Walk-through 2026-11-22 A12: "£91 over September by the 21st" sat on the ring. The hole is 98 dp on the Fold
+        // (236 / 2 − 2 − 18) and 92 pt on the Mac (200 / 2 − 16 / 2: the stroke sits on the edge).
+        assertEquals(98.0, MoneySpending.ringHole)
+        assertEquals(92.0, MoneySpending.macRingHole)
+        // The chord 50 dp below the middle is 2·√(98² − 50²) ≈ 168.6, less 8 each side.
+        assertEquals(152, MoneySpending.ringTextDp)
+        assertEquals(149, MoneySpending.macRingTextPt)
+        // A line that wide, at the block's lower edge, has its corners inside the hole.
+        val w = MoneySpending.ringTextDp / 2.0
+        val h = MoneySpending.RING_TEXT_HALF_HEIGHT
+        assertTrue(kotlin.math.sqrt(w * w + h * h) <= MoneySpending.ringHole - MoneySpending.RING_TEXT_MARGIN / 2)
+        // It was the whole ring less 24 dp each side (188 dp): wider than the hole's chord there.
+        assertTrue(MoneySpending.RING_DP - 48 > MoneySpending.ringTextWidth(MoneySpending.ringHole, h, margin = 0.0))
+        assertEquals(0.0, MoneySpending.ringTextWidth(10.0, 50.0))
+    }
+
+    @Test
     fun theMiddleComparesThisMonthAtTodaysPace() {
         // Usual £2,000 a month; by the 24th of 31 that's £1,548; £1,860 spent is £312 over.
         val c = view().centre

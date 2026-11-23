@@ -400,6 +400,8 @@ class MoneyPaymentSheetScreensTest {
         tap("money-view-needs")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-needs-wants"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-needs-wants")
+        // Walk-through 2026-11-22 A12: "£91 over September by the 21st" sat on the ring here.
+        ScreenShots.assertInsideRing(compose, "cover-dark-needs-wants")
         // A15: "2 payments without a / category" and "Income · Current / account" left a word alone on the cover.
         val m15 = core.moneyView.value.month!!
         ScreenShots.assertNoLoneWords(compose, "cover-dark-needs-wants",

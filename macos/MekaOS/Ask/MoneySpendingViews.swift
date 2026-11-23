@@ -97,15 +97,17 @@ struct MoneyRingView: View {
                     .rotationEffect(.degrees(-90))
                     .opacity(MoneySpending.shared.lit(s: s, focus: focus, v: spending) ? 1 : 0.25)
             }
+            // Walk-through A12 (2026-11-22): every line inside the ring's hole, a long one wrapping, never on the ring.
             VStack(spacing: MekaSpace.xxs) {
                 Text(centre.top).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 Text(centre.big).font(MekaType.greeting).foregroundStyle(palette.textPrimary)
                 if let sub = centre.sub {
                     Text(sub).font(MekaType.caption).foregroundStyle(palette.moneyLine(centre.tone))
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.horizontal, MekaSpace.l)
+            .frame(maxWidth: CGFloat(MoneySpending.shared.macRingTextPt))
             .id(centre.top + centre.big)
             .transition(.opacity)
         }

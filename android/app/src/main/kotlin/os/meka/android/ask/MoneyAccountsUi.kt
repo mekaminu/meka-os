@@ -40,6 +40,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.wordsTap
 import os.meka.android.lists.Field
 import os.meka.core.domain.MoneyAccountItem
 import os.meka.core.domain.MoneyAccountList
@@ -215,8 +216,8 @@ internal fun MoneyAccountDetails(
         if (a.canType) Field(MoneyWorth.BALANCE_HINT, modifier = Modifier.testTag("money-account-balance"), value = balance,
             onValue = { balance = it }, description = "${MoneyWorth.BALANCE_HINT} for ${a.title}") { balance = ""; onBalance(it) }
         Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            SwitchRow(MoneyAccountList.CARD_SWITCH, MoneyAccountList.CARD_SWITCH_LINE, a.card, "money-account-card") { onCard(!a.card) }
-            a.sideHustle?.let { on -> SwitchRow(MoneyBusiness.SWITCH, MoneyAccountList.SIDE_HUSTLE_LINE, on, "money-account-side") { onSideHustle(!on) } }
+            MoneySwitchRow(MoneyAccountList.CARD_SWITCH, MoneyAccountList.CARD_SWITCH_LINE, a.card, "money-account-card") { onCard(!a.card) }
+            a.sideHustle?.let { on -> MoneySwitchRow(MoneyBusiness.SWITCH, MoneyAccountList.SIDE_HUSTLE_LINE, on, "money-account-side") { onSideHustle(!on) } }
         }
         Text(if (busy) "Reading the file…" else MoneyAccountList.IMPORT, style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
@@ -246,9 +247,11 @@ internal fun MoneyAccountDetails(
 
 /** A switch as a row: the label over its line, and an On pill lit in the accent (a tick haptic is the caller's). */
 @Composable
-private fun SwitchRow(label: String, line: String, on: Boolean, tag: String, onClick: () -> Unit) {
+internal fun MoneySwitchRow(label: String, line: String, on: Boolean, tag: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch, onClick = onClick)
+        // Walk-through A12 (2026-11-22): a 16 dp rounded clip sat right on the words, so the wrapped line's first
+        // letter was cut ("on Bills", "hustle's tax year"); the tap's highlight now bleeds past them (wordsTap).
+        Modifier.fillMaxWidth().wordsTap(role = Role.Switch, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = "$label. $line"; stateDescription = if (on) "On" else "Off" }
             .minTouch().padding(vertical = MekaSpace.xxs).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,

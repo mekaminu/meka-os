@@ -134,6 +134,9 @@ class MoneyScreensTest {
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, MoneyRules.TITLE)
+        // Walk-through 2026-11-22 A12: the ring's middle stays inside its hole (it checks something on a full Spending).
+        val ringLines = ScreenShots.assertInsideRing(compose, name)
+        if (fill == Fill.MANY && tab == MoneyTab.SPENDING && ringLines < 2) fail("$name: the ring's middle drew $ringLines lines")
         val v = core.moneyView.value
         if (v.locked) fail("$name: Money is still locked after opening")
         // Money's top as the mockup: the line under the title only when nothing is in yet ("2 accounts · …" is gone), and
