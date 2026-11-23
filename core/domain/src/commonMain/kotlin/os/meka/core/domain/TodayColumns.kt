@@ -27,6 +27,17 @@ object TodayColumnsRules {
     const val LEFT_SHARE = 0.5f
     const val HEADER_MAX_SHARE = 0.4f
 
+    /**
+     * Found and fixing week 5, A12 (Today on the open Fold): once a split column has scrolled, its top fades over this
+     * much, a whole task row with its meta line ([TodayBesideRules.ROW_WITH_LINE_MAX_DP]) and its gap, so a row passing
+     * under the header's habit chips dissolves rather than showing half a title. The 24 dp foot fade was too thin there:
+     * "Fix the gate latch" read as sliced and Up next's buttons as cut. At rest the top is crisp.
+     */
+    const val TOP_FADE_DP = 56
+
+    /** How opaque a split column's content is [yDp] below its top once scrolled (0 at the edge, whole past the fade). */
+    fun topFadeAlpha(yDp: Float): Float = (yDp / TOP_FADE_DP).coerceIn(0f, 1f)
+
     fun splits(layout: CommandLayout): Boolean = layout != CommandLayout.SINGLE
 
     /**

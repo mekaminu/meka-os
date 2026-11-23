@@ -18,6 +18,7 @@ import os.meka.core.domain.DayListRules
 import os.meka.core.domain.EveningCardRules
 import os.meka.android.today.EVENING_CARD_TAG
 import org.junit.Assert.fail
+import org.junit.Assert.assertTrue
 import os.meka.android.goals.FASTING_TODAY_TAG
 import os.meka.core.domain.FastingScreenRules
 import androidx.test.core.app.ApplicationProvider
@@ -298,6 +299,13 @@ class TodayScreensTest {
         settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
+        // Found and fixing week 5, A12: on the open Fold each column, scrolled to its end, dissolves what slid under the
+        // header's habit chips instead of slicing it ("Fix the gate latch", Up next's buttons, 09:00 Work).
+        if (compose.onAllNodesWithTag(TODAY_RIGHT_LIST_TAG).fetchSemanticsNodes().isNotEmpty()) {
+            assertTrue("$name: the left column never scrolled, so nothing was checked",
+                ScreenShots.assertTopDissolves(compose, name, TODAY_LIST_TAG))
+            ScreenShots.assertTopDissolves(compose, name, TODAY_RIGHT_LIST_TAG)
+        }
         val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
         val bar = compose.onNodeWithTag(CAPTURE_BAR_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val clearBy = bar.top - MotionMath.FOOT_FADE_DP * density

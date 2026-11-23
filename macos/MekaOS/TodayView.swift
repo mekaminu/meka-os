@@ -228,7 +228,8 @@ struct TodayView: View {
     static let leftColumnID = "column-today-left"
     static let rightColumnID = "column-today-right"
 
-    /// One of the split's two lists: it scrolls on its own and its foot fades into the capture field.
+    /// One of the split's two lists: it scrolls on its own, its top fades over a whole row once scrolled and its foot
+    /// fades into the capture field.
     private func splitList<Content: View>(_ id: String, leading: CGFloat, trailing: CGFloat,
                                           @ViewBuilder content: () -> Content) -> some View {
         ScrollView {
@@ -240,8 +241,9 @@ struct TodayView: View {
                     .padding(.bottom, MekaSpace.xl)
             )
         }
+        // Found and fixing week 5, A12: once scrolled, the top fades over a whole row under the header.
+        .edgeFades(topPt: CGFloat(TodayColumnsRules.shared.TOP_FADE_DP), foot: false)
         .footFade()
-        .scrollIndicators(.never)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(id)

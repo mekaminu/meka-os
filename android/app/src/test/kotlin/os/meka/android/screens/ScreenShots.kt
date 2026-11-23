@@ -1008,6 +1008,39 @@ object ScreenShots {
         return checked
     }
 
+    /**
+     * Found and fixing week 5, A12 (Today on the open Fold): once the list tagged [tag] has scrolled, nothing in its
+     * first [bandDp] under the header reads at more than half strength, so a row that slid under the habit chips
+     * dissolves instead of showing half a title ("Fix the gate latch") or Up next's cut buttons. Each pixel row in the
+     * band is compared with the background read at the list's left padding. Returns false when the list hadn't scrolled
+     * (nothing to check).
+     */
+    fun assertTopDissolves(compose: ComposeContentTestRule, name: String, tag: String, bandDp: Float = 20f, maxDiff: Int = 128): Boolean {
+        val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        val range = node.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) ?: fail("$name: $tag doesn't scroll")
+        if (range.value() <= 0.5f) return false
+        val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
+        val density = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>().resources.displayMetrics.density
+        val b = node.boundsInRoot
+        val left = b.left.toInt().coerceAtLeast(0)
+        val right = b.right.toInt().coerceAtMost(shot.width)
+        val top = b.top.toInt().coerceAtLeast(0)
+        val end = (b.top + bandDp * density).toInt().coerceAtMost(shot.height)
+        for (y in top until end) {
+            val bg = shot.getPixel(left + 1, y)
+            for (x in left until right) {
+                val p = shot.getPixel(x, y)
+                val d = maxOf(kotlin.math.abs(android.graphics.Color.red(p) - android.graphics.Color.red(bg)),
+                    kotlin.math.abs(android.graphics.Color.green(p) - android.graphics.Color.green(bg)),
+                    kotlin.math.abs(android.graphics.Color.blue(p) - android.graphics.Color.blue(bg)))
+                if (d > maxDiff) {
+                    fail("$name: $tag shows a sliced row ${(y - b.top) / density} dp under the header (x $x differs from the background by $d)")
+                }
+            }
+        }
+        return true
+    }
+
     private fun assertNotACopy(name: String, file: File, opening: ByteArray?, openingName: String?) {
         if (!file.exists()) return
         val shot = file.readBytes()

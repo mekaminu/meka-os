@@ -80,4 +80,16 @@ class TodayColumnsTest {
         // Nothing on the left is above them: they never push Now down (week 3, A1).
         assertTrue(r.slots(TodayColumn.LEFT).none { r.aboveHousekeeping(it) })
     }
+
+    @Test
+    fun aScrolledSplitColumnFadesItsTopOverAWholeRow() {
+        // Found and fixing week 5, A12: a 24 dp fade left "Fix the gate latch" sliced under the habit chips.
+        val r = TodayColumnsRules
+        assertTrue(r.TOP_FADE_DP >= TodayBesideRules.ROW_WITH_LINE_MAX_DP)
+        assertEquals(0f, r.topFadeAlpha(0f))
+        assertEquals(1f, r.topFadeAlpha(r.TOP_FADE_DP.toFloat()))
+        assertEquals(1f, r.topFadeAlpha(200f))
+        // A title's first 20 dp under the header are under half strength, so no half line reads as cut.
+        assertTrue(r.topFadeAlpha(20f) < 0.5f)
+    }
 }

@@ -7364,3 +7364,12 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - Mac `MoneySheet.swift`: the popover's `saidLine` moved from under the form to `ownSaidBar` above Cancel · Save, on the raised surface, moving in from the bottom (reduced motion: opacity).
 - Test: `MoneyPaymentSheetScreensTest.aMonthlyCapOnHisCategory` checks the bar sits between `money-own-body` and `money-own-foot`, reads "Treats capped at £15…", and that Undo takes the cap off and the bar away.
 
+
+### Found and fixing, week 5 — slice 42 (2026-11-23): A12's Today on the open Fold, rows dissolve under the header
+
+- Walk-through finding (g3a 3): on the open Fold, scrolled to the end, "Pay the window cleaner" / "Fix the gate latch" read as sliced under the pinned "Read 20 pages · Stretch" chips, and in fasting-end Up next's Done · Tomorrow · Open buttons showed cut at the top. The split columns already faded their top once scrolled (week 4, A6), but over 24 dp only, so a row's remains read as a hard cut.
+- Core `TodayColumnsRules.TOP_FADE_DP` (56, a task row with its meta line and gap) and `topFadeAlpha`: once a split column has scrolled, its top fades over a whole row.
+- Android `FootFade.kt`: `edgeFades` takes `topDp`; `TodayRoute.SplitToday`'s two columns pass `TOP_FADE_DP`.
+- Mac `ScrollChrome.swift`: `edgeFades(topPt:foot:)`; `TodayView.splitList` fades its top over `TOP_FADE_DP` once scrolled (it had no top fade at all) and keeps its foot fade into the capture field.
+- Tests: `TodayColumnsTest.aScrolledSplitColumnFadesItsTopOverAWholeRow`; new `ScreenShots.assertTopDissolves` (nothing in a scrolled list's first 20 dp under the header reads at more than half strength against the background), run on `inner-dark-many-end` and `inner-dark-fasting-end` for both columns (the left must have scrolled).
+- Still open in A12: the inner many shot's task list sits below Up next and This evening (the approved order); the snackbar over half-visible text in Needs you's mail by-hand.

@@ -7,6 +7,10 @@ import SwiftUI
 /// out with the appear curve; Reduce Motion switches them.
 private struct EdgeFadesModifier: ViewModifier {
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    /// How deep the top fades once scrolled (Today's split columns: a whole row, core TodayColumnsRules.TOP_FADE_DP).
+    var topPt: CGFloat = CGFloat(MacCommandCentreRules.shared.TOP_FADE_PT)
+    /// Whether the foot fades while more lies below (off where the column keeps its own foot fade).
+    var foot: Bool = true
     @State private var fades = Fades(top: false, bottom: false)
 
     private nonisolated struct Fades: Equatable { var top: Bool; var bottom: Bool }
@@ -30,9 +34,9 @@ private struct EdgeFadesModifier: ViewModifier {
             .mask {
                 VStack(spacing: 0) {
                     LinearGradient(colors: [.black.opacity(fades.top ? 0 : 1), .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: CGFloat(MacCommandCentreRules.shared.TOP_FADE_PT))
+                        .frame(height: topPt)
                     Rectangle()
-                    LinearGradient(colors: [.black, .black.opacity(fades.bottom ? 0 : 1)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [.black, .black.opacity(fades.bottom && foot ? 0 : 1)], startPoint: .top, endPoint: .bottom)
                         .frame(height: CGFloat(MacCommandCentreRules.shared.BOTTOM_FADE_PT))
                 }
             }
@@ -42,6 +46,10 @@ private struct EdgeFadesModifier: ViewModifier {
 extension View {
     /// A scrolling column with no scroll bar and soft fades at the edges with more beyond them.
     func edgeFades() -> some View { modifier(EdgeFadesModifier()) }
+
+    /// Found and fixing week 5, A12: a column under a fixed header fades its top over [topPt] once scrolled, so a row
+    /// passing under the header dissolves instead of being sliced; [foot] false leaves the foot to the column's own fade.
+    func edgeFades(topPt: CGFloat, foot: Bool) -> some View { modifier(EdgeFadesModifier(topPt: topPt, foot: foot)) }
 }
 
 /// A column's heading that stays put while the column scrolls under it (Mac presentation pass, item 2), sitting

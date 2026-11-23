@@ -37,17 +37,24 @@ fun Modifier.footFade(): Modifier = this
  * [MotionMath.FOOT_FADE_DP] instead of being sliced through its title. At rest the top is crisp. No motion of its own.
  * Walk-through week 5, A12: [more] says whether anything is still below (a sheet's body over its fixed Cancel · Save
  * foot), so the foot fades only while there is more to scroll to and the last line sits crisp at the end.
+ * [topDp] is how deep the top fades once scrolled (Today's split columns fade over a whole row, core
+ * TodayColumnsRules.TOP_FADE_DP, so a row under the habit chips dissolves rather than reading as sliced).
  */
-fun Modifier.edgeFades(more: () -> Boolean = { true }, scrolled: () -> Boolean): Modifier = this
+fun Modifier.edgeFades(
+    more: () -> Boolean = { true },
+    topDp: Int = MotionMath.FOOT_FADE_DP,
+    scrolled: () -> Boolean,
+): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
         val fade = MotionMath.FOOT_FADE_DP.dp.toPx().coerceAtMost(size.height / 2)
         if (scrolled()) {
+            val topFade = topDp.dp.toPx().coerceAtMost(size.height / 2)
             drawRect(
-                brush = Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black, startY = 0f, endY = fade),
+                brush = Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black, startY = 0f, endY = topFade),
                 topLeft = Offset.Zero,
-                size = Size(size.width, fade),
+                size = Size(size.width, topFade),
                 blendMode = BlendMode.DstIn,
             )
         }

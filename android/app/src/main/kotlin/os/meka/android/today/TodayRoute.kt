@@ -1617,7 +1617,7 @@ private fun SplitToday(
                 LazyColumn(
                     state = leftState,
                     modifier = Modifier.weight(TodayColumnsRules.LEFT_SHARE).fillMaxHeight()
-                        .edgeFades { leftState.canScrollBackward }.testTag(TODAY_LIST_TAG),
+                        .edgeFades(topDp = TodayColumnsRules.TOP_FADE_DP) { leftState.canScrollBackward }.testTag(TODAY_LIST_TAG),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = MekaSpace.gutter, end = half, bottom = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                     content = left,
@@ -1626,7 +1626,7 @@ private fun SplitToday(
                 LazyColumn(
                     state = rightState,
                     modifier = Modifier.weight(1f - TodayColumnsRules.LEFT_SHARE).fillMaxHeight()
-                        .edgeFades { rightState.canScrollBackward }.testTag(TODAY_RIGHT_LIST_TAG),
+                        .edgeFades(topDp = TodayColumnsRules.TOP_FADE_DP) { rightState.canScrollBackward }.testTag(TODAY_RIGHT_LIST_TAG),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = half, end = MekaSpace.gutter, bottom = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {
