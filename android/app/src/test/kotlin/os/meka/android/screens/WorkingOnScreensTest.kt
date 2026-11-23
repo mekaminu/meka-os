@@ -367,7 +367,9 @@ class WorkingOnScreensTest {
                 if (compose.onAllNodes(hasTestTag("call-try-again"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no Try again")
                 if (!onScreen("they offered 21:00")) fail("$name: the result isn't shown")
                 // Week 3's walk-through (A22): no "Nothing to keep an eye on yet" over the finished call's card.
-                if (v.summary != "1 call finished · nothing needs you") fail("$name: the summary reads \"${v.summary}\"")
+                // Week 5's walk-through (A13): never "nothing needs you" over a not-booked call he can try again.
+                if (v.summary != "1 call finished · not booked · try again if you like") fail("$name: the summary reads \"${v.summary}\"")
+                if (onScreen("nothing needs you")) fail("$name: \"nothing needs you\" over a not-booked call's Try again")
                 if (onScreen("Nothing to keep an eye on yet")) fail("$name: the empty line shows over a call card")
             }
             Fill.FOUND -> {

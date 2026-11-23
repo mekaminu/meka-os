@@ -266,12 +266,21 @@ object WorkingOnRules {
         val openCalls = calls.count { it.canCancel }
         val callsPart = if (openCalls > 0) " · ${plural(openCalls, "call card")}" else ""
         val open = jobs.count { it.canStop }
-        val needs = if (need > 0) " · $need need${if (need == 1) "s" else ""} you" else " · nothing needs you"
+        // Week 5's walk-through (A13, 2026-11-23): a call that wasn't booked but can be tried again (they offered
+        // another time) leaves him a choice, so the head says "not booked", never "nothing needs you" over Try again.
+        val notBooked = calls.count { it.canTryAgain && !it.needsYou }
+        val needs = when {
+            need > 0 -> " · $need need${if (need == 1) "s" else ""} you"
+            notBooked > 0 -> " · ${plural(notBooked, "call")} not booked"
+            else -> " · nothing needs you"
+        }
         // Walk-through A22 (2026-11-14): a finished call's card (not booked, Try again) still shows, so the head never
         // says there's nothing to keep an eye on over it.
         val summary = when {
             switches.none { it.on } && open == 0 && calls.isEmpty() -> ALL_OFF_LINE
             cards.isEmpty() && open == 0 && calls.isEmpty() -> emptyLine(switches.count { it.on })
+            cards.isEmpty() && open == 0 && openCalls == 0 && need == 0 && notBooked == calls.size ->
+                "${plural(calls.size, "call")} finished · not booked · ${BookingCallRules.TRY_AGAIN_HINT}"
             cards.isEmpty() && open == 0 && openCalls == 0 -> "${plural(calls.size, "call")} finished$needs"
             cards.isEmpty() && open == 0 -> "Holding ${plural(openCalls, "call card")} for you$needs"
             cards.isEmpty() -> "On ${plural(open, "errand")} for you$callsPart$needs"

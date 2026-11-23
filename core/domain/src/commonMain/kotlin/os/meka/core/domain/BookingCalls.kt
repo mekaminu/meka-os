@@ -265,6 +265,8 @@ object BookingCallRules {
     const val SAVE = "Save"
     const val SAVED = "Call card saved"
     const val TRY_AGAIN = "Try again"
+    /** Working on's head over a finished, not-booked call that can be tried again (week 5's walk-through, A13). */
+    const val TRY_AGAIN_HINT = "try again if you like"
     const val TRIED_AGAIN = "New call card ready · check it, then Call now"
     const val TRIED_AGAIN_LINE = "Tried again · the new card is above"
     const val NOT_RETRYABLE = "Only a call that wasn't booked can be tried again"

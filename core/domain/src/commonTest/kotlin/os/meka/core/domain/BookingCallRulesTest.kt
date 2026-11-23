@@ -250,6 +250,14 @@ class BookingCallRulesTest {
         val allOff = WorkingOnRules.view(WorkingOnSetting(StandingErrand.entries.toSet()), RenewalsView.EMPTY, GiftsView.EMPTY,
             emptyList(), today, calls = listOf(gone.copy(canCancel = false)))
         assertEquals("1 call finished · nothing needs you", allOff.summary)
+        // Week 5's walk-through (A13): a not-booked call he can try again leaves him the choice, so never
+        // "nothing needs you" over Try again; beside other cards it is counted on its own.
+        val retry = gone.copy(canCancel = false, canTryAgain = true)
+        val notBooked = WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today, calls = listOf(retry))
+        assertEquals("1 call finished · not booked · try again if you like", notBooked.summary)
+        assertEquals(0, notBooked.needCount)
+        val two = WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today, calls = listOf(retry, gone.copy(canCancel = false)))
+        assertEquals("2 calls finished · 1 call not booked", two.summary)
         assertEquals(WorkingOnRules.emptyLine(StandingErrand.entries.size),
             WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today).summary)
     }
