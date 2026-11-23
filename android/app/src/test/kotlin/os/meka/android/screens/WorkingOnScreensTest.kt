@@ -173,7 +173,7 @@ class WorkingOnScreensTest {
     private suspend fun fill(core: MekaCore, fill: Fill) {
         val today = core.todayEpochDay()
         when (fill) {
-            Fill.EMPTY, Fill.ERRANDS, Fill.CALL, Fill.FOUND -> Unit
+            Fill.EMPTY, Fill.ERRANDS, Fill.CALL, Fill.FOUND, Fill.REDRAFTED -> Unit
             Fill.ONE -> core.addWaiting("The drill back", "Casey", 0)
             Fill.MANY -> {
                 core.addRenewal("Home insurance", ObligationKind.INSURANCE, today + 15, RenewalRepeat.YEARLY, null, null)
@@ -352,6 +352,11 @@ class WorkingOnScreensTest {
                 if (!onScreen(ObiJobRules.DRAFT_LABEL.uppercase())) fail("$name: no draft box")
                 if (!onScreen("Working · step 2 of 2")) fail("$name: the fence's status isn't shown")
                 assertActionsStart(name, "errand-card", "errand-answer")
+            }
+            Fill.REDRAFTED -> {
+                val jobs = compose.onAllNodes(hasTestTag("errand-card"), useUnmergedTree = true).fetchSemanticsNodes().size
+                if (jobs != 1) fail("$name: $jobs errand cards, not 1")
+                if (compose.onAllNodes(hasTestTag("errand-draft"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no new draft")
             }
             Fill.CALL -> {
                 val r = v.calls.singleOrNull() ?: fail("$name: ${v.calls.size} call cards, not 1")
