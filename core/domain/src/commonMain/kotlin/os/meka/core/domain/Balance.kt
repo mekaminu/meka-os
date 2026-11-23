@@ -415,7 +415,10 @@ object BalanceRules {
         return byKey.map { (k, a) ->
             val min = covered(a.spans).toInt()
             val days = a.days.sorted().joinToString(", ") { LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(it) - 1] }
-            BalanceUnclear(k, a.title, "$days · ${hours(min)}", min)
+            // Walk-through 2026-11-22 A13: "5 events not counted" over four rows read wrong while Choir's "Mon, Thu"
+            // was two of them; a title seen more than once says how many it is.
+            val times = a.spans.size.takeIf { it > 1 }?.let { "$it events · " }.orEmpty()
+            BalanceUnclear(k, a.title, "$times$days · ${hours(min)}", min)
         }.sortedWith(compareByDescending<BalanceUnclear> { it.minutes }.thenBy { it.key })
     }
 

@@ -139,7 +139,8 @@ class ReviewBalanceReflectScreensTest {
     /** The week's habits as the review lists them, so Balance and Reflect count the same ones. */
     private val habits = ShotReviewWeek.week(Fill.MANY).habits.map { it.title to it.days }
 
-    private fun balance(fill: Fill): BalanceView = when (fill) {
+    /** [counted]: a title just counted by hand ("Choir" as Self), so the list under its line no longer offers it (A13). */
+    private fun balance(fill: Fill, counted: Pair<String, BalanceArea>? = null): BalanceView = when (fill) {
         Fill.EMPTY -> BalanceRules.view(ws, nowMs, cal, work, emptyList(), emptyList(), emptyMap())
         Fill.ONE -> BalanceRules.view(ws - 7, nowMs, cal, work, events(Fill.ONE), emptyList(), emptyMap())
         Fill.MANY -> {
@@ -149,7 +150,11 @@ class ReviewBalanceReflectScreensTest {
                 ws - 7 to mapOf(BalanceArea.WORK to 39 * 60, BalanceArea.FAMILY to 9 * 60 + 30, BalanceArea.HEALTH to 3 * 60, BalanceArea.YOURSELF to 2 * 60),
                 ws to emptyMap(),
             )
-            val chosen = BalanceChoices(mapOf("quiz night" to BalanceArea.YOURSELF), mapOf("quiz night" to "Quiz night"))
+            val mine = counted?.let { (t, a) -> BalanceRules.key(t) to (a to t) }
+            val chosen = BalanceChoices(
+                listOfNotNull(mine?.let { it.first to it.second.first }).toMap() + mapOf("quiz night" to BalanceArea.YOURSELF),
+                listOfNotNull(mine?.let { it.first to it.second.second }).toMap() + mapOf("quiz night" to "Quiz night"),
+            )
             BalanceRules.view(ws, nowMs, cal, work, events(Fill.MANY), habits, mapOf(BalanceArea.FAMILY to 10 * 60), trendWeeks = trend, chosen = chosen)
         }
     }
@@ -210,13 +215,16 @@ class ReviewBalanceReflectScreensTest {
 
     private fun onScreen(text: String): Boolean = ScreenShots.texts(compose).any { DateGlue.plain(it).contains(text) }
 
-    private fun draw(theme: ThemeChoice, fill: Fill, taps: Taps = Taps(), countSaid: String? = null, asked: Boolean = true) {
+    private fun draw(
+        theme: ThemeChoice, fill: Fill, taps: Taps = Taps(), countSaid: String? = null, asked: Boolean = true,
+        counted: Pair<String, BalanceArea>? = null,
+    ) {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
         compose.mainClock.autoAdvance = false
         val v = week(fill)
         val w = winsView(fill)
-        val b = balance(fill)
+        val b = balance(fill, counted)
         val r = reflection(fill, asked)
         // A9: the facts' wins are the Wins card's wins, one count on one screen.
         val factWins = Regex("(\\d+) wins?").find(r.facts)?.groupValues?.get(1)?.toInt() ?: 0
@@ -385,7 +393,12 @@ class ReviewBalanceReflectScreensTest {
     private fun byHand() {
         val name = "review-balance-by-hand"
         val taps = Taps()
-        draw(ThemeChoice.DARK, Fill.MANY, taps, countSaid = BalanceRules.countAsLine("Choir", BalanceArea.YOURSELF, false))
+        // Walk-through 2026-11-22 A13: the shot said "Choir counts as self" over Choir still listed as not counted.
+        val choir = "Choir" to BalanceArea.YOURSELF
+        draw(ThemeChoice.DARK, Fill.MANY, taps, countSaid = BalanceRules.countAsLine(choir.first, choir.second, false), counted = choir)
+        val counted = balance(Fill.MANY, choir)
+        if (counted.unclear.any { it.title == choir.first }) fail("$name: Choir is counted as Self but still listed under not counted")
+        if ((counted.uncounted ?: "") == (balance(Fill.MANY).uncounted ?: "")) fail("$name: the not-counted line didn't drop Choir (${counted.uncounted})")
         scrollTo("Targets")
         if (onScreen("Family · a week")) fail("$name: the targets show before a tap")
         clickNode(hasText("Targets"), "$name: Targets")
@@ -397,7 +410,7 @@ class ReviewBalanceReflectScreensTest {
         if (taps.targets != listOf(BalanceArea.FAMILY to 14 * 60)) fail("$name: a target chip didn't set it (${taps.targets})")
         if (!onScreen("Quiz night · Self")) fail("$name: his choice isn't listed under Targets")
         scrollTo("Count as")
-        val first = balance(Fill.MANY).unclear.first().title
+        val first = counted.unclear.first().title
         clickNode(hasText("Health"), "$name: Count as Health")
         if (taps.counted.firstOrNull() != (first to "HEALTH")) fail("$name: Count as didn't count \"$first\" (${taps.counted})")
         scrollTo("Undo")

@@ -241,6 +241,17 @@ class BalanceTest {
         assertEquals(1, all.count { it.source == NoticeSource.BALANCE })
     }
 
+    /** Walk-through 2026-11-22 A13: "5 events not counted" sat over four rows, Choir's "Mon, Thu" being two of them. */
+    @Test
+    fun aTitleSeenTwiceSaysHowManyEventsItIs() {
+        val end = at(mon + 7, 9)
+        val twice = week + listOf(ev("Choir", mon, 19, 0, 20), ev("Choir", mon + 3, 19, 0, 20))
+        val v = BalanceRules.view(mon, end, cal, work, twice, habits, emptyMap(), childOf)
+        assertEquals("3 events not counted · no clear area", v.uncounted)
+        assertEquals(listOf("Choir" to "2 events · Mon, Thu · 2 h", "Pick up parcel" to "Mon · 1 h"), v.unclear.map { it.title to it.line })
+        assertEquals(3, v.unclear.sumOf { u -> Regex("^(\\d+) events").find(u.line)?.groupValues?.get(1)?.toInt() ?: 1 })
+    }
+
     @Test
     fun countAsChoosesTheAreaForEventsWithNoClearAreaByTitle() {
         val end = at(mon + 7, 9)
