@@ -7382,3 +7382,9 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - Mac `ScrollChrome.swift`: `edgeFades(topPt:foot:topStops:)` builds the top gradient from the stops; `TodayView.splitList` passes them (read once into a static `[Double]`).
 - Tests: `TodayColumnsTest.aRowsStubAtRestUnderTheChipsIsAllButGone`; `TodayScreensTest.shootEnd` also runs `assertTopDissolves` with a 24 dp band at a 64 difference on both columns.
 - The inner many shot's task list below Up next and This evening is the approved order (Meka 2026-11-08 22:58: left = Now, This evening, Today), so it stays.
+
+### Found and fixing, week 5 — slice 45 (2026-11-23): A13's Week ahead wraps between parts
+- The cover's summary read "3 office days · Alex and Sam off / Fri · 8 events" (g3b 3: as if Friday had 8 events; the 8 is the week's total) and the balance "Balance with what's planned · family / 2 h 45 of 8 h".
+- Core `LoneWordGlue.listed(line)`: each " · " part of up to `PART_MAX` (28) letters has no-break spaces and its dot held to it, so a line wraps only between parts (a longer part wraps inside itself as `measured`); `partRanges(line)` gives the held parts for a screen test.
+- Android `WeekAheadPane` and Mac `WeekAheadSheet` draw the summary and the balance through `listed`.
+- Tests: `LoneWordGlueTest.aSummaryWrapsOnlyBetweenItsParts`; new `ScreenShots.assertPartsWhole` on every Week ahead shot (those two lines may end on their dot, so they're out of `assertNoDotEndingALine`).

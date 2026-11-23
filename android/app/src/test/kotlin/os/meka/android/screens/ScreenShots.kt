@@ -379,6 +379,16 @@ object ScreenShots {
     fun assertClocksWhole(compose: ComposeContentTestRule, name: String) =
         assertPhrasesWhole(compose, name, "a time difference") { t -> CLOCKS.findAll(DateGlue.plain(t)).map { it.range }.toList() }
 
+    /**
+     * Walk-through 2026-11-22, A13: each of [texts] (matched whole) wraps only between its " · " parts, never inside one
+     * no longer than [LoneWordGlue.PART_MAX] (Week ahead's "Alex and Sam off / Fri · 8 events" read as 8 events on Friday).
+     */
+    fun assertPartsWhole(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+        val wanted = texts.map { DateGlue.plain(it) }.toSet()
+        if (wanted.isEmpty()) return
+        assertPhrasesWhole(compose, name, "a part of its line") { t -> if (DateGlue.plain(t) in wanted) LoneWordGlue.partRanges(t) else emptyList() }
+    }
+
     private fun assertPhrasesWhole(compose: ComposeContentTestRule, name: String, what: String, ranges: (String) -> List<IntRange>) {
         val split = mutableListOf<String>()
         fun walk(n: SemanticsNode) {

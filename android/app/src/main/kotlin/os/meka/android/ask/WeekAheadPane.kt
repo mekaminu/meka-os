@@ -135,7 +135,8 @@ fun WeekAheadPane(
         }
         item(key = "summary") {
             Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-summary") { s ->
-                Text(LoneWordGlue.measured(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                // Walk-through 2026-11-22, A13: wraps only between its parts ("Alex and Sam off Fri" never splits before "Fri").
+                Text(LoneWordGlue.listed(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
         // Car completeness slice 2: "Car · MOT ran out Sat 31 Oct · book one before you drive", in red, first (cross-fades as it changes).
@@ -174,8 +175,8 @@ fun WeekAheadPane(
         v.balance?.let { line ->
             item(key = "balance") {
                 Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-balance", modifier = Modifier.animateItem()) { l ->
-                    // Found and fixing A10: "6 h of 8 h" kept whole, so "h" never sits alone on a line.
-                    Text(LoneWordGlue.measured(l), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                    // Found and fixing A10: "6 h of 8 h" kept whole; A13: "family 2 h 45 of 8 h" goes down whole with its label.
+                    Text(LoneWordGlue.listed(l), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
                 }
             }
         }

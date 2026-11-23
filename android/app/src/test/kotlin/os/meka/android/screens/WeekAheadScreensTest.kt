@@ -197,7 +197,11 @@ class WeekAheadScreensTest {
             v.goals.goals.flatMap { listOf(it.title, it.meta) }
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
-        ScreenShots.assertNoDotEndingALine(compose, name, lines)
+        // Walk-through 2026-11-22, A13: the summary and the balance wrap only between their parts, so there a line may end
+        // on its dot; no part ("Alex and Sam off Fri", "family 2 h 45 of 8 h") is ever split.
+        val listed = listOfNotNull(v.summary, v.balance)
+        ScreenShots.assertNoDotEndingALine(compose, name, lines - listed.toSet())
+        ScreenShots.assertPartsWhole(compose, name, listed)
         ScreenShots.assertReadable(compose, name, v.days.flatMap { d -> d.lines.map { it.text } }, mustShow = false)
         // The range under the title reads on one line ("This week · Wed 21 – Sun 25 Oct").
         ScreenShots.assertEachOneLine(compose, name, listOf("${v.title} · ${v.rangeLabel}"))
@@ -215,9 +219,9 @@ class WeekAheadScreensTest {
                 // Nothing on, not even work: the summary says it's a quiet week and no day has an office line.
                 if (v.summary != WeekAheadRules.QUIET) fail("$name: nothing on, but \"${v.summary}\"")
                 v.days.firstOrNull { it.dayLine?.startsWith("Office") == true }?.let { fail("$name: nothing on, but ${it.label} says ${it.dayLine}") }
-                ScreenShots.assertShows(compose, name, LoneWordGlue.measured(v.summary))
+                ScreenShots.assertShows(compose, name, LoneWordGlue.listed(v.summary))
                 // The balance still says what the plan leaves short ("family 0 h of 8 h …"), kept whole at its dots.
-                v.balance?.let { ScreenShots.assertShows(compose, name, LoneWordGlue.measured(it)) }
+                v.balance?.let { ScreenShots.assertShows(compose, name, LoneWordGlue.listed(it)) }
                 if (v.sync.isNotEmpty() || v.goals.goals.isNotEmpty()) fail("$name: nothing on, but a family sync or goals")
             }
             Fill.ONE -> {

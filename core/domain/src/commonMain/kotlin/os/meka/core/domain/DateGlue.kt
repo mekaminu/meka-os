@@ -196,6 +196,37 @@ object LoneWordGlue {
      */
     fun measured(line: String): String = kept(percentsHeld(DurationGlue.kept(line)))
 
+    /** The longest " · " part [listed] holds whole; a longer one wraps inside itself as [measured] lays it. */
+    const val PART_MAX = 28
+
+    /**
+     * A summary line made of " · " parts, each part held whole while it is no longer than [PART_MAX] and its dot held to it,
+     * so the line only wraps between parts (walk-through 2026-11-22, A13: Week ahead's cover read "3 office days · Alex and
+     * Sam off / Fri · 8 events", as if Friday had 8 events, and "Balance with what's planned · family / 2 h 45 of 8 h").
+     * A line with no dot reads as [measured].
+     */
+    fun listed(line: String): String {
+        val parts = DateGlue.plain(line).trimEnd().split(" · ")
+        if (parts.size < 2) return measured(line)
+        return parts.mapIndexed { i, p ->
+            val whole = if (p.length <= PART_MAX) p.replace(' ', NBSP) else measured(p)
+            if (i < parts.lastIndex) whole + NBSP + "·" else whole
+        }.joinToString(" ")
+    }
+
+    /** The ranges in [line] (plain or [listed]) of each part [listed] holds whole, for a screen test that checks none wraps. */
+    fun partRanges(line: String): List<IntRange> {
+        val p = DateGlue.plain(line)
+        if (!p.contains(" · ")) return emptyList()
+        val out = mutableListOf<IntRange>()
+        var at = 0
+        for (part in p.split(" · ")) {
+            if (part.length in 1..PART_MAX) out += at until at + part.length
+            at += part.length + 3
+        }
+        return out
+    }
+
     /** "0% ends", "10% higher": a percentage and the word after it never part ("10% · a drop" stays free). */
     private val PERCENT = Regex("(?<=\\d%) (?=[A-Za-z])")
 

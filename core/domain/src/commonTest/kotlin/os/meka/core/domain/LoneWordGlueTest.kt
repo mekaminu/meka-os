@@ -277,6 +277,24 @@ class LoneWordGlueTest {
     }
 
     @Test
+    fun aSummaryWrapsOnlyBetweenItsParts() {
+        // Walk-through 2026-11-22, A13: "3 office days · Alex and Sam off / Fri · 8 events" read as 8 events on Friday.
+        val s = LoneWordGlue.listed("3 office days · Alex and Sam off Fri · 8 events")
+        assertEquals("3${nb}office${nb}days${nb}· Alex${nb}and${nb}Sam${nb}off${nb}Fri${nb}· 8${nb}events", s)
+        // The balance line's label and its share go down together.
+        assertTrue(LoneWordGlue.listed("Balance with what's planned · family 2 h 45 of 8 h · self 0 h of 2 h")
+            .contains("family${nb}2${nb}h${nb}45${nb}of${nb}8${nb}h${nb}·"))
+        // A part longer than PART_MAX still wraps inside itself, a line with no dot reads as measured, and plain gives the line back.
+        val long = LoneWordGlue.listed("Quarterly planning with the design and engineering leads · 2 events")
+        assertTrue(long.startsWith("Quarterly planning"), long)
+        assertEquals(LoneWordGlue.measured("A quiet week so far"), LoneWordGlue.listed("A quiet week so far"))
+        assertEquals("3 office days · Alex and Sam off Fri · 8 events", DateGlue.plain(s))
+        // The ranges a screen test checks: each held part, none for a line with no dot.
+        assertEquals(listOf(0..12, 16..35, 39..46), LoneWordGlue.partRanges(s))
+        assertEquals(emptyList(), LoneWordGlue.partRanges("A quiet week so far"))
+    }
+
+    @Test
     fun noChipIsLeftAloneOnItsRow() {
         // Three of four fit: two and two, not three and one.
         assertEquals(listOf(2, 2), EvenRows.sizes(listOf(80, 80, 90, 90), 8, 280))
