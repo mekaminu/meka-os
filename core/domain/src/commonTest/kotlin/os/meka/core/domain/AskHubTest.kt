@@ -88,4 +88,18 @@ class AskHubTest {
         assertEquals(SettingsBox.DEVICE, AskHubRules.settingsTarget(HelpPlace.APPEARANCE))
         assertNull(AskHubRules.settingsTarget(HelpPlace.WORK))
     }
+
+    @Test
+    fun foldedLinesOfferWholeNamesLongestFirst() {
+        // Found and fixing week 5, A12: "Bins, Date night, Schoo…" cut mid-word; the app draws the first choice that fits.
+        assertEquals(
+            listOf("Bins, Date night, School", "Bins, Date night, +1 more", "Bins, +2 more"),
+            AskHubRules.setUpPeekFitting(listOf("Bins", "Date night", "School")),
+        )
+        assertEquals(listOf("Vault · Your data", "Vault · +1 more"), AskHubRules.peekFitting(listOf("Vault", "Your data")))
+        assertEquals(listOf("Bins"), AskHubRules.setUpPeekFitting(listOf("Bins")))
+        assertTrue(AskHubRules.peekFitting(emptyList()).isEmpty())
+        // Every choice is whole names: none ends mid-word or with an ellipsis.
+        AskHubRules.peekFitting(SettingsBox.DATA.rows.map { it.name }).forEach { assertTrue(!it.endsWith("…"), it) }
+    }
 }

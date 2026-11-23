@@ -390,7 +390,7 @@ fun AskRoute(
                             SetUpLabel(
                                 os.meka.core.domain.LifeTileRules.setUpLabel(toSetUp.size), setUpOpen,
                                 Modifier.animateItem().appear(rememberAppearance(ShellNav.tileStep(end - start, columns) + 1)),
-                                peek = os.meka.core.domain.AskHubRules.setUpPeek(toSetUp.map { it.label }),
+                                peek = os.meka.core.domain.AskHubRules.setUpPeekFitting(toSetUp.map { it.label }),
                             ) {
                                 setUpChoice = !setUpOpen
                                 AskPrefs.saveSetUpOpen(context, !setUpOpen)
@@ -905,7 +905,7 @@ private fun LazyListScope.tileRows(
  * chevron turns on the expand spring (reduced motion: at once). TalkBack reads it as a button with its state.
  */
 @Composable
-private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, peek: String? = null, toggle: () -> Unit) {
+private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, peek: List<String> = emptyList(), toggle: () -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val turn by animateFloatAsState(if (open) 90f else 0f, MekaMotion.expand(reduced), label = "setup-chevron")
@@ -924,10 +924,8 @@ private fun SetUpLabel(text: String, open: Boolean, modifier: Modifier, peek: St
         Text(text.uppercase(), style = MekaType.sectionLabel, color = askQuietInk(), modifier = Modifier.semantics { heading() })
         Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.rotate(if (reduced) (if (open) 90f else 0f) else turn))
         // The Ask hub: folded, the places' names follow ("Bins, Gifts, Annual leave").
-        if (!open && !peek.isNullOrEmpty()) {
-            Text(peek, style = MekaType.caption, color = askQuietInk(), maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        }
+        // Found and fixing week 5 (A12): whole names that fit, "+N more" past them, never cut mid-word.
+        if (!open && peek.isNotEmpty()) FittingLine(peek, MekaType.caption, askQuietInk(), Modifier.weight(1f))
     }
 }
 

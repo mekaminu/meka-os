@@ -89,8 +89,8 @@ struct AskScreen: View {
                         .accessibilityHidden(true)
                     // The Ask hub: folded, the places' names follow ("Bins, Gifts, Annual leave").
                     if !setUpOpen {
-                        Text(AskHubRules.shared.setUpPeek(names: toSetUp.map(\.label)))
-                            .font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark)).lineLimit(1)
+                        FittingLine(choices: AskHubRules.shared.setUpPeekFitting(names: toSetUp.map(\.label)),
+                                    color: palette.smallInk(dark: scheme == .dark))
                     }
                 }
                 .padding(.top, MekaSpace.xs)
@@ -761,8 +761,8 @@ private struct SettingsBoxView<Row: View>: View {
                         Text(box.title).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
                             .accessibilityAddTraits(.isHeader)
                         if !open {
-                            Text(AskHubRules.shared.peek(labels: rows.map(\.label)))
-                                .font(MekaType.caption).foregroundStyle(palette.smallInk(dark: scheme == .dark)).lineLimit(1)
+                            FittingLine(choices: AskHubRules.shared.peekFitting(labels: rows.map(\.label)),
+                                        color: palette.smallInk(dark: scheme == .dark))
                         }
                     }
                     Spacer()
@@ -824,6 +824,22 @@ enum AskSetUp {
         case open: return KotlinBoolean(bool: true)
         case closed: return KotlinBoolean(bool: false)
         default: return nil
+        }
+    }
+}
+
+/// Found and fixing week 5 (A12): a folded line drawn as the first of `choices` (longest first, whole names only,
+/// from the core's `AskHubRules.fitting`) that fits, so it reads "Bins, Date night, +8 more", never "Bins, Date night, Schoo…".
+struct FittingLine: View {
+    let choices: [String]
+    let color: Color
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            ForEach(Array(choices.enumerated()), id: \.offset) { _, line in
+                Text(line).font(MekaType.caption).foregroundStyle(color).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            }
+            Text(choices.last ?? "").font(MekaType.caption).foregroundStyle(color).lineLimit(1)
         }
     }
 }

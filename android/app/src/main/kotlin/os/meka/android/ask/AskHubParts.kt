@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.semantics.Role
@@ -39,6 +40,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.LightInk
@@ -199,8 +202,7 @@ internal fun SettingsBoxCard(
             Column(Modifier.weight(1f)) {
                 Text(box.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
                 if (!open) {
-                    Text(AskHubRules.peek(rows.map { it.label }), style = MekaType.caption, color = askQuietInk(),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    FittingLine(AskHubRules.peekFitting(rows.map { it.label }), MekaType.caption, askQuietInk())
                 }
             }
             Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
@@ -251,5 +253,21 @@ internal fun SettingRow(
             item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary, setup?.summary),
             ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0, setup?.toDo ?: 0), pane == item,
         ) { open(item) }
+    }
+}
+
+/**
+ * Found and fixing week 5 (A12): one line drawn as the first of [choices] (longest first, whole names only, from
+ * [AskHubRules.fitting]) that fits the room it has, so a folded line reads "Bins, Date night, +8 more", never
+ * "Bins, Date night, Schoo…". The last choice is drawn when nothing fits (cut with … only on a very narrow row).
+ */
+@Composable
+internal fun FittingLine(choices: List<String>, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+    if (choices.isEmpty()) return
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier) {
+        val room = constraints.maxWidth
+        val line = choices.firstOrNull { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width <= room } ?: choices.last()
+        Text(line, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

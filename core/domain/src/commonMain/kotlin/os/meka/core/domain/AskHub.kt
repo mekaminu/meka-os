@@ -73,6 +73,23 @@ object AskHubRules {
     /** Folded "Places to set up · 5" shows their names after it: "Bins, Gifts, Annual leave". */
     fun setUpPeek(names: List<String>): String = names.joinToString(", ")
 
+    /**
+     * Found and fixing week 5 (A12): the folded lines, longest first, for the app to draw the first that fits on one
+     * line: every name, then fewer whole names with "+N more" ("Bins, Date night, +8 more"), so a line is never cut
+     * mid-word ("Bins, Date night, Schoo…"). The last always fits a narrow row: the first name and "+N more".
+     */
+    fun fitting(names: List<String>, separator: String): List<String> {
+        if (names.isEmpty()) return emptyList()
+        val all = names.joinToString(separator)
+        return listOf(all) + (names.size - 1 downTo 1).map { n -> names.take(n).joinToString(separator) + separator + "+${names.size - n} more" }
+    }
+
+    /** [setUpPeek]'s choices, longest first ([fitting]). */
+    fun setUpPeekFitting(names: List<String>): List<String> = fitting(names, ", ")
+
+    /** [peek]'s choices, longest first ([fitting]). */
+    fun peekFitting(labels: List<String>): List<String> = fitting(labels, " · ")
+
     /** The box a setting sits in (null for anything that isn't a setting). */
     fun boxOf(place: HelpPlace): SettingsBox? = SettingsBox.entries.firstOrNull { place in it.rows }
 

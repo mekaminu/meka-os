@@ -126,6 +126,8 @@ class AskScreensTest {
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Ask")
+        // Found and fixing week 5, A12: "Places to set up" folded names whole places, never "Bins, Date night, Schoo…".
+        assertPeeksWhole(name, os.meka.core.domain.AskHubRules.setUpPeekFitting(ShellNav.lifeToSetUp(core.lifeLines.value).map { it.label }), mustDraw = false)
         // The Ask hub: Life · Daily · Settings, Life first.
         os.meka.core.domain.AskHubRules.TABS.forEach { ScreenShots.assertShows(compose, name, it.label) }
         when (fill) {
@@ -219,6 +221,14 @@ class AskScreensTest {
             compose.mainClock.advanceTimeBy(100)
         }
         turns(settle)
+    }
+
+    /** The folded line drawn is one of [choices], whole and not cut with … (fails if none of them is drawn). */
+    private fun assertPeeksWhole(name: String, choices: List<String>, mustDraw: Boolean = true) {
+        if (choices.isEmpty()) return
+        val drawn = ScreenShots.texts(compose).filter { it in choices }
+        if (mustDraw && drawn.isEmpty()) fail("$name: no folded line drawn as whole names; expected one of $choices")
+        ScreenShots.assertNotEllipsized(compose, name, choices)
     }
 
     private fun shows(m: SemanticsMatcher) = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
@@ -445,6 +455,10 @@ class AskScreensTest {
         val you = ShellNav.settingsRows(os.meka.core.domain.SettingsBox.YOU, connected = true)
         settled(name, "Settings", gone = hasText(firstDaily.label) and hasClickAction(), here = hasText(you.first().label) and hasClickAction())
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", "cover-dark-settings-by-hand"))
+        // Found and fixing week 5, A12: a folded box's line names whole rows ("Vault · Your data · +4 more"), never "… H…".
+        assertPeeksWhole(name, os.meka.core.domain.AskHubRules.BOXES.flatMap { b ->
+            os.meka.core.domain.AskHubRules.peekFitting(ShellNav.settingsRows(b, connected = true).map { it.label })
+        })
         assertTouchTargets(name)
         // Every row's own pane is checked by SettingsScreensTest; here the first one opens over Ask and Close drops it.
         you.forEach { reach(name, hasText(it.label), "${it.label} in ${os.meka.core.domain.SettingsBox.YOU.title}") }

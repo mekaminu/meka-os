@@ -7342,3 +7342,10 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - Core: `RoutineRules.shortSummary` (Routines.kt) drops leading show/open/check/remind me about, my/the/our and a trailing "for the week", lower-cases after the first part, and keeps the line within `SUMMARY_MAX` (40) by ending "+N more"; `Routines.addFromSentence` writes it, and `RoutineRules.items` reads a summary saved as the steps' full titles back as the short one (one he typed stays).
 - Tests: RoutineSentenceTest (the saved summary, `shortSummaryNeverRunsPastTheRow`, `aSummarySavedInFullReadsBackShort`); RoutinesScreensTest.newRoutine checks the saved row's line and `assertNotEllipsized` on every row line.
 - Both apps through the shared core; Mac checked nightly. Not changed: the same SUN 19:00 slot as Sunday reset (Sunday evening is Sunday reset in his words, so the starter isn't offered beside it).
+
+### Found and fixing, week 5 — slice 39 (2026-11-23): A12's Ask folded lines
+- g5a 7: "PLACES TO SET UP · 10 › Bins, Date night, Schoo…" (`ask/cover-dark-many.png`, `cover-light-many.png`, `cover-dark-tiles-by-hand.png`) and Settings' folded boxes "Obi's voice · Talk · Speaking up · What Navilif…", "Vault · Your data · Recovery key · Activity · H…" (`ask/cover-dark-settings-by-hand.png`) were cut mid-word with nothing to expand.
+- Core: `AskHubRules.fitting` (AskHub.kt) gives the line's choices longest first, every name then fewer whole names with "+N more"; `setUpPeekFitting` (", ") and `peekFitting` (" · ").
+- Fold: `FittingLine` (AskHubParts.kt) measures each choice and draws the first that fits its room; used by Places to set up's peek and each folded Settings box. Mac: `FittingLine` (AskScreen.swift) does the same with `ViewThatFits`.
+- Tests: AskHubTest.foldedLinesOfferWholeNamesLongestFirst; AskScreensTest's shots and settings-by-hand check the drawn peek is one of the choices and `assertNotEllipsized`.
+- Fold and Mac; Mac checked nightly.
