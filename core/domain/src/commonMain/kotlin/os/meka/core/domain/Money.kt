@@ -827,7 +827,8 @@ object MoneyRules {
         ) else null
         // Found and fixing week 5, A13: a row whose payment this month is due again before payday says so, beside Bills to come.
         val dueAgain = paydayView?.takeIf { it.notReady == null }?.regularDue.orEmpty()
-        if (dueAgain.isNotEmpty()) spendCats.replaceAll { sc ->
+        // An index loop, not replaceAll: Kotlin/Native's MutableList.replaceAll needs ExperimentalNativeApi (nightly Mac 2026-11-23).
+        if (dueAgain.isNotEmpty()) for (i in spendCats.indices) spendCats[i] = spendCats[i].let { sc ->
             val again = cur.filter { it.pence < 0 && shownKey(it) == sc.key }.groupBy { keyOf(it) }
                 .mapNotNull { (k, ts) -> dueAgain[k]?.let { next -> ts.maxOf { it.day } to next } }
                 .filter { (paid, next) -> next > paid }.sortedBy { it.second }
