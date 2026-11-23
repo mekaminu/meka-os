@@ -99,6 +99,13 @@ struct AskScreen: View {
             .buttonStyle(.plain)
             .accessibilityValue(setUpOpen ? "Open" : "Closed")
             .staggeredAppear(ShellNav.tileStep(ShellNav.lifeLive(model.lifeLines).count) + 1)
+            // Walk-through 2026-11-22 A13: the first run's line sits under the label, over the tiles it means, never
+            // over the live grid (where "The rest aren't set up yet" read over Lists "1 to buy").
+            if setUpOpen, let welcome = LifeTileRules.shared.welcome(lines: lines) {
+                Text(LifeTileRules.shared.shown(text: welcome)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .padding(.bottom, MekaSpace.xxs)
+                    .staggeredAppear(ShellNav.tileStep(ShellNav.lifeLive(model.lifeLines).count) + 1)
+            }
             if setUpOpen {
                 tileGrid(toSetUp, first: 0)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
@@ -131,12 +138,6 @@ struct AskScreen: View {
     @ViewBuilder
     private func lifePage() -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            // Ask polish, slice 1: on the first run one welcome line; tiles still to set up sink under "To set up".
-            if let lines = model.lifeLines, let welcome = LifeTileRules.shared.welcome(lines: lines) {
-                Text(LifeTileRules.shared.shown(text: welcome)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .padding(.bottom, MekaSpace.xxs)
-                    .staggeredAppear(ShellNav.tileStep(0))
-            }
             let live = ShellNav.lifeLive(model.lifeLines)
             let count = Int32(live.count)
             let start = Int(AskHubRules.shared.pageStart(page: Int32(lifePageAsked), count: count, columns: 2))

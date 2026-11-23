@@ -151,8 +151,9 @@ class LifeTilesTest {
         // Walk-through 2026-11-15 A9: never "Nothing set up yet" over Lists "1 to buy" or a countdown to Christmas.
         val listed = LifeTileRules.lines(LifeTileInputs(toBuy = 1, countdownLine = LifeTileLine("Christmas in 65 days", false)))
         assertEquals(listOf(LifeTile.LISTS, LifeTile.COUNTDOWNS), LifeTileRules.filled(listed))
-        assertEquals(LifeTileRules.WELCOME_REST, LifeTileRules.welcome(listed))
-        assertTrue("Nothing" !in LifeTileRules.welcome(listed)!!)
+        assertEquals(LifeTileRules.WELCOME, LifeTileRules.welcome(listed))
+        // Walk-through 2026-11-22 A13: it sits under "Places to set up", so it never repeats that it isn't set up.
+        LifeTileRules.WELCOME_NEVER.forEach { assertTrue(it !in LifeTileRules.WELCOME, it) }
         assertTrue(LifeTileRules.setUpOpen(null, listed))
         assertEquals(emptyList(), LifeTileRules.filled(empty))
     }

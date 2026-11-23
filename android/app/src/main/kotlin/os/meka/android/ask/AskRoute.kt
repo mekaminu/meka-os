@@ -368,13 +368,6 @@ fun AskRoute(
                     // first; a row keyed by its tiles glides to its new place. Tiles still to set up fold under them.
                     val live = ShellNav.lifeLive(lifeLines)
                     val toSetUp = ShellNav.lifeToSetUp(lifeLines)
-                    val welcome = os.meka.core.domain.LifeTileRules.welcome(lifeLines)
-                    if (welcome != null) {
-                        item(key = "life-welcome") {
-                            Text(os.meka.core.domain.LifeTileRules.shown(welcome), style = MekaType.caption, color = Meka.colors.textSecondary,
-                                modifier = Modifier.padding(bottom = MekaSpace.xxs).animateItem().appear(rememberAppearance(ShellNav.tileStep(0))))
-                        }
-                    }
                     val start = os.meka.core.domain.AskHubRules.pageStart(lifePage, live.size, columns)
                     val end = os.meka.core.domain.AskHubRules.pageEnd(lifePage, live.size, columns)
                     tileRows(live.subList(start, end), columns, "tiles", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
@@ -389,11 +382,21 @@ fun AskRoute(
                         item(key = "label-setup") {
                             SetUpLabel(
                                 os.meka.core.domain.LifeTileRules.setUpLabel(toSetUp.size), setUpOpen,
-                                Modifier.animateItem().appear(rememberAppearance(ShellNav.tileStep(end - start, columns) + 1)),
+                                Modifier.testTag(SET_UP_LABEL_TAG).animateItem().appear(rememberAppearance(ShellNav.tileStep(end - start, columns) + 1)),
                                 peek = os.meka.core.domain.AskHubRules.setUpPeekFitting(toSetUp.map { it.label }),
                             ) {
                                 setUpChoice = !setUpOpen
                                 AskPrefs.saveSetUpOpen(context, !setUpOpen)
+                            }
+                        }
+                        // Walk-through 2026-11-22 A13: the first run's line sits under the label, over the tiles it means,
+                        // never over the live grid (where "The rest aren't set up yet" read over Lists "1 to buy").
+                        val welcome = os.meka.core.domain.LifeTileRules.welcome(lifeLines)
+                        if (setUpOpen && welcome != null) {
+                            item(key = "life-welcome") {
+                                Text(os.meka.core.domain.LifeTileRules.shown(welcome), style = MekaType.caption, color = Meka.colors.textSecondary,
+                                    modifier = Modifier.testTag(LIFE_WELCOME_TAG).padding(bottom = MekaSpace.xxs).animateItem()
+                                        .appear(rememberAppearance(ShellNav.tileStep(end - start, columns) + 1)))
                             }
                         }
                         if (setUpOpen) tileRows(toSetUp, columns, "setup", lifeLines, pane, step = { ShellNav.tileStep(it, columns) }) { open(it) }
@@ -593,6 +596,8 @@ internal fun MoreRow(
 
 /** Ask's own list, for the hand tests' bounded scrolls (quality gate (3)). */
 const val ASK_LIST_TAG = "ask-list"
+internal const val SET_UP_LABEL_TAG = "life-setup-label"
+internal const val LIFE_WELCOME_TAG = "life-welcome"
 
 /** The box round a Life tile's icon, so the quality gate's shots can check it sits on the name's first line. */
 internal const val TILE_ICON_TAG = "life-tile-icon"

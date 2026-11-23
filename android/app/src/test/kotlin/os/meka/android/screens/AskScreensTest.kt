@@ -21,6 +21,9 @@ import os.meka.android.ask.ASK_FIELD_TAG
 import os.meka.android.ask.ASK_LIST_TAG
 import os.meka.android.ask.ASK_MATCH_TAG
 import os.meka.android.ask.ASK_MIC_TAG
+import os.meka.android.ask.LIFE_WELCOME_TAG
+import os.meka.android.ask.SET_UP_LABEL_TAG
+import androidx.compose.ui.test.performScrollToKey
 import os.meka.android.shell.OpenItem
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.ShellDestination
@@ -131,18 +134,13 @@ class AskScreensTest {
         // The Ask hub: Life · Daily · Settings, Life first.
         os.meka.core.domain.AskHubRules.TABS.forEach { ScreenShots.assertShows(compose, name, it.label) }
         when (fill) {
-            // Nothing set up: one line says so over the open set-up group, never an empty grid.
-            // Walk-through 2026-11-15 A9: the countdown to Christmas is there from the start, so the line names the rest
-            // and never says "Nothing set up yet" over a tile with something in it.
-            Fill.EMPTY -> {
-                val counting = ScreenShots.texts(compose).any { "Christmas" in it }
-                ScreenShots.assertShows(compose, name, if (counting) LifeTileRules.WELCOME_REST else LifeTileRules.WELCOME)
-                if (counting && ScreenShots.texts(compose).any { LifeTileRules.WELCOME in it }) fail("$name: \"${LifeTileRules.WELCOME}\" over a countdown")
-            }
+            // Nothing set up: one line over the open set-up group, never an empty grid.
+            // Walk-through 2026-11-22 A13: the line sits under "Places to set up", never over the live grid's Lists
+            // "1 to buy" or the countdown to Christmas, and never repeats that the places aren't set up.
+            Fill.EMPTY -> assertWelcomeUnderLabel(name)
             Fill.ONE -> {
                 ScreenShots.assertShows(compose, name, "1 to buy")
-                ScreenShots.assertShows(compose, name, LifeTileRules.WELCOME_REST)
-                if (ScreenShots.texts(compose).any { LifeTileRules.WELCOME in it }) fail("$name: \"${LifeTileRules.WELCOME}\" over \"1 to buy\"")
+                assertWelcomeUnderLabel(name)
             }
             Fill.MANY -> {
                 ScreenShots.assertShows(compose, name, "3 to buy")
@@ -221,6 +219,25 @@ class AskScreensTest {
             compose.mainClock.advanceTimeBy(100)
         }
         turns(settle)
+    }
+
+    /**
+     * Walk-through 2026-11-22 A13: the first run's line is drawn under the open "Places to set up" label (so it is about
+     * the set-up tiles, not the live grid above), and never repeats that the places aren't set up.
+     */
+    private fun assertWelcomeUnderLabel(name: String) {
+        ScreenShots.texts(compose).forEach { t ->
+            LifeTileRules.WELCOME_NEVER.forEach { w -> if (w in t) fail("$name: \"$t\" says \"$w\" (the label already does)") }
+        }
+        if (compose.onAllNodes(hasTestTag(LIFE_WELCOME_TAG), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            compose.onNodeWithTag(ASK_LIST_TAG).performScrollToKey("life-welcome")
+            compose.mainClock.advanceTimeBy(SETTLE_MS)
+            compose.waitForIdle()
+        }
+        val welcome = compose.onNodeWithTag(LIFE_WELCOME_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val label = compose.onNodeWithTag(SET_UP_LABEL_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        if (welcome.top < label.bottom - 0.5f) fail("$name: the welcome (top ${welcome.top}) isn't under \"Places to set up\" (bottom ${label.bottom})")
+        ScreenShots.assertShows(compose, name, LifeTileRules.WELCOME)
     }
 
     /** The folded line drawn is one of [choices], whole and not cut with … (fails if none of them is drawn). */

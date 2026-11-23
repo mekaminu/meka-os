@@ -149,24 +149,23 @@ object LifeTileRules {
      */
     fun setUpLabel(count: Int): String = "Places to set up · $count"
 
-    /** First run (nothing at all set up): one line over the open set-up group, not an empty grid. */
-    const val WELCOME = "Nothing set up yet · pick one to start; each takes a minute"
-
     /**
-     * The same first run with something already in a place (Lists "1 to buy", a countdown to Christmas): the line names
-     * the rest, so it never says "Nothing set up yet" over tiles that have something (walk-through 2026-11-15, A9).
+     * First run (nothing at all set up): one line under the open "Places to set up" label, over the set-up tiles it
+     * means, never over the live grid. Walk-through 2026-11-22 A13 (A9 reworded, still there): "The rest aren't set up
+     * yet" sat above Lists "1 to buy", Countdowns and Trips, so it labelled the wrong group and repeated the label below
+     * it. Drawn under the label it needs no "not set up" of its own: it only says what to do.
      */
-    const val WELCOME_REST = "The rest aren't set up yet · pick one to start; each takes a minute"
+    const val WELCOME = "Pick one to start · each takes a minute"
 
     /** The tiles with something real in them: not waiting to be set up and not on their empty prompt. */
     fun filled(lines: LifeLines): List<LifeTile> =
         ORDER.filter { !lines.needsSetUp(it) && lines.of(it).let { l -> l != null && l.text != prompt(it) } }
 
-    fun welcome(lines: LifeLines): String? = when {
-        !lines.toSetUp.containsAll(SET_UP_TILES) -> null
-        filled(lines).isEmpty() -> WELCOME
-        else -> WELCOME_REST
-    }
+    /** The first run's line, or null once any place has been set up; drawn only while "Places to set up" is open. */
+    fun welcome(lines: LifeLines): String? = if (lines.toSetUp.containsAll(SET_UP_TILES)) WELCOME else null
+
+    /** Words the welcome never uses: the label over it already says the places aren't set up. */
+    val WELCOME_NEVER: List<String> = listOf("Nothing set up", "aren't set up", "not set up")
 
     /**
      * Whether "To set up" is open: what he chose on this device ([stored], remembered per device), else open on the

@@ -102,10 +102,12 @@ final class ShellNavTests: XCTestCase {
         XCTAssertTrue(ShellNav.lifeToSetUp(lines).contains(.bins))
         XCTAssertFalse(ShellNav.lifeLive(lines).contains(.bins))
         XCTAssertEqual(Set(ShellNav.lifeLive(lines) + ShellNav.lifeToSetUp(lines)), Set(ShellNav.lifeTiles()))
-        // Walk-through 2026-11-15 A9: nothing to set up done, but Lists has something: the welcome names the rest.
+        // Walk-through 2026-11-22 A13: nothing set up but Lists has something: one line, drawn under "Places to set up",
+        // that never repeats the places aren't set up.
         let listed = LifeLines(lines: [LifeTile.lists: LifeTileLine(text: "1 to buy", lit: false)],
                                toSetUp: LifeTileRules.shared.SET_UP_TILES)
-        XCTAssertEqual(LifeTileRules.shared.welcome(lines: listed), LifeTileRules.shared.WELCOME_REST)
+        XCTAssertEqual(LifeTileRules.shared.welcome(lines: listed), LifeTileRules.shared.WELCOME)
+        for w in LifeTileRules.shared.WELCOME_NEVER { XCTAssertFalse(LifeTileRules.shared.WELCOME.contains(w)) }
         XCTAssertNil(AskSetUp.stored(""))
         XCTAssertEqual(AskSetUp.stored(AskSetUp.open)?.boolValue, true)
     }

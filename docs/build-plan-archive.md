@@ -7388,3 +7388,9 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - Core `LoneWordGlue.listed(line)`: each " · " part of up to `PART_MAX` (28) letters has no-break spaces and its dot held to it, so a line wraps only between parts (a longer part wraps inside itself as `measured`); `partRanges(line)` gives the held parts for a screen test.
 - Android `WeekAheadPane` and Mac `WeekAheadSheet` draw the summary and the balance through `listed`.
 - Tests: `LoneWordGlueTest.aSummaryWrapsOnlyBetweenItsParts`; new `ScreenShots.assertPartsWhole` on every Week ahead shot (those two lines may end on their dot, so they're out of `assertNoDotEndingALine`).
+
+### Found and fixing, week 5 — slice 46 (2026-11-23): A13's Ask welcome under its label
+- Ask → Life read "The rest aren't set up yet · pick one to start; each takes a minute" directly above Lists "1 to buy", Countdowns "Christmas in 65 days", Trips, Errands and People, and only then "PLACES TO SET UP · 13" (g5a 2; A9 reworded but still there): the line labelled the live grid and repeated the label below it.
+- Core `LifeTileRules.WELCOME` is now "Pick one to start · each takes a minute" for every first run (`WELCOME_REST` removed; `welcome` is the line while no set-up place has anything); `WELCOME_NEVER` lists the words it never uses ("Nothing set up", "aren't set up", "not set up").
+- Android `AskRoute` draws it as the item after the "Places to set up" label, only while the group is open (tags `SET_UP_LABEL_TAG`, `LIFE_WELCOME_TAG`); the Mac's `setUpSection` draws it under the label the same way. Closing the group hides it with the tiles.
+- Tests: `LifeTilesTest.firstRunOpensTheSetUpGroupWithAWelcome`; Android `AskScreensTest` empty and one shots: `assertWelcomeUnderLabel` (its top below the label's bottom; no "not set up" anywhere on Life); Mac `ShellNavTests`. No server change, no migration, Mac checked nightly.
