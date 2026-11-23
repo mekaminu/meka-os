@@ -310,6 +310,13 @@ class KeptPlacesScreensTest {
                 if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, LifePageRules.shown(it)) }
                 if (fill == Fill.EMPTY && v.summary != FactRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.count != 6) fail("$name: ${v.count} facts for six")
+                // A13 (walk-through 2026-11-22): "kept" means one thing here, kept from the AI; "7 facts kept" (stored) sat
+                // beside "2 kept from AI" and a row's bare "Kept". Every number, the summary and each row's tag say it whole.
+                val words = page.tiles.map { it.label } + v.summary.split(" · ") + page.cards.flatMap { c -> c.rows.map { it.whenText } }
+                words.filter { Regex("\\bkept\\b", RegexOption.IGNORE_CASE).containsMatchIn(it) && !it.contains("kept from AI", ignoreCase = true) }
+                    .takeIf { it.isNotEmpty() }?.let { fail("$name: \"kept\" that doesn't mean kept from the AI: $it") }
+                if (fill == Fill.MANY && v.groups.flatMap { it.rows }.none { it.keptFromAi }) fail("$name: no fact kept from the AI to check")
+                ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.map { it.whenText } }.filter { it.isNotEmpty() }, mustShow = false)
                 // A14 (walk-through 2026-11-15): the boiler's fact is cut by the row's width, so the open Fold shows it whole.
                 if (fill == Fill.MANY) {
                     val lines = page.cards.flatMap { c -> c.rows.map { it.line } }

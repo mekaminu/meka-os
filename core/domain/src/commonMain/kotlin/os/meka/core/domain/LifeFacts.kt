@@ -80,7 +80,7 @@ data class FactGroupView(val group: String, val label: String, val rows: List<Fa
 data class FactsView(
     /** Only groups with facts, in [FactGroup] order. */
     val groups: List<FactGroupView>,
-    /** "12 facts · MEKA answers from 11 · 1 kept from AI", or how to start. */
+    /** "12 facts · Obi can use 11 · 1 kept from AI", or how to start. */
     val summary: String,
     val count: Int,
 ) {
@@ -109,7 +109,7 @@ object FactRules {
     const val REFUSED_BANK = "Navilife keeps card and bank numbers and sort codes off this page. Keep the bank's name instead: “Bank: Monzo”."
     const val REFUSED_ID = "Navilife doesn't keep passport, National Insurance, driving licence or NHS numbers. Write where the document is: “Passports: study desk, top drawer”."
     const val FULL = "The page is full. Remove a fact first."
-    const val NOTE = "Kept in your own Navilife data only. Navilife's AI sees a fact only when a question needs it, never one kept from AI. Passwords and card, bank or ID numbers never go here."
+    const val NOTE = "Stored in your own Navilife data only. Navilife's AI sees a fact only when a question needs it, never one kept from AI. Passwords and card, bank or ID numbers never go here."
     const val KEPT_LINE = "Kept from AI"
     /** After "Added Spare key to Home and utilities" when + Add kept it from the AI ("ai" was lowercased, A22). */
     const val ADDED_KEPT = "kept from AI"
@@ -225,7 +225,11 @@ object FactRules {
         val kept = facts.count { it.aiOff }
         val summary = listOfNotNull(
             if (n == 1) "1 fact" else "$n facts",
-            if (kept == 0) "Navilife answers from them" else "Navilife answers from ${n - kept}",
+            // The tiles' own words (A13, 2026-11-22): "Obi can use", never "Navilife answers from" beside it.
+            when {
+                kept == 0 -> if (n == 1) "Obi can use it" else "Obi can use them"
+                else -> "Obi can use ${n - kept}"
+            },
             "$kept kept from AI".takeIf { kept > 0 },
         ).joinToString(" · ")
         return FactsView(groups, summary, n)

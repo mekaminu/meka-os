@@ -4,7 +4,8 @@ package os.meka.core.domain
  * Ask → What Navilife knows in the page shape (every page under Ask in one shape, slice 13; approved 2026-11-11,
  * `docs/design/look/LifePage.dc.html`): the title with its ⓘ (what the page is for, that it stays in his own data, and
  * that passwords and card, bank or ID numbers are turned away), one gold + Add (A fact · A fact kept from the AI, each
- * a field: "Car reg: AB12 CDE"), three numbers (facts kept, how many Obi can use, how many kept from the AI), then one
+ * a field: "Car reg: AB12 CDE"), three numbers (how many facts, how many Obi can use, how many kept from the AI; "kept" only ever means kept from
+ * the AI here, A13 walk-through 2026-11-22), then one
  * card a group — Sizes, Health and care, Car, Home and utilities, Family and school, Other — each at most five rows
  * with See all. A fact's row opens its sheet with the fact whole, a field to change it, Copy, Keep from AI (or Let
  * Navilife use it) and Remove. Built from the [FactsView] both apps already have; nothing new is read or sent, and the
@@ -12,13 +13,13 @@ package os.meka.core.domain
  */
 object FactsPageRules {
     const val TITLE = "What Navilife knows"
-    const val INFO = "The things you look up, kept in one place: the car's reg, the GP, shoe sizes, the energy supplier. Obi answers from them, and a fact kept from the AI is never sent with a question. Kept in your own Navilife data only; passwords, PINs and card, bank or ID numbers are turned away."
+    const val INFO = "The things you look up, in one place: the car's reg, the GP, shoe sizes, the energy supplier. Obi answers from them, and a fact kept from the AI is never sent with a question. Stored in your own Navilife data only; passwords, PINs and card, bank or ID numbers are turned away."
     const val ADD_TITLE = "Add to what Navilife knows"
     const val GONE = "That fact isn't on the page now"
     /** The row sheet's field. */
     const val CHANGE_HINT = "The new fact, e.g. AB12 CDE"
-    /** A row's right-hand word while the AI never sees it (the sheet says it in full). */
-    const val KEPT_SHORT = "Kept"
+    /** A row's right-hand words while the AI never sees it: "Kept from AI", never a bare "Kept" that reads as stored. */
+    const val KEPT_SHORT = FactRules.KEPT_LINE
     /** The one card while nothing is on the page yet. */
     const val ALL = "all"
     const val ALL_TITLE = "Your facts"
@@ -67,7 +68,7 @@ object FactsPageRules {
         val rows = view.groups.flatMap { it.rows }
         val kept = rows.count { it.keptFromAi }
         val tiles = listOf(
-            tile(rows.size, "fact kept", "facts kept", "facts yet"),
+            tile(rows.size, "fact", "facts", "facts yet"),
             tile(rows.size - kept, "Obi can use", "Obi can use", "for Obi yet"),
             tile(kept, "kept from AI", "kept from AI", "kept from AI"),
         )

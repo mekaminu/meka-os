@@ -24,8 +24,22 @@ class FactsPageTest {
         val p = FactsPageRules.page(FactRules.view(some))
         assertEquals(FactsPageRules.TITLE, p.title)
         assertEquals(listOf("4", "3", "1"), p.tiles.map { it.number })
-        assertEquals(listOf("facts kept", "Obi can use", "kept from AI"), p.tiles.map { it.label })
+        assertEquals(listOf("facts", "Obi can use", "kept from AI"), p.tiles.map { it.label })
         assertTrue(p.tiles.none { it.lit })
+    }
+
+    /** A13 (walk-through 2026-11-22): "kept" only ever means kept from the AI; "4 facts kept" meant stored. */
+    @Test
+    fun keptOnlyEverMeansKeptFromTheAi() {
+        val v = FactRules.view(some)
+        val p = FactsPageRules.page(v)
+        assertEquals("4 facts · Obi can use 3 · 1 kept from AI", v.summary)
+        assertEquals("Kept from AI", p.cards.last().rows.last().whenText)
+        val words = p.tiles.map { it.label } + v.summary.split(" · ") + p.cards.flatMap { c -> c.rows.map { it.whenText } } + p.info
+        words.forEach { w ->
+            Regex("\\bkept\\b(?! from (the )?AI)", RegexOption.IGNORE_CASE).find(w)?.let { throw AssertionError("\"kept\" meaning stored: $w") }
+        }
+        assertEquals("1 fact · Obi can use it", FactRules.view(some.take(1)).summary)
     }
 
     @Test

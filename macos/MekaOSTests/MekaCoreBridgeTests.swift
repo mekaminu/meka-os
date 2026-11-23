@@ -2966,7 +2966,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(FactAskRules.shared.askLines(facts: [fact], question: "what's the car's reg?"),
                        ["Facts · 1 kept · all below", "Fact · Car · Car reg: AB12 CDE"])
         let view = rules.view(facts: [fact])
-        XCTAssertEqual(view.summary, "1 fact · Navilife answers from them")
+        XCTAssertEqual(view.summary, "1 fact · Obi can use it")
         XCTAssertEqual(view.groups.map(\.label), ["Car"])
         XCTAssertEqual(view.groups.first?.rows.first?.aiButton, rules.KEEP_BUTTON)
         XCTAssertEqual(FactsView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)

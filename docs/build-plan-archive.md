@@ -7405,3 +7405,8 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - Core `BalanceRules.unclear`: a title seen more than once says how many events it is, "2 events · Mon, Thu · 2 h", so the rows add up to the line above them; both apps draw the line from the core.
 - The by-hand shot's fixture now counts Choir as Self with the line it shows, so Choir leaves the list and the not-counted line drops; the test fails if a counted title is still listed or the line doesn't move.
 - Tests: `BalanceTest.aTitleSeenTwiceSaysHowManyEventsItIs`; Android `ReviewBalanceReflectScreensTest.byHand`. No server change, no migration, Mac checked nightly.
+
+### Found and fixing, week 5 — slice 50 (2026-11-23): A13's Facts "Kept"
+- What Navilife knows said "7 facts kept" (stored) beside "2 kept from AI" and a row's bare "Kept" (hidden from the AI); the summary said "Navilife answers from 5" beside the tile "5 Obi can use" (g6c 9).
+- Core `FactsPageRules`: the first tile is "facts"; a row's tag is `FactRules.KEPT_LINE`, "Kept from AI"; the ⓘ says "in one place" and "Stored in your own Navilife data". `FactRules.view`'s summary uses the tiles' words: "7 facts · Obi can use 5 · 2 kept from AI" ("Obi can use them", or "it" for one). `FactRules.NOTE` says "Stored". Help (docs/help/facts.md) regenerated.
+- Tests: `FactsPageTest.keptOnlyEverMeansKeptFromTheAi`; `LifeFactsTest`, `AskMekaFacadeTest`, Mac `MekaCoreBridgeTests` updated; Android `KeptPlacesScreensTest`'s Facts shots fail on any "kept" that isn't "kept from AI" and check the row tags aren't cut. Both apps through the shared core; no server change, no migration, Mac checked nightly.

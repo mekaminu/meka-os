@@ -56,7 +56,7 @@ const val FACTS_ALL_SHEET_TAG = "facts-all-sheet"
 /**
  * Ask → What Navilife knows in the page shape (every page under Ask in one shape, slice 13; approved 2026-11-11,
  * `docs/design/look/LifePage.dc.html`): the title with its ⓘ, one gold + Add (A fact · A fact kept from the AI, each a
- * field: "Car reg: AB12 CDE"), three numbers (facts kept, how many Obi can use, how many kept from the AI), then one
+ * field: "Car reg: AB12 CDE"), three numbers (how many facts, how many Obi can use, how many kept from the AI), then one
  * card a group (Sizes, Health and care, Car, Home and utilities, Family and school, Other; five rows each, See all for
  * the rest). A fact's row opens its sheet with the fact whole, a field to change it, Copy (the fact alone on the
  * clipboard), Keep from AI / Let Navilife use it and Remove. A line holding a password, PIN or card, bank or ID number

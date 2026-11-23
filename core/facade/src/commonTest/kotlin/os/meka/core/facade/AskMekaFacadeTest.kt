@@ -877,7 +877,7 @@ class AskMekaFacadeTest {
         now += 1_000
         assertEquals("Added GP to Health and care", c.addFact("GP: Dr Patel, Ivel Medical Centre").line)
         assertTrue(c.addFact("Bank card: 4111 1111 1111 1111").refused)
-        assertEquals("3 facts · Navilife answers from them", c.factsView.value.summary)
+        assertEquals("3 facts · Obi can use them", c.factsView.value.summary)
 
         assertIs<AskOutcome.Answered>(c.askMeka("What's the car's reg?"))
         val ctx = server.asked.last().second
@@ -890,7 +890,7 @@ class AskMekaFacadeTest {
         // Kept from AI: still on the page, never sent.
         val car = c.factsView.value.groups.first { it.group == "car" }.rows.single()
         assertTrue(c.setFactAi(car.id, use = false))
-        assertEquals("3 facts · Navilife answers from 2 · 1 kept from AI", c.factsView.value.summary)
+        assertEquals("3 facts · Obi can use 2 · 1 kept from AI", c.factsView.value.summary)
         assertIs<AskOutcome.Answered>(c.askMeka("What do you know about me?"))
         assertEquals(
             listOf("Facts · 2 kept · all below", "Fact · Sizes · Shoe size: 10", "Fact · Health and care · GP: Dr Patel, Ivel Medical Centre"),
