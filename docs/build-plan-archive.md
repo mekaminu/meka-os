@@ -7279,3 +7279,18 @@ by-hand is shot after the scam's row is opened, with Junk it & block, Move to Tr
 shot after Move to Trash, while its 5 s bar ("Moving Invest Co's email to Trash · kept there 30 days · Undo brings it
 back") is up, and fails if "1 possible scam to check" still heads the box. Test only, Fold, no app change.
 - Still open in A11: the other identical pairs the walk-through lists.
+
+### Found and fixing, week 5 — slice 31 (2026-11-23): A11's by-hand pairs and a guard for identical shots
+The screens branch (ci run 2167) was md5-checked area by area: mail one/many, Speaking up's empty/one/many and
+Protected's by-hand were already apart (the 2026-11-22 shootBelow fix for zero-height edge lines let their tops drop),
+but Vault, Train queue and Life admin by hand were still byte for byte One, and Watch by hand was Empty: each test shot
+its opening state and never again. Now each reshoots with `ScreenShots.reshootAfterHand` (which fails on a copy of the
+opening or any other shot in the area) once the hand has done something to see: Vault with the Railcard added and its
+row open on Add a copy and Remove; Train queue with the pasted link moved to Done lately; Watch with the watch linked by
+hand, which the stand-in server now names "Galaxy Watch7" (One's is the default "Galaxy Watch" linked earlier today, so
+the two would otherwise draw alike); Life admin with the hour moved to Sunday and this week skipped, Keep it on screen.
+New `tools/check-shot-copies.py` (CI step after the Android tests, with a self-test) fails on any byte-identical pair
+inside one area of `android/app/build/outputs/roborazzi`, except the pairs still to fix listed in KNOWN (Review's
+wins/balance-foot/reflect, Calendars' on-today, Money's accounts layout/list and worth-other-row); a KNOWN pair whose
+files now differ also fails, so the list only shrinks. Test only, Fold, no app change.
+- Still open in A11: the KNOWN pairs.

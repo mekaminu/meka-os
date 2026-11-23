@@ -203,6 +203,9 @@ class VaultScreensTest {
         until { compose.onAllNodes(remove).fetchSemanticsNodes().isNotEmpty() }
         if (compose.onAllNodes(remove).fetchSemanticsNodes().isEmpty()) fail("$name: opening the row showed no Remove")
         assertTouchTargets(name)
+        // Week 5 A11: the by-hand shot shows what the hand did (the Railcard added and opened on Add a copy and Remove),
+        // not the one-document state again.
+        ScreenShots.reshootAfterHand(compose, Place.VAULT.area, "cover-dark-by-hand")
         compose.onAllNodes(remove)[0].performSemanticsAction(SemanticsActions.OnClick)
         until { core.documentsView.value.rows.none { it.id == row.id } }
         if (core.documentsView.value.rows.any { it.id == row.id }) fail("$name: Remove left the Railcard")

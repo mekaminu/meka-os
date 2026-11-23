@@ -230,6 +230,8 @@ class TrainQueueScreensTest {
         until { core.queueView.value.done.any { it.id == top.id } }
         if (core.queueView.value.done.none { it.id == top.id }) fail("$name: Done left \"${top.title}\" waiting")
         ScreenShots.assertShows(compose, name, "DONE LATELY")
+        // Week 5 A11: the by-hand shot shows what the hand did (the pasted link saved, then done), not the one state again.
+        ScreenShots.reshootAfterHand(compose, "train-queue", "cover-dark-by-hand")
 
         tap("Back: ${top.title}")
         until { core.queueView.value.waiting.any { it.id == top.id } }

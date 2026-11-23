@@ -76,7 +76,10 @@ class WatchHealthScreensTest {
     private val minute = 60_000L
     private val day = 24 * 60 * minute
 
-    private companion object { const val SETTLE_MS = 3_000L }
+    private companion object {
+        const val SETTLE_MS = 3_000L
+        const val LINKED_BY_HAND = "Galaxy Watch7"
+    }
 
     private enum class Fill { EMPTY, ONE, MANY }
 
@@ -91,8 +94,9 @@ class WatchHealthScreensTest {
         override suspend fun linkWatch(code: String): DeviceLinkCodec.Linked {
             refuse?.let { throw LinkRefusedException(it) }
             val id = "watch00000000000000a" + watches.size
-            watches.add(0, DeviceLinkCodec.Watch(id, WatchLinkRules.DEFAULT_NAME, now))
-            return DeviceLinkCodec.Linked(id, WatchLinkRules.DEFAULT_NAME)
+            // Week 5 A11: the watch linked by hand has its own name, so its shot isn't One's (a Galaxy Watch linked today).
+            watches.add(0, DeviceLinkCodec.Watch(id, LINKED_BY_HAND, now))
+            return DeviceLinkCodec.Linked(id, LINKED_BY_HAND)
         }
         var listed = 0
         override suspend fun linkedWatches(): List<DeviceLinkCodec.Watch> { listed++; return watches.toList() }
@@ -223,7 +227,10 @@ class WatchHealthScreensTest {
         val v = core.watchLinkView.value ?: fail("Watch: no view after Link")
         if (v.rows.size != 1) fail("Watch: Link didn't link the watch (${v.rows.size} rows, problem \"${v.problem}\")")
         ScreenShots.assertShows(compose, "watch-by-hand", "Linked today")
+        ScreenShots.assertShows(compose, "watch-by-hand", LINKED_BY_HAND)
         ScreenShots.assertShows(compose, "watch-by-hand", LoneWordGlue.kept(v.summary))
+        // Week 5 A11: the by-hand shot shows the watch the hand linked, not the empty state it started from.
+        ScreenShots.reshootAfterHand(compose, "watch", "cover-dark-by-hand")
         // The field clears for the next one.
         if (compose.onAllNodes(hasText("1234 5678"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
             fail("Watch: the code is still in the field after linking")

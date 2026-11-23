@@ -69,6 +69,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: fold-screens, path: android/app/build/outputs/roborazzi, retention-days: 14, if-no-files-found: ignore }
+      # Found and fixing week 5, A11: no two shots in an area are the same picture (a state nobody would see).
+      - name: No two screen shots are byte for byte the same
+        run: python3 tools/check-shot-copies.py --self-test && python3 tools/check-shot-copies.py android/app/build/outputs/roborazzi
       # Quality gate, slice 2: the same shots pushed to the append-only `screens` branch (docs/screens/fold/), so a build
       # run can look at them (it can't reach the artifact's download host). Green runs on main only; a commit only when
       # an image changed; a publishing hiccup never turns the run red.

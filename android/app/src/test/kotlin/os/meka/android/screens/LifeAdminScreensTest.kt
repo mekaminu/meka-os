@@ -236,6 +236,9 @@ class LifeAdminScreensTest {
         until { core.lifeAdminView.value.skipped }
         if (!core.lifeAdminView.value.skipped) fail("$name: Skip this week left the hour booked")
         ScreenShots.awaitShows(compose, name, LifeAdminRules.KEEP_LABEL)
+        // Week 5 A11: the by-hand shot shows what the hand did (the hour moved to Sunday, this week skipped with Keep it),
+        // not the one state again.
+        ScreenShots.reshootAfterHand(compose, "life-admin", "cover-dark-by-hand")
         val keep = compose.onAllNodes(hasText(LifeAdminRules.KEEP_LABEL) and hasClickAction())
         if (keep.fetchSemanticsNodes().isEmpty()) fail("$name: no Keep it once skipped")
         keep[0].performSemanticsAction(SemanticsActions.OnClick)
