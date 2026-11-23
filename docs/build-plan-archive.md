@@ -7305,3 +7305,13 @@ shot; a copy is removed (the earlier shot already shows that part) and every che
 -reflect. KNOWN in `tools/check-shot-copies.py` loses its twelve Review pairs (4 left: Calendars' on-today, Money's
 accounts layout/list and worth-other-row). Test only, Fold.
 - Still open in A11: Calendars' on-today and Money's two pairs.
+
+### Found and fixing, week 5 — slice 33 (2026-11-23): A11's last pairs
+Calendars' on-today (dark and light) and Money's accounts list were scrolls with nothing to do: ON TODAY and the accounts
+card already sit on the first cover screen, so the shot after the scroll was byte for byte cover-*-many and
+cover-dark-accounts-layout. New `ScreenShots.shootIfScrolled` compares where the node started with where it ends and
+shoots only when the scroll moved it (a stale file is removed); unlike `shootUnlessSame` it needs no other test's file.
+Money's worth-other-row, taken after typing "Pension £42,000", is the Money shots' own Accounts (cover-dark-accounts,
+MoneyScreensTest, which shows the row with Change), so it is no longer shot; its checks (Change, £42,000 once, no Remove
+on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so any identical pair fails CI. Test only, Fold.
+- A11 finished; next is A12 (text cut, split or hidden).

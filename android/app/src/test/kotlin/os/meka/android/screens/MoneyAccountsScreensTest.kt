@@ -130,8 +130,12 @@ class MoneyAccountsScreensTest {
     fun accountsIsOneCleanListAndARowOpensItsSheet() {
         val core = open()
         pick(MoneyTab.ACCOUNTS)
+        // Found and fixing week 5, A11: the list sits on Accounts' first screen, so the scroll moves nothing and the shot
+        // would be byte for byte cover-dark-accounts-layout; it's kept only if the list ever needs scrolling to.
+        val list = hasTestTag("money-accounts-card")
+        val before = ScreenShots.topOf(compose, list)
         scrollTo("money-accounts-card")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-list"))
+        ScreenShots.shootIfScrolled(compose, "money", "cover-dark-accounts-list", list, before)
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-list")
         val v = core.moneyView.value
         val items = MoneyAccountList.items(v)
@@ -236,8 +240,10 @@ class MoneyAccountsScreensTest {
         // Walk-through A14: the pension is all the total counts, so its row says Change, not £42,000 a second time.
         assertTrue(showsText(MoneyWorthOther.CHANGE), "the row doesn't say Change")
         assertEquals(1, compose.onAllNodesWithText("£42,000", substring = true).fetchSemanticsNodes().size, "£42,000 shows twice")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-worth-other-row"))
-        ScreenShots.assertNoBrokenWords(compose, "cover-dark-worth-other-row")
+        // Found and fixing week 5, A11: with the pension typed in, Accounts is the Money shots' own Accounts, byte for byte
+        // cover-dark-accounts (MoneyScreensTest), which already shows the row with Change; so no second picture of it here,
+        // the checks still run.
+        ScreenShots.assertNoBrokenWords(compose, "worth-other-row")
         if (shows("money-worth-remove-n-pension")) fail("a typed thing's Remove sits on the page")
         tap("money-worth-other")
         assertTrue(shows("money-other-sheet"), "the typed things' sheet didn't open")

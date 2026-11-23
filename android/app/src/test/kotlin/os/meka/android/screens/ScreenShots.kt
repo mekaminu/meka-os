@@ -876,6 +876,28 @@ object ScreenShots {
         return true
     }
 
+    /** Where the first node matching [matcher] starts on screen, or null when it isn't composed (a lazy row off screen). */
+    fun topOf(compose: ComposeContentTestRule, matcher: SemanticsMatcher): Float? =
+        compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+
+    /**
+     * Found and fixing week 5, A11's last pairs (Calendars' on-today, Money's accounts list): shoots `<area>/<name>` only
+     * when a scroll moved [matcher]'s node ([before] is where it started, null when it wasn't composed yet). When the
+     * part was already on screen the scroll does nothing and the picture is byte for byte the shot taken before it, so
+     * no copy is kept (a stale one is removed) and false returned; the caller's checks on the screen still run. Unlike
+     * [shootUnlessSame] it doesn't depend on another test's file being there first.
+     */
+    fun shootIfScrolled(compose: ComposeContentTestRule, area: String, name: String, matcher: SemanticsMatcher, before: Float?): Boolean {
+        val file = File(path(area, name))
+        val after = topOf(compose, matcher)
+        if (before != null && after != null && kotlin.math.abs(after - before) < 1f) {
+            file.delete()
+            return false
+        }
+        compose.onNodeWithTag("screen").captureRoboImage(file.path)
+        return true
+    }
+
     private fun assertNotACopy(name: String, file: File, opening: ByteArray?, openingName: String?) {
         if (!file.exists()) return
         val shot = file.readBytes()

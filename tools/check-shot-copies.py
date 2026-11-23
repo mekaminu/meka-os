@@ -18,13 +18,9 @@ import os
 import sys
 import tempfile
 
-# Found and fixing week 5, A11: the identical pairs left on 2026-11-23 (screens branch, ci run 2167), each to fix.
-KNOWN = {
-    ("calendars", "cover-dark-many-on-today.png", "cover-dark-many.png"),
-    ("calendars", "cover-light-many-on-today.png", "cover-light-many.png"),
-    ("money", "cover-dark-accounts-layout.png", "cover-dark-accounts-list.png"),
-    ("money", "cover-dark-accounts.png", "cover-dark-worth-other-row.png"),
-}
+# Found and fixing week 5, A11: the identical pairs left on 2026-11-23 (screens branch, ci run 2167) are all fixed; a pair
+# still being fixed goes here as (area, a, b).
+KNOWN = set()
 
 
 def pairs(root):

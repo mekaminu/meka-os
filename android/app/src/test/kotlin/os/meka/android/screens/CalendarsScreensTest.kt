@@ -256,9 +256,13 @@ class CalendarsScreensTest {
     /** The many shot scrolled to ON TODAY, so the shots show the Kids calendar beside Personal (walk-through week 4, A13). */
     private fun onTodayShot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         val core = calendars(name, Fill.MANY, theme, shot = false)
-        compose.onAllNodes(hasText("ON TODAY"), useUnmergedTree = true)[0].performScrollTo()
+        val header = hasText("ON TODAY")
+        val before = ScreenShots.topOf(compose, header)
+        compose.onAllNodes(header, useUnmergedTree = true)[0].performScrollTo()
         turns()
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("calendars", name))
+        // Found and fixing week 5, A11: on the cover ON TODAY is already on the many shot's screen, so the scroll moves
+        // nothing and a second shot would be byte for byte cover-*-many; it's kept only on a screen where it scrolls in.
+        ScreenShots.shootIfScrolled(compose, "calendars", name, header, before)
         ScreenShots.assertSensible(compose, name)
         core.calendarsOnToday.value.forEach { c ->
             if (compose.onAllNodes(hasContentDescription("${c.label} on Today")).fetchSemanticsNodes().isEmpty()) {
