@@ -7270,3 +7270,12 @@ Copy follows `draftShown` too. New shot `working-on/cover-dark-redrafted` (the s
 morning", Copy back, no redrafting line); `errandsByHand` fails if "ideally a morning" is on screen after the answer.
 Tests: core `ObiJobsTest.anOldDraftIsNotCopiedWhileHisAnswerIsOnItsWay` (draftShown null while redrafting, the new one
 shown once taken), `WorkingOnScreensTest.coverRedrafted`. Both apps; Mac checked nightly.
+
+### Found and fixing, week 5 — slice 30 (2026-11-23): A11's scam shots
+
+g2a 2: `needs-you/cover-dark-scams`, `cover-dark-scams-by-hand` and `cover-dark-scams-trash` were byte-identical: the
+test took every shot before its taps. `NeedsYouScamScreensTest` now shoots the plain state only for the plain tests;
+by-hand is shot after the scam's row is opened, with Junk it & block, Move to Trash and Not a scam on screen; trash is
+shot after Move to Trash, while its 5 s bar ("Moving Invest Co's email to Trash · kept there 30 days · Undo brings it
+back") is up, and fails if "1 possible scam to check" still heads the box. Test only, Fold, no app change.
+- Still open in A11: the other identical pairs the walk-through lists.

@@ -160,7 +160,9 @@ class NeedsYouScamScreensTest {
         turns()
         compose.waitForIdle()
         reach(name, hasTestTag(NEEDS_YOU_SCAMS_TAG), "Possible scams to check")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
+        // Walk-through 2026-11-22 A11: scams, scams-by-hand and scams-trash were one picture. Only the plain shot is
+        // taken here; the by-hand shot is the opened scam with its three answers, the trash shot what Move to Trash did.
+        if (!byHand) shot(name)
         ScreenShots.assertSensible(compose, name)
         // The headline is the section label, drawn in capitals.
         if (!onScreen(MailScamListRules.headline(1).uppercase())) fail("$name: no \"${MailScamListRules.headline(1)}\" line")
@@ -175,12 +177,25 @@ class NeedsYouScamScreensTest {
         if (!onScreen(MailSenderRuleRules.BIN)) fail("$name: the possible scam doesn't open on ${MailSenderRuleRules.BIN}")
         // Scam email never a task, slice 3: a plain Move to Trash (no block) beside it.
         if (!onScreen(MailScamTrashRules.TRASH)) fail("$name: the possible scam doesn't offer ${MailScamTrashRules.TRASH}")
+        if (!onScreen(MailNotScamRules.NOT_SCAM)) fail("$name: the possible scam doesn't offer ${MailNotScamRules.NOT_SCAM}")
+        if (!trash) shot(name)
         if (trash) {
             reach(name, ScreenShots.plainText(MailScamTrashRules.TRASH) and hasClickAction(), "Move to Trash")[0]
                 .performSemanticsAction(SemanticsActions.OnClick)
-            until { core.mailScams.value == null }
+            // The shot shows the bar's line with Undo and no scam row left to check, taken while the bar (5 s) is up.
+            val said = MailScamTrashRules.line("Invest Co")
+            for (i in 0 until 40) {
+                if (core.mailScams.value == null && ScreenShots.shows(compose, said)) break
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(50)
+                compose.mainClock.advanceTimeBy(100)
+            }
             if (core.mailScams.value != null) fail("$name: Move to Trash left it under Possible scams to check")
             if (core.mailNeeds.value?.rows?.map { it.id } != listOf(real)) fail("$name: Move to Trash sent it to Mail to answer")
+            turns(600)
+            ScreenShots.assertShows(compose, name, said)
+            if (onScreen(MailScamListRules.headline(1).uppercase())) fail("$name: \"${MailScamListRules.headline(1)}\" still shows after Move to Trash")
+            shot(name, settleMs = 0L)
             return
         }
         reach(name, ScreenShots.plainText(MailNotScamRules.NOT_SCAM) and hasClickAction(), "Not a scam")[0]
@@ -188,6 +203,12 @@ class NeedsYouScamScreensTest {
         until { core.mailScams.value == null }
         if (core.mailScams.value != null) fail("$name: Not a scam left it under Possible scams to check")
         if (core.mailNeeds.value?.rows?.map { it.id }?.toSet() != setOf(real, scam)) fail("$name: Not a scam didn't send it to Mail to answer")
+    }
+
+    private fun shot(name: String, settleMs: Long = 3_000L) {
+        if (settleMs > 0) turns(settleMs)
+        compose.waitForIdle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
