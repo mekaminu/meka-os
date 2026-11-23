@@ -262,6 +262,35 @@ object ScreenShots {
     }
 
     /**
+     * Walk-through 2026-11-22 A12 ("5 lesso / ns left"): fails, naming each line, when any text on screen breaks a line
+     * between two letters or digits, i.e. inside a word, in a text with spaces too ([assertNoBrokenWords] covers one-word
+     * texts only). A held run (no-break spaces) too long for its room is what does this.
+     */
+    fun assertNoMidWordBreaks(compose: ComposeContentTestRule, name: String) {
+        val broken = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && action != null && text.isNotBlank()) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                val layout = results.firstOrNull()
+                if (layout != null && layout.layoutInput.text.text == text) {
+                    for (line in 0 until layout.lineCount - 1) {
+                        val e = layout.getLineEnd(line)
+                        if (e in 1 until text.length && text[e - 1].isLetterOrDigit() && text[e].isLetterOrDigit()) {
+                            broken += text.substring(0, e) + " / " + text.substring(e)
+                        }
+                    }
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (broken.isNotEmpty()) fail("$name breaks a word mid-way:\n" + broken.joinToString("\n") { "- \"$it\"" })
+    }
+
+    /**
      * The quality gate's "an icon on its name's first line" (Ask's re-shot, 2026-10-22: the Goals tile's icon sat centred
      * beside its two-line name "Goals and / habits"): fails unless the icon tagged [tag] just left of [text] has its
      * middle within the text's first line.

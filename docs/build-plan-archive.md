@@ -7315,3 +7315,8 @@ Money's worth-other-row, taken after typing "Pension £42,000", is the Money sho
 MoneyScreensTest, which shows the row with Change), so it is no longer shot; its checks (Change, £42,000 once, no Remove
 on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so any identical pair fails CI. Test only, Fold.
 - A11 finished; next is A12 (text cut, split or hidden).
+
+### Found and fixing, week 5 — slice 34 (2026-11-23): A12's Study split
+- The plan card's "N sessions a week" and its side line ("1 h 30 a week · 5 lessons left") sat in a Row; on the closed Fold the side line got about 100 dp and its held run broke mid-word ("5 lesso / ns left", dark and light).
+- `StudyPane.PlanCard`: a FlowRow, both bottom-aligned, so the side line goes under, whole, when it doesn't fit. Mac `StudySheet`: ViewThatFits, side by side or stacked.
+- Test: `ScreenShots.assertNoMidWordBreaks` (any text, a line break between two letters or digits) on `cover-dark-plan` and `cover-light-plan`.

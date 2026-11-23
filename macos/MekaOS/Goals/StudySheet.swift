@@ -597,9 +597,16 @@ struct StudySheet: View {
                 Task { if !(await model.setStudySlot(id, key: key, on: on)) { tapSlots[key] = nil } }
             }
             if let perWeek = p.perWeek {
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-                    Text(perWeek).font(MekaType.nowTitle).foregroundStyle(palette.accent).contentTransition(.numericText())
-                    if let sub = p.perWeekSub { Text(sub).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                // Walk-through 2026-11-22 A12: the side line goes under "2 sessions a week", whole, when it doesn't fit beside it.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                        Text(perWeek).font(MekaType.nowTitle).foregroundStyle(palette.accent).contentTransition(.numericText())
+                        if let sub = p.perWeekSub { Text(sub).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize() }
+                    }
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(perWeek).font(MekaType.nowTitle).foregroundStyle(palette.accent).contentTransition(.numericText())
+                        if let sub = p.perWeekSub { Text(sub).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                    }
                 }
             }
             if let fit = p.fit {

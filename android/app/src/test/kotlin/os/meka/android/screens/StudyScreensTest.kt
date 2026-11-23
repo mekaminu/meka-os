@@ -144,6 +144,8 @@ class StudyScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
+        // Walk-through 2026-11-22 A12: "1 h 30 / a week · 5 lesso / ns left" beside "2 sessions a week".
+        ScreenShots.assertNoMidWordBreaks(compose, name)
         ScreenShots.assertShows(compose, name, "On track for Wed 18 Nov")
         ScreenShots.assertShows(compose, name, "2 sessions a week")
         ScreenShots.assertShows(compose, name, "Fits: the 2 times you picked give 4 sessions a week; you need 2.")

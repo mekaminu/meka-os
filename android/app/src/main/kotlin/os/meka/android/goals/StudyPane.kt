@@ -936,9 +936,11 @@ private fun PlanCard(
             ChipGroup(StudyRules.SESSION_LABEL, plan.lens, "study-len", onSession)
             ChipGroup(StudyRules.SLOTS_LABEL, plan.slots, "study-slot", onSlot)
             Crossfade(plan.perWeek to plan.perWeekSub, animationSpec = MekaMotion.appear(reduced), label = "study-per-week") { (big, sub) ->
-                if (big != null) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    Text(big, style = MekaType.nowTitle, color = Meka.colors.accent, modifier = Modifier.testTag("study-per-week"))
-                    sub?.let { Text(studyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xxs)) }
+                // Walk-through 2026-11-22 A12: beside "2 sessions a week" on the closed Fold the side line had ~100 dp, so its
+                // held "5 lessons left" broke mid-word ("5 lesso / ns left"); in a flow row it goes under, whole, when it doesn't fit.
+                if (big != null) FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(big, style = MekaType.nowTitle, color = Meka.colors.accent, modifier = Modifier.align(Alignment.Bottom).testTag("study-per-week"))
+                    sub?.let { Text(studyShown(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.align(Alignment.Bottom).padding(bottom = MekaSpace.xxs).testTag("study-per-week-sub")) }
                 }
             }
             Crossfade(plan.fit, animationSpec = MekaMotion.appear(reduced), label = "study-fit") { fit ->
