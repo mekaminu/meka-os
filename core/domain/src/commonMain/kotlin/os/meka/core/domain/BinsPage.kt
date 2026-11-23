@@ -22,7 +22,11 @@ object BinsPageRules {
     const val ONE_OFFS_EMPTY = "None to come. For a Christmas week or a missed collection, tap + Add and pick “A one-off”."
     const val REMINDER = "Reminder"
     const val COUNCIL = "Council's dates"
-    const val OWN_DAYS = "Your own days. To follow your council's calendar, tap + Add and pick “The council's dates”."
+    /**
+     * Found and fixing week 5, A12: the row's line fits its two lines on the closed Fold ("…pick “The council's da" was
+     * cut on every cover shot) and names what the row's own sheet offers, Use the council's dates, not another route.
+     */
+    const val OWN_DAYS = "Your own days. Tap here to use the council's dates."
 
     const val ADD_BIN = "bin"
     const val ADD_ONE_OFF = "one-off"

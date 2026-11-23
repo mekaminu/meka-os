@@ -12,7 +12,8 @@ class EmptyLinesReadTest {
         TripsPageRules.TRIPS_EMPTY, TripsPageRules.BOOKED_EMPTY, ErrandsPageRules.WAITING_EMPTY,
         KidsPageRules.FEES_EMPTY, KidsPageRules.MONEY_EMPTY, SchoolPageRules.OFF_EMPTY, SchoolPageRules.DATES_EMPTY,
         SchoolPageRules.WEEKLY_EMPTY, SchoolPageRules.COUNCIL_EMPTY, ReadingPageRules.NEXT_EMPTY,
-        CarPageRules.PARKED_EMPTY, BinsPageRules.YOURS_EMPTY, BinsPageRules.ONE_OFFS_EMPTY, BinsPageRules.OWN_DAYS,
+        CarPageRules.PARKED_EMPTY, BinsPageRules.YOURS_EMPTY, BinsPageRules.ONE_OFFS_EMPTY,
+    // BinsPageRules.OWN_DAYS left (week 5, A12): it's a row's line, and the row's own sheet holds Use the council's dates.
     ) + EmergencySection.entries.map { EmergencyPageRules.empty(it) }
 
     @Test

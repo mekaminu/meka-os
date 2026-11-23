@@ -234,6 +234,8 @@ class PlansPlacesScreensTest {
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(BinsPageRules.YOURS_EMPTY))
+                // Found and fixing week 5, A12: no row's line is cut with … ("…pick “The council's da" on every cover).
+                ScreenShots.assertNotEllipsized(compose, name, page.cards.flatMap { c -> c.rows.map { it.line } }.filter { it.isNotEmpty() })
             }
             Place.READING -> {
                 val v = core.readingView.value

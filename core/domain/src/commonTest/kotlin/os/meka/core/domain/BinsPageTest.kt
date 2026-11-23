@@ -78,6 +78,9 @@ class BinsPageTest {
         // g7 7: the row's line says only when, never the time again ("… at 19:00 · …" was cut under it).
         assertEquals("The evening before · Today says it from 16:00", settings.rowAt(0).line)
         assertEquals(BinsPageRules.OWN_DAYS, settings.rowAt(1).line)
+        // A12: short enough for the cover's two lines, and it names the sheet's own button.
+        assertTrue(BinsPageRules.OWN_DAYS.length <= 60, BinsPageRules.OWN_DAYS)
+        assertTrue("Use the council's dates".lowercase() in BinsPageRules.OWN_DAYS.lowercase())
     }
 
     @Test

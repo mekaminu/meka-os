@@ -7326,3 +7326,8 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - `OwnCategorySheet`: the body uses `edgeFades` (24 dp, no motion of its own) instead of `headFade`: the top fades once scrolled, the foot fades while more is below (new `more` parameter on `edgeFades`, default unchanged for Today).
 - Test: `ScreenShots.assertEdgesSoft` reads the body's first and last pixel rows against the sheet's background at the left padding; `hisCategoriesAreManagedFromAccounts` insists on the foot, `aMonthlyCapOnHisCategory` on the top. Fold only; the Mac's category popover has no fixed head or foot.
 - Still in A12 for this sheet: the "capped at £15 · Undo" line sits inline mid-sheet rather than as a snackbar.
+
+### Found and fixing, week 5 — slice 36 (2026-11-23): A12's Bins row
+- Reminder and dates' Council's dates row read "Your own days. To follow your council's calendar, tap + Add and pick “The council's dates”." and its two caption lines cut it on every cover shot ("…pick “The council's da…"); it also pointed to + Add while the row's own sheet offers Use the council's dates.
+- `BinsPageRules.OWN_DAYS` is now "Your own days. Tap here to use the council's dates." (both apps read it from the core). `EmptyLinesReadTest` no longer holds it to the + Add wording (it is a row's line, not an empty line).
+- Tests: `BinsPageTest` holds it to 60 characters and the sheet's button words; the Bins shots run `ScreenShots.assertNotEllipsized` on every row line.
