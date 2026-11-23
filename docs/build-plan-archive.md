@@ -7233,3 +7233,18 @@ was the fixture in `NeedsYouGroupsScreensTest`. Its chats now come in at 12:10, 
 line; the seven FYI rows say seven things; the held messages come from a person not in Messages. The test fails if a
 chat's time is at or after the foot line's "until" time, or if two chats or two FYI rows repeat. Test only, Fold.
 
+
+### Found and fixing, week 5 — slice 27 (2026-11-23): A9's tile count vs the sheet, and the lit All chip
+
+g2-needs-01 finding 1: the Mail tile said "71 promos" tidied today while All tidied mail, which the tile opens, said
+"8 promos tidied today" on the paged shot and "3 promos" on the select and Trash all shots; and the sender row's lit
+"All" read as the day filter beside the kind row's unlit "Today · 8". The app reads both from the same tidies
+(`NeedsYouMailRules.tiles` and `ArchivedAllRules.list` on today's), so the fault was three fixtures. New shared
+fixture `ShotMailTidied` (android test sources): one day's tidy, 14 = 3 newsletters + 8 promos + 2 junk & scams +
+1 receipt, with the eight promos listed (invented shops, domains as addresses). `NeedsYouMailTilesScreensTest`,
+`ArchivedAllBulkScreensTest` (now 8 promos over two pages: Select all on this page → 5 selected, Trash all 8 promos,
+Move 8 to Trash) and `ArchivedAllPagesScreensTest` (its senders still "Sender N" placeholders: the shops hung its
+pager scroll on 2026-11-22) all read it; the tile test fails if its tiles aren't the shared day's. Core:
+`ArchivedAllRules.ALL` is now "All senders" (both apps draw it), test
+`ArchivedAllTest.theSenderRowsFirstChipSaysAllSendersNotAll`. Mac checked nightly (one constant).
+- Still open in A9: the paged shot's placeholder senders.

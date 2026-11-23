@@ -58,7 +58,7 @@ data class ArchivedAllList(
     val kinds: List<ArchivedAllKindChip> = emptyList(),
     /** The chosen [TidiedKind.id]: today's emails of that kind; null for the last 30 days. */
     val kind: String? = null,
-    /** "All" first, then the senders with the most tidied emails (the chosen one always shown). */
+    /** "All senders" first, then the senders with the most tidied emails (the chosen one always shown). */
     val senders: List<ArchivedAllSender>,
     /** No sender chosen. */
     val allSelected: Boolean,
@@ -90,7 +90,11 @@ data class ArchivedAllPageView(
 object ArchivedAllRules {
     const val TITLE = "All tidied mail"
     const val OPEN = "All tidied mail"
-    const val ALL = "All"
+    /**
+     * The sender row's first chip (week 5, A9): "All senders", never a bare "All" beside the kind row's "Today · 8"
+     * and "Last 30 days", so it can't read as the day filter.
+     */
+    const val ALL = "All senders"
     const val CLOSE = "Close"
     /** Emails listed at once; a sender's filter lists theirs within it. */
     const val MAX_ROWS = 150

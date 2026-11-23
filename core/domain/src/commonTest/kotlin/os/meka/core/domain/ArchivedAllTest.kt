@@ -170,4 +170,14 @@ class ArchivedAllTest {
         assertEquals(TidiedKind.JUNK, TidiedKind.of("junk"))
         assertNull(TidiedKind.of("nope"))
     }
+
+    /** Week 5, A9: the sender row's first chip names senders, so a lit "All" never reads as the day filter. */
+    @Test
+    fun theSenderRowsFirstChipSaysAllSendersNotAll() {
+        assertEquals("All senders", ArchivedAllRules.ALL)
+        val today = mixed("mt1", listOf(email("a", "Deliveroo", "2 for 1", 9 * 60)), at(12 * 60))
+        val l = ArchivedAllRules.list(listOf(today), null, now, cal, TidiedKind.PROMOS.id)
+        assertTrue(l.kinds.none { it.label == ArchivedAllRules.ALL || it.label == "All" }, "the kind row has no chip named like the sender row's")
+        assertTrue(l.senders.none { it.label.startsWith(ArchivedAllRules.ALL) })
+    }
 }

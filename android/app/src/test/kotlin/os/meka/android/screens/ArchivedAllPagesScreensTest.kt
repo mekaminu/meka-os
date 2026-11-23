@@ -31,11 +31,6 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.ARCHIVED_ALL_PAGER_TAG
 import os.meka.android.today.ArchivedAllPane
 import os.meka.core.domain.EntityTypes
-import os.meka.core.domain.MailAutopilotRules
-import os.meka.core.domain.MailSort
-import os.meka.core.domain.MailTidiedEmail
-import os.meka.core.domain.MailTidiedRules
-import os.meka.core.domain.MailTidy
 import os.meka.core.domain.TidiedKind
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.FieldValue
@@ -78,11 +73,6 @@ class ArchivedAllPagesScreensTest {
         ops.append(Op("srvpg${k++}", "hh", EntityTypes.MAIL_TIDY, id, f, v, clock.now(), emptyList(), "server"))
     }
 
-    private fun promo(id: String, from: String, minsAgo: Int) = MailTidiedEmail(
-        MailTidiedRules.key("acc", id), MailTidy.ARCHIVE, MailSort.PROMO, now - minsAgo * 60_000L, from,
-        "${from.lowercase().filter { it.isLetterOrDigit() }}.example", "Weekend sale $id", null,
-    )
-
     private var said: String? = null
 
     private fun turns(ms: Long = 2_000L) {
@@ -94,8 +84,10 @@ class ArchivedAllPagesScreensTest {
 
     private fun open(): MekaCore {
         ThemeChoice.save(ApplicationProvider.getApplicationContext<ShotApplication>(), ThemeChoice.DARK)
-        val emails = (1..8).map { promo("p$it", "Sender $it", 100 - it * 5) }
-        serverWrite("mt1", MailAutopilotRules.batchFields(now - 2 * 60_000L, "Personal", mapOf(MailTidy.ARCHIVE to 8)) + MailTidiedRules.fields(emails))
+        // Week 5, A9: the day of tidies every mail shot shares (the tile's 8 promos). Its senders stay placeholders here
+        // for now: the shops' names hung this test's pager scroll (ci runs 45083546847, 45084901801).
+        val emails = ShotMailTidied.promos(now, names = (1..8).map { "Sender $it" to "Weekend sale p$it" })
+        serverWrite("mt1", ShotMailTidied.fields(now - 2 * 60_000L, emails))
         val core = MekaCore(
             householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
             secureRandom = Random(47), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },

@@ -35,8 +35,8 @@ import os.meka.android.today.NeedsYouHead
 import os.meka.android.today.NeedsYouMailCard
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MailAutopilotRules
-import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailTidyBatch
+import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailUnopenedCard
 import os.meka.core.domain.MailUnopenedRow
 import os.meka.core.domain.NeedsYouLayoutRules
@@ -67,11 +67,8 @@ class NeedsYouMailTilesScreensTest {
         return MailTidyBatch(id, cal.toEpochMs(20_000L, minute), "Personal", summary, detail, kinds.values.sum(), null, null, null, kinds)
     }
 
-    private val tidies = listOf(
-        batch("a", 8 * 60, mapOf(MailTidy.NEWSLETTER to 20, MailTidy.ARCHIVE to 40, MailTidy.RECEIPT to 1)),
-        batch("b", 9 * 60, mapOf(MailTidy.NEWSLETTER to 13, MailTidy.ARCHIVE to 31)),
-        batch("c", 10 * 60, mapOf(MailTidy.JUNK_TRASH to 30, MailTidy.SCAM_JUNK to 3)),
-    )
+    // Week 5, A9: the day of tidies every mail shot shares, so the promos tile's 8 are the 8 All tidied mail lists.
+    private val tidies = listOf(batch("a", 8 * 60, ShotMailTidied.kinds))
 
     private val offer = MailUnopenedCard(
         title = "Not opened in 30 days", headline = "Unsubscribe from 3?", unsubscribeLabel = "Unsubscribe from 3", note = "",
@@ -115,12 +112,14 @@ class NeedsYouMailTilesScreensTest {
 
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         draw(theme)
-        listOf("138", "33", "71", "tidied", "newsletters", "promos", "junk & scams").forEach { if (!onScreen(it)) fail("$name: $it is missing") }
+        val t = ShotMailTidied
+        listOf("${t.TOTAL}", "${t.NEWSLETTERS}", "${t.PROMOS}", "tidied", "newsletters", "promos", "junk & scams").forEach { if (!onScreen(it)) fail("$name: $it is missing") }
         if (compose.onAllNodesWithTag(NEEDS_YOU_TILE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 4) fail("$name: not four tiles")
         if (!onScreen("Unsubscribe from Oakfield Kids Club?")) fail("$name: the one question is missing")
         if (!onScreen(NeedsYouMailRules.FOOT) || !onScreen("See all")) fail("$name: the foot is missing")
-        ScreenShots.assertEachOneLine(compose, name, listOf("138", "71", "tidied", "promos", NeedsYouMailRules.UNSUBSCRIBE, NeedsYouMailRules.SEE_ALL))
-        // Week 4, A7: the tiles add up on screen (138 = 33 + 71 + 33 + the receipt named under them), and no word breaks.
+        ScreenShots.assertEachOneLine(compose, name, listOf("${t.TOTAL}", "${t.PROMOS}", "tidied", "promos", NeedsYouMailRules.UNSUBSCRIBE, NeedsYouMailRules.SEE_ALL))
+        // Week 4, A7: the tiles add up on screen (14 = 3 + 8 + 2 + the receipt named under them), and no word breaks.
+        if (summary.tiles.map { it.number } != listOf(t.TOTAL, t.NEWSLETTERS, t.PROMOS, t.JUNK).map { "$it" }) fail("$name: the tiles aren't the shared day's")
         if (summary.rest != "Also 1 receipt or order" || !onScreen("Also 1 receipt or order")) fail("$name: what the parts leave out isn't named")
         val parts = summary.tiles.drop(1).sumOf { it.number.toInt() } + 1
         if (summary.tiles[0].number.toInt() != parts) fail("$name: the tiles don't add up")
@@ -149,13 +148,13 @@ class NeedsYouMailTilesScreensTest {
     fun eachTileOpensItsKind() {
         draw(ThemeChoice.DARK)
         if (compose.onAllNodesWithText(NEEDS_YOU_TILE_CHEVRON, useUnmergedTree = true).fetchSemanticsNodes().size != 4) fail("each tile should show its chevron")
-        compose.onNodeWithContentDescription("33 newsletters tidied today. Opens them").assertHasClickAction().performClick()
+        compose.onNodeWithContentDescription("${ShotMailTidied.NEWSLETTERS} newsletters tidied today. Opens them").assertHasClickAction().performClick()
         turns(300)
         if (tiled != "newsletters") fail("the newsletters tile opened $tiled")
-        compose.onNodeWithContentDescription("33 junk and scam emails tidied today. Opens them").performClick()
+        compose.onNodeWithContentDescription("${ShotMailTidied.JUNK} junk and scam emails tidied today. Opens them").performClick()
         turns(300)
         if (tiled != "junk") fail("the junk & scams tile opened $tiled")
-        compose.onNodeWithContentDescription("138 emails tidied today. Opens them").performClick()
+        compose.onNodeWithContentDescription("${ShotMailTidied.TOTAL} emails tidied today. Opens them").performClick()
         turns(300)
         if (tiled != "all") fail("the tidied tile opened $tiled")
         if (seeAll != 0) fail("a tile shouldn't be See all")
