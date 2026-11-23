@@ -7331,3 +7331,8 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - Reminder and dates' Council's dates row read "Your own days. To follow your council's calendar, tap + Add and pick “The council's dates”." and its two caption lines cut it on every cover shot ("…pick “The council's da…"); it also pointed to + Add while the row's own sheet offers Use the council's dates.
 - `BinsPageRules.OWN_DAYS` is now "Your own days. Tap here to use the council's dates." (both apps read it from the core). `EmptyLinesReadTest` no longer holds it to the + Add wording (it is a row's line, not an empty line).
 - Tests: `BinsPageTest` holds it to 60 characters and the sheet's button words; the Bins shots run `ScreenShots.assertNotEllipsized` on every row line.
+
+### Found and fixing, week 5 — slice 37 (2026-11-23): A12's Settings AI card
+- `settings/cover-light-connected`: Navilife's AI, the Obi box's last row, drew a rounded card of its own (`lightCardEdge`, added for A21 when it stood alone), so in Light its top edge sat on the box's last divider and its sides ran into the box's.
+- `AiSpendRow(inBox = true)` from `SettingRow` (Ask's Settings tab and the Settings pane) leaves its own edge off; it reads as one more row under the hairline, like its neighbours. Standing alone (LightCardEdgeTest) it keeps its edge. Fold only: the Mac's row has no edge, the same plain surface as its MoreRow neighbours.
+- Test: `SettingsScreensTest.assertAiRowInsideObiBox` (Light connected shot) reads the box's side strip (half the box's padding left of the Obi heading) from "What Navilife may do" down to "Navilife's AI" and fails on any line across it.

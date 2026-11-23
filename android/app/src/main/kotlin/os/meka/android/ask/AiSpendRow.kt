@@ -55,9 +55,13 @@ import os.meka.core.domain.LoneWordGlue
  * appear at once and the bars are drawn full. Its grey lines keep their last words and dots together ([LoneWordGlue],
  * quality gate slice 60). While the AI can't answer (slice 3) a list under the line says what each
  * AI feature does instead ("While it's off · Morning brief · read from your day as it is…"), fading in.
+ *
+ * [inBox]: walk-through 2026-11-22 A12 ("the Navilife's AI card overlaps the Obi card"): as a row inside Settings' Obi
+ * box it is one more row under the box's hairline, like its neighbours, with no edge of its own; its own rounded edge
+ * sat on the box's last divider and ran into the box's sides in Light. Standing alone it keeps its card edge.
  */
 @Composable
-internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
+internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier, inBox: Boolean = false) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     var open by remember { mutableStateOf(false) }
@@ -68,7 +72,8 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
     )
     Column(
         modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m))
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .then(if (inBox) Modifier else Modifier.lightCardEdge(RoundedCornerShape(MekaRadius.m)))
             .background(Meka.colors.surface)
             .animateContentSize(MekaMotion.expand(reduced)),
     ) {

@@ -15,6 +15,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -210,7 +212,33 @@ class SettingsScreensTest {
         if (connected) {
             if (ScreenShots.anyOnScreen(compose, listOf(AskRules.NOT_CONNECTED_LINE))) fail("$name: connected, yet Navilife's AI says \"${AskRules.NOT_CONNECTED_LINE}\"")
         } else if (ScreenShots.anyOnScreen(compose, listOf(aiLine))) fail("$name: not connected, yet Navilife's AI reads \"$aiLine\"")
+        if (theme == ThemeChoice.LIGHT && connected) assertAiRowInsideObiBox(name)
         if (appearanceOpen) shootAppearance(name)
+    }
+
+    /**
+     * Walk-through 2026-11-22 A12 ("the Navilife's AI card overlaps the Obi card", `settings/cover-light-connected`):
+     * Navilife's AI is the Obi box's last row, so between the box's side and the rows' words (the strip the hairlines
+     * never reach) nothing is drawn from "What Navilife may do" down to "Navilife's AI": no second rounded edge sitting
+     * on the box's last divider. Read at the Obi heading's left, less half the box's padding.
+     */
+    private fun assertAiRowInsideObiBox(name: String) {
+        fun bounds(text: String) = compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            ?: fail("$name: \"$text\" isn't on screen")
+        val heading = bounds("Obi")
+        val above = bounds(MoreItem.AUTONOMY.label)
+        val ai = bounds(MoreItem.AI.label)
+        val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
+        val inset = with(compose.density) { (os.meka.android.designsystem.MekaSpace.m.toPx() / 2f).toInt() }.coerceAtLeast(2)
+        val x = heading.left.toInt() - inset
+        val bg = shot.getPixel(x, heading.center.y.toInt())
+        for (y in above.top.toInt() until ai.bottom.toInt().coerceAtMost(shot.height)) {
+            val p = shot.getPixel(x, y)
+            val d = maxOf(kotlin.math.abs(android.graphics.Color.red(p) - android.graphics.Color.red(bg)),
+                kotlin.math.abs(android.graphics.Color.green(p) - android.graphics.Color.green(bg)),
+                kotlin.math.abs(android.graphics.Color.blue(p) - android.graphics.Color.blue(bg)))
+            if (d > 14) fail("$name: a line crosses the Obi box's side strip at y $y (x $x, off by $d): Navilife's AI draws a card of its own inside the box")
+        }
     }
 
     /**

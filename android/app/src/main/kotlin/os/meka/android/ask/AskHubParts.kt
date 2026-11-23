@@ -246,7 +246,7 @@ internal fun SettingRow(
     val setup by core.setupView.collectAsState()
     when {
         ShellNav.unfoldsInPlace(item) -> AppearanceRow(appearanceOpen, Modifier, openTopics = openTopics, playOpening = playOpening, toggle = toggleAppearance, core = core)
-        item == MoreItem.AI -> AiSpendRow(ai, Modifier)
+        item == MoreItem.AI -> AiSpendRow(ai, Modifier, inBox = true)
         else -> MoreRow(
             item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary, setup?.summary),
             ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0, setup?.toDo ?: 0), pane == item,
