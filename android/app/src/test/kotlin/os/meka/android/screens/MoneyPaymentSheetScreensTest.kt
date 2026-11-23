@@ -367,8 +367,8 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(bar.top >= body.bottom - 1f && bar.bottom <= foot.top + 1f,
             "the cap's line isn't a bar between the body and Cancel · Save: bar $bar, body $body, foot $foot")
         val line = compose.onNodeWithTag("money-own-said", useUnmergedTree = true).fetchSemanticsNode()
-            .config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text }.orEmpty()
-        assertTrue("capped at" in line && "15" in line, "the bar says \"$line\"")
+            .config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text }.orEmpty().replace('\u00A0', ' ').replace("\u2060", "")
+        assertTrue(line.startsWith("Treats capped at £15"), "the bar says \"$line\"")
         tap("money-own-undo")
         waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.cap == null }
         assertTrue(!shows("money-own-said-bar"), "the bar stayed after Undo")
