@@ -45,6 +45,15 @@ class MoneyBillsTest {
         assertTrue(kotlin.math.abs(3_000f / 28_099f - b.paidShare) < 0.001f)
     }
 
+    /** Found and fixing week 5, A13: the regular payments still to come, by merchant, for Spending's rows to name. */
+    @Test
+    fun theRegularPaymentsStillToComeAreKeyedByMerchant() {
+        val due = payday().regularDue
+        assertEquals(d(10, 20), due[MoneyCategoryRules.merchantKey("STREAMLY.COM")])
+        // Netflux was paid on the 3rd and isn't due again before payday.
+        assertNull(due[MoneyCategoryRules.merchantKey("NETFLUX.COM")])
+    }
+
     @Test
     fun billsToComeByDateThenThePaidOnesGreyed() {
         val rows = payday().bills!!.rows

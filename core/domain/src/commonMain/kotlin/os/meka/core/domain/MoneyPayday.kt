@@ -43,6 +43,8 @@ data class MoneyPaydayView(
     val toGoPence: Long? = null,
     /** Money redesign (B3): the Bills tab's card and list, from the same bills ([MoneyBills]). */
     val bills: MoneyBillsView? = null,
+    /** Found and fixing week 5, A13: each regular payment still to go out before payday, merchant key to its due day. */
+    val regularDue: Map<String, Long> = emptyMap(),
 )
 
 /**
@@ -251,6 +253,7 @@ object MoneyPayday {
             HEAD, null, payLine, fromLine, sinceLine, goingOut, rows, (sorted.size - rows.size).coerceAtLeast(0),
             pay.account, accountName, balanceLine, bal != null, safe, lit, foot(source),
             paydayDay = payday, leftPence = leftPence, toGoPence = total, bills = billsView,
+            regularDue = regular.associate { it.key to it.nextDay },
         )
     }
 }

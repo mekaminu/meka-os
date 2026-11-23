@@ -50,4 +50,25 @@ object MoneySpendNote {
             else -> Note(same, MoneyTone.QUIET)
         }
     }
+
+    /**
+     * Found and fixing week 5, A13 (g1a 1, g1b 1): Spending counted the council tax paid Thu 1 Oct in its Bills row
+     * ("as usual") while the Bills to come tile held the next one, due Sun 1 Nov, so two reviewers read the £142 as taken
+     * off twice. A row whose payment this month comes round again before payday now says so: one payee "paid Thu 1 Oct ·
+     * next Sun 1 Nov" (or, when the note says how it compares, "£30 over usual · next Sun 1 Nov"); several "paid this
+     * month · 2 due again". [again] is each such payee's day paid this month to its next due day (epoch days).
+     */
+    fun dueAgain(base: Note, again: List<Pair<Long, Long>>): Note {
+        if (again.isEmpty()) return base
+        val quiet = base.tone == MoneyTone.QUIET
+        val text = if (again.size == 1) {
+            val (paid, next) = again.single()
+            val nextLine = "next ${CivilDate.shortLabel(next)}"
+            if (quiet) "paid ${CivilDate.shortLabel(paid)} · $nextLine" else "${base.text} · $nextLine"
+        } else {
+            val n = "${again.size} due again"
+            if (quiet) "paid this month · $n" else "${base.text} · $n"
+        }
+        return Note(text, base.tone)
+    }
 }

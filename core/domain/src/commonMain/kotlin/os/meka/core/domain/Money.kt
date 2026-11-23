@@ -825,6 +825,17 @@ object MoneyRules {
             regular, BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + cardBills,
             cardBills.mapTo(HashSet()) { it.title }, today,
         ) else null
+        // Found and fixing week 5, A13: a row whose payment this month is due again before payday says so, beside Bills to come.
+        val dueAgain = paydayView?.takeIf { it.notReady == null }?.regularDue.orEmpty()
+        if (dueAgain.isNotEmpty()) spendCats.replaceAll { sc ->
+            val again = cur.filter { it.pence < 0 && shownKey(it) == sc.key }.groupBy { keyOf(it) }
+                .mapNotNull { (k, ts) -> dueAgain[k]?.let { next -> ts.maxOf { it.day } to next } }
+                .filter { (paid, next) -> next > paid }.sortedBy { it.second }
+            if (again.isEmpty()) sc else {
+                val tone = when { sc.over -> MoneyTone.OVER; sc.under -> MoneyTone.GOOD; else -> MoneyTone.QUIET }
+                sc.copy(line = MoneySpendNote.dueAgain(MoneySpendNote.Note(sc.line, tone), again).text)
+            }
+        }
         // Money redesign (B2): the Spending tab's ring, tiles, category rows and the latest payments by day.
         val shownDate = CivilDate.fromEpochDay(today)
         val spending = MoneySpending.view(

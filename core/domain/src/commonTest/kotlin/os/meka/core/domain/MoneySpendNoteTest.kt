@@ -64,4 +64,20 @@ class MoneySpendNoteTest {
         // Just past the whole month (under the share that counts as over): still the pace.
         assertEquals("£210 over usual", note(pounds = 410, avgPounds = 400, partial = true, day = 15).text)
     }
+
+    /** Found and fixing week 5, A13: a payment this month that comes round again before payday says when. */
+    @Test
+    fun aPaymentDueAgainBeforePaydaySaysPaidAndNext() {
+        val paid = CivilDate.toEpochDay(2026, 10, 1)
+        val next = CivilDate.toEpochDay(2026, 11, 1)
+        val quiet = MoneySpendNote.Note("as usual", MoneyTone.QUIET)
+        assertEquals(MoneySpendNote.Note("paid Thu 1 Oct · next Sun 1 Nov", MoneyTone.QUIET), MoneySpendNote.dueAgain(quiet, listOf(paid to next)))
+        // A note that compares keeps its figure and tone, and adds the next day.
+        val over = MoneySpendNote.Note("£30 over usual", MoneyTone.OVER)
+        assertEquals(MoneySpendNote.Note("£30 over usual · next Sun 1 Nov", MoneyTone.OVER), MoneySpendNote.dueAgain(over, listOf(paid to next)))
+        // Several payees: counted, not each named.
+        assertEquals("paid this month · 2 due again", MoneySpendNote.dueAgain(quiet, listOf(paid to next, paid + 2 to next + 2)).text)
+        // None: the note as it was.
+        assertEquals(quiet, MoneySpendNote.dueAgain(quiet, emptyList()))
+    }
 }

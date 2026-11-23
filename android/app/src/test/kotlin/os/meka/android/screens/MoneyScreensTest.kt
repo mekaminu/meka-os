@@ -183,6 +183,11 @@ class MoneyScreensTest {
             // Walk-through 2026-11-08 A32: beside the bills to come, the last tile takes them off and says so.
             val last = v.month?.spending?.tiles?.lastOrNull()?.label
             if (last != os.meka.core.domain.MoneySpending.TILE_AFTER_BILLS) fail("$name: the tile beside Bills to come says $last, not After bills")
+            // Found and fixing week 5, A13 (g1a 1, g1b 1): the council tax in the Bills row was paid Thu 1 Oct and the one
+            // in Bills to come is the next; the row says so, so the £142 never reads as taken off twice.
+            val billsRow = v.month?.spending?.rows?.firstOrNull { it.key == os.meka.core.domain.MoneyCategory.BILLS.key }
+                ?: fail("$name: no Bills row on Spending")
+            if (billsRow.note != "paid Thu 1 Oct · next Sun 1 Nov") fail("$name: the Bills row says \"${billsRow.note}\", not when it was paid and is next due")
         }
         // Walk-through 2026-11-08 A19: the three tiles' labels are one size ("Bills to come" read smaller than its
         // neighbours on the closed Fold), and so are their figures.
