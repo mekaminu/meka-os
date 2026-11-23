@@ -7320,3 +7320,9 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - The plan card's "N sessions a week" and its side line ("1 h 30 a week · 5 lessons left") sat in a Row; on the closed Fold the side line got about 100 dp and its held run broke mid-word ("5 lesso / ns left", dark and light).
 - `StudyPane.PlanCard`: a FlowRow, both bottom-aligned, so the side line goes under, whole, when it doesn't fit. Mac `StudySheet`: ViewThatFits, side by side or stacked.
 - Test: `ScreenShots.assertNoMidWordBreaks` (any text, a line break between two letters or digits) on `cover-dark-plan` and `cover-light-plan`.
+
+### Found and fixing, week 5 — slice 35 (2026-11-23): A12's Edit category edges
+- With a cap set, the name field scrolled under the sheet's fixed head ("Treats · 1 payee") and showed the lower half of its "Treats" through a 16 dp head fade; with no cap, the cap field's hint ("Cap it a month, e.g. £60") was cut through its letters by the Cancel · Save foot with no fade at all.
+- `OwnCategorySheet`: the body uses `edgeFades` (24 dp, no motion of its own) instead of `headFade`: the top fades once scrolled, the foot fades while more is below (new `more` parameter on `edgeFades`, default unchanged for Today).
+- Test: `ScreenShots.assertEdgesSoft` reads the body's first and last pixel rows against the sheet's background at the left padding; `hisCategoriesAreManagedFromAccounts` insists on the foot, `aMonthlyCapOnHisCategory` on the top. Fold only; the Mac's category popover has no fixed head or foot.
+- Still in A12 for this sheet: the "capped at £15 · Undo" line sits inline mid-sheet rather than as a snackbar.

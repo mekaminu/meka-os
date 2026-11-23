@@ -12,6 +12,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.text.TextLayoutResult
 import android.os.Looper
 import androidx.compose.ui.test.performTouchInput
@@ -925,6 +927,46 @@ object ScreenShots {
         }
         compose.onNodeWithTag("screen").captureRoboImage(file.path)
         return true
+    }
+
+    /**
+     * Found and fixing week 5, A12 (Edit category): a scroll area tagged [tag] between a fixed head and a fixed foot
+     * draws nothing hard-cut at either edge. Once scrolled, its first pixel row is the sheet's own background right
+     * across (whatever passed under the head faded out, never half a "Treats"), and while more is below, so is its last
+     * row (never the top half of the cap field's hint over Cancel · Save). The background is read at the area's left
+     * padding. Returns which edges were checked ("top", "foot"), so a caller can insist on the one its shot shows.
+     */
+    fun assertEdgesSoft(compose: ComposeContentTestRule, name: String, tag: String, tolerance: Int = 14): Set<String> {
+        val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        val range = node.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) ?: fail("$name: $tag doesn't scroll")
+        val value = range.value()
+        val max = range.maxValue()
+        val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
+        val b = node.boundsInRoot
+        val left = b.left.toInt().coerceAtLeast(0)
+        val right = b.right.toInt().coerceAtMost(shot.width)
+        fun hard(y: Int): String? {
+            if (y < 0 || y >= shot.height) return null
+            val bg = shot.getPixel(left + 1, y)
+            for (x in left until right) {
+                val p = shot.getPixel(x, y)
+                val d = maxOf(kotlin.math.abs(android.graphics.Color.red(p) - android.graphics.Color.red(bg)),
+                    kotlin.math.abs(android.graphics.Color.green(p) - android.graphics.Color.green(bg)),
+                    kotlin.math.abs(android.graphics.Color.blue(p) - android.graphics.Color.blue(bg)))
+                if (d > tolerance) return "x $x differs from the background by $d"
+            }
+            return null
+        }
+        val checked = mutableSetOf<String>()
+        if (value > 0.5f) {
+            checked += "top"
+            hard(b.top.toInt() + 1)?.let { fail("$name: $tag is cut hard under its head ($it)") }
+        }
+        if (value < max - 0.5f) {
+            checked += "foot"
+            hard(b.bottom.toInt() - 2)?.let { fail("$name: $tag is cut hard over its foot ($it)") }
+        }
+        return checked
     }
 
     private fun assertNotACopy(name: String, file: File, opening: ByteArray?, openingName: String?) {

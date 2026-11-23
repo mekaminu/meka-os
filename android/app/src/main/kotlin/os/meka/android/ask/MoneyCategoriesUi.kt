@@ -58,7 +58,7 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.MotionMath
-import os.meka.android.designsystem.headFade
+import os.meka.android.designsystem.edgeFades
 import os.meka.android.designsystem.minTouch
 import os.meka.android.lists.Field
 import os.meka.core.domain.MoneyChallenges
@@ -154,10 +154,13 @@ internal fun OwnCategorySheet(
                         Text(moneyShown(r.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
-                // Whatever scrolls under the head fades out rather than being cut to a hard edge (the board's headFade).
+                // Whatever scrolls under the head fades out rather than being cut to a hard edge, and while more is below,
+                // the body fades into the Cancel · Save foot too (walk-through week 5, A12: the name field's "Treats" showed
+                // its lower half under the head, the cap field's hint its top half over the foot, both with a hard edge).
                 val body = rememberScrollState()
                 Column(
-                    Modifier.weight(1f, fill = false).fillMaxWidth().clipToBounds().headFade(body.value > 0).verticalScroll(body)
+                    Modifier.weight(1f, fill = false).fillMaxWidth().clipToBounds()
+                        .edgeFades(scrolled = { body.value > 0 }, more = { body.value < body.maxValue }).verticalScroll(body)
                         .padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.m, top = MekaSpace.xs)
                         .testTag("money-own-body"),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),

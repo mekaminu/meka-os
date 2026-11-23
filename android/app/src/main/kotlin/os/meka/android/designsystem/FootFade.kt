@@ -35,8 +35,10 @@ fun Modifier.footFade(): Modifier = this
  * Walk-through week 4, A6: a list under a fixed header (Today's two columns on the open Fold) fades its top edge as well
  * as its foot once it has scrolled ([scrolled]), so a row passing under the header's habit chips softens over
  * [MotionMath.FOOT_FADE_DP] instead of being sliced through its title. At rest the top is crisp. No motion of its own.
+ * Walk-through week 5, A12: [more] says whether anything is still below (a sheet's body over its fixed Cancel · Save
+ * foot), so the foot fades only while there is more to scroll to and the last line sits crisp at the end.
  */
-fun Modifier.edgeFades(scrolled: () -> Boolean): Modifier = this
+fun Modifier.edgeFades(scrolled: () -> Boolean, more: () -> Boolean = { true }): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
@@ -49,6 +51,7 @@ fun Modifier.edgeFades(scrolled: () -> Boolean): Modifier = this
                 blendMode = BlendMode.DstIn,
             )
         }
+        if (!more()) return@drawWithContent
         val top = size.height - fade
         drawRect(
             brush = Brush.verticalGradient(0f to Color.Black, 1f to Color.Transparent, startY = top, endY = size.height),

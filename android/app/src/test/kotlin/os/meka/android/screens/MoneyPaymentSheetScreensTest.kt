@@ -258,6 +258,9 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(shows("money-own-sheet"), "the category's sheet didn't open")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-own-category"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-own-category")
+        // Found and fixing week 5, A12: the cap field's hint fades into Cancel · Save while more is below, never cut through.
+        assertTrue("foot" in ScreenShots.assertEdgesSoft(compose, "cover-dark-own-category", "money-own-body"),
+            "the sheet's body has nothing below the foot, so the shot can't show its foot fading")
         // Walk-through A26: Cancel · Save sit at the sheet's foot, below Hide from the ring and the cap (never between the
         // form and them), the form draws no buttons of its own, and the sheet stops short of the screen's top edge.
         if (shows("money-new-create") || shows("money-new-cancel")) fail("the edit form still has its own Cancel / Save mid-sheet")
@@ -355,6 +358,9 @@ class MoneyPaymentSheetScreensTest {
         assertTrue(compose.onNodeWithTag("money-own-body").fetchSemanticsNode().config
             .getOrNull(SemanticsProperties.VerticalScrollAxisRange)?.value?.invoke()?.let { it > 0f } == true,
             "the shot isn't of a scrolled sheet, so it can't show the head staying put")
+        // Found and fixing week 5, A12: the name field that scrolled under the head fades out, never half a "Treats".
+        assertTrue("top" in ScreenShots.assertEdgesSoft(compose, "cover-dark-own-category-cap", "money-own-body"),
+            "the sheet's body isn't scrolled, so the shot can't show its head's edge")
     }
 
     /** Needs and wants: the sheet's Need toggle marks the payee; Spending's "Needs vs wants" chip splits the month in two. */
