@@ -230,6 +230,9 @@ struct TodayView: View {
 
     /// One of the split's two lists: it scrolls on its own, its top fades over a whole row once scrolled and its foot
     /// fades into the capture field.
+    /// Found and fixing week 5, A12 slice 44: the split columns' eased top fade (core TodayColumnsRules.topFadeStops).
+    private static let splitTopStops: [Double] = TodayColumnsRules.shared.topFadeStops().map { Double($0.floatValue) }
+
     private func splitList<Content: View>(_ id: String, leading: CGFloat, trailing: CGFloat,
                                           @ViewBuilder content: () -> Content) -> some View {
         ScrollView {
@@ -242,7 +245,8 @@ struct TodayView: View {
             )
         }
         // Found and fixing week 5, A12: once scrolled, the top fades over a whole row under the header.
-        .edgeFades(topPt: CGFloat(TodayColumnsRules.shared.TOP_FADE_DP), foot: false)
+        // Slice 44: the fade eases in, so a row's stub at rest under the header is all but gone.
+        .edgeFades(topPt: CGFloat(TodayColumnsRules.shared.TOP_FADE_DP), foot: false, topStops: Self.splitTopStops)
         .footFade()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)

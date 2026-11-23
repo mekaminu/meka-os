@@ -35,8 +35,19 @@ object TodayColumnsRules {
      */
     const val TOP_FADE_DP = 56
 
-    /** How opaque a split column's content is [yDp] below its top once scrolled (0 at the edge, whole past the fade). */
-    fun topFadeAlpha(yDp: Float): Float = (yDp / TOP_FADE_DP).coerceIn(0f, 1f)
+    /**
+     * How opaque a split column's content is [yDp] below its top once scrolled (0 at the edge, whole past the fade).
+     * Found and fixing week 5, A12 (slice 44): the fade eases in (the square of the way down it), so a row's stub at rest
+     * in its top half ("60 min" under the habit chips on the open Fold's end shot) is all but gone, not a dim line; a
+     * straight ramp left it at about a third. Past the middle the row comes up quickly and reads whole.
+     */
+    fun topFadeAlpha(yDp: Float): Float = (yDp / TOP_FADE_DP).coerceIn(0f, 1f).let { it * it }
+
+    /** How many even steps the apps draw [topFadeAlpha] with (a gradient stop at each, both ends included). */
+    const val TOP_FADE_STEPS = 8
+
+    /** [topFadeAlpha] at [TOP_FADE_STEPS] + 1 evenly spaced points from the top (0) to the fade's end (1). */
+    fun topFadeStops(): List<Float> = (0..TOP_FADE_STEPS).map { topFadeAlpha(TOP_FADE_DP * it.toFloat() / TOP_FADE_STEPS) }
 
     fun splits(layout: CommandLayout): Boolean = layout != CommandLayout.SINGLE
 

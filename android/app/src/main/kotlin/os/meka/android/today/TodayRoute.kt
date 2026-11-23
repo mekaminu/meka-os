@@ -1607,6 +1607,8 @@ private fun SplitToday(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val headerMax = maxHeight * TodayColumnsRules.HEADER_MAX_SHARE
+        // Found and fixing week 5, A12 slice 44: the columns' top fade eases in, so a row's stub at rest is all but gone.
+        val splitTopStops = remember { TodayColumnsRules.topFadeStops() }
         Column(Modifier.fillMaxSize()) {
             Box(
                 Modifier.fillMaxWidth().heightIn(max = headerMax).verticalScroll(rememberScrollState())
@@ -1617,7 +1619,7 @@ private fun SplitToday(
                 LazyColumn(
                     state = leftState,
                     modifier = Modifier.weight(TodayColumnsRules.LEFT_SHARE).fillMaxHeight()
-                        .edgeFades(topDp = TodayColumnsRules.TOP_FADE_DP) { leftState.canScrollBackward }.testTag(TODAY_LIST_TAG),
+                        .edgeFades(topDp = TodayColumnsRules.TOP_FADE_DP, topStops = splitTopStops) { leftState.canScrollBackward }.testTag(TODAY_LIST_TAG),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = MekaSpace.gutter, end = half, bottom = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                     content = left,
@@ -1626,7 +1628,7 @@ private fun SplitToday(
                 LazyColumn(
                     state = rightState,
                     modifier = Modifier.weight(1f - TodayColumnsRules.LEFT_SHARE).fillMaxHeight()
-                        .edgeFades(topDp = TodayColumnsRules.TOP_FADE_DP) { rightState.canScrollBackward }.testTag(TODAY_RIGHT_LIST_TAG),
+                        .edgeFades(topDp = TodayColumnsRules.TOP_FADE_DP, topStops = splitTopStops) { rightState.canScrollBackward }.testTag(TODAY_RIGHT_LIST_TAG),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = half, end = MekaSpace.gutter, bottom = MekaSpace.xl),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 ) {

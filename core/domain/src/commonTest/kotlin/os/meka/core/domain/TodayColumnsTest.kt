@@ -92,4 +92,18 @@ class TodayColumnsTest {
         // A title's first 20 dp under the header are under half strength, so no half line reads as cut.
         assertTrue(r.topFadeAlpha(20f) < 0.5f)
     }
+
+    @Test
+    fun aRowsStubAtRestUnderTheChipsIsAllButGone() {
+        // Found and fixing week 5, A12 slice 44: the end shot's "60 min" stub, about 20 dp under the header, read dim at
+        // about a third; the eased fade leaves it under a fifth, and the fade still comes up whole by its end.
+        val r = TodayColumnsRules
+        assertTrue(r.topFadeAlpha(24f) < 0.2f)
+        assertTrue(r.topFadeAlpha(42f) > 0.5f)
+        val stops = r.topFadeStops()
+        assertEquals(r.TOP_FADE_STEPS + 1, stops.size)
+        assertEquals(0f, stops.first())
+        assertEquals(1f, stops.last())
+        assertTrue(stops.zipWithNext().all { (a, b) -> b > a })
+    }
 }

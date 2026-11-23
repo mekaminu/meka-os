@@ -7373,3 +7373,12 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - Mac `ScrollChrome.swift`: `edgeFades(topPt:foot:)`; `TodayView.splitList` fades its top over `TOP_FADE_DP` once scrolled (it had no top fade at all) and keeps its foot fade into the capture field.
 - Tests: `TodayColumnsTest.aScrolledSplitColumnFadesItsTopOverAWholeRow`; new `ScreenShots.assertTopDissolves` (nothing in a scrolled list's first 20 dp under the header reads at more than half strength against the background), run on `inner-dark-many-end` and `inner-dark-fasting-end` for both columns (the left must have scrolled).
 - Still open in A12: the inner many shot's task list sits below Up next and This evening (the approved order); the snackbar over half-visible text in Needs you's mail by-hand.
+
+### Found and fixing, week 5 — slice 44 (2026-11-23): A12 finished, Today's split columns fade in eased
+
+- After slice 42 the open Fold's end shot (`today/inner-dark-many-end.png`) still showed a dim "60 min" under the habit chips: the last of "Fix the gate latch", about 20 dp into the 56 dp top fade, which ran straight, so it read at about a third.
+- Core `TodayColumnsRules.topFadeAlpha` is now the square of the way down the fade (24 dp under a fifth, past 42 dp over half), with `TOP_FADE_STEPS` (8) and `topFadeStops()` for the apps to draw it.
+- Android `FootFade.kt`: `edgeFades` takes `topStops` (null keeps the straight ramp elsewhere); `SplitToday`'s two columns pass the core stops.
+- Mac `ScrollChrome.swift`: `edgeFades(topPt:foot:topStops:)` builds the top gradient from the stops; `TodayView.splitList` passes them (read once into a static `[Double]`).
+- Tests: `TodayColumnsTest.aRowsStubAtRestUnderTheChipsIsAllButGone`; `TodayScreensTest.shootEnd` also runs `assertTopDissolves` with a 24 dp band at a 64 difference on both columns.
+- The inner many shot's task list below Up next and This evening is the approved order (Meka 2026-11-08 22:58: left = Now, This evening, Today), so it stays.

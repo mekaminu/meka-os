@@ -11,11 +11,23 @@ private struct EdgeFadesModifier: ViewModifier {
     var topPt: CGFloat = CGFloat(MacCommandCentreRules.shared.TOP_FADE_PT)
     /// Whether the foot fades while more lies below (off where the column keeps its own foot fade).
     var foot: Bool = true
+    /// The top fade's alphas at even steps down it (core TodayColumnsRules.topFadeStops, eased so a row's stub at rest
+    /// is all but gone); empty keeps the straight ramp. Plain numbers, read once on the main actor by the caller.
+    var topStops: [Double] = []
     @State private var fades = Fades(top: false, bottom: false)
 
     private nonisolated struct Fades: Equatable { var top: Bool; var bottom: Bool }
     // Built in the scroll-geometry transform, which may run off the main actor.
     private nonisolated struct Geo: Equatable { var offset: CGFloat; var content: CGFloat; var viewport: CGFloat }
+
+    private var topGradient: Gradient {
+        guard fades.top else { return Gradient(colors: [.black, .black]) }
+        guard topStops.count >= 2 else { return Gradient(colors: [.black.opacity(0), .black]) }
+        let last = Double(topStops.count - 1)
+        return Gradient(stops: topStops.enumerated().map { i, a in
+            Gradient.Stop(color: .black.opacity(min(max(a, 0), 1)), location: Double(i) / last)
+        })
+    }
 
     func body(content: Content) -> some View {
         content
@@ -33,7 +45,7 @@ private struct EdgeFadesModifier: ViewModifier {
             }
             .mask {
                 VStack(spacing: 0) {
-                    LinearGradient(colors: [.black.opacity(fades.top ? 0 : 1), .black], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(gradient: topGradient, startPoint: .top, endPoint: .bottom)
                         .frame(height: topPt)
                     Rectangle()
                     LinearGradient(colors: [.black, .black.opacity(fades.bottom && foot ? 0 : 1)], startPoint: .top, endPoint: .bottom)
@@ -49,7 +61,9 @@ extension View {
 
     /// Found and fixing week 5, A12: a column under a fixed header fades its top over [topPt] once scrolled, so a row
     /// passing under the header dissolves instead of being sliced; [foot] false leaves the foot to the column's own fade.
-    func edgeFades(topPt: CGFloat, foot: Bool) -> some View { modifier(EdgeFadesModifier(topPt: topPt, foot: foot)) }
+    func edgeFades(topPt: CGFloat, foot: Bool, topStops: [Double] = []) -> some View {
+        modifier(EdgeFadesModifier(topPt: topPt, foot: foot, topStops: topStops))
+    }
 }
 
 /// A column's heading that stays put while the column scrolls under it (Mac presentation pass, item 2), sitting

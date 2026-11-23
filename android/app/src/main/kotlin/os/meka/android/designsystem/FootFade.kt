@@ -39,10 +39,13 @@ fun Modifier.footFade(): Modifier = this
  * foot), so the foot fades only while there is more to scroll to and the last line sits crisp at the end.
  * [topDp] is how deep the top fades once scrolled (Today's split columns fade over a whole row, core
  * TodayColumnsRules.TOP_FADE_DP, so a row under the habit chips dissolves rather than reading as sliced).
+ * [topStops], when given, are the top fade's alphas at even steps down it (core TodayColumnsRules.topFadeStops, an
+ * eased fade so a row's stub at rest is all but gone); null keeps the straight ramp.
  */
 fun Modifier.edgeFades(
     more: () -> Boolean = { true },
     topDp: Int = MotionMath.FOOT_FADE_DP,
+    topStops: List<Float>? = null,
     scrolled: () -> Boolean,
 ): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -51,8 +54,17 @@ fun Modifier.edgeFades(
         val fade = MotionMath.FOOT_FADE_DP.dp.toPx().coerceAtMost(size.height / 2)
         if (scrolled()) {
             val topFade = topDp.dp.toPx().coerceAtMost(size.height / 2)
+            val brush = if (topStops != null && topStops.size >= 2) {
+                val last = (topStops.size - 1).toFloat()
+                Brush.verticalGradient(
+                    *Array(topStops.size) { i -> (i / last) to Color.Black.copy(alpha = topStops[i].coerceIn(0f, 1f)) },
+                    startY = 0f, endY = topFade,
+                )
+            } else {
+                Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black, startY = 0f, endY = topFade)
+            }
             drawRect(
-                brush = Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black, startY = 0f, endY = topFade),
+                brush = brush,
                 topLeft = Offset.Zero,
                 size = Size(size.width, topFade),
                 blendMode = BlendMode.DstIn,

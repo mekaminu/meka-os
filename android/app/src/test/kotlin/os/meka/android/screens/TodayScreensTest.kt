@@ -305,6 +305,9 @@ class TodayScreensTest {
             assertTrue("$name: the left column never scrolled, so nothing was checked",
                 ScreenShots.assertTopDissolves(compose, name, TODAY_LIST_TAG))
             ScreenShots.assertTopDissolves(compose, name, TODAY_RIGHT_LIST_TAG)
+            // Slice 44: the eased fade leaves no dim stub ("60 min") in the first 24 dp of a column at rest.
+            ScreenShots.assertTopDissolves(compose, name, TODAY_LIST_TAG, bandDp = 24f, maxDiff = 64)
+            ScreenShots.assertTopDissolves(compose, name, TODAY_RIGHT_LIST_TAG, bandDp = 24f, maxDiff = 64)
         }
         val density = ApplicationProvider.getApplicationContext<ShotApplication>().resources.displayMetrics.density
         val bar = compose.onNodeWithTag(CAPTURE_BAR_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
