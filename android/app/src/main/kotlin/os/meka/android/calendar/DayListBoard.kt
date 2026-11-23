@@ -350,7 +350,7 @@ fun DayListSpread(
             maxSheetWidth = SPREAD_SHEET_MAX_DP.dp,
         )
     }
-    EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = MekaSpace.xxl + MekaSpace.xxl + MekaSpace.l))
+    EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).padding(bottom = MekaSpace.xxl + MekaSpace.xxl + MekaSpace.l), backdrop = null)
     }
 }
 

@@ -256,10 +256,14 @@ extension View {
 }
 
 /// The calendar-action undo bar: rises from the bottom with the message and Undo; goes after 5 seconds.
+/// Found and fixing week 5, A12: over a page ([backdrop]) it sits on the page's colour, solid round the bar down to the
+/// window's foot ([bottomInset] included) and fading in above it (core UndoBarRules), so a row cut under it dissolves.
 struct EventUndoBar: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
+    var backdrop = false
+    var bottomInset: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -277,6 +281,19 @@ struct EventUndoBar: View {
                 .background(palette.surfaceRaised, in: Capsule())
                 .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
                 .padding(.bottom, MekaSpace.l)
+                .padding(.bottom, bottomInset)
+                .frame(maxWidth: backdrop ? .infinity : nil)
+                .padding(.top, backdrop ? CGFloat(UndoBarRules.shared.BACKDROP_FADE_DP) + MekaSpace.m : 0)
+                .background {
+                    if backdrop {
+                        VStack(spacing: 0) {
+                            LinearGradient(colors: [palette.background.opacity(0), palette.background], startPoint: .top, endPoint: .bottom)
+                                .frame(height: CGFloat(UndoBarRules.shared.BACKDROP_FADE_DP))
+                            palette.background
+                        }
+                        .allowsHitTesting(false)
+                    }
+                }
                 .id(offer.id)
                 .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }

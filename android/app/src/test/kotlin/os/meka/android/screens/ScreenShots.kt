@@ -1041,6 +1041,40 @@ object ScreenShots {
         return true
     }
 
+    /**
+     * Found and fixing week 5, A12 (the snackbar over half-visible text): while the undo bar shows, the 16 dp gap between
+     * its fade and the raised bar, and the gaps either side of the bar, are the page's colour alone, so no fragment of a
+     * card cut under the bar shows there. Each pixel is compared with the backdrop read at the gap's left end. Returns
+     * false when no undo bar is up (nothing to check).
+     */
+    fun assertUndoBackdrop(compose: ComposeContentTestRule, name: String, maxDiff: Int = 24): Boolean {
+        val nodes = compose.onAllNodesWithTag(os.meka.android.calendar.UNDO_BAR_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        val node = nodes.firstOrNull() ?: return false
+        val shot = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
+        val density = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>().resources.displayMetrics.density
+        val b = node.boundsInRoot
+        val left = b.left.toInt().coerceAtLeast(0)
+        val right = b.right.toInt().coerceAtMost(shot.width)
+        val gapTop = (b.top + os.meka.core.domain.UndoBarRules.BACKDROP_FADE_DP * density).toInt().coerceAtLeast(0)
+        val gapEnd = (gapTop + 14 * density).toInt().coerceAtMost(shot.height)
+        val bg = shot.getPixel(left + 1, gapTop)
+        fun differs(p: Int) = maxOf(kotlin.math.abs(android.graphics.Color.red(p) - android.graphics.Color.red(bg)),
+            kotlin.math.abs(android.graphics.Color.green(p) - android.graphics.Color.green(bg)),
+            kotlin.math.abs(android.graphics.Color.blue(p) - android.graphics.Color.blue(bg)))
+        for (y in gapTop until gapEnd) for (x in left until right) {
+            val d = differs(shot.getPixel(x, y))
+            if (d > maxDiff) fail("$name: something shows in the gap above the undo bar, ${(y - b.top) / density} dp into its backdrop (x $x differs by $d)")
+        }
+        // The side gaps, the bar's own height (inside the 16 dp at each end, outside the raised bar's rounded corners).
+        val sideEnd = (b.bottom - 16 * density).toInt().coerceAtMost(shot.height)
+        val sides = listOf(left until (left + 14 * density).toInt(), (right - 14 * density).toInt() until right)
+        for (y in gapEnd until sideEnd) for (xs in sides) for (x in xs) {
+            val d = differs(shot.getPixel(x, y))
+            if (d > maxDiff) fail("$name: something shows beside the undo bar (x $x, ${(y - b.top) / density} dp, differs by $d)")
+        }
+        return true
+    }
+
     private fun assertNotACopy(name: String, file: File, opening: ByteArray?, openingName: String?) {
         if (!file.exists()) return
         val shot = file.readBytes()

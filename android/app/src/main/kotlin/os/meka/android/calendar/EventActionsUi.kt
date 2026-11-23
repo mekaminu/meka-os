@@ -35,7 +35,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -66,6 +69,7 @@ import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.CalendarRules
 import os.meka.core.domain.EventDetails
 import os.meka.core.domain.ReminderRules
+import os.meka.core.domain.UndoBarRules
 import os.meka.core.facade.MekaCore
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -347,7 +351,7 @@ private fun EventActionsMenu(event: CalendarEvent, handlers: EventActionHandlers
  * Reduced motion: fades.
  */
 @Composable
-fun EventUndoBar(undo: EventUndo, modifier: Modifier = Modifier) {
+fun EventUndoBar(undo: EventUndo, modifier: Modifier = Modifier, backdrop: Color? = Meka.colors.background) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -367,6 +371,15 @@ fun EventUndoBar(undo: EventUndo, modifier: Modifier = Modifier) {
         modifier = modifier,
     ) {
         val shown = last ?: return@AnimatedVisibility
+        // Found and fixing week 5, A12: the bar sits on a backdrop of the page's colour, solid round the bar and fading
+        // in above it (core UndoBarRules), so a card cut under it dissolves instead of showing in the gap. No pointer
+        // input on the backdrop: taps through its fade still reach the page.
+        val fade = UndoBarRules.BACKDROP_FADE_DP.dp
+        val back = if (backdrop == null) Modifier else Modifier.drawBehind {
+            val solid = (fade.toPx() / size.height).coerceIn(0f, 1f)
+            drawRect(Brush.verticalGradient(0f to backdrop.copy(alpha = 0f), solid to backdrop, 1f to backdrop))
+        }.padding(top = fade)
+        Box(Modifier.fillMaxWidth().testTag(UNDO_BAR_TAG).then(back)) {
         Row(
             Modifier.fillMaxWidth().padding(MekaSpace.m).clip(RoundedCornerShape(MekaRadius.l))
                 .background(Meka.colors.surfaceRaised).minTouch().padding(horizontal = MekaSpace.l),
@@ -387,5 +400,9 @@ fun EventUndoBar(undo: EventUndo, modifier: Modifier = Modifier) {
                 )
             }
         }
+        }
     }
 }
+
+/** The undo bar with its backdrop (screen tests read its edge). */
+const val UNDO_BAR_TAG = "undo-bar"

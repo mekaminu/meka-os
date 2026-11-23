@@ -59,7 +59,7 @@ struct ShellView: View {
             }
             .clipped()
             // Calendar actions: "Hidden from your day · Undo" rises over whichever screen you did it on.
-            .overlay(alignment: .bottom) { EventUndoBar(palette: palette).padding(.bottom, MekaSpace.xxl) }
+            .overlay(alignment: .bottom) { EventUndoBar(palette: palette, backdrop: true, bottomInset: MekaSpace.xxl) }
         }
         // The ⌘K command bar, over the whole window (sidebar included).
         .overlay {

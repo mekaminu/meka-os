@@ -345,6 +345,9 @@ class NeedsYouMailScreensTest {
         // Walk-through 2026-11-15 A12 ("needs-you mail-by-hand = mail"): the shot was cover-dark-mail's opening screen;
         // it is taken again once Done has taken the first email off the card.
         ScreenShots.reshootAfterHand(compose, "needs-you", "cover-dark-mail-by-hand")
+        // Walk-through 2026-11-22 A12: "Done · archived at Navilife's next check  Undo" sat over Safe Drive's cut quote,
+        // its fragments showing above the bar; the bar's backdrop now covers its gaps.
+        if (!ScreenShots.assertUndoBackdrop(compose, name)) fail("$name: no undo bar after Done on \"Football on Saturday\"")
 
         val other = row(core, invoice) ?: fail("$name: \"Invoice question\" left From your mail with Done on the other email")
         openRow(name, invoice)
