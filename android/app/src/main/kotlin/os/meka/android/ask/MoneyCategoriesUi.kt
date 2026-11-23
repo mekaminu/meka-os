@@ -3,7 +3,6 @@ package os.meka.android.ask
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -170,17 +169,6 @@ internal fun OwnCategorySheet(
                         title = MoneyOwnCategories.EDIT_TITLE, action = MoneyOwnCategories.SAVE,
                         startName = r.name, startTone = r.tone, startIcon = r.icon, draft = draft, buttons = false,
                     )
-                    Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-own-said") { s ->
-                        if (s != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            Text(moneyShown(s.line), style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textSecondary,
-                                modifier = Modifier.weight(1f).testTag("money-own-said"))
-                            s.undo?.let { u ->
-                                Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
-                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onUndo(u) }
-                                        .minTouch().padding(MekaSpace.xs))
-                            }
-                        }
-                    }
                     FlowRow(Modifier.padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         TripPill(MoneyOwnCategories.HIDE, on = r.hidden, tag = "money-own-hide",
                             description = MoneyOwnCategories.HIDE + if (r.hidden) ", on" else ", off") { onHide(!r.hidden) }
@@ -228,6 +216,10 @@ internal fun OwnCategorySheet(
                         }
                     }
                 }
+                // Found and fixing week 5, A12: what the last write did ("Treats capped at £10 a month · on both devices
+                // Undo") rises as a bar just above Cancel · Save, never inline among the fields mid-sheet; reduced motion
+                // fades it. A refused line is lit; the next write replaces it.
+                OwnSaidBar(said, reduced, onUndo)
                 // Walk-through A26: Cancel · Save at the sheet's foot, under everything they finish, and always in view
                 // (the body scrolls above them). Save writes the name, colour and icon only when they changed, then closes;
                 // Hide, the cap, Merge and Delete act as they are tapped.
@@ -257,6 +249,33 @@ internal fun OwnCategorySheet(
                         Text(MoneyOwnCategories.SAVE, style = MekaType.metaStrong, color = if (ready) Meka.colors.onAccent else Meka.colors.textTertiary)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** The Edit category sheet's undo bar: the last write's line and Undo on a raised bar above the foot (rises; reduced motion fades). */
+@Composable
+private fun OwnSaidBar(said: MoneySaved?, reduced: Boolean, onUndo: (String) -> Unit) {
+    val last = remember { arrayOfNulls<MoneySaved>(1) }
+    if (said != null) last[0] = said
+    AnimatedVisibility(
+        visible = said != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else slideInVertically(MekaMotion.appear(false)) { it } + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else slideOutVertically(MekaMotion.appear(false)) { it } + fadeOut(MekaMotion.appear(false)),
+    ) {
+        val s = said ?: last[0] ?: return@AnimatedVisibility
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.l))
+                .background(Meka.colors.surfaceRaised).minTouch().padding(horizontal = MekaSpace.m).testTag("money-own-said-bar"),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            Text(moneyShown(s.line), style = MekaType.caption, color = if (s.refused) Meka.colors.accent else Meka.colors.textPrimary,
+                modifier = Modifier.weight(1f).padding(vertical = MekaSpace.xs).testTag("money-own-said"))
+            s.undo?.let { u ->
+                Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onUndo(u) }
+                        .minTouch().padding(MekaSpace.xs).testTag("money-own-undo"))
             }
         }
     }

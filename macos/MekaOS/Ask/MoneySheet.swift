@@ -2227,7 +2227,6 @@ struct MoneySheet: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
                 newCategoryForm(txnId: nil, editing: id)
-                if let s = said { saidLine(s).transition(.opacity) }
                 sheetPill(MoneyOwnCategories.shared.HIDE, on: r.hidden, spoken: MoneyOwnCategories.shared.HIDE + (r.hidden ? ", on" : ", off")) {
                     let hide = !r.hidden
                     MekaHaptics.tick()
@@ -2285,6 +2284,9 @@ struct MoneySheet: View {
                 }
                 // Walk-through A26: Cancel · Save at the foot, under Hide, the cap and Merge. Save writes the name, colour
                 // and icon only when they changed, then closes; the rest acts as it's clicked.
+                // Found and fixing week 5, A12: what the last write did, with Undo, rises as a bar just above Cancel · Save,
+                // never inline among the fields (reduced motion fades it).
+                if let s = said { ownSaidBar(s) }
                 let ready = MoneyOwnCategories.shared.clean(raw: newCategoryName) != nil
                 HStack {
                     Button(MoneyOwnCategories.shared.CANCEL) { ownSheet = nil; askingDelete = false }
@@ -2375,6 +2377,16 @@ struct MoneySheet: View {
             onDone: { chatOpen = false },
             listenOnOpen: chatListen
         )
+    }
+
+    /// The Edit category popover's undo bar: [saidLine] on a raised bar above the foot.
+    private func ownSaidBar(_ s: CoreModel.MoneySaid) -> some View {
+        let edge: AnyTransition = reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+        return saidLine(s)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.l, style: .continuous))
+            .padding(.top, MekaSpace.xs)
+            .transition(edge)
     }
 
     private func saidLine(_ s: CoreModel.MoneySaid) -> some View {

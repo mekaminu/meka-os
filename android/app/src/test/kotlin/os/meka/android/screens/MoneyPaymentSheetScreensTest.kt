@@ -361,6 +361,17 @@ class MoneyPaymentSheetScreensTest {
         // Found and fixing week 5, A12: the name field that scrolled under the head fades out, never half a "Treats".
         assertTrue("top" in ScreenShots.assertEdgesSoft(compose, "cover-dark-own-category-cap", "money-own-body"),
             "the sheet's body isn't scrolled, so the shot can't show its head's edge")
+        // Found and fixing week 5, A12: the cap's line with Undo is a bar above Cancel · Save, not a line mid-sheet.
+        val bar = compose.onNodeWithTag("money-own-said-bar").fetchSemanticsNode().boundsInRoot
+        val foot = compose.onNodeWithTag("money-own-foot").fetchSemanticsNode().boundsInRoot
+        assertTrue(bar.top >= body.bottom - 1f && bar.bottom <= foot.top + 1f,
+            "the cap's line isn't a bar between the body and Cancel · Save: bar $bar, body $body, foot $foot")
+        val line = compose.onNodeWithTag("money-own-said", useUnmergedTree = true).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text }.orEmpty()
+        assertTrue(line.startsWith("Treats capped at £15"), "the bar says \"$line\"")
+        tap("money-own-undo")
+        waitFor(core) { core.moneyView.value.ownRows.firstOrNull()?.cap == null }
+        assertTrue(!shows("money-own-said-bar"), "the bar stayed after Undo")
     }
 
     /** Needs and wants: the sheet's Need toggle marks the payee; Spending's "Needs vs wants" chip splits the month in two. */

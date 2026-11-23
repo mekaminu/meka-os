@@ -7356,3 +7356,11 @@ on the page) still run. KNOWN in `tools/check-shot-copies.py` is now empty, so a
 - `ScreenShots.assertInsideRing` (tag `money-ring`): every drawn line of the ring's middle has all four corners inside the hole; run on every MoneyScreensTest shot (a full Spending must check at least two lines) and on cover-dark-needs-wants.
 - The account sheet's switch rows (It's a card, Side hustle account) clipped the whole row to a 16 dp rounded shape with no side inset, so the wrapped caption's first letter at the bottom-left corner was cut ("on Bills", "hustle's tax year"). `MoneySwitchRow` now taps with `wordsTap` (the highlight bleeds 8 dp past the words). `MoneySwitchRowTest` draws each row beside the same words and pill with no tap and requires identical pixels.
 - Files: core MoneySpending.kt (+test), android MoneySpendingBlocks.kt, MoneyAccountsUi.kt, ScreenShots.kt, MoneyScreensTest.kt, MoneyPaymentSheetScreensTest.kt, MoneySwitchRowTest.kt; macos MoneySpendingViews.swift. Mac checked nightly.
+
+### Found and fixing, week 5 — slice 41 (2026-11-23): A12's Edit category Undo line
+
+- Walk-through finding (g4b): "Treats capped at £10 a month · on both devices  Undo" sat inline mid-sheet, between the edit form and Hide from the ring, instead of as a snackbar.
+- Android `MoneyCategoriesUi.kt`: the sheet's said line left the scrolling body; new `OwnSaidBar` draws it on a raised, rounded bar (tags `money-own-said-bar`, `money-own-said`, `money-own-undo`) between the body and the Cancel · Save foot; it rises with the appear spring (reduced motion: fade) and a refused line is lit.
+- Mac `MoneySheet.swift`: the popover's `saidLine` moved from under the form to `ownSaidBar` above Cancel · Save, on the raised surface, moving in from the bottom (reduced motion: opacity).
+- Test: `MoneyPaymentSheetScreensTest.aMonthlyCapOnHisCategory` checks the bar sits between `money-own-body` and `money-own-foot`, reads "Treats capped at £15…", and that Undo takes the cap off and the bar away.
+
