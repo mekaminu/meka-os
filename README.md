@@ -648,6 +648,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/working-on/cover-dark-many.png](docs/screens/fold/working-on/cover-dark-many.png)
 - [fold/working-on/cover-dark-not-booked.png](docs/screens/fold/working-on/cover-dark-not-booked.png)
 - [fold/working-on/cover-dark-one.png](docs/screens/fold/working-on/cover-dark-one.png)
+- [fold/working-on/cover-dark-redrafted.png](docs/screens/fold/working-on/cover-dark-redrafted.png)
 - [fold/working-on/cover-dark-tried-again.png](docs/screens/fold/working-on/cover-dark-tried-again.png)
 - [fold/working-on/cover-dark-used-found.png](docs/screens/fold/working-on/cover-dark-used-found.png)
 - [fold/working-on/cover-light-errands.png](docs/screens/fold/working-on/cover-light-errands.png)
