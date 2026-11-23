@@ -338,14 +338,16 @@ class ReviewBalanceReflectScreensTest {
         if (!onScreen(b.line)) fail("$name: the balance's line \"${b.line}\" isn't on screen")
         assertLines("$name-balance", fill)
         scrollTo("Targets")
-        shoot("$name-balance-foot")
+        // A11: a part already on screen shoots the same picture as the shot before it, which shows it; no copy is kept.
+        var last = "$name-balance"
+        if (ScreenShots.shootUnlessSame(compose, "review", "$name-balance-foot", last)) last = "$name-balance-foot"
         assertLines("$name-balance-foot", fill)
         if (fill == Fill.MANY) {
             if (b.unclear.size < 3) fail("$name: the fixture should have events to count (${b.unclear.map { it.title }})")
             if (!onScreen("Count as")) fail("$name: no \"Count as\" under an event with no clear area")
         }
         scrollTo("REFLECT")
-        shoot("$name-reflect")
+        ScreenShots.shootUnlessSame(compose, "review", "$name-reflect", last)
         if (!onScreen(r.title)) fail("$name: the reflection's title \"${r.title}\" isn't on screen")
         assertLines("$name-reflect", fill)
         when (fill) {

@@ -7294,3 +7294,14 @@ inside one area of `android/app/build/outputs/roborazzi`, except the pairs still
 wins/balance-foot/reflect, Calendars' on-today, Money's accounts layout/list and worth-other-row); a KNOWN pair whose
 files now differ also fails, so the list only shrinks. Test only, Fold, no app change.
 - Still open in A11: the KNOWN pairs.
+
+### Found and fixing, week 5 — slice 32 (2026-11-23): A11's Review pairs
+Review's twelve identical pairs were scrolls with nothing to do: on a short week WINS, Targets or REFLECT was already on
+screen, so `performScrollToNode` left the list where it was and the next shot was byte for byte the one before
+(empty = empty-wins, empty-balance = balance-foot = reflect, one-balance-foot = one-reflect, ...). New
+`ScreenShots.shootUnlessSame` shoots after the scroll and keeps the file only when it differs from the pane's last kept
+shot; a copy is removed (the earlier shot already shows that part) and every check on the screen still runs.
+`ReviewScreensTest.pane` uses it for -wins and -north, `ReviewBalanceReflectScreensTest.pane` for -balance-foot and
+-reflect. KNOWN in `tools/check-shot-copies.py` loses its twelve Review pairs (4 left: Calendars' on-today, Money's
+accounts layout/list and worth-other-row). Test only, Fold.
+- Still open in A11: Calendars' on-today and Money's two pairs.

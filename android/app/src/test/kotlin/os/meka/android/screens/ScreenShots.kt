@@ -859,6 +859,23 @@ object ScreenShots {
         return true
     }
 
+    /**
+     * Walk-through 2026-11-22 A11 (Review's wins, balance-foot and reflect): shoots `<area>/<name>` after a scroll, but keeps
+     * it only when it differs from [after]'s shot (an earlier shot of the same pane). When the scroll had nothing to do
+     * (the part was already on screen), the picture is byte for byte [after]'s, which already shows that part, so the copy
+     * is removed and false returned; the caller's checks on the screen still run.
+     */
+    fun shootUnlessSame(compose: ComposeContentTestRule, area: String, name: String, after: String): Boolean {
+        val file = File(path(area, name))
+        compose.onNodeWithTag("screen").captureRoboImage(file.path)
+        val earlier = File(path(area, after))
+        if (file.exists() && earlier.exists() && earlier.readBytes().contentEquals(file.readBytes())) {
+            file.delete()
+            return false
+        }
+        return true
+    }
+
     private fun assertNotACopy(name: String, file: File, opening: ByteArray?, openingName: String?) {
         if (!file.exists()) return
         val shot = file.readBytes()

@@ -186,10 +186,11 @@ class ReviewScreensTest {
         assertLines(name, fill)
         // Further down: the wins, then what's still open, the week ahead and the north star (the lone dash lived here).
         scrollTo("WINS")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("review", "$name-wins"))
+        // A11: when the wins were on screen already the scroll does nothing; the opening shot shows them, so no copy is kept.
+        val last = if (ScreenShots.shootUnlessSame(compose, "review", "$name-wins", name)) "$name-wins" else name
         assertLines("$name-wins", fill)
         scrollTo("Time returned")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("review", "$name-north"))
+        ScreenShots.shootUnlessSame(compose, "review", "$name-north", last)
         assertLines("$name-north", fill)
         if (onScreen("—")) fail("$name: a north-star number not counted yet shows a dash")
         when (fill) {

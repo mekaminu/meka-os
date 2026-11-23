@@ -24,18 +24,6 @@ KNOWN = {
     ("calendars", "cover-light-many-on-today.png", "cover-light-many.png"),
     ("money", "cover-dark-accounts-layout.png", "cover-dark-accounts-list.png"),
     ("money", "cover-dark-accounts.png", "cover-dark-worth-other-row.png"),
-    ("review", "cover-dark-empty-wins.png", "cover-dark-empty.png"),
-    ("review", "cover-dark-many-wins.png", "cover-dark-many.png"),
-    ("review", "inner-dark-one-wins.png", "inner-dark-one.png"),
-    ("review", "inner-dark-one-balance-foot.png", "inner-dark-one-reflect.png"),
-    ("review", "cover-light-one-balance-foot.png", "cover-light-one-reflect.png"),
-    ("review", "cover-dark-one-balance-foot.png", "cover-dark-one-reflect.png"),
-    ("review", "cover-dark-empty-balance-foot.png", "cover-dark-empty-balance.png"),
-    ("review", "cover-dark-empty-balance.png", "cover-dark-empty-reflect.png"),
-    ("review", "cover-dark-empty-balance-foot.png", "cover-dark-empty-reflect.png"),
-    ("review", "inner-dark-many-wins.png", "inner-dark-many.png"),
-    ("review", "cover-light-one-wins.png", "cover-light-one.png"),
-    ("review", "cover-dark-one-wins.png", "cover-dark-one.png"),
 }
 
 
