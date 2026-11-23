@@ -355,8 +355,11 @@ object RoutineRules {
         val days = decodeDays(s.f(RoutineFields.DAYS).textOrNull)
         if (!payday && days.isEmpty()) return@mapNotNull null
         val steps = decodeSteps(s.f(RoutineFields.STEPS).textOrNull)
+        // Walk-through 2026-11-22 A12: a summary saved as every step's title in full ("Show my bills for the week, Plan
+        // next week, Tidy my inbox, Remind …", cut on the cover) is read back as the short line the starters use.
         val summary = s.f(RoutineFields.SUMMARY).textOrNull?.trim()?.takeIf { it.isNotEmpty() }
-            ?: steps.take(3).joinToString(", ") { it.title }
+            ?.takeUnless { it.length > RoutineRules.SUMMARY_MAX && it == steps.take(4).joinToString(", ") { st -> st.title } }
+            ?: RoutineRules.shortSummary(steps.map { it.title })
         RoutineItem(
             id, name, RoutineSchedule(days, minute, payday), steps, summary,
             on = s.f(RoutineFields.ON).boolOrNull ?: true,
@@ -516,6 +519,39 @@ object RoutineRules {
         s.key, s.name, dayTile(s.schedule), LocalClock.formatMinute(s.schedule.minute), s.summary, whenLine(s.schedule),
         spoken = "${s.name}. ${whenLine(s.schedule)}. ${s.summary}",
     )
+
+    /** The longest line under a routine's name that fits the cover's row whole (the starters' run 33–38). */
+    const val SUMMARY_MAX = 40
+
+    private val LEAD = Regex("""^(?:show|open|see|check|remind|tell)(?:\s+(?:me|us))?(?:\s+(?:about|of|to|on))?\s+""", RegexOption.IGNORE_CASE)
+    private val OWN = Regex("""\b(?:my|the|our)\s+""", RegexOption.IGNORE_CASE)
+    private val TAIL = Regex("""\s+(?:for|of)\s+(?:the\s+)?(?:week|day|month|today|tonight|tomorrow)$""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Walk-through 2026-11-22 A12: the short line under a routine he made in a sentence, as the starters read ("Bills,
+     * plan next week, tidy inbox, bins" from "Show my bills for the week · Plan next week · Tidy my inbox · Remind me
+     * about bins"): "show"/"remind me about" and "my"/"the" go, "for the week" goes, the first word keeps its capital.
+     * Never longer than [SUMMARY_MAX]: the steps that don't fit become "+2 more", so the row is never cut with ….
+     */
+    fun shortSummary(titles: List<String>): String {
+        val parts = titles.map { t ->
+            val short = t.trim().replace(LEAD, "").replace(TAIL, "").replace(OWN, "").trim().ifEmpty { t.trim() }
+            short.replaceFirstChar { it.lowercaseChar() }
+        }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return ""
+        fun line(n: Int): String {
+            val head = parts.take(n).joinToString(", ").replaceFirstChar { it.uppercaseChar() }
+            return if (n < parts.size) "$head, +${parts.size - n} more" else head
+        }
+        for (n in parts.size downTo 1) {
+            val l = line(n)
+            if (l.length <= SUMMARY_MAX) return l
+        }
+        val one = line(1)
+        val cut = parts.first().replaceFirstChar { it.uppercaseChar() }.split(' ')
+            .runningReduce { a, w -> "$a $w" }.lastOrNull { it.length <= SUMMARY_MAX - 9 } ?: parts.first().take(SUMMARY_MAX - 9)
+        return if (parts.size > 1) "$cut, +${parts.size - 1} more" else if (one.length <= SUMMARY_MAX) one else cut
+    }
 
     /** "2 on · 1 paused", "1 on", "All paused", or [EMPTY_LINE]. */
     fun summary(items: List<RoutineItem>): String {
@@ -827,7 +863,7 @@ class Routines(
                 RoutineFields.PAYDAY to s.payday.fv(),
                 RoutineFields.MINUTE to s.minute.toLong().fv(),
                 RoutineFields.STEPS to RoutineRules.encodeSteps(steps).fv(),
-                RoutineFields.SUMMARY to steps.take(4).joinToString(", ") { it.title }.fv(),
+                RoutineFields.SUMMARY to RoutineRules.shortSummary(steps.map { it.title }).fv(),
                 RoutineFields.ON to true.fv(),
                 RoutineFields.ADDED_AT to now.fv(),
             ) + ideaStarter(idea),

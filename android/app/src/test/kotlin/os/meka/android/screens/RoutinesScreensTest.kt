@@ -319,6 +319,9 @@ class RoutinesScreensTest {
         if (count("routine-starter") != 3 || core.routinesView.value.starters.any { it.key == "sunday-reset" }) {
             fail("$name: Sunday reset is still offered beside the Sunday evening just saved")
         }
+        // Walk-through 2026-11-22 A12: the saved routine's line is short, like its siblings, never cut with ….
+        if (row.line != "Bills, plan next week, tidy inbox, bins") fail("$name: its line reads \"${row.line}\"")
+        ScreenShots.assertNotEllipsized(compose, name, core.routinesView.value.rows.map { it.line })
         ScreenShots.reshootAfterHand(compose, "routines", "cover-dark-new-list") // A20: the list with the routine just saved
     }
 

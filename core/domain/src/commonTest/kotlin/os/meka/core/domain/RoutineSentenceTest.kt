@@ -1,5 +1,6 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.fv
 import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -127,7 +128,8 @@ class RoutineSentenceTest {
         assertEquals(RoutineStepMode.SHOW, item.steps[1].mode)
         assertEquals(RoutineStepMode.DOES, item.steps[2].mode)
         assertTrue(item.on)
-        assertEquals("Show my bills for the week, Plan next week, Tidy my inbox, Remind me about bins", item.summary)
+        // Walk-through 2026-11-22 A12: the short line the starters use, not every step in full cut on the cover.
+        assertEquals("Bills, plan next week, tidy inbox, bins", item.summary)
         // Sunday 19:00: it starts by itself (slice 3b).
         world.clock.nowMs = cal.toEpochMs(fri + 2, 19 * 60 + 1)
         assertTrue(said.id!! in onMac.startDue())
@@ -137,5 +139,39 @@ class RoutineSentenceTest {
     fun savedTonightRunsTonight() {
         val r = Routines(fold.replica, { "rt${n++}" }, { world.clock.nowMs }, cal)
         assertEquals("Saved Every night · first run tonight at 21:00", r.addFromSentence("Every night at 9pm open tonight's lessons", "").line)
+    }
+
+    @Test
+    fun shortSummaryNeverRunsPastTheRow() {
+        assertEquals("Bills, plan next week, tidy inbox, bins",
+            RoutineRules.shortSummary(listOf("Show my bills for the week", "Plan next week", "Tidy my inbox", "Remind me about bins")))
+        assertEquals("Weather", RoutineRules.shortSummary(listOf("Show the weather")))
+        val many = RoutineRules.shortSummary(listOf("Show my bills for the week", "Plan next week", "Tidy my inbox", "Remind me about bins", "Open tonight's lessons", "Check the car's MOT date"))
+        assertTrue(many.length <= RoutineRules.SUMMARY_MAX, many)
+        assertTrue(many.endsWith(" more"), many)
+        val long = RoutineRules.shortSummary(listOf("Look over every single one of the receipts in the vault", "Plan next week"))
+        assertTrue(long.length <= RoutineRules.SUMMARY_MAX && long.endsWith(", +1 more"), long)
+        assertEquals("", RoutineRules.shortSummary(emptyList()))
+    }
+
+    @Test
+    fun aSummarySavedInFullReadsBackShort() {
+        val steps = listOf(
+            RoutineStep("Show my bills for the week", RoutinePlace.MONEY, RoutineStepMode.SHOW),
+            RoutineStep("Plan next week", RoutinePlace.WEEK_BOARD, RoutineStepMode.ASK),
+            RoutineStep("Tidy my inbox", RoutinePlace.INBOX, RoutineStepMode.DOES),
+            RoutineStep("Remind me about bins", RoutinePlace.HOME, RoutineStepMode.SHOW),
+        )
+        val old = mapOf(
+            RoutineFields.NAME to "Sunday evening".fv(),
+            RoutineFields.DAYS to "7".fv(),
+            RoutineFields.MINUTE to (19L * 60).fv(),
+            RoutineFields.STEPS to RoutineRules.encodeSteps(steps).fv(),
+            RoutineFields.SUMMARY to steps.joinToString(", ") { it.title }.fv(),
+        )
+        assertEquals("Bills, plan next week, tidy inbox, bins", RoutineRules.items(mapOf("a" to old)).single().summary)
+        // One he typed himself stays as he typed it.
+        val own = old + (RoutineFields.SUMMARY to "My Sunday jobs".fv())
+        assertEquals("My Sunday jobs", RoutineRules.items(mapOf("a" to own)).single().summary)
     }
 }
