@@ -7248,3 +7248,13 @@ pager scroll on 2026-11-22) all read it; the tile test fails if its tiles aren't
 `ArchivedAllRules.ALL` is now "All senders" (both apps draw it), test
 `ArchivedAllTest.theSenderRowsFirstChipSaysAllSendersNotAll`. Mac checked nightly (one constant).
 - Still open in A9: the paged shot's placeholder senders.
+
+### Found and fixing, week 5 — slice 28 (2026-11-23): A9's paged tidied shot, real-looking senders
+
+g2-needs-01 / g1a 20: All tidied mail's paged shot still read "Sender 8 · Weekend sale p8". `ArchivedAllPagesScreensTest`
+now takes `ShotMailTidied.promos(now)` with the shared eight invented shops and subjects (as the tile, Select and Trash
+all shots), checks each page by shop name and its address-shaped domain, and fails if a placeholder sender is on
+screen. The first try (slice 24) hung at the pager after Select all: `performScrollToNode`'s scroll-and-look loop never
+settled with the clock held and the shops' longer rows (ci run 45084901801; its other run was a Maven 429), so
+`toPager` now scrolls straight to the "pager" item with `performScrollToKey` and checks the pager is drawn. Test only,
+Fold, no app change. A9 is finished.

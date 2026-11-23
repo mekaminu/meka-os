@@ -7,13 +7,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
-import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollToKey
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -84,9 +85,9 @@ class ArchivedAllPagesScreensTest {
 
     private fun open(): MekaCore {
         ThemeChoice.save(ApplicationProvider.getApplicationContext<ShotApplication>(), ThemeChoice.DARK)
-        // Week 5, A9: the day of tidies every mail shot shares (the tile's 8 promos). Its senders stay placeholders here
-        // for now: the shops' names hung this test's pager scroll (ci runs 45083546847, 45084901801).
-        val emails = ShotMailTidied.promos(now, names = (1..8).map { "Sender $it" to "Weekend sale p$it" })
+        // Week 5, A9: the day of tidies every mail shot shares (the tile's 8 promos), with its invented shops, never
+        // "Sender 8 · Weekend sale p8" placeholders.
+        val emails = ShotMailTidied.promos(now)
         serverWrite("mt1", ShotMailTidied.fields(now - 2 * 60_000L, emails))
         val core = MekaCore(
             householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
@@ -109,9 +110,14 @@ class ArchivedAllPagesScreensTest {
 
     private fun onScreen(text: String) = ScreenShots.texts(compose).any { it.contains(text) }
 
+    /**
+     * Scrolls the list straight to the pager's item by its key. Not performScrollToNode: with the clock held and the
+     * shops' two-line rows, its scroll-and-look loop never found the pager after Select all (hung ci run 45084901801).
+     */
     private fun toPager() {
-        compose.onNodeWithTag("archived-all").performScrollToNode(hasTestTag(ARCHIVED_ALL_PAGER_TAG))
+        compose.onNodeWithTag("archived-all").performScrollToKey("pager")
         turns(600)
+        if (compose.onAllNodes(hasTestTag(ARCHIVED_ALL_PAGER_TAG)).fetchSemanticsNodes().isEmpty()) fail("the pager is not on screen")
     }
 
     private fun toTop() {
@@ -119,11 +125,16 @@ class ArchivedAllPagesScreensTest {
         turns(600)
     }
 
-    /** Every sender whose row is on the page (its "Sender 3 · sender3.example" line, not the chips), top to bottom. */
+    private val shops = ShotMailTidied.shops.map { it.first }
+
+    /** Every sender whose row is on the page (its "Alex Books · alexbooks.example" line, not the chips), top to bottom. */
     private fun senders(): Set<String> {
         toTop()
         val seen = mutableSetOf<String>()
-        fun read() = ScreenShots.texts(compose).forEach { t -> Regex("(Sender \\d) · sender").findAll(t).forEach { seen += it.groupValues[1] } }
+        fun read() = ScreenShots.texts(compose).forEach { t ->
+            shops.forEach { from -> if ("$from · ${ShotMailTidied.domain(from)}" in t) seen += from }
+            if (Regex("Sender \\d|Weekend sale p\\d").containsMatchIn(t)) fail("a placeholder sender is on screen: $t")
+        }
         read()
         compose.onNodeWithTag("archived-all").performScrollToIndex(7)
         turns(300)
@@ -137,7 +148,7 @@ class ArchivedAllPagesScreensTest {
     fun fiveAPageWithThePagerAndSelectAllOnThisPage() {
         open()
         val first = senders()
-        if (first != (4..8).map { "Sender $it" }.toSet()) fail("page one should hold the newest five, held $first")
+        if (first != shops.drop(3).toSet()) fail("page one should hold the newest five, held $first")
         toPager()
         if (!onScreen("1–5 of 8")) fail("the pager should say 1–5 of 8")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "tidied-pages-cover-dark"))
@@ -146,7 +157,7 @@ class ArchivedAllPagesScreensTest {
         toPager()
         if (!onScreen("6–8 of 8")) fail("› should open 6–8 of 8")
         val second = senders()
-        if (second != (1..3).map { "Sender $it" }.toSet()) fail("page two should hold the oldest three, held $second")
+        if (second != shops.take(3).toSet()) fail("page two should hold the oldest three, held $second")
         toPager()
         compose.onNodeWithContentDescription("Previous page").performClick()
         turns(1_000)
