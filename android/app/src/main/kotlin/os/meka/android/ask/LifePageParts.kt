@@ -315,7 +315,7 @@ internal fun LifeEmptyCard(line: String, button: String, modifier: Modifier = Mo
             button, style = MekaType.itemTitle, color = Meka.colors.onAccent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                 .clickable(role = Role.Button) { onClick() }.minTouch()
-                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
         )
     }
 }
