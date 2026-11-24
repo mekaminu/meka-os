@@ -631,7 +631,7 @@ private fun KidsEmptyCard(line: String, onAboutYou: () -> Unit) {
             KidsPageRules.OPEN_ABOUT_YOU, style = MekaType.itemTitle, color = Meka.colors.onAccent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                 .clickable(role = Role.Button) { onAboutYou() }.minTouch()
-                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
         )
     }
 }
