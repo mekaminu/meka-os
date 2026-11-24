@@ -225,6 +225,10 @@ class MailSyncTest {
         override val oauth = "google"
         override val requiredScopes = listOf(GmailMail.MODIFY, GmailMail.SEND)
         val mailbox = linkedMapOf<String, MailHeader>()
+        /** School emails first, slice 2: whole emails the server may read ([MailProvider.message]); none by default. */
+        val bodies = mutableMapOf<String, os.meka.core.domain.MailMessageFacts>()
+        val bodyReads = mutableListOf<String>()
+        override fun message(accessToken: String, id: String): os.meka.core.domain.MailMessageFacts? = bodies[id]?.also { bodyReads += id }
         var nextRound: (String?) -> MailChanges = { c -> MailChanges(fetch = mailbox.keys.toList(), cursor = "h1") }
         val cursorsAsked = mutableListOf<String?>()
         val headersRead = mutableListOf<String>()
@@ -1373,6 +1377,50 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(cursor = "h4") }
         i.syncAccount(id)
         assertEquals(2, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+    }
+
+    @Test
+    fun aLongSchoolEmailIsReadWholeIntoACardAndFinds() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        val zone = java.time.ZoneId.of("Europe/London")
+        val fair = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(10)
+        val bottle = fair.minusDays(1)
+        fun text(d: java.time.LocalDate) = d.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", java.util.Locale.UK))
+        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.CHILDREN, FieldValue.Text("Alex|7|Oakfield School"))
+        // School emails first, slice 2: the preview says nothing dated; the whole email does.
+        gmail.mailbox["f1"] = msg("f1", 0, "noreply@pmx.parentmail.co.uk").copy(fromName = "Oakfield School", subject = "PTA news", preview = "Dear Parents and Carers, we are delighted to invite you")
+        gmail.bodies["f1"] = os.meka.core.domain.MailMessageFacts(
+            from = os.meka.core.domain.MailPerson("Oakfield School", "noreply@pmx.parentmail.co.uk"), to = emptyList(), cc = emptyList(), atMs = now,
+            subject = "PTA news", html = null, attachments = emptyList(),
+            text = "Dear Parents and Carers,\n\nOur Christmas fair will take place on ${text(fair)} from 12pm-4pm in the school hall.\n" +
+                "Entry is £1 per adult. Please bring a bottle for the tombola by ${text(bottle)}.\nPlease note there is no parking at school.",
+        )
+        gmail.nextRound = { MailChanges(fetch = listOf("f1"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(listOf("f1"), gmail.bodyReads)
+        val item = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_ITEM)[os.meka.core.domain.MailNeedsRules.itemId(id, "f1")]!!
+        val card = os.meka.core.domain.SchoolBodyRules.decode((item[MailItemFields.SCHOOL_SUMMARY] as FieldValue.Text).value).associate { it.label to it.value }
+        assertTrue(card["When"]!!.endsWith("12:00–16:00"), card.toString())
+        assertEquals("The school hall", card["Where"])
+        assertEquals("£1 per adult", card["Cost"])
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values
+        val event = finds.single { it[os.meka.core.domain.MailFindFields.WHAT] == FieldValue.Text("School fair") }
+        assertEquals(FieldValue.Int64(720), event[os.meka.core.domain.MailFindFields.START_MINUTE])
+        assertEquals(FieldValue.Int64(960), event[os.meka.core.domain.MailFindFields.END_MINUTE])
+        assertEquals(FieldValue.Text("the school hall"), event[os.meka.core.domain.MailFindFields.PLACE])
+        assertTrue((event[os.meka.core.domain.MailFindFields.NOTES] as FieldValue.Text).value.contains("No parking at school"))
+        assertTrue(finds.any { (it[os.meka.core.domain.MailFindFields.WHAT] as? FieldValue.Text)?.value?.startsWith("Bring a bottle") == true })
+        // Read once: the next check reads no body again and writes nothing new; nothing reaches School or Tasks.
+        val count = finds.size
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(listOf("f1"), gmail.bodyReads)
+        assertEquals(count, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.SCHOOL_ITEM).size)
     }
 
     @Test

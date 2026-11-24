@@ -120,6 +120,11 @@ object MailItemFields {
      * server-written, Bool; absent (false) for any other email. Additive: older apps ignore it.
      */
     const val SCHOOL = "school"
+    /**
+     * School emails first, slice 2 ([SchoolBodyRules.encode]): the school email's summary read from its whole body, one
+     * "Label\tvalue" line each (When · Where · Cost · Bring / do · Deadline · For), server-written, Text; absent until read.
+     */
+    const val SCHOOL_SUMMARY = "schoolSummary"
     const val MEETING_EDIT_ID = "meetingEditId"
     const val MEETING_AT = "meetingAtMs"
 }
@@ -195,6 +200,8 @@ data class MailItem(
     val note: String? = null,
     /** School emails first, slice 1b: from the children's school ([MailItemFields.SCHOOL]). */
     val school: Boolean = false,
+    /** School emails first, slice 2: its summary card's lines ([SchoolBodyRules.decode]); empty until read. */
+    val schoolSummary: List<SchoolSummaryLine> = emptyList(),
 )
 
 /** One email on the card. */
@@ -381,10 +388,11 @@ object MailNeedsRules {
     fun serverFields(
         account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int,
         threadKey: String? = null, security: String = "", warning: String = "", canUnsubscribe: Boolean = false, note: String = "",
-        school: Boolean = false,
+        school: Boolean = false, schoolSummary: List<SchoolSummaryLine> = emptyList(),
     ): Map<String, FieldValue> =
         mapOf(MailItemFields.CAN_UNSUB to FieldValue.Bool(canUnsubscribe)) +
             (if (school) mapOf(MailItemFields.SCHOOL to FieldValue.Bool(true)) else emptyMap()) +
+            (if (school && schoolSummary.isNotEmpty()) mapOf(MailItemFields.SCHOOL_SUMMARY to SchoolBodyRules.encode(schoolSummary).fv()) else emptyMap()) +
             (if (note.isNotEmpty()) mapOf(MailItemFields.NOTE to note.take(MailNoteRules.MAX_SITE).fv()) else emptyMap()) +
         (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) +
             (if (security.isNotEmpty()) mapOf(MailItemFields.SECURITY to security.fv()) else emptyMap()) +
@@ -459,6 +467,7 @@ object MailNeedsRules {
             warning = text(MailItemFields.WARNING),
             note = text(MailItemFields.NOTE),
             school = (f[MailItemFields.SCHOOL] as? FieldValue.Bool)?.value == true,
+            schoolSummary = SchoolBodyRules.decode((f[MailItemFields.SCHOOL_SUMMARY] as? FieldValue.Text)?.value),
         )
     }
 

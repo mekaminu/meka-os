@@ -77,6 +77,13 @@ data class MailFind(
     val fromName: String? = null,
     /** Renewals keep their email, slice 1: the cancel-by day the email named ([MailRenewal.cancelByDay]), else null. */
     val cancelByDay: Long? = null,
+    /** School emails first, slice 2 ([SchoolBodyRules]): the event's start and end, minutes after local midnight, else null. */
+    val startMinute: Int? = null,
+    val endMinute: Int? = null,
+    /** School emails first, slice 2: where it is ("the school hall"), the email's words, else null. */
+    val place: String? = null,
+    /** School emails first, slice 2: what to bring, wear or do and travel notes, one per line, the email's words, else null. */
+    val notes: String? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -124,6 +131,11 @@ object MailFindFields {
     const val FROM_NAME = "fromName"
     /** Renewals keep their email, slice 1 (server-written, once): a renewal's cancel-by day (local epoch day). */
     const val CANCEL_BY = "cancelByDay"
+    /** School emails first, slice 2 (server-written, once; additive): a school event's times, place and notes. */
+    const val START_MINUTE = "startMinute"
+    const val END_MINUTE = "endMinute"
+    const val PLACE = "place"
+    const val NOTES = "notes"
 }
 
 data class MailFindRow(
@@ -394,6 +406,10 @@ object MailRenewalRules {
             direction = f[MailFindFields.DIRECTION]?.textOrNull,
             fromName = f[MailFindFields.FROM_NAME]?.textOrNull?.takeIf { it.isNotBlank() },
             cancelByDay = f[MailFindFields.CANCEL_BY]?.longOrNull,
+            startMinute = f[MailFindFields.START_MINUTE]?.longOrNull?.toInt()?.takeIf { it in 0 until 24 * 60 },
+            endMinute = f[MailFindFields.END_MINUTE]?.longOrNull?.toInt()?.takeIf { it in 1..24 * 60 },
+            place = f[MailFindFields.PLACE]?.textOrNull?.takeIf { it.isNotBlank() },
+            notes = f[MailFindFields.NOTES]?.textOrNull?.takeIf { it.isNotBlank() },
         )
     }
 

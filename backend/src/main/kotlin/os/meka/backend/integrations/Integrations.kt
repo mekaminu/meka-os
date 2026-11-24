@@ -22,6 +22,7 @@ import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.MailSourceRules
 import os.meka.core.domain.ActionableFields
 import os.meka.core.domain.MailPromiseRules
+import os.meka.core.domain.SchoolBodyRules
 import os.meka.core.domain.SchoolMailRules
 import os.meka.core.domain.LifeAuditRules
 import os.meka.core.domain.MailFollowUpRules
@@ -821,6 +822,8 @@ class Integrations(
         // Phishing in the body, slice 5: the one-off look back over the last 30 days (before the day's moves).
         stage(a, "scamSweep") { scamSweep(a, m, token, ms) }
         stage(a, "scamJunk") { scamJunk(a, m, token, ms) }
+        // School emails first, slice 2: the school's emails read whole once, for their cards and finds (before the cards).
+        stage(a, "schoolBodies") { schoolBodies(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         stage(a, "publishMailNeeds") { publishMailNeeds(a, ms) }
         // Drafted replies come to him: a draft on the card of each new email that asks him something (sent only on his tap).
@@ -1075,18 +1078,61 @@ class Integrations(
             SchoolMailRules.readAll(h.subject, previews[h.id] ?: h.preview, day, children)
                 .filter { it.endDay >= today }.map { Triple(h, day, it) }
         }
-        if (reads.isEmpty()) return
+        // School emails first, slice 2: an email read whole gives its finds from every sentence, with their times,
+        // place and notes, first; the subject and preview's own finds still come after, so none is lost.
+        val bodyReads = candidates.flatMap { h ->
+            val day = LONDON.epochDayOf(h.receivedAtMs)
+            schoolRead[bodyKey(a.id, h.id)]?.finds.orEmpty().filter { it.find.endDay >= today }.map { Triple(h, day, it) }
+        }
+        if (reads.isEmpty() && bodyReads.isEmpty()) return
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         val mirror = store.transaction { store.mirror(a.householdId, a.id) }
         val written = mutableSetOf<String>()
-        for ((h, day, sf) in reads.sortedBy { it.first.receivedAtMs }) {
+        val all = bodyReads + reads.map { (h, day, sf) -> Triple(h, day, os.meka.core.domain.SchoolBodyFind(sf)) }
+        for ((h, day, b) in all.sortedBy { it.first.receivedAtMs }) {
+            val sf = b.find
             val id = SchoolMailRules.findId(a.id, sf)
             if (id in written || mirror.containsKey(id)) continue
             val school = os.meka.core.domain.MailReceiptRules.merchant(h.fromName, h.fromAddress)
-            writeMail(a, id, SchoolMailRules.serverFields(sf, school, account, h.subject, day), EntityTypes.MAIL_FIND)
+            writeMail(a, id, SchoolMailRules.serverFields(sf, school, account, h.subject, day) + SchoolBodyRules.findFields(b), EntityTypes.MAIL_FIND)
             written += id
         }
     }
+
+    /**
+     * School emails first, slice 2: the school's emails ([isSchool]) of the last [SchoolMailRules.WINDOW_DAYS] days are
+     * read whole once from the provider, newest first, at most [SchoolBodyRules.PER_CHECK] a check, by
+     * [SchoolBodyRules.read] (every dated thing with its time, place and notes; the summary card). Only the read is
+     * kept, in memory ("account\u0000id"); the body is never kept, logged or given to the AI, and nothing in it is
+     * followed. After a restart an email is read again (its finds already written are never written twice). A refusal
+     * ends this check's reading.
+     */
+    internal fun schoolBodies(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        if (schoolRead.size > 5_000) schoolRead.clear()
+        val profile = runCatching { AboutYouRules.read(reader.entity(a.householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)) }.getOrNull()
+        val known = profile?.let { SchoolMailRules.Known.of(it) } ?: SchoolMailRules.Known.NONE
+        val children = profile?.children?.map { it.name }.orEmpty()
+        val nowMs = now()
+        val due = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= SchoolMailRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                !schoolRead.containsKey(bodyKey(a.id, h.id)) && isSchool(h, known)
+        }.sortedByDescending { it.receivedAtMs }.take(SchoolBodyRules.PER_CHECK)
+        for (h in due) {
+            val facts: os.meka.core.domain.MailMessageFacts? = try {
+                m.message(token, h.id)
+            } catch (e: ReconnectRequired) {
+                throw e
+            } catch (e: Exception) {
+                break
+            }
+            if (facts == null) continue
+            val body = SchoolBodyRules.plain(facts)
+            schoolRead[bodyKey(a.id, h.id)] = SchoolBodyRules.read(h.subject, body, LONDON.epochDayOf(h.receivedAtMs), children)
+        }
+    }
+
+    /** School emails first, slice 2: each school email's read ([SchoolBodyRules.read]), in memory only, never the body. */
+    private val schoolRead = java.util.concurrent.ConcurrentHashMap<String, os.meka.core.domain.SchoolBodyRead>()
 
     /**
      * Promises, receipts and renewals from email, slice 1: the emails of the last [MailRenewalRules.WINDOW_DAYS] days
@@ -1700,6 +1746,8 @@ class Integrations(
                 note = notes[h.id] ?: "",
                 // School emails first, slice 1b: the apps put it in From the school, first in Needs you.
                 school = reasons[h.id] == MailSortReason.SCHOOL,
+                // School emails first, slice 2: its summary card, once its whole body has been read.
+                schoolSummary = schoolRead[bodyKey(a.id, h.id)]?.summary.orEmpty(),
             ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
