@@ -4,7 +4,10 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.EventEditFields
+import os.meka.core.domain.EventFields
 import os.meka.core.domain.SchoolAutoRules
+import os.meka.core.domain.SchoolCalendarRules
 import os.meka.core.domain.SchoolBodyRules
 import os.meka.core.domain.SchoolMailRules
 import os.meka.core.sync.FieldValue
@@ -191,5 +194,79 @@ class SchoolMailFacadeTest {
         assertEquals(FieldValue.Bool(true), serverTask(SchoolAutoRules.taskId(id, "day"))[os.meka.core.domain.ActionableFields.DELETED])
         assertEquals(listOf(id), mac.mailFinds.value!!.rows.map { it.id })
         assertTrue(mac.schoolView.value.dates.isEmpty())
+    }
+
+    private inner class EditingTransport(
+        private val list: List<ConnectedAccount>,
+        private val inner: os.meka.core.sync.SyncTransport = transport,
+    ) : os.meka.core.sync.SyncTransport by inner, AccountsApi {
+        override suspend fun startConnect(provider: String, editing: Boolean): ConnectStart = ConnectStart.NotSetUp
+        override suspend fun accounts(): List<ConnectedAccount> = list
+        override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> = list
+    }
+
+    private fun serverEdit(id: String, fields: Map<String, FieldValue>) = fields.forEach { (f, v) ->
+        serverOps.append(Op("srvse${k++}", "hh", EntityTypes.EVENT_EDIT, id, f, v, clock.now(), emptyList(), "server"))
+    }
+
+    private fun serverEvent(id: String, fields: Map<String, FieldValue>) = fields.forEach { (f, v) ->
+        serverOps.append(Op("srvev${k++}", "hh", EntityTypes.EVENT, id, f, v, clock.now(), emptyList(), "server"))
+    }
+
+    private fun serverEdits(): Map<String, Map<String, FieldValue>> =
+        serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityType == EntityTypes.EVENT_EDIT }
+            .groupBy { it.entityId }.mapValues { (_, ops) -> ops.associate { it.field to it.value } }
+
+    @Test
+    fun aSchoolEventGoesIntoHisGoogleCalendarOnceAndUndoTakesItOut() = runTest {
+        // Slice 3b: the fair (Sat 24 Oct, 12pm-4pm, school hall) is added to Google once though both apps run, it isn't
+        // shown twice in Navilife (the task on the day stands for it), and Undo deletes it from Google once it's there.
+        val body = "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall. " +
+            "Entry is £1 per adult. Please note there is no parking at school.\n\nThank you"
+        val b = SchoolBodyRules.read("Christmas fair", body, received).finds.single()
+        val id = SchoolMailRules.findId("acc1", b.find)
+        serverWrite(id, SchoolMailRules.serverFields(b.find, "Oakfield Primary", "Personal", "Christmas fair", received) + SchoolBodyRules.findFields(b))
+        val google = listOf(ConnectedAccount("google", "alex@example.com", "ok", null, canEdit = true))
+        fun core(device: String) = MekaCore(
+            householdId = "hh", deviceId = device, store = InMemoryReplicaStore(), transport = EditingTransport(google),
+            secureRandom = Random(if (device == "android") 1 else 2), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        val fold = core("android")
+        val mac = core("mac")
+        fold.refreshCalendarAccounts(); mac.refreshCalendarAccounts()
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val editId = SchoolCalendarRules.editId(id)
+        val adds = serverEdits().filterValues { it[EventEditFields.KIND] == FieldValue.Text("ADD") }
+        assertEquals(setOf(editId), adds.keys, "one add, made the same on both apps")
+        val add = adds.getValue(editId)
+        assertEquals(FieldValue.Text("School fair"), add[EventEditFields.TITLE])
+        assertEquals(FieldValue.Text("alex@example.com"), add[EventEditFields.ACCOUNT])
+        assertEquals(FieldValue.Int64(1_792_839_600_000L), add[EventEditFields.START_AT]) // Sat 24 Oct, 12:00 in London
+        assertEquals(FieldValue.Int64(1_792_854_000_000L), add[EventEditFields.END_AT]) // 16:00
+        assertEquals(FieldValue.Bool(false), add[EventEditFields.ALL_DAY])
+        assertTrue((add[EventEditFields.NOTES] as FieldValue.Text).value.contains("No parking at school", ignoreCase = true))
+        val entry = SchoolAutoRules.activityId(id)
+        val row = mac.activityView.value.days.flatMap { it.rows }.single { it.id == entry }
+        assertTrue(row.summary.contains("· in Google and School, reminders"), row.summary)
+
+        // Google has it: the server says done and the mirror holds it; Navilife shows it once, as the task.
+        now += 60_000
+        serverEdit(editId, mapOf(EventEditFields.STATUS to FieldValue.Text("DONE"), EventEditFields.STATUS_AT to FieldValue.Int64(now)))
+        serverEvent("g1", mapOf(
+            EventFields.TITLE to FieldValue.Text("School fair"), EventFields.START_AT to FieldValue.Int64(1_792_839_600_000L),
+            EventFields.END_AT to FieldValue.Int64(1_792_854_000_000L), EventFields.ALL_DAY to FieldValue.Bool(false),
+            EventFields.PROVIDER to FieldValue.Text("google"), EventFields.ACCOUNT to FieldValue.Text("alex@example.com"),
+        ))
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val sat = fold.calendarView.value.sections.first { it.title == "Sat 24 Oct" }
+        assertEquals(1, sat.rows.count { it.title == "School fair" }, "the task stands for it: ${sat.rows.map { it.title }}")
+
+        // Undo: the tasks and the School line go, and the event is deleted from Google (once, though both apps run).
+        fold.undoActivity(entry)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        val deletes = serverEdits().filterValues { it[EventEditFields.KIND] == FieldValue.Text("DELETE") }
+        assertEquals(setOf(SchoolCalendarRules.deleteId(id)), deletes.keys)
+        assertEquals(FieldValue.Text("g1"), deletes.values.single()[EventEditFields.EVENT_ID])
     }
 }

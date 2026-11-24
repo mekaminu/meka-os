@@ -11000,6 +11000,76 @@ class MekaCore(
         if (added > 0) activityChanged()
     }
 
+    /** ADR-006: may a school event go into his calendar? Level 4 under the same rule his switch made; the kill switch holds it. */
+    private fun schoolCalendarAllowed(): Boolean {
+        val rule = os.meka.core.domain.SchoolAutoRules.RULE_ID
+        val config = PolicyConfig(
+            levels = mapOf((PolicyDomain.CALENDAR to ActionType.CREATE_CALENDAR_EVENT) to AutonomyLevel.AUTO_UNDER_RULE),
+            autoRules = mapOf(rule to ActionType.CREATE_CALENDAR_EVENT),
+            killSwitch = autonomy.paused(),
+        )
+        val decision = PolicyEngine(config).decide(
+            ActionRequest(
+                ActionType.CREATE_CALENDAR_EVENT, PolicyDomain.CALENDAR, provenance = Provenance.DETERMINISTIC_RULE, reversible = true,
+                requestedLevel = AutonomyLevel.AUTO_UNDER_RULE, ruleId = rule,
+            ),
+        )
+        return decision is PolicyDecision.Permit
+    }
+
+    /**
+     * School emails first, slice 3b: each school event done for him ([autoAddSchoolFinds]) also goes into his real
+     * calendar ([os.meka.core.domain.SchoolCalendarRules]): one add per find (fixed id, so both devices make one), to the
+     * account Add event remembers or the first that allows editing, unless that day already holds it; its Activity line
+     * then says so. Once its entry is undone, the add is taken back (undone in its five seconds, else deleted once the
+     * calendar has it). Runs after each refresh, so an event waiting for an account to allow editing goes when one does.
+     */
+    private fun schoolEventsToCalendar() {
+        if (replica.isRecording) return
+        val A = os.meka.core.domain.SchoolAutoRules
+        val C = os.meka.core.domain.SchoolCalendarRules
+        val finds = activity.mailFinds().filter { it.kind == os.meka.core.domain.SchoolMailRules.KIND_SCHOOL && it.autoAtMs != null }
+        if (finds.isEmpty()) return
+        val entries = activity.items().associateBy { it.id }
+        val edits = calendarEdits.all().associateBy { it.id }
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        val on = schoolAutoOn()
+        val mirror by lazy { events.all() }
+        val shown by lazy { currentEvents() }
+        var changed = false
+        for (f in finds) {
+            val entry = entries[A.activityId(f.id)] ?: continue
+            val editId = C.editId(f.id)
+            val edit = edits[editId]
+            if (entry.undoneAtMs != null) {
+                when (val t = C.takeBack(edit, edits[C.deleteId(f.id)] != null, mirror, now)) {
+                    os.meka.core.domain.SchoolCalendarRules.TakeBack.UndoAdd -> changed = calendarEdits.undo(editId) || changed
+                    is os.meka.core.domain.SchoolCalendarRules.TakeBack.Delete ->
+                        changed = calendarEdits.delete(t.event, id = C.deleteId(f.id)) is os.meka.core.domain.EventEditResult.Made || changed
+                    else -> Unit
+                }
+                continue
+            }
+            if (!on || edit != null || f.renewDay < today) continue
+            val accounts = _editAccounts.value
+            if (accounts.isEmpty()) continue
+            if (!C.wanted(f, A.plan(f, now, cal)) || C.alreadyThere(f, shown, cal) || !schoolCalendarAllowed()) continue
+            val last = os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all())
+            val target = accounts.firstOrNull { it.key == last } ?: accounts.first()
+            val r = calendarEdits.add(target.provider, target.email, C.draft(f, cal), id = editId)
+            if (r is os.meka.core.domain.EventEditResult.Made) {
+                replica.commitLocal(
+                    os.meka.core.domain.EntityTypes.AGENT_ACTION, entry.id,
+                    mapOf(os.meka.core.domain.ActivityFields.SUMMARY to C.withCalendar(entry.summary, target.provider).fv()),
+                )
+                changed = true
+            }
+        }
+        if (changed) activityChanged()
+    }
+
     /** Writes Autopilot's switch (synced; the server reads it at its next check). False when it already was. */
     private fun writeMailAutopilot(on: Boolean): Boolean {
         val current = replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID)
@@ -14610,6 +14680,8 @@ class MekaCore(
             autoAddMailFinds()
             // School emails first, slice 3a: the school's dates go into School with their tasks and reminders, no tap.
             autoAddSchoolFinds()
+            // Slice 3b: and into his real calendar (or taken back from it after Undo).
+            schoolEventsToCalendar()
             // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
             archivedChanged()
             // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.
@@ -15557,9 +15629,11 @@ class MekaCore(
     private fun currentEvents(): List<os.meka.core.domain.CalendarEvent> {
         val edits = calendarEdits.all()
         // Plan my day's blocks (slice 2e): the task stands for that time, so its block isn't shown twice.
-        val shown = os.meka.core.domain.PlanCalendarRules.withoutTaskBlocks(
+        val blocksOut = os.meka.core.domain.PlanCalendarRules.withoutTaskBlocks(
             os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs()), edits,
         )
+        // School emails first, slice 3b: the school's event stands as its task on the day, so it isn't shown twice.
+        val shown = os.meka.core.domain.SchoolCalendarRules.withoutSchoolEvents(blocksOut, edits, schoolDayTaskFinds(edits))
         // Meka's own calendar names (Fold review 2026-10-09 07:26, item 9) ride on every event, so each place that
         // names a calendar (the Calendar key, rows, details, Calendars) says the same thing.
         // Appointment nudges, slice 2c: a booked visit that isn't in Google or Outlook stands in as MEKA's own event.
@@ -15570,6 +15644,16 @@ class MekaCore(
         val names = eventActions.calendarNames()
         if (names.isEmpty()) return list
         return list.map { e -> names[os.meka.core.domain.CalendarRules.key(e)]?.let { e.copy(calendarTitle = it) } ?: e }
+    }
+
+    /** The school finds whose event Navilife added and whose task on the day is still there (slice 3b). */
+    private fun schoolDayTaskFinds(edits: List<os.meka.core.domain.EventEdit>): Set<String> {
+        if (edits.none { it.id.startsWith("se") && it.kind == os.meka.core.domain.EventEditKind.ADD }) return emptySet()
+        val ids = edits.mapTo(HashSet()) { it.id }
+        val finds = activity.mailFinds().filter { it.autoAtMs != null && os.meka.core.domain.SchoolCalendarRules.editId(it.id) in ids }
+        if (finds.isEmpty()) return emptySet()
+        val live = tasks.all().mapTo(HashSet()) { it.id }
+        return finds.filter { os.meka.core.domain.SchoolAutoRules.taskId(it.id, "day") in live }.mapTo(HashSet()) { it.id }
     }
 
     /** Calendar events minus those hidden from my day. */

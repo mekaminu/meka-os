@@ -54,8 +54,8 @@ object SchoolAutoRules {
     const val RULE_ID = "mail.school"
     const val SOURCE = "auto:school_mail"
     const val TITLE = "School events from the school's emails"
-    const val ON_LINE = "Puts each school date in School with reminders and tasks the day before and on the day · " +
-        "each with Undo · never pays, signs or replies"
+    const val ON_LINE = "Puts each school date in School and each school event in your calendar, with reminders and " +
+        "tasks the day before and on the day · each with Undo · never pays, signs or replies"
     const val OFF_LINE = "Off · each waits in Needs you for your Add"
     const val TURN_ON = "Turn on"
     const val TURN_OFF = "Turn off"
@@ -220,4 +220,132 @@ object SchoolAutoRules {
 
     /** Activity's detail: where it came from ("Personal mail · “Christmas fair this Saturday”"). */
     fun detail(f: MailFind): String = MailRenewalRules.fromLine(f)
+}
+
+/*
+ * School emails first, slice 3b (Meka 2026-11-24 17:38: "I need the AI to auto create stuff in my calendar"): **the
+ * school's events go into his real calendar too**. For a find [SchoolAutoRules] added on its own that is an event (not a
+ * deadline, an ask or a day off) and is still to come, one ordinary calendar add (`event_edit`, five-second Undo, sent by
+ * the server) goes to the account Add event remembers, else the first that allows editing: its title, its time (all day
+ * when the email gave none), the place, and what to bring or do in its notes. The edit's id is fixed per find
+ * ([editId]), so both devices land on one add, and nothing is added when that day already holds an event of the same
+ * name (the school's own invite, or one he added himself). The reminders stay on the tasks (Navilife's own reminders,
+ * 3 days and 1 day before), so his calendar is not given its own alerts twice.
+ *
+ * Inside Navilife the task on the day stands for that time (as Plan my day's blocks do), so the event is left out of
+ * Today and the Calendar tab while that task is there ([withoutSchoolEvents]); it shows again if he deletes the task.
+ *
+ * Undo in Activity takes it back too: inside the five seconds the add is undone; once the calendar has it, it is
+ * deleted there ([deleteId], fixed too); while it is still on its way, it is deleted as soon as it lands.
+ */
+object SchoolCalendarRules {
+    /** An event with a start and no end lasts this long. */
+    const val DEFAULT_MINUTES = 60
+    private const val DAY_MS = 86_400_000L
+    /** Undo keeps trying to take a sent event back for this long. */
+    const val TAKE_BACK_MS = 7 * DAY_MS
+
+    fun editId(findId: String): String = "se" + ActivityRules.fnv64("schoolcal:add:$findId")
+    fun deleteId(findId: String): String = "sx" + ActivityRules.fnv64("schoolcal:delete:$findId")
+
+    /** Whether [plan] puts [f] in his calendar: an event (it has a task on the day) still to come. */
+    fun wanted(f: MailFind, plan: SchoolAutoPlan): Boolean =
+        plan.schoolLine && plan.tasks.any { it.id == SchoolAutoRules.taskId(f.id, "day") }
+
+    /** The event: its title, its time (all day without one), the place, and the notes. */
+    fun draft(f: MailFind, cal: LocalCalendar): EventDraft {
+        val day = f.renewDay
+        val start = f.startMinute
+        val (s, e) = if (start == null) {
+            day * DAY_MS to (maxOf(day, f.endDay ?: day) + 1) * DAY_MS
+        } else {
+            val from = cal.toEpochMs(day, start)
+            from to (f.endMinute?.takeIf { it > start }?.let { cal.toEpochMs(day, it) } ?: (from + DEFAULT_MINUTES * 60_000L))
+        }
+        return CalendarEditRules.clean(EventDraft(SchoolAutoRules.eventTitle(f), s, e, start == null, f.place, notes(f)))
+    }
+
+    /** The event's notes: what it costs and what to bring, where it came from, and that Navilife added it. */
+    fun notes(f: MailFind): String = listOfNotNull(
+        f.pence?.let { "Cost: " + RenewalRules.formatPence(it) },
+        f.notes?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() }?.let { "Bring / do: " + it.joinToString(" · ") },
+        "From ${SchoolMailRules.title(f)}'s email" + (f.subject?.let { " “$it”" } ?: "") + ".",
+        "Added by Navilife · Undo in Navilife's Activity.",
+    ).joinToString("\n")
+
+    private fun norm(s: String): String = s.lowercase().filter { it.isLetterOrDigit() || it == ' ' }.trim()
+
+    private fun dayOf(e: CalendarEvent, cal: LocalCalendar): Long = if (e.allDay) e.startAtMs.floorDiv(DAY_MS) else cal.epochDayOf(e.startAtMs)
+
+    /**
+     * Whether [f]'s day already holds an event of the same name in [events] (the school's own invite, or his), so
+     * nothing is added. Navilife's own provisional adds don't count.
+     */
+    fun alreadyThere(f: MailFind, events: List<CalendarEvent>, cal: LocalCalendar): Boolean {
+        val what = norm(f.what ?: return false).takeIf { it.length >= 4 } ?: return false
+        return events.any { e ->
+            if (e.isProvisional || dayOf(e, cal) != f.renewDay) return@any false
+            val t = norm(e.title)
+            t.length >= 4 && (t.contains(what) || what.contains(t))
+        }
+    }
+
+    /** The event a sent add became in the mirror [events] (same account, title and start), or null while it isn't there. */
+    fun sentEvent(edit: EventEdit, events: List<CalendarEvent>): CalendarEvent? {
+        val d = edit.draft ?: return null
+        return events.firstOrNull { e ->
+            !e.isProvisional && e.provider == edit.provider && e.account == edit.account &&
+                e.startAtMs == d.startAtMs && e.allDay == d.allDay && e.title.trim() == d.title.trim()
+        }
+    }
+
+    /** What Undo still has to do with [edit] (the school add) once its Activity entry is undone. */
+    sealed class TakeBack {
+        data object Nothing : TakeBack()
+        /** Still inside its five seconds: undo the add. */
+        data object UndoAdd : TakeBack()
+        /** In the calendar: delete [event]. */
+        data class Delete(val event: CalendarEvent) : TakeBack()
+        /** Sent or on its way, not in the mirror yet: wait. */
+        data object Wait : TakeBack()
+    }
+
+    fun takeBack(edit: EventEdit?, deleted: Boolean, events: List<CalendarEvent>, nowMs: Long): TakeBack {
+        if (edit == null || edit.undone || deleted) return TakeBack.Nothing
+        return when (edit.state(nowMs)) {
+            EventEditState.WAITING -> TakeBack.UndoAdd
+            EventEditState.REFUSED, EventEditState.FAILED, EventEditState.UNDONE, EventEditState.CLASH -> TakeBack.Nothing
+            EventEditState.SENDING, EventEditState.DONE -> when {
+                nowMs - edit.createdAtMs > TAKE_BACK_MS -> TakeBack.Nothing
+                else -> sentEvent(edit, events)?.let { TakeBack.Delete(it) } ?: TakeBack.Wait
+            }
+        }
+    }
+
+    /** Activity's line once the event is in his calendar: "… · in Google and School, reminders …". */
+    fun withCalendar(summary: String, provider: String): String {
+        val p = CalendarEditRules.providerName(provider)
+        return when {
+            summary.contains(" · in $p and School") -> summary
+            summary.contains(" · in School") -> summary.replaceFirst(" · in School", " · in $p and School")
+            else -> "$summary · in $p"
+        }
+    }
+
+    /**
+     * [events] without the school events Navilife added whose task on the day is still there ([liveDayTasks] holds
+     * those finds' ids): the provisional event of such an add and the mirrored event it became.
+     */
+    fun withoutSchoolEvents(events: List<CalendarEvent>, edits: List<EventEdit>, liveDayTasks: Set<String>): List<CalendarEvent> {
+        if (liveDayTasks.isEmpty()) return events
+        val ids = liveDayTasks.mapTo(HashSet()) { editId(it) }
+        val adds = edits.filter { it.id in ids && it.kind == EventEditKind.ADD && !it.undone && it.status != EventEditStatus.REFUSED && it.status != EventEditStatus.FAILED }
+        if (adds.isEmpty()) return events
+        val addIds = adds.mapTo(HashSet()) { it.id }
+        return events.filterNot { e ->
+            val pending = PendingEditRules.editIdOf(e.id)
+            if (pending != null) pending in addIds
+            else adds.any { sentEvent(it, listOf(e)) != null }
+        }
+    }
 }

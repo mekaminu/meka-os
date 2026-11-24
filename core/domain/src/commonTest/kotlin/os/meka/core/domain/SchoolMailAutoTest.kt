@@ -131,6 +131,102 @@ class SchoolMailAutoTest {
         assertEquals(SchoolAutoRules.ENTITY_ID, v.sections.single { it.label == AutonomyRules.MAIL_LABEL }.rows.last().key)
         assertEquals("Navilife does 1 thing on its own · each with Undo and in Activity", v.summary)
     }
+
+    // ---- Slice 3b: into his real calendar ----
+
+    private fun ev(id: String, title: String, start: Long, end: Long, allDay: Boolean = false) =
+        CalendarEvent(id, title, start, end, allDay, null, "google", "alex@example.com", "Personal")
+
+    @Test
+    fun anEventBecomesACalendarAddWithItsTimePlaceAndNotes() {
+        assertTrue(SchoolCalendarRules.wanted(fair, SchoolAutoRules.plan(fair, now, cal)))
+        val d = SchoolCalendarRules.draft(fair, cal)
+        assertEquals("School fair", d.title)
+        assertEquals(cal.toEpochMs(sat, 12 * 60), d.startAtMs)
+        assertEquals(cal.toEpochMs(sat, 16 * 60), d.endAtMs)
+        assertFalse(d.allDay)
+        assertEquals("the school hall", d.location)
+        assertEquals(
+            "Cost: £1\nBring / do: No parking at school · Wear Christmas jumpers\n" +
+                "From Oakfield Primary's email “Christmas fair this Saturday”.\nAdded by Navilife · Undo in Navilife's Activity.",
+            d.notes,
+        )
+        // No end: an hour. No time at all: the whole day (UTC midnights, as the calendars mirror them).
+        val start = SchoolCalendarRules.draft(fair.copy(endMinute = null), cal)
+        assertEquals(start.startAtMs + 60 * 60_000L, start.endAtMs)
+        val whole = SchoolCalendarRules.draft(fair.copy(startMinute = null, endMinute = null), cal)
+        assertTrue(whole.allDay)
+        assertEquals(sat * 86_400_000L, whole.startAtMs)
+        assertEquals((sat + 1) * 86_400_000L, whole.endAtMs)
+        // Fixed ids, the same on both devices, different for the add and its take-back.
+        assertEquals(SchoolCalendarRules.editId("f1"), SchoolCalendarRules.editId("f1"))
+        assertTrue(SchoolCalendarRules.editId("f1") != SchoolCalendarRules.deleteId("f1"))
+    }
+
+    @Test
+    fun deadlinesAsksAndDaysOffStayOutOfHisCalendar() {
+        val pay = find("f2", "Trip payment", today + 10, pence = 1200)
+        assertFalse(SchoolCalendarRules.wanted(pay, SchoolAutoRules.plan(pay, now, cal)))
+        val off = find("f8", "INSET day", today + 6, kind = SchoolKind.OFF.wire)
+        assertFalse(SchoolCalendarRules.wanted(off, SchoolAutoRules.plan(off, now, cal)))
+        val ask = find("f9", "Send in a named coat", today + 3, kind = SchoolMailRules.ASK)
+        assertFalse(SchoolCalendarRules.wanted(ask, SchoolAutoRules.plan(ask, now, cal)))
+    }
+
+    @Test
+    fun aDayThatAlreadyHoldsItGetsNothingAdded() {
+        val invite = ev("g9", "Oakfield Christmas Fair", cal.toEpochMs(sat, 12 * 60), cal.toEpochMs(sat, 16 * 60))
+        val other = ev("g8", "Football", cal.toEpochMs(sat, 9 * 60), cal.toEpochMs(sat, 10 * 60))
+        // "School fair" isn't inside "Oakfield Christmas Fair"; the same words are.
+        assertFalse(SchoolCalendarRules.alreadyThere(fair, listOf(invite, other), cal))
+        assertTrue(SchoolCalendarRules.alreadyThere(fair, listOf(invite.copy(title = "School Fair!")), cal))
+        assertFalse(SchoolCalendarRules.alreadyThere(fair, listOf(invite.copy(title = "School fair", startAtMs = cal.toEpochMs(sat + 1, 600))), cal))
+        assertFalse(SchoolCalendarRules.alreadyThere(fair, listOf(invite.copy(id = PendingEditRules.PROVISIONAL_PREFIX + "x", title = "School fair")), cal))
+        assertTrue(SchoolCalendarRules.alreadyThere(fair, listOf(ev("g7", "School fair", sat * 86_400_000L, (sat + 1) * 86_400_000L, allDay = true)), cal))
+    }
+
+    private fun edit(status: EventEditStatus? = null, createdAtMs: Long = now, undone: Boolean = false): EventEdit {
+        val d = SchoolCalendarRules.draft(fair, cal)
+        return EventEdit(
+            SchoolCalendarRules.editId("f1"), EventEditKind.ADD, "google", "alex@example.com", null, emptySet(), d, null, false,
+            createdAtMs, createdAtMs + CalendarEditRules.UNDO_MS, undone, status, null, null, null, null,
+        )
+    }
+
+    @Test
+    fun undoTakesTheEventBackWhereverItIs() {
+        val d = SchoolCalendarRules.draft(fair, cal)
+        val inGoogle = ev("g1", d.title, d.startAtMs, d.endAtMs)
+        assertEquals(SchoolCalendarRules.TakeBack.UndoAdd, SchoolCalendarRules.takeBack(edit(), false, emptyList(), now + 1_000))
+        assertEquals(SchoolCalendarRules.TakeBack.Wait, SchoolCalendarRules.takeBack(edit(), false, emptyList(), now + 60_000))
+        assertEquals(SchoolCalendarRules.TakeBack.Delete(inGoogle), SchoolCalendarRules.takeBack(edit(EventEditStatus.DONE), false, listOf(inGoogle), now + 60_000))
+        // Already deleted, undone, refused, or long gone: nothing more.
+        assertEquals(SchoolCalendarRules.TakeBack.Nothing, SchoolCalendarRules.takeBack(edit(EventEditStatus.DONE), true, listOf(inGoogle), now + 60_000))
+        assertEquals(SchoolCalendarRules.TakeBack.Nothing, SchoolCalendarRules.takeBack(edit(undone = true), false, emptyList(), now + 1_000))
+        assertEquals(SchoolCalendarRules.TakeBack.Nothing, SchoolCalendarRules.takeBack(edit(EventEditStatus.REFUSED), false, listOf(inGoogle), now + 60_000))
+        assertEquals(SchoolCalendarRules.TakeBack.Nothing, SchoolCalendarRules.takeBack(null, false, listOf(inGoogle), now))
+        assertEquals(SchoolCalendarRules.TakeBack.Nothing, SchoolCalendarRules.takeBack(edit(EventEditStatus.DONE), false, listOf(inGoogle), now + SchoolCalendarRules.TAKE_BACK_MS + 1))
+    }
+
+    @Test
+    fun theEventIsShownOnceAsItsTaskAndActivitySaysWhereItWent() {
+        val d = SchoolCalendarRules.draft(fair, cal)
+        val inGoogle = ev("g1", d.title, d.startAtMs, d.endAtMs)
+        val other = ev("g2", "Football", d.startAtMs, d.endAtMs)
+        val e = edit(EventEditStatus.DONE)
+        assertEquals(listOf(other), SchoolCalendarRules.withoutSchoolEvents(listOf(inGoogle, other), listOf(e), setOf("f1")))
+        // The task on the day was deleted: the event shows again.
+        assertEquals(listOf(inGoogle, other), SchoolCalendarRules.withoutSchoolEvents(listOf(inGoogle, other), listOf(e), emptySet()))
+        val pending = inGoogle.copy(id = PendingEditRules.PROVISIONAL_PREFIX + e.id)
+        assertTrue(SchoolCalendarRules.withoutSchoolEvents(listOf(pending), listOf(edit()), setOf("f1")).isEmpty())
+
+        val line = "From the school: School fair · Sat 28 Nov, 12:00–16:00 · in School, reminders Wed and Fri, tasks Fri and Sat"
+        assertEquals(
+            "From the school: School fair · Sat 28 Nov, 12:00–16:00 · in Google and School, reminders Wed and Fri, tasks Fri and Sat",
+            SchoolCalendarRules.withCalendar(line, "google"),
+        )
+        assertEquals(SchoolCalendarRules.withCalendar(line, "google"), SchoolCalendarRules.withCalendar(SchoolCalendarRules.withCalendar(line, "google"), "google"))
+    }
 }
 
 /** The whole path from a long email's words to what is made (the facade test sends the same email). */

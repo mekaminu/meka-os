@@ -24,7 +24,9 @@ import os.meka.core.sync.fv
  *   refuses with "This cancels it for 4 people", and the app asks again.
  *
  * MEKA itself never creates an edit: only Meka's own taps do (ADR-006); anything MEKA proposes later goes through
- * Needs you first.
+ * Needs you first. The one rule he made for it is the school's dates (school emails first, slice 3b, Meka 2026-11-24:
+ * "auto create stuff in my calendar"): under his "School events from the school's emails" switch, a school event is
+ * added with Undo in Activity ([SchoolCalendarRules]).
  */
 object EventEditFields {
     /** [EventEditKind] name. */
@@ -483,13 +485,18 @@ class CalendarEdits(
         return all().filter { it.state(now) in OPEN && !(it.status == EventEditStatus.CLASH && it.resolved != null) }
     }
 
-    /** Adds an event to [account]'s main calendar; [forTask] when it is a task's block from Plan my day. */
-    fun add(provider: String, account: String, draft: EventDraft, forTask: String? = null): EventEditResult {
+    /**
+     * Adds an event to [account]'s main calendar; [forTask] when it is a task's block from Plan my day; [id] when the
+     * edit's id is fixed (school emails first, slice 3b: both devices adding the same school event write one edit), in
+     * which case an edit already there is left as it is.
+     */
+    fun add(provider: String, account: String, draft: EventDraft, forTask: String? = null, id: String? = null): EventEditResult {
+        if (id != null && replica.entity(EntityTypes.EVENT_EDIT, id) != null) return EventEditResult.Refused("Already added")
         if (provider !in CalendarEditRules.WRITABLE) return EventEditResult.Refused("Navilife can't add events there")
         if (!canEdit(provider, account)) return refusedNotAllowed(provider, account)
         val d = CalendarEditRules.clean(draft)
         CalendarEditRules.problem(d, nowMs())?.let { return EventEditResult.Refused(it) }
-        return EventEditResult.Made(write(EventEditKind.ADD, provider, account, null, emptySet(), d, null, false, forTask = forTask))
+        return EventEditResult.Made(write(EventEditKind.ADD, provider, account, null, emptySet(), d, null, false, forTask = forTask, fixedId = id))
     }
 
     /**
@@ -522,13 +529,17 @@ class CalendarEdits(
      * Deletes [event]; [guestsOk] when Meka confirmed it cancels the event for its guests; [forTask] when a task's
      * block goes with its task.
      */
-    fun delete(event: CalendarEvent, guestsOk: Boolean = false, forTask: String? = null, every: Boolean = false, following: Boolean = false): EventEditResult {
+    fun delete(
+        event: CalendarEvent, guestsOk: Boolean = false, forTask: String? = null, every: Boolean = false, following: Boolean = false,
+        id: String? = null,
+    ): EventEditResult {
+        if (id != null && replica.entity(EntityTypes.EVENT_EDIT, id) != null) return EventEditResult.Refused("Already removed")
         guard(event)?.let { return it }
         if (every && !event.repeats) return EventEditResult.Refused("It doesn't repeat")
         val from = following && !every
         if (from) CalendarEditRules.followingProblem(event, CalendarEditRules.draftOf(event), null, emptySet(), null)?.let { return EventEditResult.Refused(it) }
         return EventEditResult.Made(
-            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk, forTask = forTask, every = every, following = from),
+            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk, forTask = forTask, every = every, following = from, fixedId = id),
         )
     }
 
@@ -607,9 +618,9 @@ class CalendarEdits(
     private fun write(
         kind: EventEditKind, provider: String, account: String, eventId: String?, changes: Set<EventEditChange>,
         draft: EventDraft?, base: EventDraft?, guestsOk: Boolean, resends: String? = null, forTask: String? = null,
-        every: Boolean = false, following: Boolean = false,
+        every: Boolean = false, following: Boolean = false, fixedId: String? = null,
     ): String {
-        val id = ids()
+        val id = fixedId ?: ids()
         val now = nowMs()
         val fields = linkedMapOf(
             EventEditFields.KIND to kind.name.fv(),
