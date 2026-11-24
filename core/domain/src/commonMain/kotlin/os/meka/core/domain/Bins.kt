@@ -144,7 +144,10 @@ object BinRules {
     /** One example, on one line on the cover screen (quality gate slice 20); TalkBack reads [ADD_DESCRIPTION]. */
     const val ADD_HINT = "Food caddy every Tuesday"
     const val ADD_DESCRIPTION = "Add a bin with its day, for example Food caddy every Tuesday, or Black bin Tue fortnightly from 13 Oct"
-    const val EMPTY_LINE = "Nothing entered yet. Type each bin once with its day, and for every-other-week bins the date of one collection."
+    /** With no bins at all; said once on Bins (walk-through 2026-11-22 A15, [BinsPageRules.blank]). */
+    const val EMPTY_LINE = "No bins yet. Add each bin once with its day, for example Food caddy every Tuesday, or use your council's dates; Navilife reminds you the evening before."
+    /** Bins entered, but none collected in the next six weeks (this used to say "Nothing entered yet"). */
+    const val NO_DATES_LINE = "No collections in the next six weeks."
     const val NOT_READ = "Navilife couldn't read that. Try \"Black bin Tue fortnightly from 13 Oct\" or \"Food caddy every Tuesday\"."
     const val SHIFT_NOTE = "a day later for the bank holiday"
     const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Or use the council's own dates: download the bin calendar (.ics) from its bin-day page and pick it with Use the council's dates."
@@ -450,7 +453,7 @@ object BinRules {
             BinRow(b.id, b.name, line, note, listOfNotNull(b.name, line, note).joinToString(". "), next, next?.let { note(b, it) })
         }
         val firstDay = bins.mapNotNull { next(it, today, holidays) }.minOrNull()
-        val summary = firstDay?.let { "Next: ${names(onDay(bins, it, holidays))} · ${dayWord(it, today)}" } ?: EMPTY_LINE
+        val summary = firstDay?.let { "Next: ${names(onDay(bins, it, holidays))} · ${dayWord(it, today)}" } ?: NO_DATES_LINE
         val council = BinCouncilRules.inUseLine(bins)
         return BinsView(rows, summary, oneOffRows(bins.map { b -> b.copy(moves = b.moves.filter { !it.council }) }, today),
             remindMinute, choices, remindLine(remindMinute), council, if (council != null) COUNCIL_IN_USE else COUNCIL)

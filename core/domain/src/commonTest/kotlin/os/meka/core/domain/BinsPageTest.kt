@@ -84,15 +84,32 @@ class BinsPageTest {
     }
 
     @Test
-    fun emptySaysItInWordsNeverADash() {
-        val p = BinsPageRules.page(BinsView.EMPTY, mon)
-        assertEquals(PageTile("Nothing", "to put out yet", false), p.tileAt(0))
-        assertTrue(p.tiles.all(LifePageRules::readsWhole))
-        assertEquals(PageTile("0", "bins on your list", false), p.tileAt(1))
-        assertEquals(PageTile("No", "one-offs to come", false), p.tileAt(2))
-        assertTrue(p.cardAt(0).rows.isEmpty() && p.cardAt(0).empty != null)
-        assertTrue(p.cardAt(1).rows.isEmpty() && p.cardAt(1).empty != null)
-        assertTrue(p.tiles.none { it.number.trim() == "—" || it.number.isBlank() })
+    fun aBlankPageSaysItOnceWithNoTilesOrCards() {
+        // Walk-through 2026-11-22 A15: the blank page said it four ways (the summary, "Nothing / to put out yet",
+        // "0 bins on your list", Your bins' and One-offs' lines naming "+ Add"); now only the one line and its button.
+        val v = BinsView.EMPTY
+        val p = BinsPageRules.page(v, mon)
+        assertTrue(BinsPageRules.blank(v))
+        assertEquals(0, p.tileCount)
+        assertEquals(0, p.cards.size)
+        assertEquals(BinsPageRules.EMPTY_LINE, BinsPageRules.summary(v))
+        assertFalse("+ Add" in BinsPageRules.EMPTY_LINE)
+        assertFalse("Type" in BinsPageRules.EMPTY_LINE)
+        assertEquals("Add a bin", BinsPageRules.ADD_FIRST)
+        assertEquals(BinsPageRules.INFO, p.info)
+        assertEquals(listOf(BinsPageRules.ADD_BIN, BinsPageRules.ADD_ONE_OFF, BinsPageRules.ADD_COUNCIL), p.addChoices.map { it.key })
+        // The council's calendar in use (even with nothing read for six weeks) is not blank.
+        assertFalse(BinsPageRules.blank(v.copy(councilLine = "Council dates · read Mon 2 Nov · to Fri 5 Feb")))
+        // One bin brings the tiles and cards back, numbers in words where there are none.
+        val one = view(mon, bin("Food caddy", 2, 1, d(10, 13)))
+        assertFalse(BinsPageRules.blank(one))
+        assertEquals(one.summary, BinsPageRules.summary(one))
+        val q = BinsPageRules.page(one, mon)
+        assertEquals(3, q.tileCount)
+        assertTrue(q.tiles.all(LifePageRules::readsWhole))
+        assertEquals(PageTile("No", "one-offs to come", false), q.tileAt(2))
+        assertTrue(q.cardAt(1).rows.isEmpty() && q.cardAt(1).empty != null)
+        assertTrue(q.tiles.none { it.number.trim() == "—" || it.number.isBlank() })
     }
 
     @Test

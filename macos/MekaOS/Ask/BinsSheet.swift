@@ -68,13 +68,10 @@ struct BinsSheet: View {
                 }
                 .staggeredAppear(0)
                 if adding { addForm(page) }
-                Text(said?.line ?? v?.summary ?? BinRules.shared.EMPTY_LINE)
-                    .font(MekaType.caption).foregroundStyle(said?.refused == true ? palette.accent : palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
-                    .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                summaryLine(v).staggeredAppear(1)
+                if page.tileCount > 0 {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in
@@ -100,6 +97,34 @@ struct BinsSheet: View {
         .background(palette.surface)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showAll)
+    }
+
+    /// Under the header: the last thing said or the next collection, or on a blank page (walk-through 2026-11-22 A15)
+    /// its one line and button in one raised card, which opens + Add on A bin.
+    @ViewBuilder
+    private func summaryLine(_ v: BinsView?) -> some View {
+        let rules = BinsPageRules.shared
+        if v.map({ rules.blank(view: $0) }) ?? true {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                if !adding {
+                    LifeEmptyCard(line: rules.EMPTY_LINE, button: rules.ADD_FIRST, palette: palette) {
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding = true; addChoice = rules.ADD_BIN; said = nil }
+                    }
+                    .transition(.opacity)
+                }
+                if let said {
+                    Text(said.line).font(MekaType.caption)
+                        .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else {
+            Text(said?.line ?? v?.summary ?? BinRules.shared.EMPTY_LINE)
+                .font(MekaType.caption).foregroundStyle(said?.refused == true ? palette.accent : palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+        }
     }
 
     /// What an open row shows: a bin or a one-off with Remove, the reminder's time, or the council's dates.

@@ -261,13 +261,29 @@ class PlansPlacesScreensTest {
                 v.rows.filter { it.name == "Black bin" || it.name == "Recycling" }.forEach { r ->
                     if ("Tuesday" !in r.line) fail("$name: ${r.name} reads \"${r.line}\", typed as a Tuesday")
                 }
-                // The page shape (slice 5): the three numbers, and Your bins' first row (or its empty line).
+                // The page shape (slice 5): the three numbers, and Your bins' first row.
                 val page = core.binsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(BinsPageRules.YOURS_EMPTY))
+                page.cards.firstOrNull()?.rows?.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "Nothing / to put out yet" or
+                    // "0 bins on your list" tiles, no Your bins or One-offs card naming "+ Add", no Reminder and dates card.
+                    ScreenShots.assertShows(compose, name, BinsPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { DateGlue.plain(it) }
+                    listOf("Nothing entered", "to put out yet", "bins on your list", "Tap + Add", "Your bins", "One-offs", "Reminder and dates").forEach { w ->
+                        if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank Bins page, beside \"${BinRules.EMPTY_LINE}\"")
+                    }
+                    val said = drawn.count { it.contains("No bins yet") }
+                    if (said != 1) fail("$name: \"No bins yet\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Bins page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank Bins line isn't in its one raised card")
+                    }
+                }
                 // Found and fixing week 5, A12: no row's line is cut with … ("…pick “The council's da" on every cover).
                 ScreenShots.assertNotEllipsized(compose, name, page.cards.flatMap { c -> c.rows.map { it.line } }.filter { it.isNotEmpty() })
             }

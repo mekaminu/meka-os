@@ -3727,6 +3727,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.read(text: "Black bin", today: sat))
         XCTAssertEqual(NoticeSource.bins.label, "Bins out the night before")
         XCTAssertEqual(BinsView.companion.EMPTY.summary, rules.EMPTY_LINE)
+        // Walk-through 2026-11-22 A15: the blank page says it once, with one button, no tiles or cards.
+        XCTAssertTrue(BinsPageRules.shared.blank(view: BinsView.companion.EMPTY))
+        XCTAssertEqual(BinsPageRules.shared.ADD_FIRST, "Add a bin")
+        XCTAssertEqual(BinsPageRules.shared.page(view: BinsView.companion.EMPTY, today: sat).tileCount, 0)
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
             databaseKeyHex: nil, encrypted: false,

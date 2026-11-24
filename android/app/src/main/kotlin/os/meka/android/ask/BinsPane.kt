@@ -135,13 +135,29 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "summary") {
                 // The last thing done (added, a one-off, the council's dates) cross-fades over the next collection.
-                val line = said?.takeIf { !it.refused && !addOpen }?.line ?: v.summary
-                Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "bins-summary") { s ->
-                    Text(s, style = MekaType.caption, color = Meka.colors.textSecondary,
-                        modifier = Modifier.appear(rememberAppearance(1)).semantics { liveRegion = LiveRegionMode.Polite })
+                if (BinsPageRules.blank(v)) {
+                    // Walk-through 2026-11-22 A15: no bins says it once, in one raised card with its one button.
+                    Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        LifeEmptyCard(BinsPageRules.EMPTY_LINE, BinsPageRules.ADD_FIRST) {
+                            haptics.tick(); addChosen = BinsPageRules.ADD_BIN; said = null; addOpen = true
+                        }
+                        // A council file that couldn't be read, or Use my own days, says so here while no sheet is open.
+                        said?.takeIf { !addOpen && rowKey == null }?.let {
+                            Text(it.line, style = MekaType.caption, color = saidColor,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                        }
+                    }
+                } else {
+                    val line = said?.takeIf { !it.refused && !addOpen }?.line ?: v.summary
+                    Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "bins-summary") { s ->
+                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary,
+                            modifier = Modifier.appear(rememberAppearance(1)).semantics { liveRegion = LiveRegionMode.Polite })
+                    }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (page.tiles.isNotEmpty()) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(

@@ -28,6 +28,24 @@ object BinsPageRules {
      */
     const val OWN_DAYS = "Your own days. Tap here to use the council's dates."
 
+    /**
+     * Walk-through 2026-11-22 A15: a blank page said it four ways (the summary "Nothing entered yet. Type each bin…",
+     * the "Nothing / to put out yet" and "0 bins on your list" tiles, a "None" tile, Your bins' and One-offs' lines
+     * naming "+ Add", and the Reminder and dates card for bins that don't exist). Now this line is said once, in one
+     * raised card with [ADD_FIRST] under it, and no tiles or cards follow until a bin is added. The ⓘ still says how the
+     * reminder works, and + Add still offers the council's dates.
+     */
+    const val EMPTY_LINE = BinRules.EMPTY_LINE
+
+    /** The blank page's one button under [EMPTY_LINE]; it opens + Add on A bin. */
+    const val ADD_FIRST = "Add a bin"
+
+    /** Whether the page is blank: no bins, no one-offs and no council calendar, so only the one line and button show. */
+    fun blank(view: BinsView): Boolean = view.rows.isEmpty() && view.oneOffs.isEmpty() && view.councilLine == null
+
+    /** The line under the header: [EMPTY_LINE] on a blank page, else the view's summary. */
+    fun summary(view: BinsView): String = if (blank(view)) EMPTY_LINE else view.summary
+
     const val ADD_BIN = "bin"
     const val ADD_ONE_OFF = "one-off"
     /** No field: the app opens its file picker for the council's bin calendar. */
@@ -69,6 +87,7 @@ object BinsPageRules {
     private fun soon(day: Long?, today: Long): Boolean = day != null && day - today in 0..1
 
     fun page(view: BinsView, today: Long): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES)
         val dated = view.rows.filter { it.nextDay != null }
         val firstDay = dated.minOfOrNull { it.nextDay!! }
         val nextTile = if (firstDay != null) {
