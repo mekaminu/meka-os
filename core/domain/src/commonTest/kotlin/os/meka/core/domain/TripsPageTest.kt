@@ -33,15 +33,37 @@ class TripsPageTest {
         TripsPageRules.page(TripRules.view(trips, on, withDocs), on)
 
     @Test
-    fun noTripsSaysSoInWordsWithOneCard() {
-        val p = page(emptyList())
+    fun noTripsSaysItOnceWithNoTilesCardsOrNote() {
+        // Walk-through 2026-11-22 A15: the blank page said it three ways (its summary, the tile "No trips coming up",
+        // Your trips' line naming "+ Add"); now only the header's one line and its button.
+        val v = TripRules.view(emptyList(), today, docs)
+        val p = TripsPageRules.page(v, today)
+        assertTrue(TripsPageRules.blank(v))
+        assertFalse(TripsPageRules.showsTiles(v))
+        assertFalse(TripsPageRules.showsNote(v))
+        assertEquals(0, p.tileCount)
+        assertEquals(0, p.cards.size)
+        assertEquals(TripRules.EMPTY_LINE, v.summary)
+        assertTrue(v.summary.startsWith("No trips yet."))
+        assertFalse("+ Add" in v.summary)
+        assertEquals("Add a trip", TripsPageRules.ADD_FIRST)
+        assertEquals(listOf("A trip", "A booking"), p.addChoices.map { it.label })
+        // One trip brings the tiles, Your trips and the note back.
+        val one = TripRules.view(listOf(bcn), today, docs)
+        assertFalse(TripsPageRules.blank(one))
+        assertTrue(TripsPageRules.showsNote(one))
+        assertEquals(3, TripsPageRules.page(one, today).tileCount)
+    }
+
+    @Test
+    fun onlyPastTripsIsNotBlankAndSaysNothingIsComing() {
+        val p = page(listOf(rome))
+        assertFalse(TripsPageRules.blank(TripRules.view(listOf(rome), today, docs)))
         assertEquals(3, p.tileCount)
         assertEquals("No trips", p.tileAt(0).number)
-        assertEquals("None", p.tileAt(1).number)
-        assertTrue(p.tiles.none { it.number.isBlank() || it.number == "–" })
-        assertEquals(listOf(TripsPageRules.TRIPS), p.cards.map { it.key })
+        assertEquals(TripsPageRules.TRIPS, p.cardAt(0).key)
         assertEquals(TripsPageRules.TRIPS_EMPTY, p.cardAt(0).empty)
-        assertEquals(listOf("A trip", "A booking"), p.addChoices.map { it.label })
+        assertTrue(p.cards.any { it.key == TripsPageRules.PAST })
     }
 
     @Test

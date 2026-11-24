@@ -211,8 +211,15 @@ private fun TripsHome(core: MekaCore, onClose: () -> Unit, onOpenLists: (String)
             }
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "trips-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    if (TripsPageRules.blank(v)) {
+                        // Walk-through 2026-11-22 A15: no trips says it once, in one raised card with its one button.
+                        LifeEmptyCard(v.summary, TripsPageRules.ADD_FIRST) {
+                            haptics.tick(); addChosen = TripsPageRules.ADD_TRIP; said = null; addOpen = true
+                        }
+                    } else {
+                        Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "trips-summary") { s ->
+                            Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
                     }
                     val line = if (addOpen) null else said
                     Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "trips-added") { r ->
@@ -221,7 +228,9 @@ private fun TripsHome(core: MekaCore, onClose: () -> Unit, onOpenLists: (String)
                     if (rowKey == null) undoLine()
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (TripsPageRules.showsTiles(v)) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(
@@ -231,9 +240,11 @@ private fun TripsHome(core: MekaCore, onClose: () -> Unit, onOpenLists: (String)
                     )
                 }
             }
-            item(key = "note") {
-                Text(TripRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+            if (TripsPageRules.showsNote(v)) {
+                item(key = "note") {
+                    Text(TripRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+                }
             }
         }
         // + Add: a trip or a booking, one typed line; the Trips field tells one from the other.

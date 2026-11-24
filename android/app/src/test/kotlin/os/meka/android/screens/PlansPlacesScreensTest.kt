@@ -190,13 +190,30 @@ class PlansPlacesScreensTest {
                 if (fill == Fill.MANY && v.rows.none { it.name == "Seville" }) fail("$name: Seville, the trip Trip lists packs for, isn't on Trips")
                 // The page shape (slice 16): the three numbers, and Your trips' first row (or its empty line).
                 val page = core.tripsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                val first = page.cards.first()
-                ScreenShots.assertReadable(compose, name, first.rows.flatMap { listOf(it.name, it.line) }, mustShow = false)
-                first.rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(TripsPageRules.TRIPS_EMPTY))
+                page.cards.firstOrNull()?.let { first ->
+                    ScreenShots.assertReadable(compose, name, first.rows.flatMap { listOf(it.name, it.line) }, mustShow = false)
+                    first.rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                }
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "No trips coming up" tile, no Your trips
+                    // card naming "+ Add", no typed-times note.
+                    ScreenShots.assertShows(compose, name, TripsPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { DateGlue.plain(it) }
+                    listOf("coming up", "Tap + Add", "pick “A trip”", "Your trips", "Typed by you", "booked yet").forEach { w ->
+                        if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank Trips page, beside \"${TripRules.EMPTY_LINE}\"")
+                    }
+                    val said = drawn.count { it.contains("No trips yet") }
+                    if (said != 1) fail("$name: \"No trips yet\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Trips page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank Trips line isn't in its one raised card")
+                    }
+                }
             }
             Place.GIFTS -> {
                 val v = core.giftsView.value

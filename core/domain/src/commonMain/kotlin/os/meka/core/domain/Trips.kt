@@ -195,7 +195,12 @@ object TripRules {
     const val BOOKING_HINT = "Flight BA478 14 Nov 07:40"
     const val ADD_DESCRIPTION = "Add a trip with its dates or a booking with its day and time, for example Barcelona 14–18 Nov, or Flight BA478 14 Nov 07:40"
     fun addHint(hasTrips: Boolean): String = if (hasTrips) BOOKING_HINT else ADD_HINT
-    const val EMPTY_LINE = "No trips yet. Type a trip with its dates, then each booking with its day, time and reference."
+    /**
+     * Walk-through 2026-11-22 A15: the blank Trips page said it three ways (this line, the tile "No trips coming up" and
+     * Your trips' "No trips yet. Tap + Add and pick “A trip”…"). Now this line is said once, in one raised card with
+     * [TripsPageRules.ADD_FIRST] under it, and no tiles, cards or note follow until a trip is added.
+     */
+    const val EMPTY_LINE = "No trips yet. Add each trip once with its dates, then its bookings; Today shows it a week before you go."
     const val NOT_READ = "Navilife couldn't read that. Try \"Barcelona 14–18 Nov\" or \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
     const val NO_DAY = "Navilife couldn't read a day in that booking. Try \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
     const val NO_TRIP = "Add the trip first, with its dates (\"Barcelona 14–18 Nov\"), then its bookings."

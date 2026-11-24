@@ -39,6 +39,18 @@ object TripsPageRules {
         else -> "A trip with its dates, for example ${TripRules.ADD_HINT}"
     }
 
+    /** The blank page's one button under [TripRules.EMPTY_LINE]; it opens + Add on A trip. */
+    const val ADD_FIRST = "Add a trip"
+
+    /** Whether the page is blank: no trip to come, on or past, so only the one line and its button show. */
+    fun blank(view: TripsView): Boolean = view.rows.isEmpty() && view.past.isEmpty()
+
+    /** Whether the three numbers show: not on a blank page. */
+    fun showsTiles(view: TripsView): Boolean = !blank(view)
+
+    /** Whether the typed-times note sits under the cards: not on a blank page, where the card's one line says it. */
+    fun showsNote(view: TripsView): Boolean = !blank(view)
+
     const val TRIPS_EMPTY = "No trips yet. Tap + Add and pick “A trip” with its dates."
     const val BOOKED_EMPTY = "Nothing booked yet. Tap + Add and pick “A booking”."
     const val DOCS_EMPTY = "None in the Vault · add passports in Settings → Vault"
@@ -139,7 +151,9 @@ object TripsPageRules {
         else PageTile("All set", "travel documents", false)
     }
 
+    /** The page; a blank one (no trips at all) has no tiles and no cards: the header's one line and button say it all. */
     fun page(view: TripsView, today: Long): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES)
         val next = nextTrip(view, today)
         val cards = buildList {
             add(LifePageRules.card(TRIPS, cardTitle(view, TRIPS, today), allRows(view, TRIPS, today), empty = TRIPS_EMPTY))

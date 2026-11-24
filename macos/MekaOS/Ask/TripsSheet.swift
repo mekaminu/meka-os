@@ -111,10 +111,7 @@ struct TripsSheet: View {
                 .staggeredAppear(0)
                 if adding { addForm(page) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    summaryLine(v)
                     if !adding, let said {
                         Text(said.line).font(MekaType.caption)
                             .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
@@ -124,7 +121,9 @@ struct TripsSheet: View {
                     undoLine
                 }
                 .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                if page.tileCount > 0 {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in
@@ -137,8 +136,10 @@ struct TripsSheet: View {
                             })
                             .staggeredAppear(3 + i)
                         }
-                        Text(TripRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if page.tileCount > 0 {
+                            Text(TripRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 .frame(maxHeight: 420)
@@ -190,6 +191,27 @@ struct TripsSheet: View {
                 try? await Task.sleep(for: .milliseconds(TripRules.shared.UNDO_MS))
                 if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.removed = nil } }
             }
+        }
+    }
+
+    /// Under the header: the view's line, or on a blank page (walk-through 2026-11-22 A15) its one line and button in
+    /// one raised card, which opens + Add on A trip.
+    @ViewBuilder
+    private func summaryLine(_ v: TripsView) -> some View {
+        let rules = TripsPageRules.shared
+        if rules.blank(view: v) {
+            if !adding {
+                LifeEmptyCard(line: v.summary, button: rules.ADD_FIRST, palette: palette) {
+                    let first = rules.ADD_TRIP
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding = true; said = nil; addChoice = first }
+                }
+                .transition(.opacity)
+            }
+        } else {
+            Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
         }
     }
 

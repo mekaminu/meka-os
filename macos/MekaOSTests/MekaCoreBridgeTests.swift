@@ -3268,6 +3268,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.kindOf(text: "Barcelona 14–18 Nov"))
         XCTAssertEqual(WeekAheadKind.trip.name, "TRIP")
         XCTAssertEqual(TripsView.companion.EMPTY.summary, rules.EMPTY_LINE)
+        // Walk-through 2026-11-22 A15: the blank page says it once, with one button, no tiles or cards.
+        let page = TripsPageRules.shared
+        XCTAssertTrue(page.blank(view: TripsView.companion.EMPTY))
+        XCTAssertEqual(page.ADD_FIRST, "Add a trip")
+        XCTAssertEqual(page.ADD_TRIP, "trip")
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
             databaseKeyHex: nil, encrypted: false,
