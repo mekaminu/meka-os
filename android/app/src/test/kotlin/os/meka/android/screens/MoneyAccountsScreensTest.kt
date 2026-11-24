@@ -197,6 +197,11 @@ class MoneyAccountsScreensTest {
         assertTrue(shows("money-export-all"), "the sheet has no Export")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-accounts-data-sheet"))
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-accounts-data-sheet")
+        // Walk-through week 5 A14: no developer copy, and the account hint sits on one line in its field.
+        for (w in listOf("server", "its key")) if (showsText(w)) fail("the import sheet still says \"$w\"")
+        val hint = compose.onAllNodes(ScreenShots.plainText(MoneyRules.ACCOUNT_HINT, substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes().first().boundsInRoot
+        assertTrue(hint.height < 30f * compose.density.density, "the account hint wraps (${hint.height} px tall)")
         // Walk-through A26: the sheet stops short of the screen's top edge.
         val sheetTop = compose.onNodeWithTag("money-more-sheet").fetchSemanticsNode().boundsInRoot.top
         assertTrue(sheetTop >= 16f, "the money data sheet sits against the top edge (top $sheetTop)")

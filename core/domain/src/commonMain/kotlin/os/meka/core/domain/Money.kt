@@ -543,8 +543,13 @@ object MoneyRules {
      * where the month will show once, on Spending ([MoneyTabs.EMPTY_SPENDING]).
      */
     const val EMPTY_SUMMARY = "Nothing imported yet"
-    const val CONNECT_LATER = "Your banks fill this in by themselves (read-only, through Lunch Flow) once Navilife's server has its key; a statement file works for any bank meanwhile."
-    const val ACCOUNT_HINT = "Which account? (Current account, Credit card…)"
+    /**
+     * Walk-through week 5 A14: with no bank feed yet, what he can do about it, never how Navilife's server works ("once
+     * the server has its key" was developer copy).
+     */
+    const val CONNECT_LATER = "Banks you tick for Navilife in Lunch Flow fill this in by themselves. Until then, a statement file works for any bank."
+    /** Short enough to sit on one line in the field on the folded Fold (A14: the longer hint wrapped). */
+    const val ACCOUNT_HINT = "Account, e.g. Current account"
     const val NO_ACCOUNT = "Name the account first (e.g. Current account), then pick the file."
     const val IMPORT = "Import a statement file"
     const val FOOT = "Read-only: Navilife never moves money or pays anything, and keeps no bank password. Your transactions stay in your own data (synced, encrypted). Not financial advice."
