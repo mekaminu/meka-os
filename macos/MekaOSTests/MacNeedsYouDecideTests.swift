@@ -49,7 +49,7 @@ final class MacNeedsYouDecideTests: XCTestCase {
         let a = ApprovalCard(id: "a1", kind: .trade, label: "TRADE · KESTREL", title: "Buy 0.1 ETH",
                              lines: ["At about £250", " "], why: "Asked 21:40 · expires in 14 min", biometric: true,
                              urgent: true, approveLabel: "Approve", declineLabel: "Decline", spoken: "Kestrel asks to buy 0.1 ETH")
-        let c = NeedsYouDecideRules.shared.approval(card: a, lock: ApprovalRules.shared.LOCK_MAC)
+        let c = NeedsYouDecideRules.shared.approval(card: a, lock: ApprovalRules.shared.LOCK_MAC, noted: true)
         XCTAssertEqual(c.what, "Buy 0.1 ETH")
         XCTAssertEqual(c.from, "Trade · Kestrel · Asked 21:40 · expires in 14 min")
         XCTAssertEqual(c.details, ["At about £250"])
@@ -57,6 +57,11 @@ final class MacNeedsYouDecideTests: XCTestCase {
         XCTAssertNil(c.changeLabel)
         XCTAssertEqual([c.yesLabel, c.noLabel], ["Approve", "Decline"])
         XCTAssertEqual(c.note, ApprovalRules.shared.LOCK_MAC)
+        // Walk-through 2026-11-22 A15: the Touch ID note is said once, under the last approval.
+        XCTAssertNil(NeedsYouDecideRules.shared.approval(card: a, lock: ApprovalRules.shared.LOCK_MAC, noted: false).note)
+        XCTAssertFalse(NeedsYouDecideRules.shared.lockNoted(index: 0, count: 2))
+        XCTAssertTrue(NeedsYouDecideRules.shared.lockNoted(index: 1, count: 2))
+        XCTAssertNil(NeedsYouGroupRules.shared.cardTitle(title: MailRenewalRules.shared.TITLE, boxed: true))
         XCTAssertEqual(NeedsYouDecideCardView.symbol(c.icon), "chart.line.uptrend.xyaxis")
     }
 

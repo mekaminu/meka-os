@@ -759,7 +759,8 @@ internal fun NeedsYouColumn(
         approvals.forEachIndexed { i, card ->
             item(key = "approval-${card.id}") {
                 ApprovalCardView(card, core, { line -> moves.undoLine(line, null) },
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1 + i, play)),
+                    noted = NeedsYouDecideRules.lockNoted(i, approvals.size))
             }
         }
         item(key = "after-work") {
@@ -984,7 +985,10 @@ internal fun NeedsYouColumn(
                     }
                 }
             }
-            if (if (boxed) present.isEmpty() else (!show(NeedsYouSection.FYI) || fyiChats.isEmpty()) && (!show(NeedsYouSection.MAIL) || !mailAny)) {
+            if (NeedsYouLayoutRules.rightEmptyShows(
+                    if (boxed) present.isEmpty() else (!show(NeedsYouSection.FYI) || fyiChats.isEmpty()) && (!show(NeedsYouSection.MAIL) || !mailAny),
+                    pageEmpty = if (boxed) presentAll.isEmpty() else false)) {
+                // Walk-through A15 (2026-11-22): not on an empty page, where "All clear" and "Nothing needs you" say it.
                 item(key = "right-empty") {
                     // Walk-through 2026-11-15 A17: level with the left column's first line (its header already ends
                     // with its own gap), not a gap lower, so it no longer floats out of line mid-screen.
@@ -1037,7 +1041,8 @@ internal fun NeedsYouColumn(
         approvals.forEachIndexed { i, card ->
             item(key = "approval-${card.id}") {
                 ApprovalCardView(card, core, { line -> moves.undoLine(line, null) },
-                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(1 + i, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(1 + i, play)),
+                    noted = NeedsYouDecideRules.lockNoted(i, approvals.size))
             }
         }
         }
@@ -1315,7 +1320,7 @@ internal fun NeedsYouColumn(
         mailFinds?.let { f ->
             item(key = "mail-finds") {
                 MailFindSection(f, core, moves.undoLine, mailTaps,
-                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().then(inBox).then(cardGap).appear(rememberAppearance(2, play)), boxed = boxed)
             }
         }
         }

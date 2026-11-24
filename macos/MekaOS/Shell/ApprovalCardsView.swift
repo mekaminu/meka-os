@@ -19,8 +19,10 @@ struct ApprovalCardsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             ForEach(Array(model.approvals.enumerated()), id: \.element.id) { i, card in
-                // The approved look (TO DECIDE, the Fold's slice 5): one compact card, what would happen kept whole.
-                NeedsYouDecideCardView(card: NeedsYouDecideRules.shared.approval(card: card, lock: ApprovalRules.shared.LOCK_MAC),
+                // The approved look (TO DECIDE, the Fold's slice 5): one compact card, what would happen kept whole; the
+                // Touch ID note under the last approval only (walk-through A15: it was said under each).
+                NeedsYouDecideCardView(card: NeedsYouDecideRules.shared.approval(card: card, lock: ApprovalRules.shared.LOCK_MAC,
+                                                                                 noted: NeedsYouDecideRules.shared.lockNoted(index: Int32(i), count: Int32(model.approvals.count))),
                                        palette: palette,
                                        onYes: { model.approve(card) }, onNo: { model.declineApproval(card) },
                                        yesSymbol: "touchid", yesSpokenSuffix: ", with Touch ID")

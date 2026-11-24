@@ -47,8 +47,10 @@ struct MailNeedsView: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Button { MekaHaptics.tick(); open.toggle() } label: {
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                            Text(card.title.uppercased())
-                                .font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                            if let title = NeedsYouGroupRules.shared.cardTitle(title: card.title, boxed: boxed) {
+                                Text(title.uppercased())
+                                    .font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                            }
                             Text(card.headline).font(MekaType.body).foregroundStyle(palette.textPrimary)
                                 .contentTransition(.opacity)
                                 .animation(MekaMotion.expand(reduced: reduceMotion), value: card.headline)
@@ -850,6 +852,8 @@ struct MailFindView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     var firstIndex: Int = 2
+    /// Inside the Renewals box: the box's head names it, so the card's own title is left off (walk-through A15).
+    var boxed: Bool = false
     @State private var open = true
 
     var body: some View {

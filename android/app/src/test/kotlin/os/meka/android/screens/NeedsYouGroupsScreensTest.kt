@@ -125,7 +125,9 @@ class NeedsYouGroupsScreensTest {
         NeedsYouGroup.MESSAGES to NeedsYouGroupRules.names(listOf("Alex", "Game testing group", "Sam")),
         NeedsYouGroup.FYI to NeedsYouGroupRules.fyiPeek(fyi.map { it.who }),
         NeedsYouGroup.CHATS to "1 group · 3 messages · digest at 12:30",
-        NeedsYouGroup.MAIL to "3 emails need you",
+        // Walk-through 2026-11-22 A15: "Mail to answer 3 / 3 emails need you" said the count twice; the peek is the
+        // app's own, the senders.
+        NeedsYouGroup.MAIL to NeedsYouGroupRules.names(listOf("Sam Taylor", "Oakfield School", "Council")),
         NeedsYouGroup.RENEWALS to NeedsYouGroupRules.renewalsPeek(listOf("Streamly", "Music Plus")),
         NeedsYouGroup.TIDIED to "41 tidied · 12 newsletters · 24 promos · 5 junk & scams",
     )
@@ -204,6 +206,7 @@ class NeedsYouGroupsScreensTest {
         val rows = compose.onAllNodesWithTag(NEEDS_YOU_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().size
         if (rows != counts.getValue(NeedsYouGroup.MESSAGES)) fail("$name: Messages is open with $rows rows under it, not 3")
         if (!onScreen(peeks.getValue(NeedsYouGroup.TIDIED))) fail("$name: a closed box doesn't peek")
+        if (onScreen("emails need you")) fail("$name: Mail to answer's peek says its count again")
         if (!onScreen("1 renewal due · from your lists")) fail("$name: From your lists isn't one row inside To decide")
         if (!onScreen("At work until 17:30 · 37 held for later ›")) fail("$name: the after-work foot line is missing")
         // Walk-through 2026-11-22 A9: no chat shown under the at-work line came in after work ends, and no two say the same.

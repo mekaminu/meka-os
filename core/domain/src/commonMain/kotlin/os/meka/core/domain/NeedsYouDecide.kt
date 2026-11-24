@@ -165,8 +165,11 @@ object NeedsYouDecideRules {
      * under it, as what would happen must never be cut; Approve · Decline (no Change: the one who asked sets the terms);
      * the fingerprint (or Touch ID) note under the taps. The taps are the approval's own: Approve still asks for the
      * fingerprint every time, and only that signed yes reaches the core.
+     *
+     * Walk-through 2026-11-22, A15 (said twice): with two approvals "Approving needs your fingerprint" sat under both;
+     * [noted] false leaves it off, so the list says it once, under its last approval ([lockNoted]).
      */
-    fun approval(card: ApprovalCard, lock: String = ApprovalRules.LOCK_FOLD): NeedsYouDecideCard = NeedsYouDecideCard(
+    fun approval(card: ApprovalCard, lock: String = ApprovalRules.LOCK_FOLD, noted: Boolean = true): NeedsYouDecideCard = NeedsYouDecideCard(
         key = "approval-" + card.id,
         icon = icon(card.kind),
         what = card.title,
@@ -177,8 +180,11 @@ object NeedsYouDecideRules {
         spoken = spoken(card.spoken, card.approveLabel + " with your fingerprint", card.declineLabel),
         details = card.lines.map { it.trim() }.filter { it.isNotEmpty() },
         urgent = card.urgent,
-        note = lock,
+        note = lock.takeIf { noted },
     )
+
+    /** Whether the approval at [index] of [count] carries the fingerprint (Touch ID) note: only the last one does. */
+    fun lockNoted(index: Int, count: Int): Boolean = index == count - 1
 
     /** "TRADE · KESTREL" → "Trade · Kestrel"; a label already in mixed case is left as it is. */
     fun sentence(label: String): String = if (label != label.uppercase()) label.trim() else

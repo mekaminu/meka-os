@@ -100,6 +100,12 @@ object NeedsYouGroupRules {
     const val CLEAR_ALL = "Clear all"
     const val FYI_PEEK = "No reply needed"
     const val RENEWALS_PEEK = "nothing added until you tap Add"
+
+    /**
+     * A card's own title inside a group's box: none, as the box's head already names it (walk-through 2026-11-22, A15:
+     * "Renewals found in mail" sat straight over "RENEWALS FROM YOUR MAIL"); a card on its own keeps its title.
+     */
+    fun cardTitle(title: String, boxed: Boolean): String? = title.takeUnless { boxed }
     const val LISTS_TITLE = "From your lists"
     // Meka 2026-11-18 23:34: the foot hint ("Tap a heading to open or close it · …") was a note on the mockup, not app
     // text, so it is gone from both apps.

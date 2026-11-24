@@ -330,7 +330,7 @@ struct NeedsYouView: View {
             }
             MailChaseView(palette: palette, firstIndex: 0)
         case .renewals:
-            MailFindView(palette: palette, firstIndex: 0)
+            MailFindView(palette: palette, firstIndex: 0, boxed: true)
         default:
             // Possible scams to check (Meka 2026-11-18 23:34): thin rows flagged Possible scam; a click opens Junk it &
             // block · Not a scam · Done.

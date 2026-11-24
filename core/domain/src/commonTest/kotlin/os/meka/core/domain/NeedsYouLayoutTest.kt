@@ -115,4 +115,14 @@ class NeedsYouLayoutTest {
         assertFalse(NeedsYouLayoutRules.twoColumns(840, taskOpen = true))
         assertFalse(NeedsYouLayoutRules.twoColumns(360, taskOpen = false))
     }
+
+    /** Walk-through 2026-11-22 A15: the empty page said it three ways; the Renewals box's card said its title again. */
+    @Test
+    fun anEmptyPageAndABoxSayItOnce() {
+        assertTrue(NeedsYouLayoutRules.rightEmptyShows(rightEmpty = true, pageEmpty = false))
+        assertFalse(NeedsYouLayoutRules.rightEmptyShows(rightEmpty = true, pageEmpty = true))
+        assertFalse(NeedsYouLayoutRules.rightEmptyShows(rightEmpty = false, pageEmpty = false))
+        assertEquals(null, NeedsYouGroupRules.cardTitle(MailRenewalRules.TITLE, boxed = true))
+        assertEquals(MailRenewalRules.TITLE, NeedsYouGroupRules.cardTitle(MailRenewalRules.TITLE, boxed = false))
+    }
 }

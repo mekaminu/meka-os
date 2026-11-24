@@ -134,6 +134,10 @@ class NeedsYouDecideTest {
         assertTrue(c.urgent)
         assertEquals(ApprovalRules.LOCK_FOLD, c.note)
         assertEquals(ApprovalRules.LOCK_MAC, NeedsYouDecideRules.approval(a, ApprovalRules.LOCK_MAC).note)
+        // Walk-through 2026-11-22 A15: with two approvals the fingerprint note is said once, under the last.
+        assertEquals(null, NeedsYouDecideRules.approval(a, noted = false).note)
+        assertEquals(listOf(false, true), (0..1).map { NeedsYouDecideRules.lockNoted(it, 2) })
+        assertTrue(NeedsYouDecideRules.lockNoted(0, 1))
         assertTrue(c.spoken.endsWith("expires in 14 min. ${ApprovalRules.APPROVE} with your fingerprint, ${ApprovalRules.DECLINE}."))
         assertEquals(NeedsYouDecideIcon.PAYMENT, NeedsYouDecideRules.approval(a.copy(kind = ApprovalKind.PAYMENT)).icon)
         assertEquals(NeedsYouDecideIcon.SHARE, NeedsYouDecideRules.approval(a.copy(kind = ApprovalKind.SHARE)).icon)

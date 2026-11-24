@@ -120,6 +120,13 @@ object NeedsYouLayoutRules {
     /** The right column's quiet line when it has nothing: FYI and mail land here. */
     const val RIGHT_EMPTY = "No FYI or tidied mail right now"
 
+    /**
+     * Whether the right column says [RIGHT_EMPTY]: only while the left still holds something. With the whole page empty
+     * the header's "All clear" and the left's "Nothing needs you" already say it (walk-through 2026-11-22, A15: the empty
+     * open Fold said it three ways).
+     */
+    fun rightEmptyShows(rightEmpty: Boolean, pageEmpty: Boolean): Boolean = rightEmpty && !pageEmpty
+
     /** The column [section] sits in on the open Fold: To decide and Messages left, FYI and Mail right. */
     fun side(section: NeedsYouSection): NeedsYouPart = when (section) {
         NeedsYouSection.DECIDE, NeedsYouSection.MESSAGES -> NeedsYouPart.LEFT

@@ -347,15 +347,12 @@ class NeedsYouScreensTest {
     fun innerEmpty() {
         shoot("inner-dark-empty", Fill.EMPTY)
         val name = "inner-dark-empty"
-        // Walk-through 2026-11-15 A17: the right column's quiet line floated a gap below the left's empty line.
         if (!shows(hasTestTag(NEEDS_YOU_COLUMNS_TAG))) fail("$name: the open Fold shows one column, not two")
-        val left = compose.onAllNodes(hasText(NeedsYouStackRules.EMPTY_LINE, substring = true)).fetchSemanticsNodes().firstOrNull()
-            ?: fail("$name: the left column's empty line isn't drawn")
-        val right = compose.onAllNodes(hasText(NeedsYouLayoutRules.RIGHT_EMPTY)).fetchSemanticsNodes().firstOrNull()
-            ?: fail("$name: the right column's line isn't drawn")
-        val dp = compose.density.density
-        val off = kotlin.math.abs(left.boundsInRoot.top - right.boundsInRoot.top) / dp
-        if (off > 4f) fail("$name: the right column's line sits ${off.toInt()} dp out of line with the left's")
+        if (compose.onAllNodes(hasText(NeedsYouStackRules.EMPTY_LINE, substring = true)).fetchSemanticsNodes().isEmpty())
+            fail("$name: the left column's empty line isn't drawn")
+        // Walk-through 2026-11-22 A15: the empty page said it three ways ("All clear", "Nothing needs you" and the right
+        // column's "No FYI or tidied mail right now"); the right column now stays quiet while the whole page is empty.
+        if (shows(hasText(NeedsYouLayoutRules.RIGHT_EMPTY))) fail("$name: the empty page still says \"${NeedsYouLayoutRules.RIGHT_EMPTY}\"")
     }
 
     @Test @Config(qualifiers = ScreenShots.INNER)

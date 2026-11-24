@@ -29,7 +29,7 @@ import os.meka.core.facade.MekaCore
  * cross-fade.
  */
 @Composable
-internal fun ApprovalCardView(card: ApprovalCard, core: MekaCore, say: (String) -> Unit, modifier: Modifier = Modifier) {
+internal fun ApprovalCardView(card: ApprovalCard, core: MekaCore, say: (String) -> Unit, modifier: Modifier = Modifier, noted: Boolean = true) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -70,9 +70,9 @@ internal fun ApprovalCardView(card: ApprovalCard, core: MekaCore, say: (String) 
         Unit
     }
     // The approved Needs you look, slice 5: the compact TO DECIDE card (icon, title over "Trade · Kestrel · Asked 21:40 ·
-    // expires in 14 min", lit when urgent; what would happen kept whole; Approve · Decline; the fingerprint note).
+    // expires in 14 min", lit when urgent; what would happen kept whole; Approve · Decline; the fingerprint note, under the last approval only).
     NeedsYouDecideShell(
-        remember(card) { NeedsYouDecideRules.approval(card, ApprovalRules.LOCK_FOLD) },
+        remember(card, noted) { NeedsYouDecideRules.approval(card, ApprovalRules.LOCK_FOLD, noted) },
         onYes = approve, onNo = decline,
         modifier = modifier.testTag("approval-${card.id}"),
     )

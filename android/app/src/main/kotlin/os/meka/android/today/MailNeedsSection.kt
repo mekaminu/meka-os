@@ -827,6 +827,8 @@ private fun MailChaseRowView(
 internal fun MailFindSection(
     card: MailFindCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, taps: MailTaps,
     modifier: Modifier = Modifier,
+    /** Inside the Renewals box: the box's head names it, so the card's own title is left off (walk-through A15). */
+    boxed: Boolean = false,
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -851,7 +853,7 @@ internal fun MailFindSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                SectionLabel(card.title)
+                os.meka.core.domain.NeedsYouGroupRules.cardTitle(card.title, boxed)?.let { SectionLabel(it) }
                 AnimatedContent(card.headline, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-finds-headline") {
                     Text(it, style = MekaType.body, color = Meka.colors.textPrimary)
                 }

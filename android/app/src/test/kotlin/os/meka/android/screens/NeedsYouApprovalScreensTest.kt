@@ -71,8 +71,9 @@ class NeedsYouApprovalScreensTest {
             MekaTheme {
                 NeedsYouDecideShotPage {
                     NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.DECIDE_HEAD, 2))
-                    listOf(trade, payment).forEach { a ->
-                        NeedsYouDecideShell(NeedsYouDecideRules.approval(a), onYes = { taps += "approve:${a.id}" }, onNo = { taps += "decline:${a.id}" })
+                    val both = listOf(trade, payment)
+                    both.forEachIndexed { i, a ->
+                        NeedsYouDecideShell(NeedsYouDecideRules.approval(a, noted = NeedsYouDecideRules.lockNoted(i, both.size)), onYes = { taps += "approve:${a.id}" }, onNo = { taps += "decline:${a.id}" })
                     }
                 }
             }
@@ -88,6 +89,9 @@ class NeedsYouApprovalScreensTest {
             "Stop at £39,000", "Pay £12.50 for the school trip", "From your current account", ApprovalRules.LOCK_FOLD,
         ).forEach { if (!onScreen(it)) fail("$name: $it is missing") }
         if (onScreen("TRADE · KESTREL")) fail("$name: the label still shouts in capitals")
+        // Walk-through 2026-11-22 A15: the fingerprint note sat under both approvals; it is said once, under the last.
+        val notes = ScreenShots.texts(compose).count { os.meka.core.domain.DateGlue.plain(it) == os.meka.core.domain.DateGlue.plain(ApprovalRules.LOCK_FOLD) }
+        if (notes != 1) fail("$name: \"${ApprovalRules.LOCK_FOLD}\" is said $notes times, not once")
         if (compose.onAllNodesWithTag(NEEDS_YOU_DECIDE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size != 2) fail("$name: not two cards")
         ScreenShots.assertEachOneLine(compose, name, listOf(ApprovalRules.APPROVE, ApprovalRules.DECLINE))
         ScreenShots.assertNothingCutUnder(compose, name, NEEDS_YOU_DECIDE_TAG)
