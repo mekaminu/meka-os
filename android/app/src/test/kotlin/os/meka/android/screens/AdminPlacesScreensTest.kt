@@ -221,7 +221,7 @@ class AdminPlacesScreensTest {
                 if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                page.cards.firstOrNull()?.rows?.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
                 // Walk-through 2026-11-02 A12: an empty field's hint says "e.g.", and a child with only some sizes kept
                 // is never "Sizes checked" as though all were.
