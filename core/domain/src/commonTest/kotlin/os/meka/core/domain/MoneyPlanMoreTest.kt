@@ -172,12 +172,27 @@ class MoneyPlanMoreTest {
         tl("a-travel", 7, 22, -4_000, "TAPAS BAR €46.50", MoneyCategory.EATING_OUT),
     )
 
+    /** Walk-through 2026-11-22 A13 (g1b 8): a fee row names the payee, never the payment's category ("Other"). */
+    @Test
+    fun aFeeRowNamesWhoWasPaidAbroad() {
+        assertEquals("Restaurante Sol", MoneyTravel.payee("RESTAURANTE SOL EUR 46.20"))
+        assertEquals("Mercado Central", MoneyTravel.payee("MERCADO CENTRAL 23.10 EUR"))
+        assertEquals("Tapas Bar", MoneyTravel.payee("TAPAS BAR €46.50"))
+        assertEquals("Cafe Roma", MoneyTravel.payee("CARD PAYMENT TO CAFE ROMA USD 12,50"))
+        val other = listOf(
+            tl("a-card", 10, 19, -4_000, "RESTAURANTE SOL EUR 46.20", MoneyCategory.OTHER),
+            tl("a-card", 10, 19, -120, "NON-STERLING TRANSACTION FEE", MoneyCategory.FEES),
+        )
+        val t = MoneyPlanMore.abroadTiles(MoneyTravel.view(other, names, d(10, 21))!!)!!
+        assertEquals("Restaurante Sol · Mon 19 Oct", t.paymentAt(0).what)
+    }
+
     @Test
     fun payingAbroadAsAFeesTileBarsAndThePaymentsBehindIt() {
         val tv = MoneyTravel.view(trip, names, sat17)!!
         assertEquals(449L, tv.feesPence)
         // Newest fee first, each with the payment it came with.
-        assertEquals(listOf("Groceries" to 150L, "Eating out" to 299L), tv.fees.map { it.what to it.pence })
+        assertEquals(listOf("Mercado" to 150L, "Restaurante Sol" to 299L), tv.fees.map { it.what to it.pence })
         val t = MoneyPlanMore.abroadTiles(tv)!!
         assertEquals(MoneyPlanMore.ABROAD_HEAD, t.head)
         assertEquals("£4.49", t.fees)
@@ -190,7 +205,7 @@ class MoneyPlanMoreTest {
         assertEquals(1f, t.barAt(1).share)
         assertEquals("about 3% of £150 · 2 payments abroad", t.barAt(1).sub)
         assertEquals("1 payment abroad · £40", t.barAt(0).sub)
-        assertEquals("Groceries · Wed 22 Jul", t.paymentAt(0).what)
+        assertEquals("Mercado · Wed 22 Jul", t.paymentAt(0).what)
         assertEquals("£1.50 fee", t.paymentAt(0).fee)
         assertNull(t.more)
         // No fees at all.

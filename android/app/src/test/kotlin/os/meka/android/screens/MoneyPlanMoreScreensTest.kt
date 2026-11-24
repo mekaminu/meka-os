@@ -91,6 +91,8 @@ class MoneyPlanMoreScreensTest {
             "19/10/2026,NON-STERLING TRANSACTION FEE,-1.20\n" +
             "20/10/2026,MERCADO CENTRAL 23.10 EUR,-20.00\n" +
             "20/10/2026,NON-STERLING TRANSACTION FEE,-0.60\n"
+        /** [CARD]'s account: the Platinum card Accounts and Bills list on the other Money shots. */
+        const val CARD_NAME = "Platinum card"
         /** The last day of [CARD], the day every Money shot's statements run to. */
         const val LAST_DAY = "20/10/2026"
     }
@@ -107,7 +109,9 @@ class MoneyPlanMoreScreensTest {
             core.tick()
             core.openMoney()
             check(!core.importMoneyStatement("Current account", CURRENT).refused)
-            if (card) check(!core.importMoneyStatement("Credit card", CARD).refused)
+            // Walk-through 2026-11-22 A13 (g1b 8): the card is the Money shots' own Platinum card; "Credit card" was
+            // a card Accounts and Bills never list.
+            if (card) check(!core.importMoneyStatement(CARD_NAME, CARD).refused)
             core.tick()
         }
         compose.mainClock.autoAdvance = false
@@ -253,6 +257,11 @@ class MoneyPlanMoreScreensTest {
         assertTrue(shows("money-abroad-payments-toggle"))
         tap("money-abroad-payments-toggle")
         assertTrue(shows("money-abroad-payments") && showsText("£1.20 fee"), "See the payments behind it should list each fee")
+        // Walk-through 2026-11-22 A13 (g1b 8): each fee names who was paid and the bar the card he has.
+        assertTrue(showsText("Restaurante Sol · Mon 19 Oct") && showsText("Mercado Central · Tue 20 Oct"),
+            "each fee row should name the payee abroad, not the payment's category")
+        if (showsText("Other · ")) fail("a fee row shows the category \"Other\" where the payee goes")
+        assertTrue(showsText(CARD_NAME), "PAYING ABROAD's bar should be the Platinum card Accounts lists")
         // A32: the fees' days are the card's own, ending on the 15th like the other Money shots.
         assertTrue(CARD.trimEnd().lines().last().startsWith(LAST_DAY) && showsText("Tue 20 Oct"),
             "the last fee should be on Tue 20 Oct, the day the other Money shots' statements end")

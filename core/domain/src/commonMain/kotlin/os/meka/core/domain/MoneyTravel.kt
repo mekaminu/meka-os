@@ -28,8 +28,9 @@ data class MoneyTravelRow(
 
 /**
  * Plan's lower half, slice 2: one foreign fee behind PAYING ABROAD's total, newest first: the account, its [day], the
- * [pence] charged and [what] it was for (the category of the payment abroad it came with, by the account and within
- * [MoneyTravel.FEE_PAIR_DAYS] before it), null when no payment matches.
+ * [pence] charged and [what] it was for (the payee of the payment abroad it came with, by the account and within
+ * [MoneyTravel.FEE_PAIR_DAYS] before it, as "Restaurante Sol"; null when no payment matches). Walk-through 2026-11-22
+ * A13 (g1b 8): it was the payment's category, so an uncategorised meal read "Other · Mon 19 Oct" where the payee goes.
  */
 data class MoneyTravelFee(val account: String, val day: Long, val pence: Long, val what: String?)
 
@@ -72,6 +73,25 @@ object MoneyTravel {
         """\b(EUR|USD|CHF|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|ISK|TRY|AED|JPY|CNY|AUD|CAD|NZD|THB|MXN|ZAR|INR|SGD|HKD|MAD|EGP|BRL)\s?\d|\d\s?(EUR|USD|CHF|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|ISK|TRY|AED|JPY|CNY|AUD|CAD|NZD|THB|MXN|ZAR|INR|SGD|HKD|MAD|EGP|BRL)\b|[€$¥]\s?\d|\d\s?[€$¥]|\b(visa|mc|mastercard|exchange|fx|conversion) rate\b|@\s?\d+\.\d{3,}""",
         RegexOption.IGNORE_CASE,
     )
+
+    /** An amount in another currency inside a statement line: "EUR 46.20", "23.10 EUR", "€46.50". */
+    private val FOREIGN_AMOUNT = Regex(
+        """\b(EUR|USD|CHF|SEK|NOK|DKK|PLN|CZK|HUF|RON|BGN|ISK|TRY|AED|JPY|CNY|AUD|CAD|NZD|THB|MXN|ZAR|INR|SGD|HKD|MAD|EGP|BRL)\b|[€$¥]|\d+(?:[.,]\d+)*""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Who a payment abroad was paid to, for the fee rows: the statement line without its foreign amount and currency,
+     * through the merchant key the other Money rows use ("RESTAURANTE SOL EUR 46.20" → "Restaurante Sol"). Unlike
+     * [MoneyCategoryRules.merchantLabel], a three-letter word abroad is a word ("Sol", "Bar"), not a UK brand's capitals;
+     * only one or two letters stay as they are.
+     */
+    fun payee(text: String): String {
+        val bare = text.replace(FOREIGN_AMOUNT, " ").replace(Regex("""\s+"""), " ").trim().ifEmpty { text }
+        return MoneyCategoryRules.merchantKey(bare).split(' ').joinToString(" ") { w ->
+            if (w.length <= 2) w else w.lowercase().replaceFirstChar { it.titlecase() }
+        }
+    }
 
     /** Whether [text] is a payment in another currency (and not a fee line). */
     fun isAbroad(text: String): Boolean = CURRENCY.containsMatchIn(text) && !MoneyWatch.isForeignFee(text)
@@ -162,7 +182,7 @@ object MoneyTravel {
                 val match = abroad.filter { (i, l) -> i !in used && l.account == f.account && l.day in (f.day - FEE_PAIR_DAYS)..f.day }
                     .minByOrNull { (_, l) -> f.day - l.day }
                 match?.let { used += it.index }
-                MoneyTravelFee(names[f.account] ?: f.account, f.day, -f.pence, match?.value?.category?.label)
+                MoneyTravelFee(names[f.account] ?: f.account, f.day, -f.pence, match?.value?.text?.let(::payee))
             }
     }
 
