@@ -14,6 +14,6 @@ tip: The three numbers up top are how soon the next day off is, the days off to 
 tip: Tap a row to see it whole, answer who's covering, put getting ready on a day with To a day…, or Remove it.
 tip: The council's dates say "check with the school"; days you type always win.
 tip: Add the school's website in About you and School links to it.
-tip: Add the addresses the school writes from under School's email in About you: its trips, payments, forms and days off then show in Needs you with Add, and Add puts them in School.
+tip: The school's emails are known with no setup (its own address, its messaging service, or your children's school named in it): they stay in your inbox, never tidied, and their trips, payments, forms and days off show in Needs you with Add. Add any other address it writes from under School's email in About you.
 tip: A request with no date of its own, like "please send in a named coat", shows there too; Add makes it a task for the next school morning, not a School date.
 tip: When the school writes that PE (or swimming, forest school, library books) is on certain days each week, each day shows there too; Add puts it in School as a weekly day, so Kids shows "PE kit" the day before.
