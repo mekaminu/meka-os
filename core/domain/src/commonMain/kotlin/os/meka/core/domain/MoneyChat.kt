@@ -19,7 +19,7 @@ import kotlin.math.roundToLong
  * - **Which card first / clear my cards** ("… at £500 a month"): the highest-rate card first, why, and when they clear.
  *   Use this plan.
  *
- * Plain arithmetic with the inputs said; never moves money; "not financial advice" once, in [FOOT].
+ * Plain arithmetic with the inputs said; never moves money; "not financial advice" once, at the Money tab's foot (walk-through week 5, A15).
  */
 data class MoneyChatAction(
     /** [MoneyChat.ACT_GOAL], [MoneyChat.ACT_CLEAR] or [MoneyChat.ACT_PLAN]. */
@@ -64,7 +64,7 @@ object MoneyChat {
     const val SEND = "Ask"
     const val DONE = "Done"
     const val WORKING = "Obi is working it out…"
-    const val FOOT = "Sums are worked out on this device. Anything else goes to Obi with your monthly totals and payees, never your accounts or balances. Not financial advice."
+    const val FOOT = "Sums are worked out on this device. Anything else goes to Obi with your monthly totals and payees, never your accounts or balances."
     const val HELLO = "Ask me about your money: what you've spent, what's coming out, whether you can afford something, what saving a little each month adds up to, or which card to clear first."
 
     const val ACT_GOAL = "goal"

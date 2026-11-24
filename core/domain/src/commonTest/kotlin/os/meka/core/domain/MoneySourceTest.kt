@@ -44,10 +44,10 @@ class MoneySourceTest {
         val today = day(2026, 10, 5)
         val files = assertNotNull(MoneyMonthReview.view(lines(), month, today))
         assertEquals("From your statements, all of September. Worked out on this device, nothing sent. " +
-            "Transfers between your accounts left out. Not financial advice.", files.foot)
+            "Transfers between your accounts left out.", files.foot)
         val bank = assertNotNull(MoneyMonthReview.view(lines(), month, today, source = MoneySource.BANK))
         assertEquals("From your banks through Lunch Flow, all of September. Worked out on this device. " +
-            "Transfers between your accounts left out. Not financial advice.", bank.foot)
+            "Transfers between your accounts left out.", bank.foot)
         assertTrue(!bank.foot.contains("statements"))
     }
 

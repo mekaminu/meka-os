@@ -552,7 +552,7 @@ object MoneyRules {
     const val ACCOUNT_HINT = "Account, e.g. Current account"
     const val NO_ACCOUNT = "Name the account first (e.g. Current account), then pick the file."
     const val IMPORT = "Import a statement file"
-    const val FOOT = "Read-only: Navilife never moves money or pays anything, and keeps no bank password. Your transactions stay in your own data (synced, encrypted). Not financial advice."
+    const val FOOT = "Read-only: Navilife never moves money or pays anything, and keeps no bank password. Your transactions stay in your own data (synced, encrypted)."
     const val DELETE_ALL = "Delete all money data"
     const val DELETE_ASK = "Delete every account and transaction from Navilife on all your devices? Your bank keeps its own records."
     const val DELETED_ALL = "Deleted all money data"

@@ -51,7 +51,7 @@ object MoneyYear {
     const val NOTICE_DAY = 2
     const val NOTICE_MIN = 9 * 60
     /** The footer's end, after where the lines came from ([MoneySource], Money bugs A4). */
-    const val FOOT = "Everything you spent, bills included; income and transfers between your accounts left out. Not financial advice."
+    const val FOOT = "Everything you spent, bills included; income and transfers between your accounts left out."
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
     private fun n(k: Int, one: String, many: String = one + "s") = "$k ${if (k == 1) one else many}"

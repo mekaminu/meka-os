@@ -191,9 +191,11 @@ class LoneWordGlueTest {
     // A28 slice 5: Ask Obi's foot ended a line on "Not" over "financial advice.".
     @Test
     fun aShortLastSentenceGoesDownWhole() {
-        val foot = LoneWordGlue.measured(MoneyChat.FOOT)
+        // (Week 5, A15 took the sentence off the sheet's foot; the rule is kept on the line as it was.)
+        val was = "Sums are worked out on this device. Anything else goes to Obi with your monthly totals and payees, never your accounts or balances. Not financial advice."
+        val foot = LoneWordGlue.measured(was)
         assertTrue(foot.endsWith("Not${nb}financial${nb}advice."), foot)
-        assertEquals(MoneyChat.FOOT, DateGlue.plain(foot))
+        assertEquals(was, DateGlue.plain(foot))
         // A last sentence too long to hold keeps only its last two words together.
         val long = LoneWordGlue.kept("All done. Remember everything tomorrow.")
         assertFalse(long.contains("Remember$nb"), long)

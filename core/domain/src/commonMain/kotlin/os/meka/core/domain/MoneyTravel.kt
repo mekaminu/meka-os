@@ -60,7 +60,7 @@ object MoneyTravel {
     const val TRIP_AHEAD_DAYS = 14L
     /** A fee is matched to a payment abroad on the same account up to this many days before it. */
     const val FEE_PAIR_DAYS = 3L
-    const val FOOT = "From your own statements over the last year: payments in another currency and the foreign fees charged for them. Your card's terms say what it charges · not financial advice."
+    const val FOOT = "From your own statements over the last year: payments in another currency and the foreign fees charged for them. Your card's terms say what it charges."
     const val NOTHING = "Nothing paid abroad in your statements in the last year, so there's no card to compare yet · your card's terms say what it charges abroad."
 
     /** [FOOT] / [NOTHING] saying where the lines really came from (Money bugs A4, the last places). */

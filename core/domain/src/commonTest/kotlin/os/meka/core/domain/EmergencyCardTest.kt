@@ -83,7 +83,9 @@ class EmergencyCardTest {
 
         sync()
         val v = cMac.view()
-        assertEquals("3 lines · your partner sees it read-only on their family page", v.summary)
+        // Walk-through week 5, A15: the foot says who sees it ([EmergencyRules.SHARED]); the header doesn't say it again.
+        assertEquals("3 lines", v.summary)
+        assertTrue("family page" in EmergencyRules.SHARED && "family page" !in EmergencyRules.EMPTY_SUMMARY)
         val gp = v.groups[0].rows.single()
         assertEquals("GP", gp.title)
         assertEquals("Dr Patel, 01632 123456", gp.detail)

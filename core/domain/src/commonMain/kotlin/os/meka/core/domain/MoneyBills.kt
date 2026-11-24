@@ -33,7 +33,7 @@ data class MoneyBillsView(
 )
 
 object MoneyBills {
-    const val FOOT = "Found from payments that repeat each month, Lists → Renewals and your cards' due dates · not financial advice"
+    const val FOOT = "Found from payments that repeat each month, Lists → Renewals and your cards' due dates"
     const val NOTHING = "nothing left"
     /** Payday found but no bill found yet (walk-through 2026-11-08 A8): the card still says £0, as Spending's tile does. */
     const val NONE_FOUND = "no bills found yet"

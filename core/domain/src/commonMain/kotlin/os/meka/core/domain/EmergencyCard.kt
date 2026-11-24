@@ -95,7 +95,8 @@ object EmergencyRules {
     /** Most lines the card holds (it is one page, read in a hurry). */
     const val MAX_LINES = 60
 
-    const val EMPTY_SUMMARY = "Empty. Add who to call, where important documents are and key accounts by name; your partner sees it on their family page."
+    /** Walk-through week 5, A15: who sees the card is said once, in [SHARED] at its foot, not in the header too. */
+    const val EMPTY_SUMMARY = "Empty. Add who to call, where important documents are and key accounts by name."
     const val NOT_READ = "Type a name, then a colon and the details: “GP: Dr Patel, 01632 123456”."
     const val REFUSED_SECRET = "Navilife keeps passwords and PINs off the card. Write where they're kept instead: “Passwords: in the family password manager”."
     const val REFUSED_NUMBER = "Navilife keeps card, account and policy numbers off the card. Write the name and where the paperwork is: “Home insurance: Aviva, policy in the blue folder”."
@@ -218,7 +219,7 @@ object EmergencyRules {
         val summary = when {
             n == 0 -> if (viewer == ShoppingRules.OWNER) EMPTY_SUMMARY else "Meka hasn't filled the emergency card in yet."
             viewer != ShoppingRules.OWNER -> "Kept up to date by Meka"
-            else -> "${if (n == 1) "1 line" else "$n lines"} · your partner sees it read-only on their family page"
+            else -> if (n == 1) "1 line" else "$n lines"
         }
         return EmergencyView(groups, summary, n)
     }

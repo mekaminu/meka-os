@@ -222,7 +222,7 @@ class MoneyChatScreensTest {
         val spare = os.meka.core.domain.MoneyRules.fmt(MoneySave.spareAfter(base.startPence, left))
         // The answer glues its words with no-break spaces (no lone words), so it's read as plain text.
         assertTrue(showsText("leaves about $spare spare"), "Obi's spare isn't Plan's $spare: ${drawn("money-chat-answer-0")}")
-        // Found and fixing week 4, A16: the foot says "Not financial advice."; the answer above it doesn't say it again.
+        // Found and fixing week 4, A16 (and week 5, A15): "not financial advice" is the Money tab's foot only; the answer doesn't say it.
         assertFalse(drawn("money-chat-answer-0").contains("financial advice", ignoreCase = true), "the answer repeats the foot's not financial advice")
         assertTrue(shows("money-chat-act-goal-0"), "no Make it a goal under the answer")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-ask-obi-answer"))

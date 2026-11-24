@@ -59,7 +59,7 @@ object MoneySave {
     val MONTHS: List<Int> = listOf(3, 6, 12, 24)
     /** Rates in hundredths of a percent a year: none, 2% and 4% (figures to compare, not offers). */
     val RATES_BP: List<Int> = listOf(0, 200, 400)
-    const val BASIS = "Sums from your average month, worked out monthly · a rate here is one you pick to compare, not an offer · not financial advice"
+    const val BASIS = "Sums from your average month, worked out monthly · a rate here is one you pick to compare, not an offer"
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
 

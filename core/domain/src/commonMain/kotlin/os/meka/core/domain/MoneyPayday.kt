@@ -63,7 +63,7 @@ data class MoneyBalance(val pence: Long, val day: Long, val typed: Boolean)
 object MoneyPayday {
     const val HEAD = "UNTIL PAYDAY"
     const val NOT_READY = "Navilife finds your payday from your pay coming in · import two months or more of the account it goes into."
-    const val FOOT = "From your statements, Lists → Renewals and Cards (a card due before payday counts its statement) · not financial advice"
+    const val FOOT = "From your statements, Lists → Renewals and Cards (a card due before payday counts its statement)"
 
     /** [FOOT] naming where the lines really came from (Money bugs A4): "From your banks through Lunch Flow, Lists → …". */
     fun foot(source: MoneySource): String =

@@ -76,7 +76,7 @@ object MoneyForecast {
     const val WHAT_IF = "WHAT IF"
     const val EXTRA_HINT = "Extra a month (side hustle, trading): £200"
     const val NOT_READY = "A forecast needs two whole months of statements · import a few months from each account to see one."
-    const val NOT_ADVICE = "your average month, not a promise · not financial advice"
+    const val NOT_ADVICE = "your average month, not a promise"
     const val EXTRA_BAD = "Type an amount, e.g. £200, £50 a week or £1,200 a year."
     const val EXTRA_CLEARED = "What-if extra cleared"
     const val MAX_EXTRA_PENCE = 10_000_000L

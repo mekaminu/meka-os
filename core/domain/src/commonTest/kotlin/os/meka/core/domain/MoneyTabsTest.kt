@@ -62,6 +62,22 @@ class MoneyTabsTest {
     }
 
     @Test
+    fun notFinancialAdviceIsSaidOnceOnMoneyAtTheTabsFootNotAgainInItsSheetsOrInfo() {
+        // Walk-through week 5, A15: "Read-only · not financial advice" ends every tab, and the September review, Obi's
+        // sheet, the card sheet and the ⓘ said it a second time on top of it.
+        val said = listOf(
+            MoneyRules.FOOT, MoneyChat.FOOT, MoneyCards.FOOT, MoneyMonthReview.FOOT, MoneyYear.FOOT, MoneyWorth.FOOT,
+            MoneyWorth.FOOT_TRADING, MoneyForecast.NOT_ADVICE, MoneySave.BASIS, MoneyBills.FOOT, MoneyPayday.FOOT, MoneyTravel.FOOT,
+        )
+        said.forEach { assertTrue(!it.contains("financial advice", ignoreCase = true), it) }
+        val v = open()
+        listOf(MoneyTab.SPENDING, MoneyTab.BILLS, MoneyTab.PLAN, MoneyTab.ACCOUNTS).forEach { tab ->
+            MoneyTabs.info(tab, v)?.forEach { assertTrue(!it.contains("financial advice", ignoreCase = true), "$tab: $it") }
+        }
+        assertEquals(1, Regex("financial advice").findAll(MoneyTabs.FOOT_SHORT).count())
+    }
+
+    @Test
     fun accountsEndsOnTheSameFootLineWhoseInfoSaysWhereAccountsBanksWorthAndTheYearComeFrom() {
         // Layout rules on Accounts: the long read-only line and net worth's and the year's source lines live behind ⓘ.
         val v = open()

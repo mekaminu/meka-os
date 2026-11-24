@@ -34,7 +34,7 @@ class MoneyForecastTest {
         assertEquals(listOf("By Apr 2027 · 6 months", "By Oct 2027 · 12 months"), f.rows.map { it.label })
         assertEquals(listOf("+£2,640", "+£5,280"), f.rows.map { it.amount })
         assertEquals("all that's left over, at your pace", f.rows[0].line)
-        assertEquals("From Jul – Sep 2026 (3 whole months) · your average month, not a promise · not financial advice", f.basis)
+        assertEquals("From Jul – Sep 2026 (3 whole months) · your average month, not a promise", f.basis)
         // What-ifs: the biggest everyday categories, never bills; coffee is under £20 a month.
         assertEquals(listOf("Halve Eating out", "Halve Groceries"), f.cuts.map { it.label })
         assertEquals("+£150 a month", f.cuts[0].line)

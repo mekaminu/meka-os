@@ -97,7 +97,7 @@ object MoneyCards {
     const val CREDIT = "credit"
     const val CHARGE = "charge"
     const val HEAD = "CARDS"
-    const val FOOT = "From what you type off each statement · a reminder 3 days before each payment and before 0% ends · Navilife never pays anything · not financial advice"
+    const val FOOT = "From what you type off each statement · a reminder 3 days before each payment and before 0% ends · Navilife never pays anything"
     const val OFFER_FIRST = "Is one of these a card? Mark it to keep its due date, minimum and limit here:"
     const val OFFER_MORE = "Another card:"
     const val MARK = "It's a card"

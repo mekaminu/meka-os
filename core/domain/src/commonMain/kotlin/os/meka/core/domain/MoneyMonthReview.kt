@@ -66,7 +66,7 @@ object MoneyMonthReview {
     /** Statements reach "to the end" of a month when their last line is this close to it. */
     const val END_SLACK_DAYS = 4
     /** The footer's end, after where the lines came from ([MoneySource], Money bugs A4) and how they were worked out. */
-    const val FOOT = "Transfers between your accounts left out. Not financial advice."
+    const val FOOT = "Transfers between your accounts left out."
     /** Layout rule (b): at most this many short lines under the review's tiles. */
     const val MAX_LINES = 2
     const val TILE_SPENT = "Spent"
