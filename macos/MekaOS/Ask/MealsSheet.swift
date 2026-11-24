@@ -69,11 +69,21 @@ struct MealsSheet: View {
                 if adding { addForm(page) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     let summary = rules.summary(view: v)
-                    // g7 7: "+ Add one with its / ingredients" goes down whole.
-                    Text(LifePageRules.shared.shown(text: summary)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: summary)
+                    if rules.blank(view: v) {
+                        // Walk-through 2026-11-22 A15: no favourites says it once, in one raised card with its button.
+                        if !adding {
+                            LifeEmptyCard(line: summary, button: rules.ADD_FIRST, palette: palette) {
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding = true; said = nil }
+                            }
+                            .transition(.opacity)
+                        }
+                    } else {
+                        // g7 7: "+ Add one with its / ingredients" goes down whole.
+                        Text(LifePageRules.shared.shown(text: summary)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: summary)
+                    }
                     if !adding, let line = said ?? removed?.line ?? model.mealsShoppedLine {
                         Text(line).font(MekaType.caption)
                             .foregroundStyle(line == MealRules.shared.NOT_READ ? palette.accent : palette.textSecondary)
@@ -98,7 +108,9 @@ struct MealsSheet: View {
                     }
                 }
                 .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                if page.tileCount > 0 {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in

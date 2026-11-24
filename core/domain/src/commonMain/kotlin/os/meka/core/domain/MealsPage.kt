@@ -18,7 +18,14 @@ object MealsPageRules {
     const val WEEK = "This week"
     const val SHOPPING = "Shopping"
     const val FAVOURITES = "Favourites"
-    const val EMPTY_SUMMARY = "Add a favourite dinner with its ingredients to start"
+    /**
+     * Walk-through 2026-11-22 A15: with no favourites the page said it four ways ("Add a favourite dinner with its
+     * ingredients to start", the tiles "None dinners planned · None to add to shopping · None favourites", then
+     * [WEEK_EMPTY] and [FAVOURITES_EMPTY], "+ Add" named beside the button). Now this line says it once in one raised
+     * card with [ADD_FIRST] under it (it opens + Add on A favourite dinner), and no tiles or cards follow until one is added.
+     */
+    const val EMPTY_SUMMARY = "No favourite dinners yet. Add each once with its ingredients, then pick the week's dinners and shop in one tap."
+    const val ADD_FIRST = "Add a favourite dinner"
     const val WEEK_EMPTY = "Pick the week's dinners here once you have a favourite"
     const val FAVOURITES_EMPTY = "Tap + Add and pick “A favourite dinner”."
     const val PICK = "Tap to pick a dinner"
@@ -39,6 +46,12 @@ object MealsPageRules {
     fun dayKey(day: Long): String = "day:$day"
     fun mealKey(id: String): String = "meal:$id"
 
+    /** Whether the page is blank: no favourites, so only the one line and its button show. */
+    fun blank(view: MealPlanView): Boolean = view.favourites.isEmpty()
+
+    /** Whether the three numbers show: not on a blank page. */
+    fun showsTiles(view: MealPlanView): Boolean = !blank(view)
+
     /** Under the header: the week's count ("4 of 7 dinners planned"), or how to start. */
     fun summary(view: MealPlanView): String = if (view.favourites.isEmpty()) EMPTY_SUMMARY else view.paneSummary
 
@@ -58,7 +71,9 @@ object MealsPageRules {
         else -> emptyList()
     }
 
+    /** The page; a blank one (no favourites) has no tiles and no cards: the header's one line and button say it all. */
     fun page(view: MealPlanView): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES)
         val planned = view.plannedCount
         val toAdd = view.toAdd.size
         val favs = view.favourites.size

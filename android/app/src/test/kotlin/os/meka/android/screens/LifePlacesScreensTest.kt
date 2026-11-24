@@ -212,11 +212,28 @@ class LifePlacesScreensTest {
                 }
                 // The page shape (slice 8): the three numbers, and This week's first row (or its empty line).
                 val page = core.mealsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(MealsPageRules.WEEK_EMPTY))
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "None" tiles, no This week or
+                    // Favourites card naming "+ Add", no "to start".
+                    ScreenShots.assertShows(compose, name, MealsPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { os.meka.core.domain.DateGlue.plain(it) }
+                    listOf("to start", "once you have a favourite", "Tap + Add", "to add to shopping", "dinners planned", MealsPageRules.WEEK, MealsPageRules.FAVOURITES).forEach { w ->
+                        if (drawn.any { it == w || (w.length > 10 && it.contains(w)) }) fail("$name: \"$w\" on a blank Dinners page, beside \"${MealsPageRules.EMPTY_SUMMARY}\"")
+                    }
+                    val said = drawn.count { it.contains("No favourite dinners yet") }
+                    if (said != 1) fail("$name: \"No favourite dinners yet\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Dinners page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank Dinners line isn't in its one raised card")
+                    }
+                } else {
+                    page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                }
                 if (fill == Fill.MANY && v.week.count { it.mealId != null } != 3) fail("$name: the week doesn't hold its three dinners")
             }
         }

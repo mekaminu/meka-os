@@ -124,9 +124,16 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Crossfade(MealsPageRules.summary(v), animationSpec = MekaMotion.appear(reduced), label = "meals-summary") { s ->
-                        // g7 7: "+ Add one with its / ingredients" goes down whole.
-                        Text(LifePageRules.shown(s), style = MekaType.caption, color = Meka.colors.textSecondary)
+                    if (MealsPageRules.blank(v)) {
+                        // Walk-through 2026-11-22 A15: no favourites says it once, in one raised card with its one button.
+                        LifeEmptyCard(MealsPageRules.summary(v), MealsPageRules.ADD_FIRST) {
+                            haptics.tick(); addChosen = MealsPageRules.ADD_FAVOURITE; said = null; addOpen = true
+                        }
+                    } else {
+                        Crossfade(MealsPageRules.summary(v), animationSpec = MekaMotion.appear(reduced), label = "meals-summary") { s ->
+                            // g7 7: "+ Add one with its / ingredients" goes down whole.
+                            Text(LifePageRules.shown(s), style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
                     }
                     // What the last add or Add to shopping said, while no sheet is open.
                     val line = if (addOpen || rowKey != null) null else said ?: removed?.second ?: shopped?.line
@@ -151,7 +158,9 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (MealsPageRules.showsTiles(v)) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(

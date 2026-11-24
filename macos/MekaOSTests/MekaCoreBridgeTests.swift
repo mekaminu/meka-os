@@ -3022,6 +3022,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.shoppedLine(added: 5, already: 1), "Added 5 to shopping · 1 was already on it")
         XCTAssertEqual(rules.plannedLine(day: sat, today: sat, title: "Chilli"), "Chilli for tonight")
         XCTAssertEqual(MealPlanView.companion.EMPTY.summary, rules.NO_FAVOURITES)
+        // Walk-through 2026-11-22 A15: a blank Dinners page says it once, with no tiles or cards under its button.
+        XCTAssertTrue(MealsPageRules.shared.blank(view: MealPlanView.companion.EMPTY))
+        XCTAssertFalse(MealsPageRules.shared.showsTiles(view: MealPlanView.companion.EMPTY))
+        XCTAssertEqual(MealsPageRules.shared.page(view: MealPlanView.companion.EMPTY).tileCount, 0)
+        XCTAssertEqual(MealsPageRules.shared.ADD_FIRST, "Add a favourite dinner")
         XCTAssertNil(MealPlanView.companion.EMPTY.shoppingLabel)
         // Walk-through 2026-11-22 A6: a favourite's Remove says what went, with Undo for a few seconds.
         XCTAssertEqual(rules.removedLine(title: "Chilli"), "Removed Chilli")
@@ -4540,7 +4545,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let nb = LifeTileRules.shared.GLUE
         XCTAssertEqual(CarPageRules.shared.owner(title: "The Golf"), "the Golf's")
         XCTAssertTrue(LifePageRules.shared.tileLabel(label: "to the Golf's MOT").hasSuffix("Golf's\(nb)MOT"))
-        XCTAssertTrue(LifePageRules.shared.shown(text: MealsPageRules.shared.EMPTY_SUMMARY).hasSuffix(" its\(nb)ingredients to\(nb)start"))
+        XCTAssertTrue(LifePageRules.shared.shown(text: MealsPageRules.shared.EMPTY_SUMMARY).hasSuffix(" in\(nb)one\(nb)tap."))
         XCTAssertEqual(BinsPageRules.shared.remindRowLine(), "The evening before · Today says it from 16:00")
         // A15 part 7: an article or "+" leads the word after it ("+ Add a birthday", "hold its ≡").
         XCTAssertTrue(LifePageRules.shared.shown(text: GiftsPageRules.shared.COMING_EMPTY).contains("+\(nb)Add a\(nb)birthday"))

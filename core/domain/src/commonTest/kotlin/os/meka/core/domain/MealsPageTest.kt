@@ -62,17 +62,26 @@ class MealsPageTest {
     }
 
     @Test
-    fun anEmptyPageSaysHowToStartInWordsNeverADash() {
+    fun anEmptyPageSaysItOnceWithNoTilesOrCards() {
+        // Walk-through 2026-11-22 A15: the blank page said it four ways (its summary, three "None" tiles, This week's
+        // and Favourites' lines naming "+ Add"); now only the header's one line and its button.
         val v = view(meals = emptyList(), plan = emptyMap())
         val p = MealsPageRules.page(v)
-        assertEquals(listOf("No", "None", "No"), p.tiles.map { it.number })
-        assertTrue(p.tiles.all(LifePageRules::readsWhole))
-        // Said once (A16): the summary says how to start, the tile "No favourites", the card only what to tap.
-        assertFalse(MealsPageRules.FAVOURITES_EMPTY.contains("No favourites"))
+        assertTrue(MealsPageRules.blank(v))
+        assertFalse(MealsPageRules.showsTiles(v))
+        assertEquals(0, p.tiles.size)
+        assertEquals(0, p.cards.size)
         assertEquals(MealsPageRules.EMPTY_SUMMARY, MealsPageRules.summary(v))
-        assertEquals(listOf(MealsPageRules.WEEK_EMPTY, MealsPageRules.FAVOURITES_EMPTY), p.cards.map { it.empty })
-        assertTrue(p.cards.all { it.rows.isEmpty() })
-        assertEquals(listOf("dinner planned", "favourite"), MealsPageRules.page(view(meals = listOf(chilli), plan = mapOf(sat to "m1"))).tiles.let { listOf(it[0].label, it[2].label) })
+        assertTrue(MealsPageRules.EMPTY_SUMMARY.startsWith("No favourite dinners yet."))
+        assertFalse("+ Add" in MealsPageRules.EMPTY_SUMMARY)
+        assertEquals("Add a favourite dinner", MealsPageRules.ADD_FIRST)
+        assertEquals(MealsPageRules.ADD_FAVOURITE, p.addChoices.single().key)
+        // One favourite brings the tiles and cards back.
+        val one = MealsPageRules.page(view(meals = listOf(chilli), plan = mapOf(sat to "m1")))
+        assertFalse(MealsPageRules.blank(view(meals = listOf(chilli), plan = mapOf(sat to "m1"))))
+        assertEquals(3, one.tiles.size)
+        assertTrue(one.tiles.all(LifePageRules::readsWhole))
+        assertEquals(listOf("dinner planned", "favourite"), listOf(one.tiles[0].label, one.tiles[2].label))
     }
 
     @Test

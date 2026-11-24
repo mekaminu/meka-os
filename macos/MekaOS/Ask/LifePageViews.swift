@@ -137,3 +137,25 @@ struct LifePageCardView: View {
         .lightCardEdge(palette)
     }
 }
+
+/// A blank Life page's one line and its one button, in one raised card (walk-through 2026-11-22 A15: an empty page says
+/// what to do once, not in its header, its tiles and each card). The page shows no tiles or cards under it.
+struct LifeEmptyCard: View {
+    let line: String
+    let button: String
+    let palette: MekaPalette
+    let onTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(button, action: onTap)
+                .buttonStyle(.borderedProminent)
+                .tint(palette.accent)
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+}
