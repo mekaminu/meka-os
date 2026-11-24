@@ -261,6 +261,11 @@ data class MailNeedsRow(
     val time: String = "",
     /** School emails first, slice 1b: from the children's school, so it sits in the From the school box ([SchoolNeedsRules]). */
     val school: Boolean = false,
+    /**
+     * School emails first, slice 2b: the school email's summary card, three to five boxed lines (When · Where · Cost ·
+     * Bring / do · Deadline · For) read from its whole body; empty for other mail and until the body is read.
+     */
+    val summary: List<SchoolSummaryLine> = emptyList(),
 )
 
 data class MailNeedsCard(
@@ -634,10 +639,11 @@ object MailNeedsRules {
             // Slice 4: Not a scam takes the scam line off (a real company's "log in yourself" line stays).
             val warning = i.warning?.takeIf { it.isNotBlank() && !(MailNotScamRules.notScam(i) && MailScamRules.scamLine(it)) }
             val note = i.note?.let(MailNoteRules::line)
+            val summary = if (i.school) i.schoolSummary.take(SchoolBodyRules.MAX_LINES) else emptyList()
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull(note, security, warning?.removePrefix("⚠ "), "${i.from}, ${i.subject}", line, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
+                spoken = listOfNotNull(note, security, warning?.removePrefix("⚠ "), "${i.from}, ${i.subject}", line, SchoolBodyRules.spoken(summary), MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
                     i.wants?.let { "Needs a reply: $it" }?.takeIf { MailAutoDraftRules.needsReply(i) },
                     "Navilife drafted a reply".takeIf { MailAutoDraftRules.draftShowing(i) && notice == null }).joinToString(". "),
                 notice = notice,
@@ -657,6 +663,7 @@ object MailNeedsRules {
                 note = note,
                 time = whenLabel(i.receivedAtMs, nowMs, cal),
                 school = i.school,
+                summary = summary,
             ).let { it.copy(canBlock = note == null && MailSenderRuleRules.canBlock(it)) }
         }
 

@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -259,6 +260,28 @@ internal fun MailNeedsSection(
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+/**
+ * School emails first, slice 2b: a school email's three to five boxed lines, a short label over a fixed column and its
+ * value beside it in the regular body style (context he reads, not a thing to tick). The whole email stays behind a tap.
+ */
+@Composable
+internal fun SchoolSummaryCard(lines: List<os.meka.core.domain.SchoolSummaryLine>, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        lines.forEach { l ->
+            Row {
+                Text(l.label, style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.width(SCHOOL_LABEL_WIDTH).alignByBaseline())
+                Text(needsShown(l.value), style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f).alignByBaseline())
+            }
+        }
+    }
+}
+
+private val SCHOOL_LABEL_WIDTH = 76.dp
+
 @Composable
 internal fun MailNeedsRowView(
     row: MailNeedsRow, onDone: () -> Unit, onTask: () -> Unit, onWaiting: () -> Unit, onSnooze: () -> Unit,
@@ -352,6 +375,12 @@ internal fun MailNeedsRowView(
             // Sender and subject only (Needs you bugs, 2026-11-10: the first lines carried greetings, his name, a card's
             // last digits); the body shows once he opens the email.
             if (head) Text(needsShown(row.line), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            // School emails first, slice 2b: the school email's summary card (When · Where · Cost · Bring / do ·
+            // Deadline), read from its whole body; it fades in when the read lands (reduced motion: the plain fade).
+            // Under a thin row the thin row shows it already.
+            if (head) AnimatedVisibility(row.summary.isNotEmpty(), enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
+                SchoolSummaryCard(row.summary, Modifier.padding(top = MekaSpace.xxs).testTag("mail-school-summary-${row.id}"))
+            }
             // Slice 2b: under a thin row, the whole email opens from its own line (a full 48 dp tap).
             if (!head && onRead != null) {
                 Text(

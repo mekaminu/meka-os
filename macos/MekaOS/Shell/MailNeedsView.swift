@@ -398,6 +398,10 @@ struct MailNeedsRowView: View {
                 Text(row.subject).font(MekaType.body).foregroundStyle(palette.textSecondary).lineLimit(2)
                 // Sender and subject only (Needs you bugs, 2026-11-10); the body shows once he opens the email.
                 Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                // School emails first, slice 2b: the summary card (a thin row above shows it already).
+                if !row.summary.isEmpty {
+                    SchoolSummaryCardView(lines: row.summary, palette: palette).transition(.opacity)
+                }
                 }
                 // Slice 4b: under a thin row, the whole email opens from its own line (a full-height click).
                 if !head, read != nil {

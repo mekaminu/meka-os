@@ -288,6 +288,10 @@ object SchoolBodyRules {
         "${l.label.replace(Regex("""[\t\n]"""), " ")}\t${l.value.replace(Regex("""[\t\n]"""), " ")}"
     }
 
+    /** What a screen reader says for a summary card: "When: Sat 28 Nov, 12:00–16:00. Cost: £1 per adult"; null when empty. */
+    fun spoken(lines: List<SchoolSummaryLine>): String? =
+        lines.takeIf { it.isNotEmpty() }?.joinToString(". ") { "${it.label}: ${it.value}" }
+
     fun decode(s: String?): List<SchoolSummaryLine> = s?.split('\n')?.mapNotNull { line ->
         val i = line.indexOf('\t')
         if (i <= 0) null else SchoolSummaryLine(line.substring(0, i), line.substring(i + 1)).takeIf { it.value.isNotBlank() }

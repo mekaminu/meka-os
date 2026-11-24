@@ -27,11 +27,14 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_GROUP_TAG
 import os.meka.android.today.NEEDS_YOU_MAIL_ROW_TAG
+import os.meka.android.today.NEEDS_YOU_SCHOOL_SUMMARY_TAG
 import os.meka.android.today.NEEDS_YOU_SCHOOL_TAG
 import os.meka.android.today.NeedsYouRoute
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.NeedsYouGroup
+import os.meka.core.domain.SchoolBodyRules
+import os.meka.core.domain.SchoolSummaryLine
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
@@ -77,9 +80,10 @@ class NeedsYouSchoolScreensTest {
         serverOps.append(Op("srv${k++}", "hh", EntityTypes.MAIL_ITEM, id, f, v, clock.now(), emptyList(), "server"))
     }
 
-    private fun email(message: String, from: String, subject: String, agoMs: Long, school: Boolean): String {
+    private fun email(message: String, from: String, subject: String, agoMs: Long, school: Boolean,
+                      summary: List<SchoolSummaryLine> = emptyList()): String {
         val id = MailNeedsRules.itemId("acc1", message)
-        serverWrite(id, MailNeedsRules.serverFields("Personal", from, null, subject, "Hello", now - agoMs, 1, school = school))
+        serverWrite(id, MailNeedsRules.serverFields("Personal", from, null, subject, "Hello", now - agoMs, 1, school = school, schoolSummary = summary))
         return id
     }
 
@@ -95,7 +99,13 @@ class NeedsYouSchoolScreensTest {
         ThemeChoice.save(context, theme)
         // Before he has opened or closed a box: From the school opens by itself.
         context.getSharedPreferences("needs_you", 0).edit().clear().commit()
-        val fair = email("s1", "Oakfield Primary", "Christmas fair this Saturday", hour, school = true)
+        // Slice 2b: its summary card, as the server writes it after reading the whole email.
+        val fair = email("s1", "Oakfield Primary", "Christmas fair this Saturday", hour, school = true, summary = listOf(
+            SchoolSummaryLine(SchoolBodyRules.WHEN, "Sat 24 Oct, 12:00–16:00"),
+            SchoolSummaryLine(SchoolBodyRules.WHERE, "the school hall"),
+            SchoolSummaryLine(SchoolBodyRules.COST, "£1 per adult"),
+            SchoolSummaryLine(SchoolBodyRules.BRING, "Bring cakes for the cake stall; no parking at school"),
+        ))
         val football = email("m1", "Sam Taylor", "Football on Saturday", 2 * hour, school = false)
         val core = MekaCore(
             householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = Server(SyncService(serverOps)),
@@ -133,6 +143,14 @@ class NeedsYouSchoolScreensTest {
             .any { it.boundsInRoot.top >= box.boundsInRoot.top && it.boundsInRoot.bottom <= box.boundsInRoot.bottom + 1f }
         if (!inBox(fair)) fail("$name: the school's email isn't in From the school")
         if (inBox(football)) fail("$name: a person's email sits in From the school")
+        // Slice 2b: the school email's card shows under its subject, inside the box, without opening it.
+        val card = compose.onAllNodes(hasTestTag("$NEEDS_YOU_SCHOOL_SUMMARY_TAG-$fair"), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
+            ?: fail("$name: the school email shows no summary card")
+        if (card.boundsInRoot.bottom > box.boundsInRoot.bottom + 1f) fail("$name: the summary card spills out of From the school")
+        for (t in listOf("When", "Sat 24 Oct, 12:00–16:00", "Cost", "£1 per adult")) {
+            if (compose.onAllNodes(ScreenShots.plainText(t, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: the card doesn't say \"$t\"")
+        }
+        if (compose.onAllNodes(hasTestTag("$NEEDS_YOU_SCHOOL_SUMMARY_TAG-$football"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: a person's email wears a school card")
         if (compose.onAllNodes(hasContentDescription("1 from the school", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() &&
             compose.onAllNodes(ScreenShots.plainText("1 from the school", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
             fail("$name: the header doesn't lead with the school's email")

@@ -211,6 +211,39 @@ struct NeedsYouPagerView: View {
 /// Slice 4b: one email in the Mail to answer box, as the mockup draws it: a hairline above, "Possible scam" first on a
 /// possible scam, the sender with when beside it, the subject under it; never the body. A click (a tick) unfolds Reply ·
 /// Done · Task · More under it and a second folds them away; the chevron turns half a turn on the expand spring.
+/// School emails first, slice 2b: a school email's three to five boxed lines (When · Where · Cost · Bring / do ·
+/// Deadline), a short label in a fixed column and its value beside it in the regular body style.
+struct SchoolSummaryCardView: View {
+    let lines: [SchoolSummaryLine]
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                SchoolSummaryLineView(line: line, palette: palette)
+            }
+        }
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+        .accessibilityIdentifier("school-summary")
+    }
+}
+
+private struct SchoolSummaryLineView: View {
+    let line: SchoolSummaryLine
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(line.label).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                .frame(width: 76, alignment: .leading)
+            Text(line.value).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 struct NeedsYouMailThinRowView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let row: NeedsYouMailRow
@@ -239,6 +272,12 @@ struct NeedsYouMailThinRowView: View {
                         }
                         Text(row.subject).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                             .lineLimit(1).truncationMode(.tail)
+                        // School emails first, slice 2b: the school email's summary card under its subject.
+                        if !row.summary.isEmpty {
+                            SchoolSummaryCardView(lines: row.summary, palette: palette)
+                                .padding(.top, MekaSpace.xs)
+                                .transition(.opacity)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.down")

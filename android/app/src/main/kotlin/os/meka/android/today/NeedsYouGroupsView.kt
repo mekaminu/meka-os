@@ -1,6 +1,9 @@
 package os.meka.android.today
 
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -72,6 +75,7 @@ internal const val NEEDS_YOU_PAGER_TAG = "needs-you-pager"
 internal const val NEEDS_YOU_FOOT_TAG = "needs-you-foot"
 internal const val NEEDS_YOU_LISTS_LEAD_TAG = "needs-you-lists-lead"
 internal const val NEEDS_YOU_MAIL_ROW_TAG = "needs-you-mail-row"
+internal const val NEEDS_YOU_SCHOOL_SUMMARY_TAG = "needs-you-school-summary"
 internal const val NEEDS_YOU_MAIL_LEAD_TAG = "needs-you-mail-lead"
 /** School emails first, slice 1b: the From the school box's emails. */
 internal const val NEEDS_YOU_SCHOOL_TAG = "needs-you-school"
@@ -316,6 +320,11 @@ internal fun NeedsYouMailRowView(row: os.meka.core.domain.NeedsYouMailRow, open:
                 }
             }
             Text(row.subject, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // School emails first, slice 2b: the school email's summary card, so what it says is read without opening it
+            // (the whole email is a tap away, under the answers). It fades in when the read lands (reduced motion: fade).
+            AnimatedVisibility(row.summary.isNotEmpty(), enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                SchoolSummaryCard(row.summary, Modifier.padding(top = MekaSpace.xs).testTag("$NEEDS_YOU_SCHOOL_SUMMARY_TAG-${row.id}"))
+            }
         }
     }
 }

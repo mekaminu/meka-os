@@ -62,6 +62,8 @@ data class NeedsYouMailRow(
     val subject: String,
     val flag: String?,
     val spoken: String,
+    /** School emails first, slice 2b: a school email's summary card under the subject ([MailNeedsRow.summary]); else empty. */
+    val summary: List<SchoolSummaryLine> = emptyList(),
 )
 
 /**
@@ -265,8 +267,9 @@ object NeedsYouGroupRules {
     fun mailRow(row: MailNeedsRow): NeedsYouMailRow {
         val flag = SCAM_FLAG.takeIf { row.scam }
         val subject = row.subject.trim().ifEmpty { "(no subject)" }
-        val spoken = listOfNotNull(flag, row.from, subject, row.time.takeIf { it.isNotBlank() }).joinToString(", ")
-        return NeedsYouMailRow(row.id, row.from, row.time, subject, flag, spoken)
+        val head = listOfNotNull(flag, row.from, subject, row.time.takeIf { it.isNotBlank() }).joinToString(", ")
+        val spoken = SchoolBodyRules.spoken(row.summary)?.let { "$head. $it" } ?: head
+        return NeedsYouMailRow(row.id, row.from, row.time, subject, flag, spoken, row.summary)
     }
 
     /**

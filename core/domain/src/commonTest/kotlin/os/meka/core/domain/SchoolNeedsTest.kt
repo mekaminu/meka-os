@@ -45,6 +45,34 @@ class SchoolNeedsTest {
         assertEquals(card.count, school.count + rest.count)
     }
 
+    @Test fun aSchoolRowCarriesItsSummaryCardAndSaysIt() {
+        val lines = listOf(
+            SchoolSummaryLine(SchoolBodyRules.WHEN, "Sat 28 Nov, 12:00–16:00"),
+            SchoolSummaryLine(SchoolBodyRules.WHERE, "the school hall"),
+            SchoolSummaryLine(SchoolBodyRules.COST, "£1 per adult"),
+        )
+        val school = assertNotNull(MailNeedsRules.read("s1", MailNeedsRules.serverFields(
+            "Personal", "Oakfield PTA", "pta@oakfield.sch.uk", "Christmas Fair", "We are", now - hour, 1, school = true, schoolSummary = lines)))
+        val other = item("p1", "Sam Taylor", "Saturday", 2 * hour, false).copy(schoolSummary = lines)
+        val card = assertNotNull(MailNeedsRules.card(listOf(school, other), now, cal))
+        val row = card.every.first { it.id == "s1" }
+        assertEquals(lines, row.summary)
+        assertTrue("When: Sat 28 Nov, 12:00–16:00. Where: the school hall. Cost: £1 per adult" in row.spoken, row.spoken)
+        // Only the school's emails wear a card; a read not yet done leaves the row as it was.
+        assertTrue(card.every.first { it.id == "p1" }.summary.isEmpty())
+        val unread = assertNotNull(MailNeedsRules.card(listOf(item("s2", "Oakfield Primary", "Trip", hour, true)), now, cal))
+        assertTrue(unread.every.single().summary.isEmpty())
+        assertNull(SchoolBodyRules.spoken(emptyList()))
+        // The split keeps the card on the school's box.
+        assertEquals(lines, SchoolNeedsRules.split(card).first!!.every.single().summary)
+        // The thin row in From the school shows it and says it after who and when.
+        val thin = NeedsYouGroupRules.mailRow(row)
+        assertEquals(lines, thin.summary)
+        assertTrue(thin.spoken.startsWith("Oakfield PTA, Christmas Fair"), thin.spoken)
+        assertTrue(thin.spoken.endsWith(". When: Sat 28 Nov, 12:00–16:00. Where: the school hall. Cost: £1 per adult"), thin.spoken)
+        assertTrue(NeedsYouGroupRules.mailRow(card.every.first { it.id == "p1" }).summary.isEmpty())
+    }
+
     @Test fun noSchoolMailLeavesTheCardAsItWas() {
         val card = assertNotNull(MailNeedsRules.card(listOf(item("p1", "Sam", "Hi", hour, false)), now, cal))
         assertEquals(null to card, SchoolNeedsRules.split(card))
