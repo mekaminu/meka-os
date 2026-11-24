@@ -214,5 +214,11 @@ class HabitBoardTest {
         // A19: no empty tracks with nothing set, neither the summary's nor the days'.
         assertFalse(b.showsBar)
         assertTrue(b.days.none { it.showsBar })
+        // Walk-through 2026-11-22 A15: the blank board says it once, in the empty card, with its one button.
+        assertTrue(HabitBoardRules.blank(b))
+        assertTrue(HabitBoardRules.EMPTY_LINE.startsWith("No habits yet."))
+        assertEquals("Add a habit", HabitBoardRules.ADD_FIRST)
+        assertFalse("+ Add" in HabitBoardRules.EMPTY_LINE)
+        assertTrue(ScreenSenseRules.problems(listOf(HabitBoardRules.EMPTY_LINE)).isEmpty())
     }
 }

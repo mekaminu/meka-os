@@ -123,7 +123,19 @@ object HabitBoardRules {
     const val MAX_LIST = 24
     const val HINT = "Tap the circle: done, then missed, then clear · tap a day to mark an earlier day"
     const val NO_HABITS = "No habits yet"
-    const val EMPTY_LINE = "Add a habit to do (Drink water) or one to keep off (No biscuits). Tap its circle each day."
+    /**
+     * Walk-through 2026-11-22 A15 (g4b 18): Habits with nothing in said it twice ("No habits yet" in the summary, then
+     * "Add a habit to do…") under seven day tiles and the All · Morning · All day · Night time · + New list chips, with
+     * nothing to mark or filter. Now a blank board ([blank]) shows only this line, once, in one raised card with
+     * [ADD_FIRST] under it: no day tiles, no summary, no chips, no hint, until the first habit is added.
+     */
+    const val EMPTY_LINE = "No habits yet. Add one to do, like Drink water, or one to keep off, like No biscuits, then tap its circle each day."
+
+    /** The blank board's one button under [EMPTY_LINE]; it opens the new habit's sheet, as + Add does. */
+    const val ADD_FIRST = "Add a habit"
+
+    /** Whether the Habits page is blank: no habits at all, so only [EMPTY_LINE] and [ADD_FIRST] show. */
+    fun blank(board: HabitBoard): Boolean = board.empty
     private val WEEKDAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     /** Slice 3: the history kept on each habit (four weeks back to a Monday always fit). */
     const val HISTORY_DAYS = 28

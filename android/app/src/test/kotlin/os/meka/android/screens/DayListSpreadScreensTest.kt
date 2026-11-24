@@ -195,6 +195,10 @@ class DayListSpreadScreensTest {
         assertTrue(!shows("Nothing yet") && !shows("0 of 0"), "$name: the empty day still says nothing more than once")
         assertEquals(1, compose.onAllNodes(hasText(DayListRules.EMPTY), useUnmergedTree = true).fetchSemanticsNodes().size,
             "$name: the empty day's one line isn't shown once")
+        // A15 (walk-through 2026-11-22, g4a 11): the empty line said "Type a task and press Enter, then the next." over
+        // the add bar's own "Enter for next"; the how is said once, by the add bar.
+        assertTrue(compose.onAllNodes(hasText("press Enter", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+            "$name: the empty day still repeats the add bar's instruction")
         val hints = compose.onAllNodes(hasText(LoneWordGlue.kept(DayListSpreadRules.HINT)), useUnmergedTree = true).fetchSemanticsNodes().size
         val grips = compose.onAllNodes(SemanticsMatcher("a ≡") { n ->
             n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("day-list-grip-") == true

@@ -80,13 +80,20 @@ struct HabitsSheet: View {
                 .id(newList)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
-            days(b).staggeredAppear(1)
-            summary(b).staggeredAppear(2)
-            chips(b).staggeredAppear(3)
-            if b.empty {
-                Text(HabitBoardRules.shared.EMPTY_LINE).font(MekaType.body).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .staggeredAppear(4)
+            if HabitBoardRules.shared.blank(board: b) {
+                // Walk-through 2026-11-22 A15: a blank board says it once, in one raised card whose button unfolds the
+                // new habit's form (as + Add does); no day tiles, summary, chips or hint until the first habit is added.
+                if adding == nil {
+                    LifeEmptyCard(line: HabitBoardRules.shared.EMPTY_LINE, button: HabitBoardRules.shared.ADD_FIRST, palette: palette) {
+                        withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding = false }
+                    }
+                    .transition(.opacity)
+                    .staggeredAppear(1)
+                }
+            } else {
+                days(b).staggeredAppear(1)
+                summary(b).staggeredAppear(2)
+                chips(b).staggeredAppear(3)
             }
             ForEach(b.groups, id: \.title) { g in
                 group(g, lists: b.lists, day: b.selectedDay).staggeredAppear(4)

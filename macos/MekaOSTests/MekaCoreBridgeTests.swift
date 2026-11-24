@@ -4736,6 +4736,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(empty.empty)
         XCTAssertFalse(empty.showsBar)  // A19: no empty track with nothing set
         XCTAssertFalse(empty.days[6].showsBar)
+        // Walk-through 2026-11-22 A15: the blank board shows only its one line and button (LifeEmptyCard).
+        XCTAssertTrue(HabitBoardRules.shared.blank(board: empty))
+        XCTAssertEqual(HabitBoardRules.shared.ADD_FIRST, "Add a habit")
+        XCTAssertEqual(DayListRules.shared.EMPTY, "Nothing planned yet.")
         let biscuits = try await core.addHabitToList(title: "No biscuits", avoid: true, list: "All day", perWeek: 7, remindAt: nil)
         _ = try await core.addHabitToList(title: "Long walk", avoid: false, list: "Weekend", perWeek: 2, remindAt: KotlinInt(int: 540))
         let today = core.goalsView.value.today

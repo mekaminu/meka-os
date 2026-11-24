@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasContentDescription
@@ -24,6 +26,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.goals.HabitsPage
+import os.meka.core.domain.HabitBoardRules
 import os.meka.core.domain.HabitMark
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -106,8 +109,8 @@ class HabitsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Habits")
         ScreenShots.assertShows(compose, name, "+ Add")
-        ScreenShots.assertShows(compose, name, "Wed")
         if (full) {
+            ScreenShots.assertShows(compose, name, "Wed")
             ScreenShots.assertShows(compose, name, "3 of 8 done today")
             ScreenShots.assertShows(compose, name, "best streak 7 days")
             ScreenShots.assertShows(compose, name, "Morning")
@@ -127,11 +130,22 @@ class HabitsScreensTest {
             assertEquals(dotCentre(teeth, 5), dotCentre(teeth, 6), "$name: today's dot is the same green as yesterday's")
             assertEquals(dotCentre(teeth, 6), dotCentre(ids.getValue("Drink water"), 6), "$name: Drink water's kept day is green")
         } else {
-            ScreenShots.assertShows(compose, name, "Add a habit to do")
-            ScreenShots.assertShows(compose, name, "No habits yet")
-            // A19 (walk-through 2026-11-08): nothing set, so no empty progress tracks, neither the summary's nor a day's.
-            compose.onNodeWithTag("habits-summary-bar", useUnmergedTree = true).assertDoesNotExist()
-            (0 until 7).forEach { compose.onNodeWithTag("habits-day-bar-$it-false", useUnmergedTree = true).assertExists() }
+            // Walk-through 2026-11-22 A15 (g4b 18): "No habits yet" then "Add a habit to do…" under seven day tiles and
+            // the list chips with nothing to mark or filter. Now the one line, once, in the empty card with its button.
+            ScreenShots.assertShows(compose, name, "Add a habit")
+            assertEquals(1, compose.onAllNodes(hasText("No habits yet", substring = true), useUnmergedTree = true).fetchSemanticsNodes().size,
+                "$name: the blank board says \"No habits yet\" more than once")
+            compose.onNodeWithTag(os.meka.android.ask.LIFE_EMPTY_TAG, useUnmergedTree = true).assertExists()
+            listOf("Morning", "All day", "Night time", "+ New list").forEach {
+                assertTrue(compose.onAllNodes(hasText(it), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+                    "$name: \"$it\" shown on a blank board with nothing to filter")
+            }
+            compose.onNodeWithTag("habits-summary", useUnmergedTree = true).assertDoesNotExist()
+            compose.onNodeWithTag("habits-day-0", useUnmergedTree = true).assertDoesNotExist()
+            // Its button opens the new habit's sheet, as + Add does.
+            compose.onNodeWithText(HabitBoardRules.ADD_FIRST, useUnmergedTree = true).performClick()
+            settle()
+            compose.onNodeWithTag("habits-add-sheet", useUnmergedTree = true).assertExists()
         }
     }
 

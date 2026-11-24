@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import os.meka.android.ask.LifeEmptyCard
 import os.meka.android.ask.MoneyChip
 import os.meka.android.ask.MoneyDetailSheet
 import os.meka.android.designsystem.Meka
@@ -152,7 +153,14 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("habits-add"))
                 }
             }
-            item(key = "days") {
+            // Walk-through 2026-11-22 A15: a blank board says it once, in one raised card whose button opens the new
+            // habit's sheet (as + Add does); no day tiles, summary, chips or hint until the first habit is added.
+            if (HabitBoardRules.blank(b)) item(key = "empty") {
+                LifeEmptyCard(HabitBoardRules.EMPTY_LINE, HabitBoardRules.ADD_FIRST, Modifier.appear(rememberAppearance(1))) {
+                    haptics.light(); adding = HabitAdd(false, defaultList(list))
+                }
+            }
+            if (!HabitBoardRules.blank(b)) item(key = "days") {
                 Row(Modifier.fillMaxWidth().appear(rememberAppearance(1)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     b.days.forEachIndexed { i, d ->
                         val fill by animateColorAsState(if (d.selected) Meka.colors.accent else Meka.colors.surface, MekaMotion.appear(reduced), label = "habit-day-$i")
@@ -176,7 +184,7 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                     }
                 }
             }
-            item(key = "summary") {
+            if (!HabitBoardRules.blank(b)) item(key = "summary") {
                 val share by animateFloatAsState(b.pct / 100f, MekaMotion.replan(reduced), label = "habits-bar")
                 Column(
                     Modifier.fillMaxWidth().appear(rememberAppearance(2)).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
@@ -198,7 +206,7 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                     }
                 }
             }
-            item(key = "chips") {
+            if (!HabitBoardRules.blank(b)) item(key = "chips") {
                 // Walk-through 2026-11-15 A11: the lists wrap onto a second line instead of sliding the fifth chip off the cover screen.
                 FlowRow(Modifier.fillMaxWidth().appear(rememberAppearance(3)),
                     horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -207,9 +215,6 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
                     }
                     MoneyChip("+ New list", on = false, tag = "habits-new-list") { haptics.light(); adding = HabitAdd(true, "") }
                 }
-            }
-            if (b.empty) item(key = "empty") {
-                Text(HabitBoardRules.EMPTY_LINE, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(4)))
             }
             items(b.groups, key = { "g-${it.title}" }) { g ->
                 GroupCard(

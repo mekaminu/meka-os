@@ -102,7 +102,12 @@ object DayListRules {
     const val SAY_SHORT = "Say"
     const val PASTE_SHORT = "Paste"
     const val FIT_SHORT = "Fit times"
-    const val EMPTY = "Nothing planned yet. Type a task and press Enter, then the next."
+    /**
+     * An empty day's one line. Walk-through 2026-11-22 A15 (g4a 11): it read "Nothing planned yet. Type a task and press
+     * Enter, then the next." right over the add bar's own "Add · Enter for next" / "Add to Saturday · Enter for the
+     * next", so the instruction was said twice; the add bar says how, this line only says the day is clear.
+     */
+    const val EMPTY = "Nothing planned yet."
     /** The way in beside Today's "Anytime today" heading, and under Today when nothing is unplanned (both apps). */
     const val LINK = "Day list ›"
     const val EMPTY_LINK = "Plan today’s tasks · Day list ›"

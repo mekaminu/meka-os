@@ -238,4 +238,12 @@ class DayListTest {
         assertEquals(2, DayListRules.boardIndex(off, board, "m", 2))
         assertEquals(0, DayListRules.boardIndex(off, board, "b", 0))
     }
+
+    @Test
+    fun anEmptyDaySaysItIsClearAndLeavesTheHowToTheAddBar() {
+        // Walk-through 2026-11-22 A15 (g4a 11): the empty line repeated the add bar's "Enter for the next".
+        assertEquals("Nothing planned yet.", DayListRules.EMPTY)
+        assertFalse("Enter" in DayListRules.EMPTY)
+        assertFalse("Type" in DayListRules.EMPTY)
+    }
 }
