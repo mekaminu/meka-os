@@ -109,8 +109,16 @@ fun DateNightPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Crossfade(v.summaryShown, animationSpec = MekaMotion.appear(reduced), label = "date-night-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    if (DateNightPageRules.blank(v)) {
+                        // Walk-through 2026-11-22 A15: off says it once, in one raised card with its one button, which
+                        // opens the evening's chooser as + Add → The evening does.
+                        LifeEmptyCard(DateNightPageRules.EMPTY_LINE, DateNightPageRules.ADD_FIRST) {
+                            haptics.tick(); said = null; eveningOpen = true
+                        }
+                    } else {
+                        Crossfade(v.summaryShown, animationSpec = MekaMotion.appear(reduced), label = "date-night-summary") { s ->
+                            Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
                     }
                     val line = if (eveningOpen || rowKey != null) null else said
                     Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "date-night-said") { l ->
@@ -118,7 +126,9 @@ fun DateNightPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (page.tiles.isNotEmpty()) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(
@@ -132,7 +142,7 @@ fun DateNightPane(core: MekaCore, onClose: () -> Unit) {
                     )
                 }
             }
-            item(key = "note") {
+            if (!DateNightPageRules.blank(v)) item(key = "note") {
                 Text(DateNightRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.l))
             }

@@ -39,10 +39,21 @@ struct DateNightSheet: View {
                 .staggeredAppear(0)
                 if choosing { chooser(v).transition(.opacity) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(v.summaryShown).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    if rules.blank(view: v) {
+                        // Walk-through 2026-11-22 A15: off says it once, in one raised card whose button opens the
+                        // evening's chooser, as + Add → The evening does.
+                        if !choosing {
+                            LifeEmptyCard(line: rules.EMPTY_LINE, button: rules.ADD_FIRST, palette: palette) {
+                                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { choosing = true }
+                            }
+                            .transition(.opacity)
+                        }
+                    } else {
+                        Text(v.summaryShown).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    }
                     if !choosing, let said = model.dateNightSaid {
                         Text(said).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
@@ -50,7 +61,9 @@ struct DateNightSheet: View {
                     }
                 }
                 .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                if page.tileCount > 0 {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in
@@ -63,8 +76,10 @@ struct DateNightSheet: View {
                             })
                             .staggeredAppear(3 + i)
                         }
-                        Text(DateNightRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if !rules.blank(view: v) {
+                            Text(DateNightRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 .frame(maxHeight: 420)

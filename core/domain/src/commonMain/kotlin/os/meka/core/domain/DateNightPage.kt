@@ -33,6 +33,21 @@ object DateNightPageRules {
     const val START = "Starts at"
     const val FIRST = "First night"
 
+    /**
+     * Walk-through 2026-11-22 A15: Date night while off said it four times over (the summary "Off · pick an evening…",
+     * the tiles "Off / date night", "None / to book", "Not set / the evening", Coming up's "Off. To keep one evening
+     * clear… tap + Add", then the note under it). Now this line is said once, in one raised card with [ADD_FIRST] under
+     * it, and no summary, tiles, cards or note follow until an evening is picked. The ⓘ still says what the page does,
+     * and + Add still offers The evening.
+     */
+    const val EMPTY_LINE = "Date night is off. Pick an evening once and Navilife keeps it clear every two weeks, then asks a week before whether you've booked somewhere."
+
+    /** The blank page's one button under [EMPTY_LINE]; it opens the evening's chooser, as + Add → The evening does. */
+    const val ADD_FIRST = "Pick the evening"
+
+    /** Whether the page is blank: date night is off, so only [EMPTY_LINE] and [ADD_FIRST] show. */
+    fun blank(view: DateNightView): Boolean = !view.on
+
     const val ADD_EVENING = "evening"
     const val EVENING_KEY = "evening"
 
@@ -93,6 +108,7 @@ object DateNightPageRules {
         PageRow(EVENING_KEY, weekdayLine(view), "From ${LocalClock.formatMinute(view.startMin)} · kept clear", CHANGE, false)
 
     fun page(view: DateNightView, today: Long): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, addChoices(view))
         val cards = buildList {
             add(LifePageRules.card(COMING_UP, COMING_UP, nightRows(view, today), empty = COMING_EMPTY))
             if (view.on) add(LifePageRules.settings(EVENING, EVENING, listOf(eveningRow(view))))

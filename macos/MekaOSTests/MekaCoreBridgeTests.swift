@@ -3067,6 +3067,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.todayLine(s: setting, today: fri, minuteOfDay: 13 * 60)?.text, "Date night tonight from 19:00")
         XCTAssertEqual(rules.skipLine(day: fri, today: sat, skip: true), "Skipped Fri 16 Oct · the evening is free to plan")
         XCTAssertEqual(DateNightView.companion.EMPTY.summary, rules.OFF_LINE)
+        // Walk-through 2026-11-22 A15: off says it once, with one button, no tiles or cards.
+        let page = DateNightPageRules.shared
+        XCTAssertTrue(page.blank(view: DateNightView.companion.EMPTY))
+        XCTAssertEqual(page.ADD_FIRST, "Pick the evening")
+        XCTAssertEqual(page.page(view: DateNightView.companion.EMPTY, today: sat).tileCount, 0)
+        XCTAssertFalse(page.blank(view: v))
     }
 
     func testLifeAdminReachesSwift() {

@@ -229,16 +229,36 @@ class KeptPlacesScreensTest {
         when (place) {
             Place.DATE_NIGHT -> {
                 val v = core.dateNightView.value
-                ScreenShots.assertShows(compose, name, v.summaryShown)
-                // The page shape (slice 11): the three numbers, and Coming up's first row (or its empty line).
                 val page = core.dateNightPage(v)
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: off says it once, in one raised card with its one button; no "Off /
+                    // date night", "None / to book" or "Not set / the evening" tiles, no Coming up card, no note.
+                    ScreenShots.assertShows(compose, name, DateNightPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { DateGlue.plain(it) }
+                    listOf("to book", "Not set", "date night", DateNightPageRules.COMING_UP, "Off ·", "Off.", "tap + Add", DateNightRules.NOTE).forEach { w ->
+                        if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank Date night page, beside \"${DateNightPageRules.EMPTY_LINE}\"")
+                    }
+                    val said = drawn.count { it.contains("Date night is off") }
+                    if (said != 1) fail("$name: \"Date night is off\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Date night page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank Date night line isn't in its one raised card")
+                    }
+                    if (v.on) fail("$name: date night on with nothing chosen")
+                    compose.onNode(hasText(DateNightPageRules.ADD_FIRST), useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+                    until { shows(hasTestTag(DATE_NIGHT_EVENING_SHEET_TAG)) }
+                    if (!shows(hasTestTag(DATE_NIGHT_EVENING_SHEET_TAG))) fail("$name: ${DateNightPageRules.ADD_FIRST} didn't open the evening's chooser")
+                    return core
+                }
+                ScreenShots.assertShows(compose, name, v.summaryShown)
+                // The page shape (slice 11): the three numbers, and Coming up's first row.
                 if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(DateNightPageRules.COMING_EMPTY))
-                if (fill == Fill.EMPTY && v.on) fail("$name: date night on with nothing chosen")
                 if (fill != Fill.EMPTY && v.nights.isEmpty()) fail("$name: no nights coming up once it's on")
                 if (fill == Fill.MANY && v.nights.none { it.skipped }) fail("$name: the skipped night isn't skipped")
             }

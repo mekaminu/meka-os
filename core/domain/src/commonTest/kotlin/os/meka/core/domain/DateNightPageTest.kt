@@ -51,13 +51,24 @@ class DateNightPageTest {
     }
 
     @Test
-    fun offShowsHowToStartAndNoEveningCard() {
-        val p = DateNightPageRules.page(view(null), today)
-        assertEquals(listOf("Off", "None", "Not set"), p.tiles.map { it.number })
-        assertEquals(listOf(DateNightPageRules.COMING_UP), p.cards.map { it.key })
-        assertTrue(p.cards.first().rows.isEmpty())
-        assertEquals(DateNightPageRules.COMING_EMPTY, p.cards.first().empty)
+    fun offSaysItOnceWithNoTilesOrCards() {
+        // Walk-through 2026-11-22 A15: "Off / date night", "None / to book", "Not set / the evening" over Coming up's
+        // "Off. To keep one evening clear…" and the summary's "Off · pick an evening…"; now the one line and its button.
+        val v = view(null)
+        val p = DateNightPageRules.page(v, today)
+        assertTrue(DateNightPageRules.blank(v))
+        assertEquals(0, p.tileCount)
+        assertEquals(0, p.cards.size)
+        assertEquals(DateNightPageRules.INFO, p.info)
+        assertFalse("+ Add" in DateNightPageRules.EMPTY_LINE)
+        assertEquals("Pick the evening", DateNightPageRules.ADD_FIRST)
+        assertTrue(ScreenSenseRules.problems(listOf(DateNightPageRules.EMPTY_LINE)).isEmpty())
         assertEquals("Pick the weekday and time, kept clear every two weeks", p.addChoices.single().hint)
+        // Once an evening is picked the page is back: three numbers, Coming up and The evening.
+        val on = DateNightPageRules.page(view(), today)
+        assertFalse(DateNightPageRules.blank(view()))
+        assertEquals(3, on.tileCount)
+        assertEquals(listOf(DateNightPageRules.COMING_UP, DateNightPageRules.EVENING), on.cards.map { it.key })
     }
 
     @Test
