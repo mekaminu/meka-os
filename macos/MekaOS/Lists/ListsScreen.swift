@@ -61,9 +61,12 @@ struct ListsScreen: View {
                         .foregroundStyle(model.lists?.dueLine != nil ? palette.accent : palette.textSecondary)
                         .contentTransition(.opacity)
                         .staggeredAppear(1)
-                    LifeNumberTiles(page: page, palette: palette)
-                        .padding(.vertical, MekaSpace.xs)
-                        .staggeredAppear(2)
+                    // A blank page says it once, in the line above (walk-through 2026-11-22, A15): no "None" tiles under it.
+                    if model.lists.map({ ListsPageRules.shared.showsTiles(view: $0) }) ?? false {
+                        LifeNumberTiles(page: page, palette: palette)
+                            .padding(.vertical, MekaSpace.xs)
+                            .staggeredAppear(2)
+                    }
                 }
                 Picker("List", selection: Binding(get: { tab }, set: { new in
                     MekaHaptics.tick()
@@ -188,13 +191,18 @@ struct ListsScreen: View {
 
     private func toggle(_ id: String) { open = open == id ? nil : id }
 
+    /// An empty tab's line, or nil when a blank page's one line has said it (ListsPageRules.tabEmpty).
+    private func tabEmpty(_ tab: String) -> String? {
+        model.lists.flatMap { ListsPageRules.shared.tabEmpty(view: $0, tab: tab) }
+    }
+
     // MARK: Waiting for
 
     @ViewBuilder private var waiting: some View {
         let items = model.lists?.waiting ?? []
         let promised = model.lists?.promised ?? []
-        if items.isEmpty && promised.isEmpty {
-            EmptyLine(text: "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and Navilife tells you when it's due.", palette: palette)
+        if items.isEmpty && promised.isEmpty, let line = tabEmpty("waiting") {
+            EmptyLine(text: line, palette: palette)
         }
         if !promised.isEmpty { sectionLabel("You promised").padding(.top, MekaSpace.xs) }
         ForEach(promised, id: \.id) { p in
@@ -233,8 +241,8 @@ struct ListsScreen: View {
 
     @ViewBuilder private var someday: some View {
         let groups = model.lists?.someday ?? []
-        if groups.isEmpty {
-            EmptyLine(text: "Ideas, trips, things to buy or read. They stay out of Today and the planner until you say \"Do it now\".", palette: palette)
+        if groups.isEmpty, let line = tabEmpty("someday") {
+            EmptyLine(text: line, palette: palette)
         }
         ForEach(groups, id: \.label) { g in
             Text(g.label.uppercased())
@@ -264,8 +272,8 @@ struct ListsScreen: View {
 
     @ViewBuilder private var decisions: some View {
         let items = model.lists?.decisions ?? []
-        if items.isEmpty {
-            EmptyLine(text: "Write down what you decided and why, so it isn't re-made. Add a review date if it should be looked at again.", palette: palette)
+        if items.isEmpty, let line = tabEmpty("decisions") {
+            EmptyLine(text: line, palette: palette)
         }
         ForEach(items, id: \.id) { d in
             ListRowView(title: d.statement, meta: d.meta, due: d.state == .due, expanded: open == d.id, palette: palette, toggle: { toggle(d.id) }) {

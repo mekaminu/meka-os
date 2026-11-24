@@ -14,7 +14,10 @@ struct RenewalsSection: View {
     var body: some View {
         let r = model.lists?.renewals
         if (r?.count ?? 0) == 0 && (r?.done.isEmpty ?? true) {
-            EmptyLine(text: "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and Navilife shows it in good time, with a cancel-by reminder if you set one.", palette: palette)
+            // Nil on a blank Lists page: its one line has said it (walk-through 2026-11-22, A15).
+            if let line = model.lists.flatMap({ ListsPageRules.shared.tabEmpty(view: $0, tab: "renewals") }) {
+                EmptyLine(text: line, palette: palette)
+            }
         } else if let board = model.renewalBoard(RenewalBoardRules.shared.tabAt(index: Int32(tab))) {
             // Renewals keep their email, slice 2: the approved cards (tiles, Coming up · All · Done, a card each).
             RenewalBoardView(board: board, tab: $tab, palette: palette, open: $open)

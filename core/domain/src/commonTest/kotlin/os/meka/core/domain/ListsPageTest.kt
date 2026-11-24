@@ -31,7 +31,32 @@ class ListsPageTest {
         assertEquals(listOf("None", "No dates", "Nothing"), p.tiles.map { it.number })
         assertTrue(p.tiles.none { it.lit })
         assertEquals(0, p.cardCount)
-        assertEquals(ListsPageRules.NOTHING_DUE, ListsPageRules.summary(ListsView.EMPTY))
+        assertEquals(ListsPageRules.BLANK_LINE, ListsPageRules.summary(ListsView.EMPTY))
+    }
+
+    @Test
+    fun aBlankPageSaysItOnce() {
+        // Walk-through 2026-11-22, A15: the summary, three "None" tiles and the tab's instruction said it five times.
+        val v = ListsView.EMPTY
+        assertTrue(ListsPageRules.blank(v))
+        assertFalse(ListsPageRules.showsTiles(v))
+        listOf("waiting", "someday", "decisions", "renewals", "shopping").forEach { assertEquals(null, ListsPageRules.tabEmpty(v, it)) }
+        assertTrue(ListsPageRules.BLANK_LINE.contains("+ Add"))
+        assertFalse(ListsPageRules.BLANK_LINE.contains("·"))
+    }
+
+    @Test
+    fun oneListInUseBringsTheNumbersAndTheOtherTabsLinesBack() {
+        val v = view(shopping = shop("Milk"))
+        assertFalse(ListsPageRules.blank(v))
+        assertTrue(ListsPageRules.showsTiles(v))
+        assertEquals(ListsPageRules.NOTHING_DUE, ListsPageRules.summary(v))
+        assertEquals(ListsPageRules.WAITING_EMPTY, ListsPageRules.tabEmpty(v, "waiting"))
+        assertEquals(ListsPageRules.RENEWALS_EMPTY, ListsPageRules.tabEmpty(v, "renewals"))
+        assertEquals(null, ListsPageRules.tabEmpty(v, "shopping"))
+        val promised = view(promised = listOf(promise("p", DueState.NONE)))
+        assertEquals(null, ListsPageRules.tabEmpty(promised, "waiting"))
+        assertEquals(ShoppingRules.EMPTY_LINE, ListsPageRules.tabEmpty(promised, "shopping"))
     }
 
     @Test

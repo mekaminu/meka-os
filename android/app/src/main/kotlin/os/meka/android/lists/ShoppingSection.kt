@@ -48,7 +48,7 @@ import os.meka.core.facade.MekaCore
  * Remove takes a row off for good; Clear under Got clears what was bought. Reduced motion: the check shown at once,
  * rows cross-fade.
  */
-internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspend () -> Unit) -> Unit) {
+internal fun LazyListScope.shopping(v: ShoppingView, emptyLine: String?, core: MekaCore, act: (suspend () -> Unit) -> Unit) {
     item(key = "sh-line") {
         val haptics = rememberMekaHaptics()
         // Shop mode (Checklists in tasks, slice 2): the list full screen, big rows, the screen kept awake.
@@ -71,7 +71,7 @@ internal fun LazyListScope.shopping(v: ShoppingView, core: MekaCore, act: (suspe
             )
         }
     }
-    if (v.toBuy.isEmpty() && v.got.isEmpty()) empty("shopping", ShoppingRules.EMPTY_LINE)
+    if (v.toBuy.isEmpty() && v.got.isEmpty()) emptyLine?.let { empty("shopping", it) }
     items(v.toBuy, key = { "sh-${it.id}" }) { s -> ShoppingRow(s, core, act, Modifier.animateItem()) }
     if (v.got.isNotEmpty()) {
         item(key = "sh-got") {

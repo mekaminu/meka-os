@@ -190,8 +190,9 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
                 modifier = Modifier.animateItem().appear(rememberAppearance(1)),
             )
         }
-        item(key = "tiles") {
-            LifeNumberTiles(page.tiles, Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(2)))
+        // A blank page says it once, in the line above (walk-through 2026-11-22, A15): no "None" tiles under it.
+        if (ListsPageRules.showsTiles(view)) item(key = "tiles") {
+            LifeNumberTiles(page.tiles, Modifier.animateItem().padding(vertical = MekaSpace.xs).appear(rememberAppearance(2)))
         }
         item(key = "tabs") {
             Tabs(tab, view, Modifier.padding(bottom = MekaSpace.m).appear(rememberAppearance(3))) { t ->
@@ -203,10 +204,10 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
             ListTab.SOMEDAY -> someday(view, open, toggle, core, act, leave)
             ListTab.DECISIONS -> decisions(view, open, toggle, core, act, leave)
             ListTab.RENEWALS -> renewals(
-                view.renewals, cars, core.todayEpochDay(), open, toggle, core, act, leave, removedCar, { removedCar = it },
+                view.renewals, ListsPageRules.tabEmpty(view, "renewals"), cars, core.todayEpochDay(), open, toggle, core, act, leave, removedCar, { removedCar = it },
                 renewalTab, { t -> if (t != renewalTab) { renewalTab = t; open = null } },
             ) { haptics.light() }
-            ListTab.SHOPPING -> shopping(view.shopping, core, act)
+            ListTab.SHOPPING -> shopping(view.shopping, ListsPageRules.tabEmpty(view, "shopping"), core, act)
         }
     }
     // + Add: which list, then that list's own form (what each asked for before, now behind + Add).
@@ -235,7 +236,7 @@ private fun LazyListScope.waiting(
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
 ) {
     if (view.waiting.isEmpty() && view.promised.isEmpty()) {
-        empty("waiting", "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and Navilife tells you when it's due.")
+        ListsPageRules.tabEmpty(view, "waiting")?.let { empty("waiting", it) }
         return
     }
     if (view.promised.isNotEmpty()) {
@@ -271,7 +272,7 @@ private fun LazyListScope.someday(
     view: ListsView, open: String?, toggle: (String) -> Unit, core: MekaCore,
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
 ) {
-    if (view.someday.isEmpty()) empty("someday", "Ideas, trips, things to buy or read. They stay out of Today and the planner until you say \"Do it now\".")
+    ListsPageRules.tabEmpty(view, "someday")?.let { empty("someday", it) }
     view.someday.forEach { g ->
         item(key = "g-${g.kind.name}") {
             SectionLabel(g.label, Modifier.animateItem().padding(start = MekaSpace.xs, top = MekaSpace.m))
@@ -293,7 +294,7 @@ private fun LazyListScope.decisions(
     view: ListsView, open: String?, toggle: (String) -> Unit, core: MekaCore,
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
 ) {
-    if (view.decisions.isEmpty()) empty("decisions", "Write down what you decided and why, so it isn't re-made. Add a review date if it should be looked at again.")
+    ListsPageRules.tabEmpty(view, "decisions")?.let { empty("decisions", it) }
     items(view.decisions, key = { "d-${it.id}" }) { d: DecisionItem ->
         ListRow(d.statement, d.meta, d.state, open == d.id, { toggle(d.id) }, Modifier.animateItem()) {
             d.rationale?.let { Text("Why: $it", style = MekaType.body, color = Meka.colors.textSecondary) }

@@ -30,8 +30,9 @@ struct ShoppingSection: View {
         }
         .padding(.bottom, MekaSpace.xs)
         .sheet(isPresented: $shopping) { ShopModeSheet(source: .shopping, palette: palette) }
-        if toBuy.isEmpty && got.isEmpty {
-            EmptyLine(text: ShoppingRules.shared.EMPTY_LINE, palette: palette)
+        // Nil on a blank Lists page: its one line has said it (walk-through 2026-11-22, A15).
+        if toBuy.isEmpty && got.isEmpty, let line = model.lists.flatMap({ ListsPageRules.shared.tabEmpty(view: $0, tab: "shopping") }) {
+            EmptyLine(text: line, palette: palette)
         }
         ForEach(toBuy, id: \.id) { s in ShoppingRowView(item: s, palette: palette) }
         if !got.isEmpty {

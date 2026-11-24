@@ -74,16 +74,14 @@ data class NewRenewal(
  * new place, light haptic); a one-off leaves like a completion. Nothing is paid or cancelled for you.
  */
 internal fun LazyListScope.renewals(
-    r: RenewalsView, cars: CarsView, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
+    r: RenewalsView, emptyLine: String?, cars: CarsView, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
     removedCar: String? = null, setRemovedCar: (String?) -> Unit = {},
     tab: RenewalTab = RenewalTab.COMING_UP, setTab: (RenewalTab) -> Unit = {}, tap: () -> Unit,
 ) {
     if (r.count == 0 && r.done.isEmpty()) {
-        empty(
-            "renewals",
-            "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and Navilife shows it in good time, with a cancel-by reminder if you set one.",
-        )
+        // Null on a blank Lists page: its one line has said it (ListsPageRules.tabEmpty).
+        emptyLine?.let { empty("renewals", it) }
     } else {
         // Renewals keep their email, slice 2: the approved cards (tiles, Coming up · All · Done, a card each).
         renewalBoard(RenewalBoardRules.board(r, today, tab), open, toggle, setTab, core, act, leave, tap)

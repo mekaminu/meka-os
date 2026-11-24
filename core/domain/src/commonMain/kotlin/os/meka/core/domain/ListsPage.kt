@@ -15,6 +15,18 @@ object ListsPageRules {
     const val ADD_TITLE = "Add to Lists"
     /** The line under the title while nothing is due (the page's summary). */
     const val NOTHING_DUE = "Nothing to chase, review or renew today."
+    /**
+     * The one line while every list is empty (walk-through 2026-11-22, A15: the empty page said "nothing" five times,
+     * the summary, three "None" tiles and the tab's own instruction). It is then the only thing said: the tiles and
+     * the tabs' empty lines are left out until something is on a list.
+     */
+    const val BLANK_LINE = "Nothing on your lists yet. Tap + Add for a promise, a renewal or the shopping."
+
+    /** Each tab's empty line, while another list has something in it (keyed as [tabFor]). */
+    const val WAITING_EMPTY = "Nothing promised either way. Add what you told someone you'd do, or a reply, a parcel or a refund you're waiting on, and Navilife tells you when it's due."
+    const val SOMEDAY_EMPTY = "Ideas, trips, things to buy or read. They stay out of Today and the planner until you say \"Do it now\"."
+    const val DECISIONS_EMPTY = "Write down what you decided and why, so it isn't re-made. Add a review date if it should be looked at again."
+    const val RENEWALS_EMPTY = "MOT, insurance, the boiler service, subscriptions and bills. Add each with its date and Navilife shows it in good time, with a cancel-by reminder if you set one."
 
     const val ADD_PROMISE = "promise"
     const val ADD_WAITING = "waiting"
@@ -40,8 +52,33 @@ object ListsPageRules {
         else -> "shopping"
     }
 
-    /** The line under the title: what's due ("1 promise due · 2 to chase"), else [NOTHING_DUE]. */
-    fun summary(view: ListsView): String = view.dueLine ?: NOTHING_DUE
+    /** Whether every list is empty: nothing promised or awaited, no someday, decision, renewal or shopping. */
+    fun blank(view: ListsView): Boolean =
+        view.promisesBothWays == 0 && view.someday.isEmpty() && view.decisions.isEmpty() &&
+            view.renewals.count == 0 && view.renewals.done.isEmpty() &&
+            view.shopping.toBuy.isEmpty() && view.shopping.got.isEmpty()
+
+    /** The line under the title: what's due ("1 promise due · 2 to chase"), else [BLANK_LINE] on a blank page, else [NOTHING_DUE]. */
+    fun summary(view: ListsView): String = view.dueLine ?: if (blank(view)) BLANK_LINE else NOTHING_DUE
+
+    /** Whether the three numbers show: not on a blank page, where [BLANK_LINE] says it once. */
+    fun showsTiles(view: ListsView): Boolean = !blank(view)
+
+    /**
+     * What an empty tab says ("waiting", "someday", "decisions", "renewals", "shopping"): null when the tab has
+     * something in it, or when the whole page is blank and [BLANK_LINE] above has said it.
+     */
+    fun tabEmpty(view: ListsView, tab: String): String? {
+        if (blank(view)) return null
+        return when (tab) {
+            "waiting" -> WAITING_EMPTY.takeIf { view.promisesBothWays == 0 }
+            "someday" -> SOMEDAY_EMPTY.takeIf { view.someday.isEmpty() }
+            "decisions" -> DECISIONS_EMPTY.takeIf { view.decisions.isEmpty() }
+            "renewals" -> RENEWALS_EMPTY.takeIf { view.renewals.count == 0 && view.renewals.done.isEmpty() }
+            "shopping" -> ShoppingRules.EMPTY_LINE.takeIf { view.shopping.toBuy.isEmpty() && view.shopping.got.isEmpty() }
+            else -> null
+        }
+    }
 
     private fun promisesTile(view: ListsView): PageTile {
         val due = view.promisesDue + view.chaseDue

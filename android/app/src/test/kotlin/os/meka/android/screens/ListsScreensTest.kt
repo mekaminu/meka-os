@@ -142,8 +142,15 @@ class ListsScreensTest {
         assertTabsWhole(name)
         if (tab == ListTab.WAITING && fill == Fill.MANY) assertRowsUnderHeadings(name)
         when {
-            // Nothing on: the line says what the list is for, never a bare heading over an empty box.
-            fill == Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Nothing promised either way")
+            // Nothing on any list: one line says so and how to start, said once (walk-through 2026-11-22, A15): no
+            // "None" tiles, no tab instruction, no "Nothing to chase" under it.
+            fill == Fill.EMPTY -> {
+                ScreenShots.assertShows(compose, name, ListsPageRules.BLANK_LINE)
+                listOf("Nothing promised either way", "promised or awaited", "to renew yet", "Nothing to buy", "Nothing to chase").forEach { said ->
+                    val n = compose.onAllNodes(hasText(said, substring = true)).fetchSemanticsNodes().size
+                    if (n > 0) fail("$name: the blank page says \"$said\" beside its one line")
+                }
+            }
             tab == ListTab.SHOPPING -> ScreenShots.assertShows(compose, name, "Milk")
             tab == ListTab.RENEWALS -> {
                 ScreenShots.assertShows(compose, name, "Car insurance")
@@ -163,7 +170,6 @@ class ListsScreensTest {
                 }
             }
         }
-        if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, "Nothing to chase, review or renew today.")
         return core
     }
 
