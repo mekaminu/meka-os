@@ -32,6 +32,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.WORK_COLUMN_MAX
+import os.meka.core.domain.CarRules
 import os.meka.core.domain.LifeAdminJobKind
 import os.meka.core.domain.LifeAdminRules
 import os.meka.core.domain.LocalClock
@@ -83,13 +84,15 @@ class LifeAdminScreensTest {
             Fill.EMPTY -> Unit
             Fill.ONE -> {
                 core.setLifeAdmin(LifeAdminRules.DEFAULT_WEEKDAY, LifeAdminRules.DEFAULT_START)
-                core.addRenewal("Home insurance", ObligationKind.INSURANCE, today + 5, RenewalRepeat.YEARLY, null, null)
+                core.addRenewal("Home insurance", ObligationKind.INSURANCE, today + ShotCar.HOME_INSURANCE_DAYS, RenewalRepeat.YEARLY, null, null)
                 core.addTask("Call the GP about the results")
             }
             Fill.MANY -> {
                 core.setLifeAdmin(LifeAdminRules.DEFAULT_WEEKDAY, 19 * 60)
-                core.addRenewal("Car insurance", ObligationKind.INSURANCE, today + 3, RenewalRepeat.YEARLY, "£420", null)
-                core.addRenewal("Home insurance for the flat and its contents", ObligationKind.INSURANCE, today + 9, RenewalRepeat.YEARLY, null, null)
+                // Walk-through 2026-11-22 A13: the car's dates are Car's shots' own, and the home insurance's day is the
+                // one shot's (it was Fri 30 Oct here beside Mon 26 Oct there).
+                ShotCar.dates(core, many = true)
+                core.addRenewal("Home insurance for the flat and its contents", ObligationKind.INSURANCE, today + ShotCar.HOME_INSURANCE_DAYS, RenewalRepeat.YEARLY, null, null)
                 listOf(
                     "Call the GP about the results", "Renew the parking permit", "Reply to the council about the bins",
                     "Pay the window cleaner", "Book the boiler service", "Send the football kit money",
@@ -210,7 +213,12 @@ class LifeAdminScreensTest {
             Fill.MANY -> {
                 if (v.jobCount <= v.jobs.size) fail("$name: ${v.jobCount} jobs all listed; the fixture should overflow")
                 if (v.overdueCount != 1) fail("$name: ${v.overdueCount} overdue, not the school form")
-                if (v.jobs.first().title != "Car insurance") fail("$name: the nearest renewal isn't first (${v.jobs})")
+                if (v.jobs.first().title != ShotCar.INSURANCE) fail("$name: the nearest renewal isn't first (${v.jobs})")
+                // A13: every car date gathered here (the insurance, and the MOT within its four weeks) is on Car's Dates too.
+                val carJobs = v.jobs.filter { it.kind == LifeAdminJobKind.RENEWAL && CarRules.PRESETS.any { p -> p.title == it.title } }.map { it.title }
+                if (carJobs.size < 2) fail("$name: the car's insurance and MOT aren't both gathered (${v.jobs.map { it.title }})")
+                val missing = ShotCar.missingFromCar(core, carJobs)
+                if (missing.isNotEmpty()) fail("$name: Life admin gathers $missing, which Car's Dates don't hold")
                 val firstTask = v.jobs.firstOrNull { it.kind == LifeAdminJobKind.TASK }
                 if (firstTask?.overdue != true) fail("$name: the overdue form isn't the first task (${v.jobs.map { it.title }})")
                 assertColumnWidth(name)

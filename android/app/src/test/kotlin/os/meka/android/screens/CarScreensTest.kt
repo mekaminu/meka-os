@@ -115,10 +115,8 @@ class CarScreensTest {
         if (fill == Fill.EMPTY) return
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         val first = CarRules.ENTITY_ID
-        check(core.setCarName(first, "the Golf"))
-        check(core.setCarRegistration(first, "AB12 CDE"))
-        val mot = core.addCarDate(first, "mot") ?: fail("no MOT date")
-        core.setRenewalDue(mot, clock / 86_400_000L + 22)
+        // Walk-through 2026-11-22 A13: the same car dates as Life admin's shots (many: its insurance too).
+        ShotCar.dates(core, many = fill == Fill.MANY)
         // Parked 25 minutes ago with a 2-hour ticket bought then: "1 h 35 left" on the pane, against the phone's clock.
         // Walk-through A14: one fixed clock, so no seconds pass to round the ticket up to "1 h 36 left" beside "25 min ago".
         clock = NOW
@@ -192,6 +190,11 @@ class CarScreensTest {
             // Page shape, Car slice 4: with one car its name is in the Fuel sheet and the Bluetooth card's row (shown
             // once Nearby devices is allowed); with two the Dates rows name each car.
             if (fill == Fill.MANY) ScreenShots.assertShows(compose, name, "The Golf")
+        }
+        // A13: the car insurance Life admin's many shot gathers is one of the Golf's dates here.
+        if (fill == Fill.MANY) {
+            val missing = ShotCar.missingFromCar(core, listOf("MOT", ShotCar.INSURANCE))
+            if (missing.isNotEmpty()) fail("$name: Car's Dates don't hold $missing, which Life admin's shots show")
         }
         // Walk-through 2026-11-15 A14: the parked rows ended "±…" and the MOT row "Every year from the dat…" on the cover;
         // a row's grey line now takes two lines before any "…", so each reads to its end.
