@@ -115,8 +115,15 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "facts-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    if (FactsPageRules.blank(v)) {
+                        // Walk-through 2026-11-22 A15: no facts says it once, in one raised card with its one button.
+                        LifeEmptyCard(FactsPageRules.EMPTY_LINE, FactsPageRules.ADD_FIRST) {
+                            haptics.tick(); addChosen = FactsPageRules.ADD_FACT; said = null; addOpen = true
+                        }
+                    } else {
+                        Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "facts-summary") { s ->
+                            Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
                     }
                     // What the last add, change or Copy said, while no sheet is open.
                     val line = if (addOpen || rowKey != null) null else said?.line
@@ -125,7 +132,9 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (FactsPageRules.showsTiles(v)) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(
@@ -135,9 +144,11 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
                     )
                 }
             }
-            item(key = "note") {
-                Text(FactRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+            if (FactsPageRules.showsNote(v)) {
+                item(key = "note") {
+                    Text(FactRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+                }
             }
         }
         // + Add: a fact, or one kept from the AI, then one typed line.

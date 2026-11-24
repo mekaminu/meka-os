@@ -299,15 +299,31 @@ class KeptPlacesScreensTest {
             }
             Place.FACTS -> {
                 val v = core.factsView.value
-                ScreenShots.assertShows(compose, name, v.summary)
-                // The page shape (slice 13): the three numbers, and the first group's first row (or its empty line).
+                ScreenShots.assertShows(compose, name, FactsPageRules.summary(v))
+                // The page shape (slice 13): the three numbers, and the first group's first row.
                 val page = core.factsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                page.cards.firstOrNull()?.rows?.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) page.cards.first().empty?.let { ScreenShots.assertShows(compose, name, LifePageRules.shown(it)) }
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "None" tiles, no Your facts card naming
+                    // "+ Add", no stored-only note.
+                    ScreenShots.assertShows(compose, name, FactsPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { os.meka.core.domain.DateGlue.plain(it) }
+                    listOf("Nothing yet", "+ Add puts", "Your facts", "facts yet", "for Obi yet", "Stored in your own Navilife data only").forEach { w ->
+                        if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank facts page, beside \"${FactsPageRules.EMPTY_LINE}\"")
+                    }
+                    val said = drawn.count { it.contains("Nothing here yet") }
+                    if (said != 1) fail("$name: \"Nothing here yet\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank facts page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank facts line isn't in its one raised card")
+                    }
+                }
                 if (fill == Fill.EMPTY && v.summary != FactRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.count != 6) fail("$name: ${v.count} facts for six")
                 // A13 (walk-through 2026-11-22): "kept" means one thing here, kept from the AI; "7 facts kept" (stored) sat

@@ -71,10 +71,7 @@ struct FactsSheet: View {
                 .staggeredAppear(0)
                 if adding { addForm(page) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    summaryLine(v)
                     if !adding, let said {
                         Text(said.line).font(MekaType.caption)
                             .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
@@ -84,7 +81,9 @@ struct FactsSheet: View {
                     }
                 }
                 .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                if page.tileCount > 0 {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in
@@ -98,8 +97,10 @@ struct FactsSheet: View {
                             })
                             .staggeredAppear(3 + i)
                         }
-                        Text(FactRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if page.tileCount > 0 {
+                            Text(FactRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 .frame(maxHeight: 420)
@@ -191,6 +192,26 @@ struct FactsSheet: View {
         board.setString(row.copyText, forType: .string)
         MekaHaptics.light()
         said = CoreModel.FactSaid(line: FactRules.shared.copiedLine(row: row), refused: false)
+    }
+
+    /// Under the header: the view's line, or on a blank page (walk-through 2026-11-22 A15) its one line and button in
+    /// one raised card, which opens + Add on A fact.
+    @ViewBuilder
+    private func summaryLine(_ v: FactsView) -> some View {
+        let rules = FactsPageRules.shared
+        if rules.blank(view: v) {
+            if !adding {
+                LifeEmptyCard(line: rules.EMPTY_LINE, button: rules.ADD_FIRST, palette: palette) {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding = true; addChoice = rules.ADD_FACT; said = nil }
+                }
+                .transition(.opacity)
+            }
+        } else {
+            Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+        }
     }
 
     @ViewBuilder

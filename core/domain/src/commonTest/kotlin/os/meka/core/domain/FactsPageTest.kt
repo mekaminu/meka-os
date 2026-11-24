@@ -56,13 +56,29 @@ class FactsPageTest {
     }
 
     @Test
-    fun anEmptyPageSaysHowToStartInWordsNeverADash() {
-        val p = FactsPageRules.page(FactsView.EMPTY)
-        assertEquals(listOf("None", "None", "None"), p.tiles.map { it.number })
-        assertTrue(p.tiles.none { it.number == "—" || it.number == "-" })
-        val card = p.cards.single()
-        assertTrue(card.rows.isEmpty())
-        assertTrue(card.empty!!.contains("+ Add"))
+    fun aBlankPageSaysItOnceWithNoTilesCardsOrNote() {
+        // Walk-through 2026-11-22 A15: the blank page said it four ways (the summary, three "None" tiles, Your facts'
+        // line naming "+ Add", the stored-only note); now only the header's one line and its button.
+        val v = FactsView.EMPTY
+        val p = FactsPageRules.page(v)
+        assertTrue(FactsPageRules.blank(v))
+        assertFalse(FactsPageRules.showsTiles(v))
+        assertFalse(FactsPageRules.showsNote(v))
+        assertEquals(0, p.tileCount)
+        assertEquals(0, p.cards.size)
+        assertEquals(FactsPageRules.EMPTY_LINE, FactsPageRules.summary(v))
+        assertFalse("+ Add" in FactsPageRules.EMPTY_LINE)
+        assertEquals("Add a fact", FactsPageRules.ADD_FIRST)
+        assertEquals(FactsPageRules.INFO, p.info)
+        assertEquals(listOf(FactsPageRules.ADD_FACT, FactsPageRules.ADD_KEPT), p.addChoices.map { it.key })
+        // One fact brings the tiles, the cards and the note back, numbers in words where there are none.
+        val one = FactRules.view(listOf(fact("Car reg", "AB12 CDE")))
+        assertFalse(FactsPageRules.blank(one))
+        assertTrue(FactsPageRules.showsNote(one))
+        assertEquals(one.summary, FactsPageRules.summary(one))
+        val tiles = FactsPageRules.page(one).tiles
+        assertEquals(listOf("1", "1", "None"), tiles.map { it.number })
+        assertTrue(tiles.none { it.number == "—" || it.number == "-" })
     }
 
     @Test

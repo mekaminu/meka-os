@@ -2983,6 +2983,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.refusal(text: "Wifi password: BlueFox77"), rules.REFUSED_SECRET)
         XCTAssertEqual(rules.refusal(text: "Bank card: 4111 1111 1111 1111"), rules.REFUSED_BANK)
         XCTAssertEqual(rules.refusal(text: "Passport: 123456789"), rules.REFUSED_ID)
+        // Walk-through 2026-11-22 A15: the blank page says it once, with one button, no tiles or cards.
+        let factsPage = FactsPageRules.shared
+        XCTAssertTrue(factsPage.blank(view: FactsView.companion.EMPTY))
+        XCTAssertEqual(factsPage.ADD_FIRST, "Add a fact")
+        XCTAssertEqual(factsPage.page(view: FactsView.companion.EMPTY).tileCount, 0)
         let fact = LifeFact(id: "f1", label: "Car reg", value: "AB12 CDE", group: .car, aiOff: false, addedAtMs: 0)
         XCTAssertEqual(FactAskRules.shared.askLines(facts: [fact], question: "what's the car's reg?"),
                        ["Facts · 1 kept · all below", "Fact · Car · Car reg: AB12 CDE"])

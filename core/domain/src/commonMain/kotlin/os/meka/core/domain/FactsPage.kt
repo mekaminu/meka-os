@@ -25,6 +25,29 @@ object FactsPageRules {
     const val ALL_TITLE = "Your facts"
     const val EMPTY_CARD = "Nothing yet · + Add puts the car's reg, the GP, sizes and the utilities here"
 
+    /**
+     * Walk-through 2026-11-22 A15: a blank page said it four ways (the summary "Nothing yet. Add the things you look
+     * up…", three "None" tiles, the Your facts card naming "+ Add" and the stored-only note under it). Now this line is
+     * said once, in one raised card with [ADD_FIRST] under it, and no tiles, cards or note follow until a fact is added.
+     * The ⓘ still says where facts are kept and what is turned away.
+     */
+    const val EMPTY_LINE = "Nothing here yet. Add the things you look up once, for example Car reg: AB12 CDE or GP: Oakfield Surgery; Obi answers from them."
+
+    /** The blank page's one button under [EMPTY_LINE]; it opens + Add on A fact. */
+    const val ADD_FIRST = "Add a fact"
+
+    /** Whether the page is blank: no facts at all, so only the one line and button show. */
+    fun blank(view: FactsView): Boolean = view.groups.all { it.rows.isEmpty() }
+
+    /** Whether the three numbers show: not on a blank page. */
+    fun showsTiles(view: FactsView): Boolean = !blank(view)
+
+    /** Whether the stored-only note sits under the cards: not on a blank page. */
+    fun showsNote(view: FactsView): Boolean = !blank(view)
+
+    /** The line under the header: [EMPTY_LINE] on a blank page, else the view's summary. */
+    fun summary(view: FactsView): String = if (blank(view)) EMPTY_LINE else view.summary
+
     const val ADD_FACT = "fact"
     const val ADD_KEPT = "kept"
 
@@ -65,6 +88,7 @@ object FactsPageRules {
         if (n == 0) PageTile("None", none, false) else PageTile("$n", if (n == 1) one else many, false)
 
     fun page(view: FactsView): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES)
         val rows = view.groups.flatMap { it.rows }
         val kept = rows.count { it.keptFromAi }
         val tiles = listOf(
