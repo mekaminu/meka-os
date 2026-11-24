@@ -121,7 +121,11 @@ object MailAccountRules {
     const val ROW_LINE = "Gmail and Outlook · read, tidied, sent only on your tap"
     const val HEADER = "Navilife reads and tidies your mail and sends only when you tap Send. It never deletes mail itself: " +
         "what it moves to Trash can be put back for 30 days."
-    const val EMPTY = "No mail connected yet. Connect each account: your personal Gmail, Outlook and the business Gmail."
+    /**
+     * Found and fixing week 5, A13: said over the two buttons it sits with (Connect Gmail, Connect Outlook), never three
+     * accounts beside two buttons.
+     */
+    const val EMPTY = "No mail connected yet. Tap Connect Gmail or Connect Outlook, once for each account you use."
     const val OFFLINE = "Couldn't reach your server. Your accounts are still connected; try again."
     /** The label chips, always in this order (both apps). */
     val LABELS: List<MailLabel> = MailLabel.entries.toList()

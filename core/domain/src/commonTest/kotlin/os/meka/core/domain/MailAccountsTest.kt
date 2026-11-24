@@ -59,6 +59,9 @@ class MailAccountsTest {
         val empty = MailAccountRules.view(emptyList(), now)
         assertEquals(MailAccountRules.EMPTY, empty.emptyLine)
         assertNull(empty.toConnect)
+        // Found and fixing week 5, A13: the empty line names the buttons it sits with, never three accounts over two.
+        empty.connects.forEach { assertTrue(MailAccountRules.EMPTY.contains(it.label), "the empty line doesn't name ${it.label}") }
+        assertFalse(MailAccountRules.EMPTY.contains("business", ignoreCase = true))
         // One Gmail without a stored label reads as Personal, and the rest is still to connect.
         val one = MailAccountRules.view(listOf(gmail("alex@example.com", synced = null)), now)
         assertEquals("Personal · Gmail", one.rows.single().title)

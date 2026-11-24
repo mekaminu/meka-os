@@ -31,9 +31,12 @@ struct MailSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(1)
             if let view = model.mail {
+                // Found and fixing week 5, A13: with nothing connected, the line and its two buttons are one card.
                 if let empty = view.emptyLine {
-                    Text(LoneWordGlue.shared.kept(line: empty)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    EmptyMailPanelView(line: empty, connects: view.connects, palette: palette) { provider, note in
+                        Task { await model.connectMail(provider, note: note) }
+                    }
+                    .staggeredAppear(2)
                 }
                 // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓"
                 // (walk-through A16: not over the life audit's own "Nothing needs you from 60 days of mail ✓").
@@ -137,7 +140,7 @@ struct MailSheet: View {
                 if let left = view.toConnect {
                     Text(LoneWordGlue.shared.kept(line: left)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
-                HStack(spacing: MekaSpace.xs) {
+                if view.emptyLine == nil { HStack(spacing: MekaSpace.xs) {
                     ForEach(view.connects, id: \.provider) { c in
                         Button(c.label) {
                             let provider = c.provider, note = c.note
@@ -148,7 +151,7 @@ struct MailSheet: View {
                         .foregroundStyle(palette.accent)
                     }
                 }
-                .padding(.top, MekaSpace.xs)
+                .padding(.top, MekaSpace.xs) }
             } else if model.mailOffline {
                 Text(MailAccountRules.shared.OFFLINE).font(MekaType.itemMeta).foregroundStyle(palette.critical)
             } else {
@@ -203,6 +206,32 @@ struct MailSheet: View {
 /// Life audit, slice 2: the closed card says what the mail turned up in one line with Review; open, what was read, then
 /// one line per finding (each saying where it lives) staggering in on the expand spring, clear lines quieter, and the
 /// foot. Read-only: nothing here acts. Reduce Motion: cross-fades.
+/// Nothing connected: the empty line and Connect Gmail · Connect Outlook in one raised card.
+private struct EmptyMailPanelView: View {
+    let line: String
+    let connects: [MailConnect]
+    let palette: MekaPalette
+    let onConnect: (String, String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(connects, id: \.provider) { c in
+                    Button(c.label) { onConnect(c.provider, c.note) }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.accent)
+                }
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+    }
+}
+
 private struct LifeAuditPanelView: View {
     let review: LifeAuditReview
     let palette: MekaPalette

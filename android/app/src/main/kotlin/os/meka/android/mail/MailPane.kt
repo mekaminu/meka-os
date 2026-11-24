@@ -74,6 +74,7 @@ import os.meka.core.domain.LifeAuditReviewLine
 import os.meka.core.domain.LifeAuditReviewRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MailAccountRow
+import os.meka.core.domain.MailConnect
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailAccountRules
 import os.meka.core.domain.MailAutoDraftRules
@@ -297,7 +298,8 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
             current.isFailure -> Text(MailAccountRules.OFFLINE, style = MekaType.itemMeta, color = Meka.colors.critical)
             else -> {
                 val v = current.getOrThrow()
-                v.emptyLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                // Found and fixing week 5, A13: with nothing connected, the line and its two buttons are one card.
+                v.emptyLine?.let { line -> EmptyMailCard(line, v.connects, Modifier.appear(rememberAppearance(0))) { connect(it.provider, it.note) } }
                 // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓"
                 // (walk-through A16: not over the life audit's own "Nothing needs you from 60 days of mail ✓").
                 MailAutoDraftRules.shownLine(v.repliesLine, audit?.summary?.takeIf { v.rows.isNotEmpty() })?.let { line ->
@@ -341,7 +343,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 RulesCard(v, Modifier.appear(rememberAppearance(v.rows.size + 1))) { id, sets -> setRule(id, sets) }
                 v.toConnect?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                 Spacer(Modifier.height(MekaSpace.l))
-                v.connects.forEach { c -> ConnectButton(c.label) { connect(c.provider, c.note) } }
+                if (v.emptyLine == null) v.connects.forEach { c -> ConnectButton(c.label) { connect(c.provider, c.note) } }
             }
         }
         Crossfade(note, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-note") { n ->
@@ -902,6 +904,18 @@ private fun LabelChip(label: MailLabel, selected: Boolean, onClick: () -> Unit) 
             .semantics { contentDescription = "Label ${label.label}"; this.selected = selected }
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
     )
+}
+
+/** Nothing connected: the empty line and Connect Gmail · Connect Outlook in one raised card. */
+@Composable
+private fun EmptyMailCard(line: String, connects: List<MailConnect>, modifier: Modifier, onConnect: (MailConnect) -> Unit) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        connects.forEach { c -> ConnectButton(c.label) { onConnect(c) } }
+    }
 }
 
 @Composable

@@ -260,6 +260,17 @@ class MailScreensTest {
                 if (v.rows.isNotEmpty() || v.autopilot != null) fail("$name: $v with nothing connected")
                 ScreenShots.assertShows(compose, name, LoneWordGlue.kept(MailAccountRules.EMPTY))
                 v.connects.forEach { ScreenShots.assertShows(compose, name, it.label) }
+                // Found and fixing week 5, A13: the line and its buttons are one card, the buttons straight under the line
+                // (not past the page's other cards), each drawn once.
+                val lineBottom = compose.onNode(hasText(LoneWordGlue.kept(MailAccountRules.EMPTY)), useUnmergedTree = true)
+                    .fetchSemanticsNode().boundsInRoot.bottom
+                v.connects.forEachIndexed { i, c ->
+                    val nodes = compose.onAllNodes(hasText(c.label), useUnmergedTree = true).fetchSemanticsNodes()
+                    if (nodes.size != 1) fail("$name: \"${c.label}\" is drawn ${nodes.size} times")
+                    val gap = nodes[0].boundsInRoot.top - lineBottom
+                    val most = (i + 1) * 80 * compose.density.density
+                    if (gap < 0 || gap > most) fail("$name: \"${c.label}\" sits ${gap / compose.density.density} dp under the empty line, not in its card")
+                }
             }
             Fill.ONE -> {
                 val row = v.rows.singleOrNull() ?: fail("$name: ${v.rows.size} rows for one account")
