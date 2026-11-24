@@ -107,7 +107,8 @@ object GiftRules {
     const val ADD_HINT = "Mum's birthday 3 Nov"
     const val ADD_DESCRIPTION = "Add a birthday or anniversary, for example Mum's birthday 3 Nov, or Wedding anniversary 20 Aug 2015"
     const val IDEA_HINT = "Add a gift idea…"
-    const val EMPTY_LINE = "Nothing entered yet. Type each birthday or anniversary once; Navilife reminds you two weeks ahead and on the day to order."
+    /** Walk-through 2026-11-22 A15: said once, in one raised card with [GiftsPageRules.ADD_FIRST] under it. */
+    const val EMPTY_LINE = "No birthdays or anniversaries yet. Add each once; Navilife reminds you two weeks ahead and on the day to order."
     const val NOT_READ = "Navilife couldn't read that. Try \"Mum's birthday 3 Nov\" or \"Wedding anniversary 20 Aug 2015\"."
     const val NOTE = "Two weeks before, a heads-up with your ideas; on the order-by day, a reminder to order. Delivery is 3 days unless you type \"delivery 5 days\". Navilife never orders anything."
 

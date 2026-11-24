@@ -208,14 +208,31 @@ class PlansPlacesScreensTest {
                 if (fill == Fill.MANY && v.rows.none { it.title == "Grandma Rose's birthday" }) fail("$name: Grandma Rose's row reads ${v.rows.map { it.title }}")
                 // The page shape (slice 3): the three numbers, and Coming up's first row (or the whole list's when nothing's coming).
                 val page = core.giftsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                (page.cards.first().rows.firstOrNull() ?: page.cards[1].rows.firstOrNull())?.let { ScreenShots.assertShows(compose, name, it.name) }
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "No …"/"Nothing" tiles, no cards
+                    // repeating "+ Add", no "Nothing entered yet".
+                    ScreenShots.assertShows(compose, name, GiftsPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { DateGlue.plain(it) }
+                    listOf("Nothing entered", "added yet", "to order yet", "noted yet", "+ Add a birthday", "+ Add puts").forEach { w ->
+                        if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank Gifts page, beside \"${GiftRules.EMPTY_LINE}\"")
+                    }
+                    val said = drawn.count { it.contains("No birthdays or anniversaries yet") }
+                    if (said != 1) fail("$name: \"No birthdays or anniversaries yet\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Gifts page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank Gifts line isn't in its one raised card")
+                    }
+                } else {
+                    (page.cards.first().rows.firstOrNull() ?: page.cards[1].rows.firstOrNull())?.let { ScreenShots.assertShows(compose, name, it.name) }
+                }
                 // Found and fixing, week 5, A6: the second number is the unsorted gifts lit on Coming up, said as two weeks.
-                val lit = page.cards.first().rows.count { it.lit && it.whenText != GiftsPageRules.SORTED }
+                val lit = page.cards.firstOrNull()?.rows?.count { it.lit && it.whenText != GiftsPageRules.SORTED } ?: 0
                 if (lit > 0 && page.tiles[1].number != "$lit") fail("$name: \"${page.tiles[1].number} ${page.tiles[1].label}\" over $lit lit on Coming up")
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(GiftsPageRules.COMING_EMPTY))
             }
             Place.BINS -> {
                 val v = core.binsView.value

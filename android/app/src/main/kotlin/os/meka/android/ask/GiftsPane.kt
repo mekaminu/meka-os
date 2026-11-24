@@ -108,13 +108,22 @@ fun GiftsPane(core: MekaCore, onClose: () -> Unit) {
                 )
             }
             item(key = "summary") {
-                val line = said?.takeIf { !it.refused }?.line ?: v.summary
-                Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "gifts-summary") { s ->
-                    Text(s, style = MekaType.caption, color = Meka.colors.textSecondary,
-                        modifier = Modifier.appear(rememberAppearance(1)).semantics { liveRegion = LiveRegionMode.Polite })
+                if (GiftsPageRules.blank(v)) {
+                    // Walk-through 2026-11-22 A15: nothing entered says it once, in one raised card with its one button.
+                    LifeEmptyCard(v.summary, GiftsPageRules.ADD_FIRST, Modifier.appear(rememberAppearance(1))) {
+                        haptics.tick(); addChosen = GiftsPageRules.ADD_BIRTHDAY; said = null; addOpen = true
+                    }
+                } else {
+                    val line = said?.takeIf { !it.refused }?.line ?: v.summary
+                    Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "gifts-summary") { s ->
+                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary,
+                            modifier = Modifier.appear(rememberAppearance(1)).semantics { liveRegion = LiveRegionMode.Polite })
+                    }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (GiftsPageRules.showsTiles(v)) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(

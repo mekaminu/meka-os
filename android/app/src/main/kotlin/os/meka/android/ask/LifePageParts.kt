@@ -297,3 +297,27 @@ internal fun AddChoiceRows(choices: List<AddChoice>, chosen: String?, onChoose: 
         }
     }
 }
+
+/**
+ * A blank Life page's one line and its one button, in one raised card (walk-through 2026-11-22 A15: an empty page
+ * says what to do once, not in its header, its tiles and each card). The page shows no tiles or cards under it.
+ */
+@Composable
+internal fun LifeEmptyCard(line: String, button: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(MekaRadius.m)
+    Column(
+        modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(shape).lightCardEdge(shape)
+            .background(Meka.colors.surfaceRaised).padding(MekaSpace.m).testTag(LIFE_EMPTY_TAG),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(os.meka.core.domain.LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        Text(
+            button, style = MekaType.itemTitle, color = Meka.colors.onAccent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                .clickable(role = Role.Button) { onClick() }.minTouch()
+                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+        )
+    }
+}
+
+internal const val LIFE_EMPTY_TAG = "life-empty"

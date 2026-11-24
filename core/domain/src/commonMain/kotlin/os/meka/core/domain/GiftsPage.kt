@@ -17,6 +17,20 @@ object GiftsPageRules {
     const val ALL = "Birthdays and anniversaries"
     const val COMING_EMPTY = "Nothing in the next two months · + Add a birthday and it shows here as it comes round"
     const val ALL_EMPTY = "Nothing yet · + Add puts each birthday and anniversary here, once"
+
+    /**
+     * Walk-through 2026-11-22 A15: with nothing entered the page said it four ways (the header's "Nothing entered yet…",
+     * the tiles "No dates added yet · Nothing to order yet · No ideas noted yet", then [COMING_EMPTY] and [ALL_EMPTY],
+     * "+ Add" named three times beside the button). Now [GiftRules.EMPTY_LINE] says it once in one raised card with
+     * [ADD_FIRST] under it (it opens + Add on A birthday), and no tiles or cards follow until an occasion is added.
+     */
+    const val ADD_FIRST = "Add a birthday"
+
+    /** Whether the page is blank: nothing entered, so only the one line and its button show. */
+    fun blank(view: GiftsView): Boolean = view.rows.isEmpty()
+
+    /** Whether the three numbers show: not on a blank page. */
+    fun showsTiles(view: GiftsView): Boolean = !blank(view)
     /** Coming up holds the occasions this many days ahead. */
     const val COMING_DAYS = 60L
     /** What a sorted row says on the right in Coming up. */
@@ -53,7 +67,9 @@ object GiftsPageRules {
     fun rowKey(id: String): String = "gift:$id"
     fun occasionId(rowKey: String): String? = rowKey.takeIf { it.startsWith("gift:") }?.removePrefix("gift:")
 
+    /** The page; a blank one (nothing entered) has no tiles and no cards: the header's one line and button say it all. */
     fun page(view: GiftsView, today: Long): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES)
         val rows = view.rows
         val next = rows.firstOrNull()
         val nextDay = next?.day
@@ -65,7 +81,6 @@ object GiftsPageRules {
             // Found and fixing, week 5, A6: "3 gifts to sort soon" sat over Coming up's four; it counts the unsorted ones
             // in the next two weeks (lit on Coming up), so it says so, as "All sorted for the next two weeks" does.
             toOrder > 0 -> PageTile("$toOrder", if (toOrder == 1) SORT_ONE else SORT_MANY, true)
-            rows.isEmpty() -> PageTile("Nothing", "to order yet", false)
             else -> PageTile("All sorted", "for the next two weeks", false)
         }
         val ideas = rows.sumOf { it.ideas.size }

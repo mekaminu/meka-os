@@ -2280,6 +2280,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.tidy(typed: "big"))
         XCTAssertEqual(rules.idFor(name: "Mary Jane"), "c-mary-jane")
         XCTAssertEqual(KidsView.companion.EMPTY.empty, rules.NO_CHILDREN)
+        // Walk-through 2026-11-22 A15: a blank Gifts page says it once, with no tiles or cards under Add a birthday.
+        XCTAssertTrue(GiftsPageRules.shared.blank(view: GiftsView.companion.EMPTY))
+        XCTAssertFalse(GiftsPageRules.shared.showsTiles(view: GiftsView.companion.EMPTY))
+        XCTAssertEqual(GiftsPageRules.shared.page(view: GiftsView.companion.EMPTY, today: 20_741).tileCount, 0)
+        XCTAssertEqual(GiftsPageRules.shared.ADD_FIRST, "Add a birthday")
         // Walk-through 2026-11-22 A15: a blank Kids page says it once, with no tiles or cards under its button.
         XCTAssertTrue(KidsPageRules.shared.blank(view: KidsView.companion.EMPTY))
         XCTAssertFalse(KidsPageRules.shared.showsTiles(view: KidsView.companion.EMPTY))

@@ -67,13 +67,34 @@ struct GiftsSheet: View {
                 }
                 .staggeredAppear(0)
                 if adding { addForm(page) }
-                Text(said?.line ?? model.gifts?.summary ?? GiftRules.shared.EMPTY_LINE)
-                    .font(MekaType.caption).foregroundStyle(said?.refused == true ? palette.accent : palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+                if let v = model.gifts, GiftsPageRules.shared.blank(view: v), !adding {
+                    // Walk-through 2026-11-22 A15: nothing entered says it once, in one raised card with its button.
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        Text(v.summary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(GiftsPageRules.shared.ADD_FIRST) {
+                            withAnimation(MekaMotion.expand(reduced: reduceMotion)) {
+                                adding = true; addChoice = GiftsPageRules.shared.ADD_BIRTHDAY; said = nil
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(palette.accent)
+                    }
+                    .padding(MekaSpace.m)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                     .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                } else {
+                    Text(said?.line ?? model.gifts?.summary ?? GiftRules.shared.EMPTY_LINE)
+                        .font(MekaType.caption).foregroundStyle(said?.refused == true ? palette.accent : palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+                        .staggeredAppear(1)
+                }
+                if page.tileCount > 0 {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in

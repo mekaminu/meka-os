@@ -70,12 +70,20 @@ class GiftsPageTest {
     }
 
     @Test
-    fun emptySaysItInWordsNeverADash() {
+    fun emptySaysItOnceWithNoTilesOrCards() {
+        // Walk-through 2026-11-22 A15: the blank page said it four ways ("Nothing entered yet…", three "No …" tiles,
+        // Coming up's and the whole list's "+ Add …" lines); now only the header's one line and its button.
         val p = GiftsPageRules.page(GiftsView.EMPTY, today)
-        assertEquals(PageTile("No dates", "added yet", false), p.tileAt(0))
-        assertEquals(PageTile("Nothing", "to order yet", false), p.tileAt(1))
-        assertEquals(PageTile("No ideas", "noted yet", false), p.tileAt(2))
-        assertTrue(p.cards.all { it.rows.isEmpty() && it.empty != null })
+        assertTrue(GiftsPageRules.blank(GiftsView.EMPTY))
+        assertTrue(!GiftsPageRules.showsTiles(GiftsView.EMPTY))
+        assertEquals(0, p.tiles.size)
+        assertEquals(0, p.cards.size)
+        assertEquals(GiftRules.EMPTY_LINE, GiftsView.EMPTY.summary)
+        assertTrue(GiftRules.EMPTY_LINE.startsWith("No birthdays or anniversaries yet."))
+        assertTrue("+ Add" !in GiftRules.EMPTY_LINE && "Nothing entered" !in GiftRules.EMPTY_LINE)
+        assertEquals("Add to Gifts", p.addTitle)
+        assertEquals(GiftsPageRules.ADD_BIRTHDAY, p.addChoices.first().key)
+        assertEquals("Add a birthday", GiftsPageRules.ADD_FIRST)
     }
 
     @Test
