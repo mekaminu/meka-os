@@ -7677,6 +7677,16 @@ class MekaCore(
             refresh()
             return@onCore os.meka.core.domain.MailFindAutoRules.switchedLine(on)
         }
+        // School emails first, slice 3a: "School events from the school's emails" — Turn off / Turn on.
+        if (kindKey == os.meka.core.domain.SchoolAutoRules.ENTITY_ID) {
+            val on = !schoolAutoOn()
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.SchoolAutoRules.ENTITY_ID,
+                os.meka.core.domain.SchoolAutoRules.switchFields(on, nowMs()),
+            )
+            refresh()
+            return@onCore os.meka.core.domain.SchoolAutoRules.switchedLine(on)
+        }
         // "The mic should just add it", slice 1: "Add what you ask for" — Ask first / Just add it.
         if (kindKey == os.meka.core.domain.DirectAddRules.ENTITY_ID) {
             val askFirst = !directAddSetting().askFirst
@@ -10660,6 +10670,7 @@ class MekaCore(
             val cal = ZoneCalendar(timeZone)
             val view = os.meka.core.domain.AutonomyRules.view(
                 trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn(), directAddSetting(),
+                schoolAutoOn(),
             )
             os.meka.core.domain.AskOutcome.Answered(
                 os.meka.core.domain.AskAnswer(
@@ -10910,6 +10921,73 @@ class MekaCore(
                             os.meka.core.domain.EntityTypes.OBLIGATION, os.meka.core.domain.MailRenewalRules.obligationId(f.id),
                             A.obligationFields(f, now, cal),
                         )
+                    }
+                    replica.commitLocal(
+                        os.meka.core.domain.EntityTypes.MAIL_FIND, f.id,
+                        os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, now),
+                    )
+                }
+                added++
+            }
+        }
+        if (added > 0) activityChanged()
+    }
+
+    private fun schoolAutoOn(): Boolean = os.meka.core.domain.SchoolAutoRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.SchoolAutoRules.ENTITY_ID)?.fields,
+    )
+
+    /** ADR-006: may the school's dates add themselves? Level 4 under the rule his switch made; the kill switch holds them. */
+    private fun schoolAutoAllowed(): Boolean {
+        val rule = os.meka.core.domain.SchoolAutoRules.RULE_ID
+        val config = PolicyConfig(
+            levels = mapOf((PolicyDomain.TASKS to ActionType.CREATE_TASK) to AutonomyLevel.AUTO_UNDER_RULE),
+            autoRules = mapOf(rule to ActionType.CREATE_TASK),
+            killSwitch = autonomy.paused(),
+        )
+        val decision = PolicyEngine(config).decide(
+            ActionRequest(
+                ActionType.CREATE_TASK, PolicyDomain.TASKS, provenance = Provenance.DETERMINISTIC_RULE, reversible = true,
+                requestedLevel = AutonomyLevel.AUTO_UNDER_RULE, ruleId = rule,
+            ),
+        )
+        return decision is PolicyDecision.Permit
+    }
+
+    /**
+     * School emails first, slice 3a: with "School events from the school's emails" on (it is unless he turned it off),
+     * each school find with a day still to come is done for him ([os.meka.core.domain.SchoolAutoRules.plan]): its School
+     * line as Add writes it, a task the day before and on the day (or a deadline's task) with their reminders, and the
+     * find answered. One Activity entry per find ("Done for you"), whose Undo removes all of it and brings the card back
+     * (never added on its own again: the find keeps its mark). Same ids on both devices. Nothing is paid, signed or sent.
+     */
+    private fun autoAddSchoolFinds() {
+        if (replica.isRecording || !schoolAutoOn()) return
+        val A = os.meka.core.domain.SchoolAutoRules
+        val S = os.meka.core.domain.SchoolMailRules
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        val finds = activity.mailFinds()
+        val due = A.due(finds, school.items(), today, A.addedToday(finds, now, cal))
+        if (due.isEmpty() || !schoolAutoAllowed()) return
+        var added = 0
+        for (f in due) {
+            val entry = A.activityId(f.id)
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailFindAutoRules.markFields(now))
+            if (activity.has(entry)) continue
+            val plan = A.plan(f, now, cal)
+            runCatching {
+                activity.actRecorded(A.summary(f, plan, now, cal), A.WHY, A.SOURCE, AutonomyLevel.AUTO_UNDER_RULE.name, A.detail(f), entry) {
+                    if (plan.schoolLine) replica.commitLocal(os.meka.core.domain.EntityTypes.SCHOOL_ITEM, S.schoolItemId(f.id), S.schoolFields(f, now))
+                    plan.tasks.forEach { t ->
+                        val id = tasks.createWithId(
+                            t.id,
+                            os.meka.core.domain.NewTask(t.title, notes = t.notes, dueAtMs = if (t.due) cal.toEpochMs(t.day, A.REMIND_MINUTE) else null),
+                            mapOf(os.meka.core.domain.ActionableFields.PROVENANCE_SOURCE to A.SOURCE.fv()),
+                        )
+                        if (t.day > today || t.minute != null) runCatching { tasks.setWhen(id, t.day, t.minute) }
+                        t.remindAtMs?.let { at -> runCatching { tasks.setReminder(id, at) } }
                     }
                     replica.commitLocal(
                         os.meka.core.domain.EntityTypes.MAIL_FIND, f.id,
@@ -14530,6 +14608,8 @@ class MekaCore(
         // Mail finds, slice 3: with "Renewals and promises from mail" on, new finds add themselves first.
         timed("Mail lists") {
             autoAddMailFinds()
+            // School emails first, slice 3a: the school's dates go into School with their tasks and reminders, no tap.
+            autoAddSchoolFinds()
             // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
             archivedChanged()
             // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.
@@ -14853,7 +14933,7 @@ class MekaCore(
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
         publishDoneTodayChoice()
-        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn(), directAddSetting())
+        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn(), directAddSetting(), schoolAutoOn())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()

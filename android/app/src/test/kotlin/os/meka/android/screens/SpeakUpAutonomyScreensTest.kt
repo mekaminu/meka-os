@@ -335,14 +335,14 @@ class SpeakUpAutonomyScreensTest {
         when (fill) {
             Fill.EMPTY -> {
                 if (v.paused) fail("$name: paused with nothing set")
-                if (lit != 2) fail("$name: $lit lit rows on a fresh install (Add what you ask for and Inbox autopilot)")
+                if (lit != 3) fail("$name: $lit lit rows on a fresh install (Add what you ask for, Inbox autopilot and the school's dates)")
             }
             Fill.ONE -> {
-                if (!v.summary.startsWith("Navilife does 3 things")) fail("$name: the summary reads \"${v.summary}\"")
+                if (!v.summary.startsWith("Navilife does 4 things")) fail("$name: the summary reads \"${v.summary}\"")
                 ScreenShots.assertShows(compose, name, AutonomyRules.ASK_FIRST)
             }
             Fill.MANY -> {
-                if (!v.summary.startsWith("Navilife does 5 things")) fail("$name: the summary reads \"${v.summary}\"")
+                if (!v.summary.startsWith("Navilife does 6 things")) fail("$name: the summary reads \"${v.summary}\"")
                 ScreenShots.assertShows(compose, name, LoneWordGlue.kept(AutonomyRules.DECLINED_LINE))
             }
         }
@@ -372,8 +372,8 @@ class SpeakUpAutonomyScreensTest {
 
         // Add a task's Ask first (the last one: Add what you ask for's leads Your lists).
         tap(AutonomyRules.ASK_FIRST, last = true)
-        until { core.autonomyView.value.summary == AutonomyRules.onItsOwnLine(2) }
-        if (core.autonomyView.value.summary != AutonomyRules.onItsOwnLine(2)) fail("$name: Ask first left a kind trusted (${core.autonomyView.value.summary})")
+        until { core.autonomyView.value.summary == AutonomyRules.onItsOwnLine(3) }
+        if (core.autonomyView.value.summary != AutonomyRules.onItsOwnLine(3)) fail("$name: Ask first left a kind trusted (${core.autonomyView.value.summary})")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun speakCoverEmpty() { speak("cover-dark-empty", Fill.EMPTY) }

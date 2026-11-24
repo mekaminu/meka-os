@@ -4,6 +4,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.SchoolAutoRules
+import os.meka.core.domain.SchoolBodyRules
 import os.meka.core.domain.SchoolMailRules
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
@@ -50,6 +52,8 @@ class SchoolMailFacadeTest {
         serverWrite(idi, SchoolMailRules.serverFields(inset, "Oakfield Primary", "Personal", null, received))
         val fold = core("android")
         val mac = core("mac")
+        // Slice 3a: dated finds are done for him unless he turns that off; this test is his own Add.
+        assertEquals(SchoolAutoRules.switchedLine(false), fold.resetTrust(SchoolAutoRules.ENTITY_ID))
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         val card = fold.mailFinds.value!!
         assertEquals(SchoolMailRules.TITLE, card.title)
@@ -148,5 +152,44 @@ class SchoolMailFacadeTest {
         fold.undoMailFind()
         assertTrue(fold.schoolView.value.weekly.isEmpty())
         assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+    }
+
+    @Test
+    fun aDatedSchoolEventIsDoneForHimOnBothAppsAndUndoTakesItAllAway() = runTest {
+        // Slice 3a: the fair email (Sat 24 Oct, 12pm-4pm) read whole: no tap, its School line, a task the day before
+        // and on the day, reminders Wed and Fri at 09:00, and one Activity entry whose Undo removes all of it.
+        val body = "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall. " +
+            "Entry is £1 per adult. Please note there is no parking at school.\n\nThank you"
+        val b = SchoolBodyRules.read("Christmas fair", body, received).finds.single()
+        val id = SchoolMailRules.findId("acc1", b.find)
+        serverWrite(id, SchoolMailRules.serverFields(b.find, "Oakfield Primary", "Personal", "Christmas fair", received) + SchoolBodyRules.findFields(b))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow())
+        assertNull(fold.mailFinds.value)
+        assertEquals("School fair", fold.schoolView.value.dates.single().title)
+        val entry = SchoolAutoRules.activityId(id)
+        val row = fold.activityView.value.days.flatMap { it.rows }.single { it.id == entry }
+        assertTrue(row.summary.startsWith("From the school: School fair · Sat 24 Oct, 12:00–16:00 · in School"), row.summary)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val day = serverTask(SchoolAutoRules.taskId(id, "day"))
+        assertEquals(FieldValue.Text("School fair"), day[os.meka.core.domain.ActionableFields.TITLE])
+        assertEquals(FieldValue.Int64(1_792_569_600_000L), day[os.meka.core.domain.TaskFields.REMIND_AT]) // Wed 21 Oct, 09:00
+        val prep = serverTask(SchoolAutoRules.taskId(id, "prep"))
+        assertTrue((prep[os.meka.core.domain.ActionableFields.TITLE] as FieldValue.Text).value.startsWith("Get ready for School fair"))
+        assertEquals(FieldValue.Int64(1_792_742_400_000L), prep[os.meka.core.domain.TaskFields.REMIND_AT]) // Fri 23 Oct, 09:00
+        // The Mac shows the same, made once.
+        assertNull(mac.mailFinds.value)
+        assertEquals(1, mac.schoolView.value.dates.size)
+        assertEquals(1, mac.activityView.value.days.flatMap { it.rows }.count { it.id == entry })
+
+        // Undo: out of School, the tasks gone, the card back with Add on both, and it never adds itself again.
+        fold.undoActivity(entry)
+        assertTrue(fold.schoolView.value.dates.isEmpty())
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(FieldValue.Bool(true), serverTask(SchoolAutoRules.taskId(id, "day"))[os.meka.core.domain.ActionableFields.DELETED])
+        assertEquals(listOf(id), mac.mailFinds.value!!.rows.map { it.id })
+        assertTrue(mac.schoolView.value.dates.isEmpty())
     }
 }

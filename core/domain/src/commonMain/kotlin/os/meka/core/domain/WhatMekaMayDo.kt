@@ -263,6 +263,24 @@ object AutonomyRules {
         )
     }
 
+    /**
+     * School emails first, slice 3a: Your mail also holds "School events from the school's emails"
+     * ([SchoolAutoRules.row]), on unless Meka turned it off; its Turn on / Turn off goes to the facade's `resetTrust`.
+     */
+    fun view(
+        states: Map<TrustKind, TrustState>, setting: AutonomySetting, cal: LocalCalendar, nowMs: Long,
+        mail: MailAutopilotSetting, mailFinds: Boolean, direct: DirectAddSetting, school: Boolean,
+    ): AutonomyView {
+        val v = view(states, setting, cal, nowMs, mail, mailFinds, direct)
+        val sections = v.sections.map { s ->
+            if (s.label == MAIL_LABEL) s.copy(rows = s.rows + SchoolAutoRules.row(school, setting.paused)) else s
+        }
+        return v.copy(
+            summary = if (setting.paused) v.summary else onItsOwnLine(lit(sections)),
+            sections = sections,
+        )
+    }
+
     /** How many rows are lit (Navilife does them on its own right now). */
     fun lit(sections: List<AutonomySection>): Int = sections.sumOf { s -> s.rows.count { it.onItsOwn } }
 
