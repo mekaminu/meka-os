@@ -881,6 +881,35 @@ object ScreenShots {
         compose.waitForIdle()
         compose.onNodeWithTag("screen").captureRoboImage(file.path)
         assertNotACopy(name, file, opening, "the opening shot")
+        assertNoTestWords(compose, name)
+    }
+
+    /**
+     * Walk-through 2026-11-22 A14 ("Test Who to call / by hand", "Added Test Key accounts to Key accounts"): words a
+     * test typed for itself, never a line he would. Each pattern is one a test once left on screen; the app's own
+     * "Test it: ring …" and "Test the smoke and CO alarms" start lower case after "Test", so they pass.
+     */
+    val TEST_WORDS: List<Regex> = listOf(
+        Regex("""\bTest [A-Z]"""), Regex(""": by hand\b"""), Regex("""(?i)\blorem ipsum\b"""),
+        Regex("""\bSender \d+\b"""), Regex("""\bTODO\b"""), Regex("""(?i)\bfoo(bar)?\b"""),
+    )
+
+    /** The words on screen that read as a test's own ([TEST_WORDS]), for a test to fail on. */
+    fun testWordsOn(compose: ComposeContentTestRule): List<String> {
+        val found = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val texts = (n.config.getOrNull(SemanticsProperties.Text)?.map { it.text } ?: emptyList()) +
+                listOfNotNull(n.config.getOrNull(SemanticsProperties.EditableText)?.text)
+            texts.filter { t -> TEST_WORDS.any { it.containsMatchIn(t) } }.forEach { found += it }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        return found.distinct()
+    }
+
+    fun assertNoTestWords(compose: ComposeContentTestRule, name: String) {
+        val found = testWordsOn(compose)
+        if (found.isNotEmpty()) fail("$name shows a test's own words, not a line he'd type:\n" + found.joinToString("\n") { "- \"$it\"" })
     }
 
     /**

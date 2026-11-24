@@ -567,7 +567,13 @@ class KeptPlacesScreensTest {
                 compose.onAllNodes(hasContentDescription(EmergencyPageRules.spokenHint(choice.key)) and hasSetTextAction())[0].performTextClearance()
                 turns(300)
             }
-            type(p, name, EmergencyPageRules.spokenHint(choice.key), "Test ${section.label}: by hand")
+            // Lines he'd type, not test strings (walk-through 2026-11-22 A14: "Test Who to call / by hand" sat in the shot).
+            val line = when (section) {
+                EmergencySection.CALL -> "Dentist: Bright Smile, 01632 960555"
+                EmergencySection.DOCUMENTS -> "Wills: filing cabinet, green folder"
+                EmergencySection.ACCOUNTS -> "Breakdown cover: Roadside Plus"
+            }
+            type(p, name, EmergencyPageRules.spokenHint(choice.key), line)
             until { v().groups.first { it.section == section.key }.rows.size > before }
             if (v().groups.first { it.section == section.key }.rows.size <= before) fail("$name: + Add → ${choice.label} added nothing")
             until { !shows(hasTestTag(LIFE_ADD_SHEET_TAG)) }

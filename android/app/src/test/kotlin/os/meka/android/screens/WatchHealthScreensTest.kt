@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -148,14 +150,14 @@ class WatchHealthScreensTest {
 
     // ---- Watch ----
 
-    private fun watch(name: String, fill: Fill, connected: Boolean = true, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
+    private fun watch(name: String, fill: Fill, connected: Boolean = true, theme: ThemeChoice = ThemeChoice.DARK, wrongCode: Boolean = false): MekaCore {
         val server = if (connected) Server() else null
         if (fill != Fill.EMPTY) server!!.watches += DeviceLinkCodec.Watch("watch00000000000000b1", WatchLinkRules.DEFAULT_NAME, now - 2 * 60 * minute)
         if (fill == Fill.MANY) server!!.watches += DeviceLinkCodec.Watch("watch00000000000000b2", "Galaxy Watch8 Classic", now - 9 * day)
         val core = setUp(theme, server)
         runBlocking { core.refreshWatches() }
         show { WatchPane(core, onClose = {}) }
-        if (fill == Fill.MANY) {
+        if (wrongCode) {
             // A wrong code typed once the screen is open (opening it reads the watches afresh and clears a problem).
             compose.mainClock.advanceTimeBy(SETTLE_MS)
             compose.waitForIdle()
@@ -195,8 +197,17 @@ class WatchHealthScreensTest {
             }
             fill == Fill.MANY -> {
                 if (v.rows.size != 2) fail("$name: ${v.rows.size} rows for two watches")
-                if (v.problem != WatchLinkRules.WRONG_CODE) fail("$name: a wrong code says \"${v.problem}\"")
-                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(WatchLinkRules.WRONG_CODE))
+                if (wrongCode) {
+                    if (v.problem != WatchLinkRules.WRONG_CODE) fail("$name: a wrong code says \"${v.problem}\"")
+                    ScreenShots.assertShows(compose, name, LoneWordGlue.kept(WatchLinkRules.WRONG_CODE))
+                } else {
+                    // Walk-through 2026-11-22 A14: the two-watch shot showed a typed code and its error; it shows the
+                    // two watches and an empty field, and the wrong code has shots of its own.
+                    if (v.problem != null) fail("$name: two watches linked, but it says \"${v.problem}\"")
+                    val typed = compose.onAllNodes(hasContentDescription("Code from the watch") and hasSetTextAction())
+                        .fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsProperties.EditableText)?.text }
+                    if (typed.any { it.isNotBlank() }) fail("$name: the code field holds \"${typed.first()}\"")
+                }
                 // The newest first.
                 if (v.rows.first().title != WatchLinkRules.DEFAULT_NAME) fail("$name: the older watch is first: ${v.rows}")
             }
@@ -244,6 +255,8 @@ class WatchHealthScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun watchCoverManyLight() { watch("cover-light-many", Fill.MANY, theme = ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun watchInnerEmpty() { watch("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun watchInnerMany() { watch("inner-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun watchCoverWrongCode() { watch("cover-dark-wrong-code", Fill.MANY, wrongCode = true) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun watchCoverWrongCodeLight() { watch("cover-light-wrong-code", Fill.MANY, theme = ThemeChoice.LIGHT, wrongCode = true) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun watchByHand() { linkByHand(watch("cover-dark-by-hand", Fill.EMPTY)) }
 
     // ---- Health ----
