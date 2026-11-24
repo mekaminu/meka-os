@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.Dispatchers
@@ -33,10 +34,17 @@ import os.meka.core.facade.MekaCore
  * A story's picture (news, images slice): the small JPEG the household's server made from the feed's picture, fetched
  * from the server by key (never from the publisher). Until it arrives, or when there is none, an accent-tinted tile
  * with the source's short name ("MD", "BBC", "TC"; [NewsItem.tileMark]), tinted in Barça's colour on Barça stories. The picture cross-fades in over the tile. Decorative: the row
- * already says the title and source, so screen readers skip it.
+ * already says the title and source, so screen readers skip it. Tests find it by its tag: [PICTURE_TAG] once the picture
+ * is drawn, [TILE_TAG] while the tile stands in (walk-through 2026-11-22 A14: every shot showed tiles of initials).
  */
 /** How strongly the picture-less tile is tinted with the accent (or Barça's colour). */
 private const val TILE_TINT = 0.16f
+
+/** The tag a drawn picture carries (screen tests). */
+const val PICTURE_TAG = "news-picture"
+
+/** The tag the picture-less tile carries (screen tests). */
+const val TILE_TAG = "news-tile"
 
 @Composable
 fun NewsThumb(core: MekaCore, item: NewsItem, modifier: Modifier, corner: Dp = MekaRadius.s, initialStyle: TextStyle = MekaType.itemTitle) {
@@ -50,7 +58,7 @@ fun NewsThumb(core: MekaCore, item: NewsItem, modifier: Modifier, corner: Dp = M
     }
     val barca = item.topic == "barca"
     Box(
-        modifier.clip(RoundedCornerShape(corner)).background(Meka.colors.surfaceRaised).clearAndSetSemantics { },
+        modifier.clip(RoundedCornerShape(corner)).background(Meka.colors.surfaceRaised).clearAndSetSemantics { testTag = if (picture != null) PICTURE_TAG else TILE_TAG },
         contentAlignment = Alignment.Center,
     ) {
         Crossfade(picture, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "news-picture") { p ->

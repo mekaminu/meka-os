@@ -1,5 +1,10 @@
 package os.meka.android.screens
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -30,11 +35,14 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.news.NewsPane
+import os.meka.android.news.PICTURE_TAG
+import os.meka.android.news.TILE_TAG
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeadlineFields
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NewsRules
 import os.meka.core.facade.MekaCore
+import os.meka.core.facade.NewsImagesApi
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
@@ -55,7 +63,9 @@ import kotlin.test.fail
  * the chips and Done closes them; Mark all read says "Marked 6 read" with Undo, and Undo brings the dots back; a story
  * opens its detail ("1 of 7"), Next moves to the second; a story with no summary or link never points at a Read full
  * story button that isn't there. Headlines reach the core from a stand-in server held in the test. Invented data only
- * (rule 13).
+ * (rule 13). Walk-through 2026-11-22 A14: every story's picture was a tile of initials, as no story named one; the
+ * stories now carry pictures (drawn here: a pitch, a chip board, a city sky) served by the stand-in server, as real
+ * feeds do, and only the headline-only story keeps its source's tile. The shots fail on a tile where a picture is.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -78,8 +88,56 @@ class NewsScreensTest {
     private val clock = HlcClock("server", { now })
     private var n = 0
 
+    /** The pictures the stand-in server holds, by key. */
+    private val pictures = mutableMapOf<String, ByteArray>()
+
+    /** A story's picture key: 32 hex digits, as the server names them. */
+    private fun keyOf(id: String): String = id.toByteArray().joinToString("") { "%02x".format(it) }.padEnd(32, '0').take(32)
+
+    /** An invented picture for [topic], 240 × 180 like the server's small JPEGs: a pitch, a chip board or a city sky. */
+    private fun picture(topic: String, seed: Int): ByteArray {
+        val w = 240; val h = 180
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        when (topic) {
+            "barca" -> {
+                p.shader = LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF1F7A3A.toInt(), 0xFF0E4D22.toInt(), Shader.TileMode.CLAMP)
+                c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p); p.shader = null
+                p.color = 0x22FFFFFF
+                for (i in 0 until 6 step 2) c.drawRect(i * 40f, 0f, i * 40f + 40f, h.toFloat(), p)
+                p.color = 0xCCFFFFFF.toInt(); p.style = Paint.Style.STROKE; p.strokeWidth = 3f
+                c.drawLine(w / 2f, 0f, w / 2f, h.toFloat(), p)
+                c.drawCircle(w / 2f, h / 2f, 34f + seed * 4, p)
+            }
+            "ai" -> {
+                p.shader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), 0xFF1B2440.toInt(), 0xFF3A2D6B.toInt(), Shader.TileMode.CLAMP)
+                c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p); p.shader = null
+                p.color = 0x5539C6E8; p.strokeWidth = 2f
+                for (x in 0..w step 24) c.drawLine(x.toFloat(), 0f, x.toFloat(), h.toFloat(), p)
+                for (y in 0..h step 24) c.drawLine(0f, y.toFloat(), w.toFloat(), y.toFloat(), p)
+                p.color = 0xFF2A3358.toInt(); c.drawRoundRect(70f - seed * 6, 50f, 170f + seed * 6, 130f, 10f, 10f, p)
+                p.color = 0xFF7FD8F0.toInt(); c.drawRoundRect(96f, 72f, 144f, 108f, 6f, 6f, p)
+            }
+            else -> {
+                p.shader = LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF8FB4D9.toInt(), 0xFFE7D2B0.toInt(), Shader.TileMode.CLAMP)
+                c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p); p.shader = null
+                p.color = 0xFF4A5566.toInt()
+                listOf(20 to 70, 60 to 100, 105 to 60, 150 to 90, 195 to 75).forEach { (x, top) ->
+                    c.drawRect(x.toFloat(), (top + seed * 5).toFloat(), x + 36f, h.toFloat(), p)
+                }
+            }
+        }
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        return out.toByteArray()
+    }
+
     private fun headline(id: String, title: String, topic: String, agoMin: Long, source: String, url: String? = "https://news.example/$id", summary: String? = null) {
+        // A feed that sends a link sends a picture too; the headline-only one sends neither (it keeps its source's tile).
+        val image = url?.let { keyOf(id).also { k -> pictures[k] = picture(topic, pictures.size % 3) } }
         listOfNotNull(
+            image?.let { HeadlineFields.IMAGE to FieldValue.Text(it) },
             HeadlineFields.TITLE to FieldValue.Text(title),
             url?.let { HeadlineFields.URL to FieldValue.Text(it) },
             HeadlineFields.SOURCE to FieldValue.Text(source),
@@ -107,11 +165,12 @@ class NewsScreensTest {
         headline("top-1", "Storm warning for the coast this weekend", "top", 200, "BBC News", url = null)
     }
 
-    /** Navilife's server, as far as News asks it: sync (the headlines it mirrors). */
-    private inner class Server : SyncTransport {
+    /** Navilife's server, as far as News asks it: sync (the headlines it mirrors) and the stories' small pictures. */
+    private inner class Server : SyncTransport, NewsImagesApi {
         val service = SyncService(ops)
         override suspend fun push(request: PushRequest) = service.push(request)
         override suspend fun pull(request: PullRequest) = service.pull(request)
+        override suspend fun newsImage(key: String): ByteArray? = pictures[key]
     }
 
     private fun core(connected: Boolean): MekaCore = MekaCore(
@@ -170,7 +229,22 @@ class NewsScreensTest {
         turns()
     }
 
+    private fun thumbs(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().size
+
+    /** Waits (real time: pictures decode off the main thread) until every story on screen that has a picture shows it. */
+    private fun untilPictures(core: MekaCore) {
+        val bare = core.newsPlace.value.items.count { it.imageKey == null }
+        var i = 0
+        while ((thumbs(TILE_TAG) > bare || thumbs(PICTURE_TAG) == 0) && i++ < 80) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns(1_000)
+    }
+
     private fun check(core: MekaCore, name: String, lanesInView: Boolean = true) {
+        if (lanesInView && core.newsPlace.value.items.any { it.imageKey != null }) untilPictures(core)
         compose.waitForIdle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("news", name))
@@ -181,6 +255,10 @@ class NewsScreensTest {
         ScreenShots.assertNumbersWhole(compose, name)
         ScreenShots.assertShows(compose, name, "News")
         val place = core.newsPlace.value
+        // A14: a story whose feed names a picture shows it, never its source's initials in its place.
+        val bareStories = place.items.count { it.imageKey == null }
+        if (thumbs(TILE_TAG) > bareStories) fail("$name: ${thumbs(TILE_TAG)} initials tiles drawn, but only $bareStories stories have no picture")
+        if (lanesInView && place.items.any { it.imageKey != null } && thumbs(PICTURE_TAG) == 0) fail("$name: stories with pictures, but none drawn")
         val lines = listOfNotNull(place.emptyLine, place.unreadLine, place.followsLine, place.spanishLine, place.sourcesCaption, place.sourcesLine) +
             place.quiet + place.lanes.map { it.sources } + place.items.map { it.meta }
         ScreenShots.assertNoLoneWords(compose, name, lines)
@@ -267,6 +345,7 @@ class NewsScreensTest {
         untilShows(name, core.newsPlace.value.items.first().title)
         tap(name, "Mark all read", hasText("Mark all read"))
         untilShows(name, LoneWordGlue.kept("Marked 6 read"))
+        untilPictures(core)
         if (core.newsPlace.value.unreadLine != "All read · new stories get a dot") fail("$name: after Mark all read \"${core.newsPlace.value.unreadLine}\"")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("news", name))
         tap(name, "Undo", hasText("Undo"))
@@ -283,6 +362,11 @@ class NewsScreensTest {
         untilShows(name, first.title)
         tap(name, "story", hasText(first.title))
         untilShows(name, "1 of 7")
+        // The story leads with its picture (A14), not its source's initials.
+        var w = 0
+        while (thumbs(PICTURE_TAG) == 0 && w++ < 80) { Shadows.shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(50); compose.mainClock.advanceTimeBy(100) }
+        turns(1_000)
+        if (thumbs(PICTURE_TAG) == 0) fail("$name: the story's picture never drew")
         ScreenShots.assertShows(compose, name, "Read full story")
         ScreenShots.assertShows(compose, name, first.summary ?: fail("$name: the first Barça story has a summary"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("news", name))
