@@ -27,14 +27,20 @@ class KidsPageTest {
     )
 
     @Test
-    fun noChildrenIsOneCardPointingAtAboutYouAndThreeWords() {
+    fun noChildrenSaysItOnceWithNoTilesOrCards() {
+        // Walk-through 2026-11-22 A15: the blank page said it four ways ("About you first", "About you ›", three
+        // "None"/"No …" tiles, "No children yet"); now only the header's one line and its button.
         val p = KidsPageRules.page(KidsView.EMPTY, today)
-        assertEquals(3, p.tiles.size)
-        assertTrue(p.tiles.none { it.number.isBlank() || it.number == "—" })
-        // Each reads as one sentence (A16): "None needed this week", "No fees kept yet", "No sizes kept yet".
-        assertEquals(listOf("None needed this week", "No fees kept yet", "No sizes kept yet"), p.tiles.map { "${it.number} ${it.label}" })
-        assertEquals(listOf("Children"), p.cards.map { it.title })
-        assertEquals(KidsPageRules.CHILDREN_EMPTY, p.cards[0].empty)
+        assertTrue(KidsPageRules.blank(KidsView.EMPTY))
+        assertTrue(!KidsPageRules.showsTiles(KidsView.EMPTY))
+        assertEquals(0, p.tiles.size)
+        assertEquals(0, p.cards.size)
+        assertEquals(KidsRules.NO_CHILDREN, KidsView.EMPTY.summary)
+        assertEquals(KidsRules.NO_CHILDREN, KidsView.EMPTY.empty)
+        assertTrue(KidsRules.NO_CHILDREN.startsWith("No children yet."))
+        // Said once: About you is named a single time in the line; the button opens it.
+        assertEquals(1, Regex("About you").findAll(KidsRules.NO_CHILDREN).count())
+        assertTrue("first" !in KidsRules.NO_CHILDREN)
         assertEquals("Add to Kids", p.addTitle)
         assertEquals(KidsPageRules.ADD_CHOICES, p.addChoices)
     }

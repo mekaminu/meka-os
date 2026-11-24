@@ -59,6 +59,7 @@ import os.meka.core.domain.KidMoney
 import os.meka.core.domain.KidFeeRow
 import os.meka.core.domain.KidSaved
 import os.meka.core.domain.KidsPageRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.KidsRules
 import os.meka.core.domain.KidsWeekRules
 import os.meka.core.facade.MekaCore
@@ -138,20 +139,24 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
             }
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "kids-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    val empty = v.empty
+                    if (empty != null) {
+                        // A15: no children yet says it once, in one raised card with its one button.
+                        KidsEmptyCard(empty) { haptics.tick(); onAboutYou() }
+                    } else {
+                        Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "kids-summary") { s ->
+                            Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
                     }
                     val line = if (addOpen) null else addSaid
                     Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "kids-add-line") { l ->
                         l?.let { Text(it.line, style = MekaType.caption, color = addSaidColor) }
                     }
-                    if (v.empty != null) {
-                        Text("About you ›", style = MekaType.itemMeta, color = Meka.colors.accent,
-                            modifier = Modifier.clickable(role = Role.Button) { onAboutYou() }.minTouch())
-                    }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (KidsPageRules.showsTiles(v)) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(
@@ -161,7 +166,7 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
                     )
                 }
             }
-            item(key = "foot") {
+            if (!KidsPageRules.blank(v)) item(key = "foot") {
                 Text(KidsRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.l))
             }
@@ -612,3 +617,23 @@ private fun KidFeeRowView(fee: KidFeeRow, onPaid: () -> Unit, onRemove: () -> Un
                 .semantics { contentDescription = "Remove ${fee.title}" }.minTouch().padding(MekaSpace.xs))
     }
 }
+
+/** Kids with no children yet (walk-through 2026-11-22 A15): the one line and Open About you in one raised card. */
+@Composable
+private fun KidsEmptyCard(line: String, onAboutYou: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surfaceRaised).padding(MekaSpace.m).testTag(KIDS_EMPTY_TAG),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        Text(
+            KidsPageRules.OPEN_ABOUT_YOU, style = MekaType.itemTitle, color = Meka.colors.onAccent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                .clickable(role = Role.Button) { onAboutYou() }.minTouch()
+                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.s),
+        )
+    }
+}
+
+internal const val KIDS_EMPTY_TAG = "kids-empty"

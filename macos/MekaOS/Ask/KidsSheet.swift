@@ -88,23 +88,35 @@ struct KidsSheet: View {
                 .staggeredAppear(0)
                 if adding { addForm(page) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    if let empty = v.empty {
+                        // Walk-through 2026-11-22 A15: no children yet says it once, in one raised card with its button.
+                        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                            Text(empty).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button(KidsPageRules.shared.OPEN_ABOUT_YOU) { dismiss(); model.showAboutYou = true }
+                                .buttonStyle(.borderedProminent)
+                                .tint(palette.accent)
+                        }
+                        .padding(MekaSpace.m)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                    } else {
+                        Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    }
                     if !adding, let addSaid {
                         Text(addSaid.line).font(MekaType.caption)
                             .foregroundStyle(addSaid.refused ? palette.accent : palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .contentTransition(.opacity)
                     }
-                    if let empty = v.empty {
-                        Button("About you…") { dismiss(); model.showAboutYou = true }
-                            .accessibilityLabel(empty)
-                    }
                 }
                 .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                if KidsPageRules.shared.showsTiles(view: v) {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in
@@ -118,8 +130,10 @@ struct KidsSheet: View {
                             })
                             .staggeredAppear(3 + i)
                         }
-                        Text(KidsRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if !KidsPageRules.shared.blank(view: v) {
+                            Text(KidsRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 .frame(maxHeight: 420)

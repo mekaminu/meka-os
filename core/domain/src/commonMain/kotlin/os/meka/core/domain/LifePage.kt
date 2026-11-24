@@ -54,7 +54,7 @@ data class LifePageView(
     val title: String,
     /** What the ⓘ unfolds: one or two plain sentences. */
     val info: String,
-    /** Always three. */
+    /** Three, or none on a blank page (Lists and Kids with nothing in them say it once in their header). */
     val tiles: List<PageTile>,
     val cards: List<PageCard>,
     /** "Add to Car". */

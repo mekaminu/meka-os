@@ -43,8 +43,18 @@ object KidsPageRules {
     /** Walk-through 2026-11-22, A7: the card holds the next 7 days (half term next Monday), never "This week". */
     const val WEEK_TITLE = "Next 7 days"
     const val WEEK_EMPTY = "Nothing they need in the next 7 days"
-    /** The header already says to add them in About you, so the card doesn't say it again (A15/A16: "you first" alone). */
-    const val CHILDREN_EMPTY = "No children yet"
+    /**
+     * Walk-through 2026-11-22 A15: with no children the page said it four ways (the header line, an "About you ›" link,
+     * three "None"/"No …" tiles and a "No children yet" card). Now [KidsRules.NO_CHILDREN] says it once in one raised
+     * card with [OPEN_ABOUT_YOU] under it, and no tiles, cards or size note follow until a child is added.
+     */
+    const val OPEN_ABOUT_YOU = "Open About you"
+
+    /** Whether the page is blank: no children yet, so only the one line and its button show. */
+    fun blank(view: KidsView): Boolean = view.isEmpty
+
+    /** Whether the three numbers show: not on a blank page. */
+    fun showsTiles(view: KidsView): Boolean = !blank(view)
     const val FEES_EMPTY = "No club fees. Tap + Add and pick “A club fee”."
     const val MONEY_EMPTY = "No chores or pocket money. Tap + Add and pick “A chore”."
     /** A child's row on the right once their sizes are three months old. */
@@ -172,14 +182,14 @@ object KidsPageRules {
         else PageTile("$kept of ${view.kids.size}", "sizes kept", false)
     }
 
+    /** The page; a blank one (no children yet) has no tiles and no cards: the header's one line and button say it all. */
     fun page(view: KidsView, today: Long): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES)
         val cards = buildList {
             if (view.week != null) add(LifePageRules.card(WEEK, cardTitle(WEEK), allRows(view, WEEK, today), empty = WEEK_EMPTY))
-            add(LifePageRules.card(CHILDREN, cardTitle(CHILDREN), allRows(view, CHILDREN, today), empty = CHILDREN_EMPTY))
-            if (!view.isEmpty) {
-                add(LifePageRules.card(FEES, cardTitle(FEES), allRows(view, FEES, today), empty = FEES_EMPTY))
-                add(LifePageRules.card(MONEY, cardTitle(MONEY), allRows(view, MONEY, today), empty = MONEY_EMPTY))
-            }
+            add(LifePageRules.card(CHILDREN, cardTitle(CHILDREN), allRows(view, CHILDREN, today)))
+            add(LifePageRules.card(FEES, cardTitle(FEES), allRows(view, FEES, today), empty = FEES_EMPTY))
+            add(LifePageRules.card(MONEY, cardTitle(MONEY), allRows(view, MONEY, today), empty = MONEY_EMPTY))
         }
         return LifePageView(TITLE, INFO, listOf(weekTile(view), feeTile(view, today), thirdTile(view)), cards, ADD_TITLE, ADD_CHOICES)
     }

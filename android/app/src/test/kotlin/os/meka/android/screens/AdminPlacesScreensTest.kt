@@ -50,6 +50,7 @@ import os.meka.android.ask.SchoolPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.DateGlue
 import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.AppointmentRules
 import os.meka.core.domain.AppointmentsPageRules
@@ -201,18 +202,27 @@ class AdminPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY) {
                     if (v.summary != KidsRules.NO_CHILDREN) fail("$name: \"${v.summary}\" with no children")
-                    ScreenShots.assertShows(compose, name, "About you")
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "None"/"No …" tiles, no card, no
+                    // "About you ›" link beside a line that already names it, no size note for children not there.
+                    ScreenShots.assertShows(compose, name, KidsPageRules.OPEN_ABOUT_YOU)
+                    val drawn = ScreenShots.texts(compose).map { DateGlue.plain(it) }
+                    listOf("About you ›", "About you first", "needed this week", "kept yet", "Typing a size").forEach { w ->
+                        if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank Kids page, beside \"${KidsRules.NO_CHILDREN}\"")
+                    }
+                    if (drawn.count { it.contains("No children yet") } != 1) fail("$name: \"No children yet\" said ${drawn.count { it.contains("No children yet") }} times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Kids page")
+                    }
                 }
                 if (fill == Fill.MANY && v.kids.size != 2) fail("$name: ${v.kids.size} cards for two children")
                 if (fill == Fill.MANY && v.week?.isEmpty != false) fail("$name: Kids' week is empty with half term in it (${v.week?.line})")
                 // The page shape (slice 15): the three numbers, and the first card's first row (or its empty line).
                 val page = core.kidsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(KidsPageRules.CHILDREN_EMPTY))
                 // Walk-through 2026-11-02 A12: an empty field's hint says "e.g.", and a child with only some sizes kept
                 // is never "Sizes checked" as though all were.
                 v.kids.forEach { k ->

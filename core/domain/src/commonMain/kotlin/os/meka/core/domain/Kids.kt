@@ -122,7 +122,7 @@ object KidsRules {
     /** Three months, near enough: a size typed or confirmed more than this long ago asks for a check. */
     const val CHECK_DAYS = 91
     const val MAX_SIZE = 16
-    const val NO_CHILDREN = "Add the children in Ask → Settings → About you first; each gets a card here for their sizes."
+    const val NO_CHILDREN = "No children yet. Each child you add in About you gets a card here for their sizes."
     const val NO_SIZES = "No sizes yet · add what they wear now"
     const val NOT_SIZE = "A size has a number in it (13, 1½, 7–8 years, 26\") or is XS, S, M, L or XL, up to 16 characters."
     const val NOT_CHILD = "That child isn't in About you any more."

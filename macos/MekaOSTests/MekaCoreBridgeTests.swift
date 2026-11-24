@@ -2280,6 +2280,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.tidy(typed: "big"))
         XCTAssertEqual(rules.idFor(name: "Mary Jane"), "c-mary-jane")
         XCTAssertEqual(KidsView.companion.EMPTY.empty, rules.NO_CHILDREN)
+        // Walk-through 2026-11-22 A15: a blank Kids page says it once, with no tiles or cards under its button.
+        XCTAssertTrue(KidsPageRules.shared.blank(view: KidsView.companion.EMPTY))
+        XCTAssertFalse(KidsPageRules.shared.showsTiles(view: KidsView.companion.EMPTY))
+        XCTAssertEqual(KidsPageRules.shared.page(view: KidsView.companion.EMPTY, today: 20_741).tileCount, 0)
+        XCTAssertEqual(KidsPageRules.shared.OPEN_ABOUT_YOU, "Open About you")
         // Slice 2: a typed club fee is read (or turned away with why).
         XCTAssertEqual(rules.readFee(typed: "Football £35 monthly", today: 20_741).second as? String, rules.FEE_NO_DATE)
         XCTAssertEqual(rules.readFee(typed: "Football £35 monthly from 1 Nov", today: 20_741).first?.title, "Football")
