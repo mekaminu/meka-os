@@ -2964,6 +2964,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.joined(things: ["milk", "batteries"]), "milk and batteries")
         XCTAssertEqual(ErrandView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)
         XCTAssertTrue(ErrandView.companion.EMPTY.places.isEmpty)
+        // Walk-through 2026-11-22 A15: the blank page says it once, with one button, no tiles or cards.
+        let errandsPage = ErrandsPageRules.shared
+        XCTAssertTrue(errandsPage.blank(view: ErrandView.companion.EMPTY))
+        XCTAssertEqual(errandsPage.ADD_FIRST, "Add an errand")
+        XCTAssertEqual(errandsPage.page(view: ErrandView.companion.EMPTY, near: nil).tileCount, 0)
     }
 
     func testFactsPageReachesSwift() {

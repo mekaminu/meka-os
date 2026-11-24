@@ -180,7 +180,7 @@ class LifePlacesScreensTest {
             }
             Place.ERRANDS -> {
                 val v = core.errandsView.value
-                ScreenShots.assertShows(compose, name, v.summary)
+                ScreenShots.assertShows(compose, name, ErrandsPageRules.summary(v))
                 if (fill == Fill.EMPTY && v.summary != ErrandRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.places.size != 3) fail("$name: ${v.places.size} places for three")
                 // Slice 15: every row reads as a sentence ("Buy first-class stamps", not lower case).
@@ -189,14 +189,31 @@ class LifePlacesScreensTest {
                 val rows = v.places.flatMap { it.rows }
                 // The page shape (slice 7): the three numbers, and Waiting's first place (or its empty line).
                 val page = core.errandsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                page.cards.firstOrNull()?.rows?.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 // Found and fixing, week 5, A6: Waiting's pill counts the errands the first number does, not the places.
-                val waiting = page.cards.first()
-                if (waiting.showsCount && "${waiting.count}" != page.tiles.first().number) fail("$name: Waiting ${waiting.count} beside \"${page.tiles.first().number} ${page.tiles.first().label}\"")
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(ErrandsPageRules.WAITING_EMPTY))
+                page.cards.firstOrNull()?.let { waiting ->
+                    if (waiting.showsCount && "${waiting.count}" != page.tiles.first().number) fail("$name: Waiting ${waiting.count} beside \"${page.tiles.first().number} ${page.tiles.first().label}\"")
+                }
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "None" tiles, no Waiting card naming
+                    // "+ Add", no colon note.
+                    ScreenShots.assertShows(compose, name, ErrandsPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { os.meka.core.domain.DateGlue.plain(it) }
+                    listOf("No errands waiting", "Tap + Add", "errands waiting", "Done lately", "Near-me reminders", "a colon").forEach { w ->
+                        if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank Errands page, beside \"${ErrandsPageRules.EMPTY_LINE}\"")
+                    }
+                    val said = drawn.count { it.contains("No errands yet") }
+                    if (said != 1) fail("$name: \"No errands yet\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Errands page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank Errands line isn't in its one raised card")
+                    }
+                }
                 rows.forEach { r -> if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case") }
                 val raw = rows.map { it.title }.filter { it.first().isLowerCase() }.toSet()
                 ScreenShots.texts(compose).firstOrNull { it in raw }?.let { fail("$name: \"$it\" reads lower case") }

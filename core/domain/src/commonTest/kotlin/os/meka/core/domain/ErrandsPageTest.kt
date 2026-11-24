@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -20,8 +21,9 @@ class ErrandsPageTest {
             listOf(PageTile("3", "errands waiting", false), PageTile("2", "places", false), PageTile("1", "done this week", false)),
             p.tiles,
         )
-        val empty = ErrandsPageRules.page(ErrandView.EMPTY)
-        assertEquals(listOf("No", "No", "None"), empty.tiles.map { it.number })
+        // Nothing waiting but one ticked off (a blank page has no tiles at all).
+        val empty = ErrandsPageRules.page(ErrandView(emptyList(), listOf(stamps), ErrandRules.EMPTY_SUMMARY, 0))
+        assertEquals(listOf("No", "No", "1"), empty.tiles.map { it.number })
         assertTrue(empty.tiles.all(LifePageRules::readsWhole))
         assertEquals(listOf("things"), p.addChoices.map { it.key })
         assertEquals(ErrandRules.HINT, ErrandsPageRules.hint(ErrandsPageRules.ADD_THINGS))
@@ -51,10 +53,42 @@ class ErrandsPageTest {
     }
 
     @Test
-    fun emptyCardsSayWhatToDo() {
-        val p = ErrandsPageRules.page(ErrandView.EMPTY)
+    fun aBlankPageSaysItOnceWithNoTilesCardsOrNote() {
+        // Walk-through 2026-11-22 A15: the blank page said it four ways (the summary, three "None" tiles, Waiting's line
+        // naming "+ Add", the colon note); now only the header's one line and its button.
+        val v = ErrandView.EMPTY
+        val p = ErrandsPageRules.page(v)
+        assertTrue(ErrandsPageRules.blank(v))
+        assertFalse(ErrandsPageRules.showsTiles(v))
+        assertFalse(ErrandsPageRules.showsNote(v))
+        assertEquals(0, p.tileCount)
+        assertEquals(0, p.cards.size)
+        assertEquals(ErrandsPageRules.EMPTY_LINE, ErrandsPageRules.summary(v))
+        assertFalse("+ Add" in ErrandsPageRules.EMPTY_LINE)
+        assertEquals("Add an errand", ErrandsPageRules.ADD_FIRST)
+        assertEquals(listOf(ErrandsPageRules.ADD_THINGS), p.addChoices.map { it.key })
+        // The Fold's near-me card waits too: it reminds only at a waiting errand's place.
+        val off = ErrandPlaceRules.setting(false, false, false, 0)
+        val fold = ErrandsPageRules.page(v, off)
+        assertEquals(0, fold.cards.size)
+        assertEquals(ErrandsPageRules.INFO_NEAR, fold.info)
+        // One errand brings the tiles, the cards and the note back.
+        assertFalse(ErrandsPageRules.blank(view))
+        assertTrue(ErrandsPageRules.showsNote(view))
+        assertEquals(view.summary, ErrandsPageRules.summary(view))
+        assertEquals(3, ErrandsPageRules.page(view).tileCount)
+    }
+
+    @Test
+    fun onlyDoneErrandsIsNotBlankAndWaitingSaysWhatToDo() {
+        val v = ErrandView(emptyList(), listOf(stamps), ErrandRules.EMPTY_SUMMARY, 0)
+        assertFalse(ErrandsPageRules.blank(v))
+        val p = ErrandsPageRules.page(v)
+        assertEquals(3, p.tileCount)
         assertEquals(ErrandsPageRules.WAITING_EMPTY, p.cardAt(0).empty)
-        assertEquals(ErrandsPageRules.DONE_EMPTY, p.cardAt(1).empty)
+        assertEquals(ErrandRules.EMPTY_SUMMARY, ErrandsPageRules.summary(v))
+        val done = ErrandsPageRules.page(view.copy(done = emptyList()))
+        assertEquals(ErrandsPageRules.DONE_EMPTY, done.cardAt(1).empty)
     }
 
     @Test

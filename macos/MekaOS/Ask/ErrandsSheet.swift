@@ -66,10 +66,7 @@ struct ErrandsSheet: View {
                 .staggeredAppear(0)
                 if adding { addForm(page) }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+                    summaryLine(v)
                     if !adding, let said {
                         Text(said.line).font(MekaType.caption)
                             .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
@@ -79,7 +76,9 @@ struct ErrandsSheet: View {
                     }
                 }
                 .staggeredAppear(1)
-                LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                if page.tileCount > 0 {
+                    LifeNumberTiles(page: page, palette: palette).staggeredAppear(2)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(0..<Int(page.cardCount), id: \.self) { i in
@@ -93,8 +92,10 @@ struct ErrandsSheet: View {
                             })
                             .staggeredAppear(3 + i)
                         }
-                        Text(ErrandRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if page.tileCount > 0 {
+                            Text(ErrandRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 .frame(maxHeight: 420)
@@ -144,6 +145,26 @@ struct ErrandsSheet: View {
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+
+    /// Under the header: the view's line, or on a blank page (walk-through 2026-11-22 A15) its one line and button in
+    /// one raised card, which opens + Add.
+    @ViewBuilder
+    private func summaryLine(_ v: ErrandView) -> some View {
+        let rules = ErrandsPageRules.shared
+        if rules.blank(view: v) {
+            if !adding {
+                LifeEmptyCard(line: rules.EMPTY_LINE, button: rules.ADD_FIRST, palette: palette) {
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { adding = true; said = nil }
+                }
+                .transition(.opacity)
+            }
+        } else {
+            Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
+        }
     }
 
     @ViewBuilder

@@ -24,6 +24,29 @@ object ErrandsPageRules {
     const val DONE_EMPTY = "Nothing ticked off in the last week"
     const val GONE = "Nothing waiting there now"
 
+    /**
+     * Walk-through 2026-11-22 A15: a blank Errands page said it four ways (the summary "No errands waiting", the tiles
+     * "None errands waiting · None places · None done this week", Waiting's line naming "+ Add" and the colon note). Now
+     * this line is said once, in one raised card with [ADD_FIRST] under it, and no tiles, cards or note follow until an
+     * errand is added.
+     */
+    const val EMPTY_LINE = "No errands yet. Add a place once with what to do there, for example Tesco: milk, batteries; tick each off when it's done."
+
+    /** The blank page's one button under [EMPTY_LINE]; it opens + Add on Things to do at a place. */
+    const val ADD_FIRST = "Add an errand"
+
+    /** Whether the page is blank: nothing waiting and nothing ticked off lately, so only the one line and button show. */
+    fun blank(view: ErrandView): Boolean = view.places.isEmpty() && view.done.isEmpty()
+
+    /** Whether the three numbers show: not on a blank page. */
+    fun showsTiles(view: ErrandView): Boolean = !blank(view)
+
+    /** Whether the colon note sits under the cards: not on a blank page, where the card's one line says it. */
+    fun showsNote(view: ErrandView): Boolean = !blank(view)
+
+    /** The line under the header: [EMPTY_LINE] on a blank page, else the view's summary. */
+    fun summary(view: ErrandView): String = if (blank(view)) EMPTY_LINE else view.summary
+
     const val ADD_THINGS = "things"
     val ADD_CHOICES = listOf(
         AddChoice(ADD_THINGS, "Things to do at a place", "The place, a colon, then what to do there, e.g. Tesco: milk, batteries"),
@@ -54,8 +77,13 @@ object ErrandsPageRules {
         else -> emptyList()
     }
 
-    /** [near] is the Fold's switch (null on the Mac, which has no near-me card). */
+    /**
+     * [near] is the Fold's switch (null on the Mac, which has no near-me card). A blank page (nothing waiting or done)
+     * has no tiles and no cards, the near-me card included (it reminds only at a waiting errand's place): the header's
+     * one line and button say it all.
+     */
     fun page(view: ErrandView, near: ErrandNearSetting? = null): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, if (near != null) INFO_NEAR else INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES)
         val waiting = view.count
         val places = view.places.size
         val done = view.done.size

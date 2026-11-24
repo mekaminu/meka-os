@@ -155,8 +155,15 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "errand-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    if (ErrandsPageRules.blank(v)) {
+                        // Walk-through 2026-11-22 A15: no errands says it once, in one raised card with its one button.
+                        LifeEmptyCard(ErrandsPageRules.EMPTY_LINE, ErrandsPageRules.ADD_FIRST) {
+                            haptics.tick(); addChosen = ErrandsPageRules.ADD_THINGS; said = null; addOpen = true
+                        }
+                    } else {
+                        Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "errand-summary") { s ->
+                            Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
                     }
                     // What the last add said, while no sheet is open.
                     if (!addOpen) Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "errand-line") { l ->
@@ -164,7 +171,9 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (ErrandsPageRules.showsTiles(v)) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(
@@ -174,9 +183,11 @@ fun ErrandsPane(core: MekaCore, onClose: () -> Unit) {
                     )
                 }
             }
-            item(key = "note") {
-                Text(ErrandRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+            if (ErrandsPageRules.showsNote(v)) {
+                item(key = "note") {
+                    Text(ErrandRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+                }
             }
         }
         // + Add: the place, a colon, then what to do there.
