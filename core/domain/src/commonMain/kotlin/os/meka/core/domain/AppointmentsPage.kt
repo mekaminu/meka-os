@@ -19,6 +19,14 @@ object AppointmentsPageRules {
     const val NEXT_DUE = "Next due"
     const val TO_BOOK_EMPTY = "Nothing to book · all in hand"
     const val EMPTY = "No appointments yet · + Add the dentist, a haircut, the optician…"
+    /**
+     * Walk-through 2026-11-22 A15: with nothing kept up with the page said it four ways (the summary "No appointments
+     * yet · add the ones you keep up with", the tiles "None due to book · None booked · None kept up with", To book's
+     * [EMPTY] naming "+ Add", and the typed-line note under it all). Now this line says it once in one raised card with
+     * [ADD_FIRST] under it (it opens + Add on A common one), and no tiles, cards or note follow until one is added.
+     */
+    const val EMPTY_SUMMARY = "No appointments yet. Add the dentist, a haircut or the optician once with how often you go; Needs you asks when one comes due."
+    const val ADD_FIRST = "Add an appointment"
     const val GONE = "That isn't on your appointments now"
     /** The row sheet's fields. */
     const val BOOKED_FOR = "Booked for…"
@@ -55,6 +63,21 @@ object AppointmentsPageRules {
     }
 
     fun rowKey(id: String): String = "appt:$id"
+
+    /** Whether the page is blank: nothing kept up with, so only the one line and its button show. */
+    fun blank(view: AppointmentView): Boolean = view.rows.isEmpty()
+
+    /** Whether the three numbers show: not on a blank page. */
+    fun showsTiles(view: AppointmentView): Boolean = !blank(view)
+
+    /** Whether the typed-line note sits under the cards: not on a blank page, where the card's one line says it. */
+    fun showsNote(view: AppointmentView): Boolean = !blank(view)
+
+    /** Under the header: the view's count ("5 appointments · 1 due"), or [EMPTY_SUMMARY] on a blank page. */
+    fun summary(view: AppointmentView): String = if (blank(view)) EMPTY_SUMMARY else view.summary
+
+    /** What [ADD_FIRST] opens + Add on: A common one while there's one to offer, else Something you keep up with. */
+    fun firstChoice(view: AppointmentView): String = if (view.suggestions.isNotEmpty()) ADD_COMMON else ADD_KEPT
 
     /** A booked visit this near (days) is lit. */
     const val SOON_DAYS = 7
@@ -118,7 +141,9 @@ object AppointmentsPageRules {
         return PageTile(if (n > 0) "$n" else "None", "kept up with", false)
     }
 
+    /** The page; a blank one (nothing kept up with) has no tiles and no cards: the header's one line and button say it all. */
     fun page(view: AppointmentView, today: Long): LifePageView {
+        if (blank(view)) return LifePageView(TITLE, INFO, emptyList(), emptyList(), ADD_TITLE, addChoices(view))
         val cards = buildList {
             add(LifePageRules.card(TO_BOOK, TO_BOOK, allRows(view, TO_BOOK, today), empty = if (view.rows.isEmpty()) EMPTY else TO_BOOK_EMPTY))
             allRows(view, BOOKED, today).takeIf { it.isNotEmpty() }?.let { add(LifePageRules.card(BOOKED, BOOKED, it)) }

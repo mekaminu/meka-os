@@ -182,20 +182,36 @@ class AdminPlacesScreensTest {
                 val v = core.appointmentsView.value
                 // Slice 16's findings: "last went 1 / Mar 2025" and "was due Mon / 12 Oct" never split.
                 ScreenShots.assertDatesWhole(compose, name)
-                ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != AppointmentRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
+                if (fill != Fill.EMPTY) ScreenShots.assertShows(compose, name, v.summary)
                 // The walk-through 2026-11-08 A8: never "all in hand" over a lit row (due, or asking when he last went).
                 if (v.summary.endsWith("all in hand") && v.rows.any { it.lit }) fail("$name: \"${v.summary}\" over a row that needs him")
                 if (fill == Fill.MANY && v.rows.size != 5) fail("$name: ${v.rows.size} rows for five")
                 // The page shape (slice 10): the three numbers, and To book's first row (or its empty line).
                 val page = core.appointmentsPage(v)
-                if (page.tiles.size != 3) fail("$name: ${page.tiles.size} number tiles")
+                if (page.tiles.size != (if (fill == Fill.EMPTY) 0 else 3)) fail("$name: ${page.tiles.size} number tiles")
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
-                assertToBookTileAgrees(name, page)
+                if (page.tiles.isNotEmpty()) assertToBookTileAgrees(name, page)
                 page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
-                if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, LifePageRules.shown(AppointmentsPageRules.EMPTY))
+                if (fill == Fill.EMPTY) {
+                    // Walk-through 2026-11-22 A15: said once, with one button; no "None" tiles, no To book card naming
+                    // "+ Add", no typed-line note repeating how to start.
+                    ScreenShots.assertShows(compose, name, AppointmentsPageRules.ADD_FIRST)
+                    val drawn = ScreenShots.texts(compose).map { DateGlue.plain(it) }
+                    listOf("+ Add the dentist", "add the ones you keep up with", "kept up with", "due to book", "When you've booked one", AppointmentsPageRules.TO_BOOK).forEach { w ->
+                        if (drawn.any { it == w || (w.length > 10 && it.contains(w)) }) fail("$name: \"$w\" on a blank Appointments page, beside \"${AppointmentsPageRules.EMPTY_SUMMARY}\"")
+                    }
+                    val said = drawn.count { it.contains("No appointments yet") }
+                    if (said != 1) fail("$name: \"No appointments yet\" said $said times")
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                        fail("$name: number tiles on a blank Appointments page")
+                    }
+                    if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                        fail("$name: the blank Appointments line isn't in its one raised card")
+                    }
+                }
             }
             Place.KIDS -> {
                 val v = core.kidsView.value

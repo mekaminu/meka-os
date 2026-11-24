@@ -84,14 +84,32 @@ class AppointmentsPageTest {
     }
 
     @Test
-    fun emptySaysHowToStartAndOffersTheCommonOnes() {
-        val p = AppointmentsPageRules.page(AppointmentView.EMPTY, today)
-        assertEquals(listOf("None", "None", "None"), p.tiles.map { it.number })
-        assertEquals(listOf(AppointmentsPageRules.TO_BOOK), p.cards.map { it.key })
-        assertEquals(AppointmentsPageRules.EMPTY, p.cards.single().empty)
+    fun anEmptyPageSaysItOnceWithNoTilesCardsOrNote() {
+        // Walk-through 2026-11-22 A15: the blank page said it four ways (its summary, three "None" tiles, To book's line
+        // naming "+ Add", the typed-line note); now only the header's one line and its button.
+        val v = AppointmentView.EMPTY
+        val p = AppointmentsPageRules.page(v, today)
+        assertTrue(AppointmentsPageRules.blank(v))
+        assertFalse(AppointmentsPageRules.showsTiles(v))
+        assertFalse(AppointmentsPageRules.showsNote(v))
+        assertEquals(0, p.tiles.size)
+        assertEquals(0, p.cards.size)
+        assertEquals(AppointmentsPageRules.EMPTY_SUMMARY, AppointmentsPageRules.summary(v))
+        assertTrue(AppointmentsPageRules.EMPTY_SUMMARY.startsWith("No appointments yet."))
+        assertFalse("+ Add" in AppointmentsPageRules.EMPTY_SUMMARY)
+        assertEquals("Add an appointment", AppointmentsPageRules.ADD_FIRST)
+        // The button opens + Add on the common ones, which are all there to pick.
+        assertEquals(AppointmentsPageRules.ADD_COMMON, AppointmentsPageRules.firstChoice(v))
         assertEquals(listOf(AppointmentsPageRules.ADD_KEPT, AppointmentsPageRules.ADD_BOOKED, AppointmentsPageRules.ADD_COMMON), p.addChoices.map { it.key })
         assertEquals(AppointmentRules.HINT, AppointmentsPageRules.hint(AppointmentsPageRules.ADD_KEPT))
         assertNull(AppointmentsPageRules.hint(AppointmentsPageRules.ADD_COMMON))
+        // One appointment brings the tiles, To book and the note back, and the view's own count.
+        val one = view(listOf(physio))
+        assertFalse(AppointmentsPageRules.blank(one))
+        assertTrue(AppointmentsPageRules.showsNote(one))
+        assertEquals(3, AppointmentsPageRules.page(one, today).tiles.size)
+        assertEquals(one.summary, AppointmentsPageRules.summary(one))
+        assertEquals(AppointmentsPageRules.TO_BOOK, AppointmentsPageRules.page(one, today).cards.first().key)
     }
 
     @Test

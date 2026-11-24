@@ -110,8 +110,15 @@ fun AppointmentsPane(core: MekaCore, onClose: () -> Unit) {
             }
             item(key = "summary") {
                 Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "appt-summary") { s ->
-                        Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    if (AppointmentsPageRules.blank(v)) {
+                        // Walk-through 2026-11-22 A15: nothing kept up with says it once, in one raised card with its one button.
+                        LifeEmptyCard(AppointmentsPageRules.summary(v), AppointmentsPageRules.ADD_FIRST) {
+                            haptics.tick(); addChosen = AppointmentsPageRules.firstChoice(v); said = null; addOpen = true
+                        }
+                    } else {
+                        Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "appt-summary") { s ->
+                            Text(s, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        }
                     }
                     // What the last add, Went or booking said, while no sheet is open.
                     val line = if (addOpen || rowKey != null) null else said
@@ -120,7 +127,9 @@ fun AppointmentsPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            if (AppointmentsPageRules.showsTiles(v)) {
+                item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(2))) }
+            }
             page.cards.forEachIndexed { i, c ->
                 item(key = "card-${c.key}") {
                     LifePageCard(
@@ -130,9 +139,11 @@ fun AppointmentsPane(core: MekaCore, onClose: () -> Unit) {
                     )
                 }
             }
-            item(key = "note") {
-                Text(AppointmentRules.NOTE_SHOWN, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+            if (AppointmentsPageRules.showsNote(v)) {
+                item(key = "note") {
+                    Text(AppointmentRules.NOTE_SHOWN, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+                }
             }
         }
         // + Add: something kept up with, a booked visit (each a field), or a common one in one tap.

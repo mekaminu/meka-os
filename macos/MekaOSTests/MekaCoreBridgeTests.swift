@@ -2846,6 +2846,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(AppointmentView.companion.EMPTY.summary, rules.EMPTY_SUMMARY)
         XCTAssertEqual(AppointmentView.companion.EMPTY.suggestions.map(\.title), ["Dentist", "Hygienist", "Optician", "Haircut", "Car service", "GP check-up"])
         XCTAssertTrue(AppointmentView.companion.EMPTY.nudges.isEmpty)
+        // Walk-through 2026-11-22 A15: the blank page says it once, with one button, no tiles or cards.
+        let page = AppointmentsPageRules.shared
+        XCTAssertTrue(page.blank(view: AppointmentView.companion.EMPTY))
+        XCTAssertEqual(page.summary(view: AppointmentView.companion.EMPTY), page.EMPTY_SUMMARY)
+        XCTAssertEqual(page.ADD_FIRST, "Add an appointment")
+        XCTAssertEqual(page.firstChoice(view: AppointmentView.companion.EMPTY), page.ADD_COMMON)
     }
 
     func testAppointmentsInAskAndSearchReachSwift() {
