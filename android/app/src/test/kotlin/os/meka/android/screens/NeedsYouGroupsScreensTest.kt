@@ -151,7 +151,8 @@ class NeedsYouGroupsScreensTest {
                 var open by rememberOpenGroups()
                 var filter by remember { mutableStateOf(NeedsYouFilter.ALL) }
                 var page by remember { mutableIntStateOf(0) }
-                val shown = NeedsYouGroup.entries.filter { NeedsYouGroupRules.shows(filter, it) }
+                // From the school (slice 1b) has its own check, NeedsYouSchoolScreensTest; this fixture has no school mail.
+                val shown = NeedsYouGroup.entries.filter { it != NeedsYouGroup.SCHOOL && NeedsYouGroupRules.shows(filter, it) }
                 val pg = NeedsYouGroupRules.page(fyi.size, page)
                 Column(
                     Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen").verticalScroll(rememberScrollState())
@@ -201,7 +202,7 @@ class NeedsYouGroupsScreensTest {
         draw(theme)
         if (!onScreen("1 to decide · 3 to reply · 7 FYI · 3 mail")) fail("$name: the header's counts aren't shown")
         if (!onScreen(NeedsYouGroupRules.CLOSE_ALL)) fail("$name: Close all is missing while To decide and Messages are open")
-        NeedsYouGroup.entries.forEach { if (!onScreen(it.title)) fail("$name: the ${it.title} box is missing") }
+        NeedsYouGroup.entries.filter { it != NeedsYouGroup.SCHOOL }.forEach { if (!onScreen(it.title)) fail("$name: the ${it.title} box is missing") }
         if (fyiRows() != 0) fail("$name: FYI starts open")
         val rows = compose.onAllNodesWithTag(NEEDS_YOU_ROW_TAG, useUnmergedTree = true).fetchSemanticsNodes().size
         if (rows != counts.getValue(NeedsYouGroup.MESSAGES)) fail("$name: Messages is open with $rows rows under it, not 3")
@@ -237,7 +238,8 @@ class NeedsYouGroupsScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "groups-$name-fyi-open"))
 
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
-        assertEquals(setOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES, NeedsYouGroup.FYI), NeedsYouGroupStore.load(context),
+        // From the school (not drawn here) keeps its own state: open, as it starts.
+        assertEquals(setOf(NeedsYouGroup.SCHOOL, NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES, NeedsYouGroup.FYI), NeedsYouGroupStore.load(context),
             "$name: what he left open isn't kept")
 
         compose.onAllNodes(hasText(NeedsYouGroupRules.CLOSE_ALL))[0].performSemanticsAction(SemanticsActions.OnClick)
@@ -245,7 +247,7 @@ class NeedsYouGroupsScreensTest {
         if (fyiRows() != 0) fail("$name: Close all left FYI open")
         if (onScreen("held for later")) fail("$name: the foot line shows with To decide closed")
         if (!onScreen(NeedsYouGroupRules.OPEN_ALL)) fail("$name: Close all didn't turn to Open all")
-        assertEquals(emptySet(), NeedsYouGroupStore.load(context), "$name: Close all isn't kept")
+        assertEquals(setOf(NeedsYouGroup.SCHOOL), NeedsYouGroupStore.load(context), "$name: Close all isn't kept")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverDark() = shoot("cover-dark")

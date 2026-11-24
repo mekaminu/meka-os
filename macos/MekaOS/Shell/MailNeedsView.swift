@@ -12,6 +12,9 @@ import SwiftUI
 /// Email triage completeness (2026-10-15): with two or more emails, Draft replies to N drafts each one whose editor is
 /// empty and opens it to read and change; once two or more open editors hold a short reply, Send all N fades in and
 /// sends each from the account its email came to (the same path and hold as Send), one Undo for all.
+/// Which emails a MailNeedsView draws (School emails first, slice 1b).
+enum MailNeedsPart { case all, school, rest }
+
 struct MailNeedsView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -34,13 +37,23 @@ struct MailNeedsView: View {
     /// Possible scams to check (Meka 2026-11-18 23:34): the possible scams in the Mail tidied today box, boxed, with no
     /// Draft replies bar (a possible scam is never answered from here).
     var scams = false
-    private var source: MailNeedsCard? { scams ? model.mailScams : model.mailNeeds }
+    /// School emails first, slice 1b: in Needs you's boxes the school's emails (From the school) and the rest (Mail to
+    /// answer) are drawn apart; everywhere else the whole card.
+    var part: MailNeedsPart = .all
+    private var source: MailNeedsCard? {
+        if scams { return model.mailScams }
+        switch part {
+        case .all: return model.mailNeeds
+        case .school: return SchoolNeedsRules.shared.school(card: model.mailNeeds)
+        case .rest: return SchoolNeedsRules.shared.rest(card: model.mailNeeds)
+        }
+    }
     /// Slice 4b: which thin rows are open (Draft replies opens the ones it drafted, so their drafts can be read).
     @State private var openRows: Set<String> = []
 
     var body: some View {
         Group {
-            if boxed, let card = source, scams || model.mailMomentSession == nil {
+            if boxed, let card = source, scams || part == .school || model.mailMomentSession == nil {
                 boxedBody(card)
             // While the ten-minute inbox runs (slice 7) it shows these one at a time instead.
             } else if !boxed, let card = source, scams || model.mailMomentSession == nil {

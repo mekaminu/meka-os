@@ -115,6 +115,11 @@ object MailItemFields {
      * ("bbc.co.uk"), server-written, Text; "" or absent for any other email.
      */
     const val NOTE = "note"
+    /**
+     * School emails first, slice 1b ([SchoolNeedsRules]): the email is the children's school's ([MailSortReason.SCHOOL]),
+     * server-written, Bool; absent (false) for any other email. Additive: older apps ignore it.
+     */
+    const val SCHOOL = "school"
     const val MEETING_EDIT_ID = "meetingEditId"
     const val MEETING_AT = "meetingAtMs"
 }
@@ -188,6 +193,8 @@ data class MailItem(
     val warning: String? = null,
     /** [MailNoteRules]: the site of the link in a note he emailed himself, or null. */
     val note: String? = null,
+    /** School emails first, slice 1b: from the children's school ([MailItemFields.SCHOOL]). */
+    val school: Boolean = false,
 )
 
 /** One email on the card. */
@@ -245,6 +252,8 @@ data class MailNeedsRow(
     val note: String? = null,
     /** Needs you grouped (slice 2b): when it came, "09:12" / "yesterday 18:40", for the thin row beside the sender. */
     val time: String = "",
+    /** School emails first, slice 1b: from the children's school, so it sits in the From the school box ([SchoolNeedsRules]). */
+    val school: Boolean = false,
 )
 
 data class MailNeedsCard(
@@ -372,8 +381,10 @@ object MailNeedsRules {
     fun serverFields(
         account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int,
         threadKey: String? = null, security: String = "", warning: String = "", canUnsubscribe: Boolean = false, note: String = "",
+        school: Boolean = false,
     ): Map<String, FieldValue> =
         mapOf(MailItemFields.CAN_UNSUB to FieldValue.Bool(canUnsubscribe)) +
+            (if (school) mapOf(MailItemFields.SCHOOL to FieldValue.Bool(true)) else emptyMap()) +
             (if (note.isNotEmpty()) mapOf(MailItemFields.NOTE to note.take(MailNoteRules.MAX_SITE).fv()) else emptyMap()) +
         (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) +
             (if (security.isNotEmpty()) mapOf(MailItemFields.SECURITY to security.fv()) else emptyMap()) +
@@ -447,6 +458,7 @@ object MailNeedsRules {
             security = text(MailItemFields.SECURITY),
             warning = text(MailItemFields.WARNING),
             note = text(MailItemFields.NOTE),
+            school = (f[MailItemFields.SCHOOL] as? FieldValue.Bool)?.value == true,
         )
     }
 
@@ -635,6 +647,7 @@ object MailNeedsRules {
                 canUnsubscribe = i.canUnsubscribe && security == null && note == null,
                 note = note,
                 time = whenLabel(i.receivedAtMs, nowMs, cal),
+                school = i.school,
             ).let { it.copy(canBlock = note == null && MailSenderRuleRules.canBlock(it)) }
         }
 

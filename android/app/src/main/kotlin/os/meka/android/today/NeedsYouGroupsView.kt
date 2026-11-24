@@ -73,6 +73,8 @@ internal const val NEEDS_YOU_FOOT_TAG = "needs-you-foot"
 internal const val NEEDS_YOU_LISTS_LEAD_TAG = "needs-you-lists-lead"
 internal const val NEEDS_YOU_MAIL_ROW_TAG = "needs-you-mail-row"
 internal const val NEEDS_YOU_MAIL_LEAD_TAG = "needs-you-mail-lead"
+/** School emails first, slice 1b: the From the school box's emails. */
+internal const val NEEDS_YOU_SCHOOL_TAG = "needs-you-school"
 
 /** What he left open, kept on this phone (display state only, never synced). */
 internal object NeedsYouGroupStore {
@@ -101,6 +103,7 @@ internal fun rememberOpenGroups(): MutableState<Set<NeedsYouGroup>> {
 /** The group's colour pair (icon tile and badge), as the mockup's. */
 @Composable
 private fun groupInk(group: NeedsYouGroup): Color = when (group) {
+    NeedsYouGroup.SCHOOL -> Meka.colors.calendar4
     NeedsYouGroup.DECIDE -> Meka.colors.approval
     NeedsYouGroup.MESSAGES -> Meka.colors.calendar1
     NeedsYouGroup.FYI, NeedsYouGroup.CHATS -> Meka.colors.textSecondary

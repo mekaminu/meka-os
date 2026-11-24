@@ -15,6 +15,11 @@ enum class NeedsYouGroup(
     /** A 24-unit stroke path, drawn the same on the Fold and the Mac (the mockup's icons). */
     val path: String,
 ) {
+    /**
+     * School emails first, slice 1b (Meka 2026-11-24): the children's school's emails ([SchoolNeedsRules]), first on
+     * the page and open until he closes it.
+     */
+    SCHOOL("school", "From the school", true, "M2 9l10-5 10 5-10 5zM6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5M22 9v6"),
     DECIDE("decide", "To decide", true, "M12 8v5M12 16.5v.5M12 3l9 16H3z"),
     MESSAGES("msgs", "Messages", true, "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"),
     FYI("fyi", "FYI", false, "M12 16v-4M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"),
@@ -90,6 +95,9 @@ data class NeedsYouGroupFacts(
     val tidiedAny: Boolean,
     val tidiedCount: Int,
     val tidiedPeek: String,
+    /** School emails first, slice 1b: the school's emails waiting ([SchoolNeedsRules.split]) and their peek. */
+    val schoolCount: Int,
+    val schoolPeek: String,
 )
 
 object NeedsYouGroupRules {
@@ -113,10 +121,12 @@ object NeedsYouGroupRules {
     /** The groups open before he has opened or closed any: To decide and Messages. */
     val DEFAULT_OPEN: Set<NeedsYouGroup> = NeedsYouGroup.entries.filter { it.openByDefault }.toSet()
 
-    /** The chip's groups: Decide → To decide; Reply → Messages; FYI → FYI and Group chats; Mail → the three mail boxes. */
+    /** The chip's groups: Decide → From the school and To decide; Reply → Messages; FYI → FYI and Group chats; Mail → the three mail boxes. */
     fun shows(filter: NeedsYouFilter, group: NeedsYouGroup): Boolean = when (filter) {
         NeedsYouFilter.ALL -> true
-        NeedsYouFilter.DECIDE -> group == NeedsYouGroup.DECIDE
+        // School emails first, slice 1b: the school's box sits with To decide (the same column on the open Fold), so
+        // the Decide chip counts and shows both.
+        NeedsYouFilter.DECIDE -> group == NeedsYouGroup.DECIDE || group == NeedsYouGroup.SCHOOL
         NeedsYouFilter.REPLY -> group == NeedsYouGroup.MESSAGES
         NeedsYouFilter.FYI -> group == NeedsYouGroup.FYI || group == NeedsYouGroup.CHATS
         NeedsYouFilter.MAIL -> group == NeedsYouGroup.MAIL || group == NeedsYouGroup.RENEWALS || group == NeedsYouGroup.TIDIED
@@ -127,7 +137,7 @@ object NeedsYouGroupRules {
      * mail boxes on the right, so a chip's groups (FYI → FYI and Group chats) open side by side in one column.
      */
     fun side(group: NeedsYouGroup): NeedsYouPart = when (group) {
-        NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES -> NeedsYouPart.LEFT
+        NeedsYouGroup.SCHOOL, NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES -> NeedsYouPart.LEFT
         NeedsYouGroup.FYI, NeedsYouGroup.CHATS, NeedsYouGroup.MAIL, NeedsYouGroup.RENEWALS, NeedsYouGroup.TIDIED -> NeedsYouPart.RIGHT
     }
 
@@ -149,14 +159,22 @@ object NeedsYouGroupRules {
     fun all(open: Set<NeedsYouGroup>, shown: List<NeedsYouGroup>): Set<NeedsYouGroup> =
         if (shown.any { it in open }) open - shown.toSet() else open + shown
 
-    /** What is kept on the device: the open groups' ids, comma separated ("" = all closed). */
-    fun encode(open: Set<NeedsYouGroup>): String = NeedsYouGroup.entries.filter { it in open }.joinToString(",") { it.id }
+    /**
+     * What is kept on the device: the open groups' ids, comma separated ("" = all closed). From the school came later
+     * than the others, so a closed one is kept as [SCHOOL_CLOSED]: what an older app saved (no word on it) opens it.
+     */
+    fun encode(open: Set<NeedsYouGroup>): String =
+        (NeedsYouGroup.entries.filter { it in open }.map { it.id } + listOfNotNull(SCHOOL_CLOSED.takeIf { NeedsYouGroup.SCHOOL !in open }))
+            .joinToString(",")
+
+    const val SCHOOL_CLOSED = "school-closed"
 
     /** What he left open; [DEFAULT_OPEN] before he has opened or closed anything (null). Unknown ids are skipped. */
     fun decode(saved: String?): Set<NeedsYouGroup> {
         if (saved == null) return DEFAULT_OPEN
         val ids = saved.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        return NeedsYouGroup.entries.filter { it.id in ids }.toSet()
+        val school = if (NeedsYouGroup.SCHOOL.id !in ids && SCHOOL_CLOSED !in ids) setOf(NeedsYouGroup.SCHOOL) else emptySet()
+        return NeedsYouGroup.entries.filter { it.id in ids }.toSet() + school
     }
 
     /** The page [page] of [total] rows, [PAGE_SIZE] a page, clamped to the pages there are. */
@@ -305,7 +323,7 @@ object NeedsYouGroupRules {
         if (facts.mailAny) add(NeedsYouGroup.MAIL)
         if (facts.renewals != null) add(NeedsYouGroup.RENEWALS)
         if (facts.tidiedAny) add(NeedsYouGroup.TIDIED)
-    }.filter { shows(filter, it) }
+    }.let { if (facts.schoolCount > 0) listOf(NeedsYouGroup.SCHOOL) + it else it }.filter { shows(filter, it) }
 
     /**
      * Slice 4: [group]'s head from [facts], as the Fold draws it: Messages, FYI and Mail to answer show their page line
@@ -322,6 +340,7 @@ object NeedsYouGroupRules {
     ): NeedsYouGroupHead {
         val isOpen = group in open
         return when (group) {
+            NeedsYouGroup.SCHOOL -> head(group, facts.schoolCount, facts.schoolPeek, isOpen)
             NeedsYouGroup.DECIDE -> head(group, facts.decideCount,
                 facts.decidePeek.ifEmpty { facts.afterWorkFoot?.removeSuffix(" ›").orEmpty() }, isOpen)
             NeedsYouGroup.MESSAGES -> head(group, facts.messages.size, names(facts.messages), isOpen, page(facts.messages.size, msgPage))
@@ -345,7 +364,14 @@ object NeedsYouGroupRules {
      * With the renewals found in mail counted too (walk-through A22, 2026-11-14: "2 mail" over Mail to answer 2 and
      * Renewals 2): "2 mail · 2 renewals".
      */
-    fun subtitle(decide: Int, reply: Int, fyi: Int, mail: Int, renewals: Int): String {
+    fun subtitle(decide: Int, reply: Int, fyi: Int, mail: Int, renewals: Int): String = subtitle(decide, reply, fyi, mail, renewals, 0)
+
+    /** School emails first, slice 1b: the school's emails lead, "1 from the school · 2 to decide · 3 mail". */
+    fun subtitle(decide: Int, reply: Int, fyi: Int, mail: Int, renewals: Int, school: Int): String {
+        return SchoolNeedsRules.withSchool(subtitleBase(decide, reply, fyi, mail, renewals), school)
+    }
+
+    private fun subtitleBase(decide: Int, reply: Int, fyi: Int, mail: Int, renewals: Int): String {
         val base = NeedsYouLayoutRules.subtitle(decide, reply, fyi)
         val more = listOfNotNull("$mail mail".takeIf { mail > 0 }, plural(renewals, "renewal", "renewals").takeIf { renewals > 0 })
         if (more.isEmpty()) return base

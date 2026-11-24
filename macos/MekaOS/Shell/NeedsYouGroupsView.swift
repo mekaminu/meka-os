@@ -19,6 +19,7 @@ extension NeedsYouGroup {
     /// The mockup's icon as the nearest SF Symbol (the Fold draws the core's stroke path).
     var symbol: String {
         switch self {
+        case .school: "graduationcap"
         case .decide: "exclamationmark.triangle"
         case .messages: "bubble.left"
         case .fyi: "info.circle"
@@ -32,6 +33,7 @@ extension NeedsYouGroup {
     /// The group's ink (icon and badge), as the mockup's.
     func ink(_ palette: MekaPalette) -> Color {
         switch self {
+        case .school: palette.calendar4
         case .decide, .renewals: palette.approval
         case .messages: palette.calendar1
         case .fyi, .chats: palette.textSecondary

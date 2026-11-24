@@ -1356,6 +1356,11 @@ class MailSyncTest {
         assertEquals(MailSort.NEEDS_YOU, ms.sortOf(id, "s4")!!.sort)
         assertEquals(MailSortReason.SCHOOL, ms.sortOf(id, "s4")!!.reason)
         assertEquals(MailSortReason.SCHOOL, ms.sortOf(id, "s1")!!.reason)
+        // Slice 1b: the published emails say they are the school's, so the apps put them in From the school.
+        val items = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_ITEM)
+        assertEquals(FieldValue.Bool(true), items[os.meka.core.domain.MailNeedsRules.itemId(id, "s4")]?.get(MailItemFields.SCHOOL), items.keys.toString())
+        assertEquals(FieldValue.Bool(true), items[os.meka.core.domain.MailNeedsRules.itemId(id, "s1")]?.get(MailItemFields.SCHOOL))
+        assertTrue(items[os.meka.core.domain.MailNeedsRules.itemId(id, "s3")]?.get(MailItemFields.SCHOOL) != FieldValue.Bool(true))
         val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values
         assertEquals(2, finds.size, finds.toString())
         val trip = finds.single { it[os.meka.core.domain.MailFindFields.WHAT] == FieldValue.Text("Trip payment") }

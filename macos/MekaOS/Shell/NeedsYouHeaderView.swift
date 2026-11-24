@@ -10,9 +10,12 @@ struct NeedsYouHeaderCounts {
     let reply: Int
     let fyi: Int
     let mail: Int
+    /// School emails first, slice 1b: the school's emails, leading the subtitle and counted on the Decide chip.
+    let school: Int
 
-    init(decide: Int, chats: [TriageChat], mail: Int) {
+    init(decide: Int, chats: [TriageChat], mail: Int, school: Int = 0) {
         self.decide = decide
+        self.school = school
         reply = Int(NeedsYouLayoutRules.shared.replyCount(chats: chats))
         fyi = NeedsYouLayoutRules.shared.fyi(chats: chats).count
         self.mail = mail
@@ -20,12 +23,14 @@ struct NeedsYouHeaderCounts {
 
     /// "2 to decide · 4 to reply · 4 FYI", or "All clear".
     var subtitle: String {
-        NeedsYouLayoutRules.shared.subtitle(decide: Int32(decide), reply: Int32(reply), fyi: Int32(fyi))
+        SchoolNeedsRules.shared.withSchool(
+            subtitle: NeedsYouLayoutRules.shared.subtitle(decide: Int32(decide), reply: Int32(reply), fyi: Int32(fyi)),
+            school: Int32(school))
     }
 
     /// All · Decide 2 · Reply 4 · FYI 4 · Mail 14.
     var chips: [NeedsYouChip] {
-        NeedsYouLayoutRules.shared.chips(decide: Int32(decide), reply: Int32(reply), fyi: Int32(fyi), mail: Int32(mail))
+        NeedsYouLayoutRules.shared.chips(decide: Int32(decide + school), reply: Int32(reply), fyi: Int32(fyi), mail: Int32(mail))
     }
 
     /// Clear FYI shows only while there is FYI to clear.

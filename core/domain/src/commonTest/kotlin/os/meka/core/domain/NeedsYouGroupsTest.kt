@@ -9,21 +9,25 @@ class NeedsYouGroupsTest {
     private val R = NeedsYouGroupRules
 
     @Test fun toDecideAndMessagesStartOpen() {
-        assertEquals(setOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES), R.DEFAULT_OPEN)
+        assertEquals(setOf(NeedsYouGroup.SCHOOL, NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES), R.DEFAULT_OPEN)
         assertEquals(R.DEFAULT_OPEN, R.decode(null))
     }
 
     @Test fun whatHeLeftOpenIsKept() {
         val open = setOf(NeedsYouGroup.FYI, NeedsYouGroup.TIDIED)
-        assertEquals("fyi,tidy", R.encode(open))
-        assertEquals(open, R.decode("fyi,tidy"))
+        assertEquals("fyi,tidy,school-closed", R.encode(open))
+        assertEquals(open, R.decode("fyi,tidy,school-closed"))
         // All closed is kept as closed, never back to the defaults.
-        assertEquals(emptySet(), R.decode(""))
-        assertEquals(setOf(NeedsYouGroup.MAIL), R.decode("mail, gone ,"))
+        assertEquals(emptySet(), R.decode(R.encode(emptySet())))
+        assertEquals(setOf(NeedsYouGroup.MAIL), R.decode("mail, gone ,school-closed"))
+        // School emails first, slice 1b: what an older app kept says nothing of From the school, so it opens.
+        assertEquals(setOf(NeedsYouGroup.FYI, NeedsYouGroup.TIDIED, NeedsYouGroup.SCHOOL), R.decode("fyi,tidy"))
+        assertEquals(setOf(NeedsYouGroup.SCHOOL), R.decode(""))
+        assertEquals("school,mail", R.encode(setOf(NeedsYouGroup.MAIL, NeedsYouGroup.SCHOOL)))
     }
 
     @Test fun theOpenFoldSplitsTheBoxesIntoTwoColumns() {
-        assertEquals(listOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES), NeedsYouGroup.entries.filter { R.side(it) == NeedsYouPart.LEFT })
+        assertEquals(listOf(NeedsYouGroup.SCHOOL, NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES), NeedsYouGroup.entries.filter { R.side(it) == NeedsYouPart.LEFT })
         assertEquals(listOf(NeedsYouGroup.FYI, NeedsYouGroup.CHATS, NeedsYouGroup.MAIL, NeedsYouGroup.RENEWALS, NeedsYouGroup.TIDIED),
             NeedsYouGroup.entries.filter { R.side(it) == NeedsYouPart.RIGHT })
         NeedsYouGroup.entries.forEach { g ->
@@ -47,9 +51,10 @@ class NeedsYouGroupsTest {
         val shown = listOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES, NeedsYouGroup.FYI)
         assertEquals(R.CLOSE_ALL, R.allLabel(R.DEFAULT_OPEN, shown))
         val closed = R.all(R.DEFAULT_OPEN, shown)
-        assertEquals(emptySet(), closed)
+        // Groups not shown (From the school, with nothing from the school) keep their state.
+        assertEquals(setOf(NeedsYouGroup.SCHOOL), closed)
         assertEquals(R.OPEN_ALL, R.allLabel(closed, shown))
-        assertEquals(shown.toSet(), R.all(closed, shown))
+        assertEquals(shown.toSet() + NeedsYouGroup.SCHOOL, R.all(closed, shown))
     }
 
     @Test fun aChipOpensJustItsGroups() {
@@ -190,9 +195,27 @@ class NeedsYouGroupsTest {
     private fun facts(
         decide: Int = 0, foot: String? = null, messages: List<String> = emptyList(), fyi: List<String> = emptyList(),
         chats: Int = 0, mailAny: Boolean = false, mailRows: Int = 0, renewals: List<String>? = null, tidied: Boolean = false,
+        school: Int = 0,
     ) = NeedsYouGroupFacts(decide, if (decide > 0) "$decide tasks" else "", foot, messages, fyi, chats,
         if (chats > 0) "Five-a-side" else "", mailAny, mailRows, if (mailAny) "Sam" else "", mailRows, renewals, tidied,
-        if (tidied) 12 else 0, if (tidied) "12 tidied" else "")
+        if (tidied) 12 else 0, if (tidied) "12 tidied" else "", school, if (school > 0) "Christmas fair" else "")
+
+    @Test fun theSchoolsEmailsComeFirstWithTheirCount() {
+        val f = facts(decide = 1, mailAny = true, school = 2)
+        assertEquals(listOf(NeedsYouGroup.SCHOOL, NeedsYouGroup.DECIDE, NeedsYouGroup.MAIL), R.present(f, NeedsYouFilter.ALL))
+        assertEquals(listOf(NeedsYouGroup.SCHOOL, NeedsYouGroup.DECIDE), R.present(f, NeedsYouFilter.DECIDE))
+        assertEquals(listOf(NeedsYouGroup.MAIL), R.present(f, NeedsYouFilter.MAIL))
+        val closed = R.headOf(NeedsYouGroup.SCHOOL, f, emptySet(), 0, 0, 0)
+        assertEquals("2", closed.count)
+        assertEquals("From the school", closed.title)
+        assertEquals("Christmas fair", closed.peek)
+        assertEquals("From the school, 2. Closed. Christmas fair.", closed.spoken)
+        // Nothing from the school: no box.
+        assertEquals(listOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MAIL), R.present(facts(decide = 1, mailAny = true), NeedsYouFilter.ALL))
+        assertEquals("2 from the school · 1 to decide · 3 mail", R.subtitle(1, 0, 0, 3, 0, 2))
+        assertEquals("1 from the school", R.subtitle(0, 0, 0, 0, 0, 1))
+        assertEquals(R.subtitle(1, 0, 0, 3, 0), R.subtitle(1, 0, 0, 3, 0, 0))
+    }
 
     @Test fun macGroupsArePresentOnlyWithSomethingInThem() {
         val f = facts(decide = 2, messages = listOf("Alex"), fyi = listOf("Sam"), mailAny = true, tidied = true)

@@ -598,7 +598,14 @@ internal fun NeedsYouColumn(
     LaunchedEffect(allMailNeeds, allMailChases, allMailFinds, allArchived, allMailScams) {
         mailTaps.settle(InstantMailRules.present(allMailNeeds, allMailChases, allMailFinds, allArchived) + allMailScams?.every?.map { it.id }.orEmpty())
     }
-    val mailNeeds = remember(allMailNeeds, mailHidden) { InstantMailRules.needs(allMailNeeds, mailHidden) }
+    val shownMailNeeds = remember(allMailNeeds, mailHidden) { InstantMailRules.needs(allMailNeeds, mailHidden) }
+    // School emails first, slice 1b: boxed, the school's emails leave Mail to answer for From the school, first.
+    val schoolSplit = remember(shownMailNeeds, compact) {
+        if (compact) null to shownMailNeeds else os.meka.core.domain.SchoolNeedsRules.split(shownMailNeeds)
+    }
+    val schoolNeeds = schoolSplit.first
+    val mailNeeds = schoolSplit.second
+    val schoolCount = schoolNeeds?.count ?: 0
     val mailScams = remember(allMailScams, mailHidden) { InstantMailRules.needs(allMailScams, mailHidden) }
     val mailChases = remember(allMailChases, mailHidden) { InstantMailRules.chases(allMailChases, mailHidden) }
     val mailFinds = remember(allMailFinds, mailHidden) { InstantMailRules.finds(allMailFinds, mailHidden) }
@@ -644,7 +651,7 @@ internal fun NeedsYouColumn(
     val renewalCount = mailFinds?.rows?.size ?: 0  // the Renewals box's own figure
     val scamCount = mailScams?.count ?: 0  // the possible scams waiting in the tidied box (A9, 2026-11-22)
     fun show(section: NeedsYouSection) = NeedsYouLayoutRules.shows(filter, section) && NeedsYouLayoutRules.inPart(part, section)
-    val mailAny = mailNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null || mailScams != null
+    val mailAny = mailNeeds != null || schoolNeeds != null || mailChases != null || mailFinds != null || archived != null || unopened != null || needsMail != null || mailMoment != null || mailMomentSession != null || mailScams != null
     // Needs you grouped and folding (APPROVED 2026-11-10 21:51, needs-you-grouped.dc.html), slice 1: on the folded Fold
     // every section is a box that opens and closes; what he left open is kept on this phone. Slice 3: the open Fold's
     // two columns are boxes too (To decide and Messages left; FYI, Group chats and the mail boxes right), sharing one
@@ -665,9 +672,10 @@ internal fun NeedsYouColumn(
     var msgPage by rememberSaveable { mutableIntStateOf(0) }
     var fyiPage by rememberSaveable { mutableIntStateOf(0) }
     var mailPage by rememberSaveable { mutableIntStateOf(0) }
+    var schoolPage by rememberSaveable { mutableIntStateOf(0) }
     var scamPage by rememberSaveable { mutableIntStateOf(0) }
     fun sectionOf(g: NeedsYouGroup): NeedsYouSection = when (g) {
-        NeedsYouGroup.DECIDE -> NeedsYouSection.DECIDE
+        NeedsYouGroup.DECIDE, NeedsYouGroup.SCHOOL -> NeedsYouSection.DECIDE
         NeedsYouGroup.MESSAGES, NeedsYouGroup.CHATS -> NeedsYouSection.MESSAGES
         NeedsYouGroup.FYI -> NeedsYouSection.FYI
         NeedsYouGroup.MAIL, NeedsYouGroup.RENEWALS, NeedsYouGroup.TIDIED -> NeedsYouSection.MAIL
@@ -684,6 +692,7 @@ internal fun NeedsYouColumn(
     // Every group with something in it on the whole page (the header's Open all / Close all reaches both columns);
     // [present] is this column's.
     val presentAll: List<NeedsYouGroup> = buildList {
+        if (schoolNeeds != null) add(NeedsYouGroup.SCHOOL)
         if (decideCount > 0 || afterWorkFoot != null) add(NeedsYouGroup.DECIDE)
         if (msgsAny) add(NeedsYouGroup.MESSAGES)
         if (fyiChats.isNotEmpty()) add(NeedsYouGroup.FYI)
@@ -696,12 +705,14 @@ internal fun NeedsYouColumn(
     val msgPg = NeedsYouGroupRules.page(messageChats.size, msgPage)
     val fyiPg = NeedsYouGroupRules.page(fyiChats.size, fyiPage)
     val mailPg = NeedsYouGroupRules.page(mailNeeds?.every?.size ?: 0, mailPage)
+    val schoolPg = NeedsYouGroupRules.page(schoolNeeds?.every?.size ?: 0, schoolPage)
     // Slice 2b: the ten-minute inbox is Mail to answer's lead line with Start while it is due and not under way.
     val mailLead = NeedsYouGroupRules.mailLead(mailMoment != null, mailMomentSession != null)
     val toggleGroup: (NeedsYouGroup) -> Unit = { g -> openGroups = NeedsYouGroupRules.toggle(openGroups, g) }
     fun headOf(g: NeedsYouGroup): os.meka.core.domain.NeedsYouGroupHead {
         val open = g in openGroups
         return when (g) {
+            NeedsYouGroup.SCHOOL -> NeedsYouGroupRules.head(g, schoolCount, os.meka.core.domain.SchoolNeedsRules.peek(schoolNeeds), open, schoolPg)
             NeedsYouGroup.DECIDE -> NeedsYouGroupRules.head(g, decideCount,
                 NeedsYouGroupRules.decidePeekOf(approvals.size, looseRequests.size, asks, cards)
                     .ifEmpty { afterWorkFoot?.removeSuffix(" ›").orEmpty() }, open)
@@ -1004,7 +1015,7 @@ internal fun NeedsYouColumn(
                 Column(Modifier.onSizeChanged { headerHeight?.value = it.height }.padding(bottom = MekaSpace.m).appear(rememberAppearance(0, play))) {
                     if (boxed) {
                         // On the open Fold the right column carries Open all / Close all at the page's edge (A27).
-                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount, renewalCount),
+                        NeedsYouHeader(NeedsYouGroupRules.subtitle(decideCount, replyCount, fyiChats.size, mailCount, renewalCount, schoolCount),
                             presentAll.isNotEmpty() && part != NeedsYouPart.LEFT,
                             onClear = { openGroups = NeedsYouGroupRules.all(openGroups, presentAll) },
                             actionLabel = NeedsYouGroupRules.allLabel(openGroups, presentAll),
@@ -1014,7 +1025,7 @@ internal fun NeedsYouColumn(
                             fyiChats.forEach { moves.onTriageChat(it, ChatFinishTap.DONE) }
                         })
                     }
-                    NeedsYouChips(NeedsYouLayoutRules.chips(decideCount, replyCount, fyiChats.size, mailCount), filter, {
+                    NeedsYouChips(NeedsYouLayoutRules.chips(decideCount + schoolCount, replyCount, fyiChats.size, mailCount), filter, {
                         filter = it
                         if (boxed) openGroups = NeedsYouGroupRules.pick(openGroups, it)
                     }, Modifier.padding(top = MekaSpace.m))
@@ -1022,6 +1033,16 @@ internal fun NeedsYouColumn(
             }
         }
         }
+        // School emails first, slice 1b: From the school, above everything else, its emails as Mail to answer's rows.
+        groupHead(boxed && NeedsYouGroup.SCHOOL in present, NeedsYouGroup.SCHOOL, ::headOf, toggleGroup, play)
+        if (boxed && inG(NeedsYouGroup.SCHOOL)) schoolNeeds?.let { n ->
+            item(key = "school-needs") {
+                MailNeedsSection(n, core, moves.undoLine, mailTaps,
+                    Modifier.animateItem().then(inBox).testTag(NEEDS_YOU_SCHOOL_TAG).appear(rememberAppearance(1, play)),
+                    boxed = true, page = schoolPg.page, onPage = { schoolPage = it })
+            }
+        }
+        boxEnd(NeedsYouGroup.SCHOOL)
         if (part != NeedsYouPart.RIGHT) doneForYouItems(doneForYou, core, moves, scope, play)
         if (show(NeedsYouSection.DECIDE) && decideCount > 0 && !boxed) {
             item(key = "decide-head") {
@@ -1380,7 +1401,7 @@ internal fun NeedsYouColumn(
         }
         boxEnd(NeedsYouGroup.TIDIED)
         if (filter == NeedsYouFilter.ALL && part != NeedsYouPart.RIGHT) {
-        if (cards.isEmpty() && approvals.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0) {
+        if (cards.isEmpty() && approvals.isEmpty() && requests.isEmpty() && triage.isEmpty() && asks == 0 && schoolNeeds == null) {
             item(key = "clear") {
                 // The breathing check ring beside a light line (catalogue "Empty states"; Fold review 2026-10-08,
                 // item 7), on the full page and in the open Fold's column alike (Fold review 2026-10-09 00:10, item 6);

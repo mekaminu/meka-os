@@ -124,6 +124,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * two days before, and a trip or non-uniform day the evening before.
      */
     SCHOOL("School", NoticeTier.HEADS_UP),
+    /**
+     * School emails first, slice 1b ([SchoolNeedsRules.notices]): a new email from the children's school, at once,
+     * "From the school" · "Christmas fair · Oakfield Primary · in Needs you". Opens Needs you.
+     */
+    SCHOOL_MAIL("Emails from the school", NoticeTier.HEADS_UP),
     /** Date night, slice 2 ([DateNightRules.notices]): a week before a kept night that isn't booked, at 09:00. */
     DATE_NIGHT("Date night", NoticeTier.HEADS_UP),
     /** Work wins log ([WinRules.notices]): Friday at 16:00, "What went well this week?", until a win is kept. */
@@ -737,6 +742,7 @@ object Governor {
         NoticeSource.SIGN_IN -> plural(n, "sign-in") + " to renew"
         NoticeSource.CALL_CREDIT -> "call assistant credit"
         NoticeSource.SCHOOL -> plural(n, "school reminder")
+        NoticeSource.SCHOOL_MAIL -> if (n == 1) "an email from the school" else "$n emails from the school"
         NoticeSource.DATE_NIGHT -> "date night to book"
         NoticeSource.WINS -> "this week's wins"
         NoticeSource.LEAVE -> if (n == 1) "leave to book" else "leave to book for $n holidays"
@@ -1071,6 +1077,8 @@ object NoticeSources {
         SpeakUpRules.pressureNotice(pressure, nowMs, cal)?.let { out += it }
         // Speaking up, slice 4: a reply he was waiting for (Obi says it only if he turned that moment on).
         out += SpeakUpRules.replyNotices(mailFinds, lists.waiting, nowMs)
+        // School emails first, slice 1b: a new email from the children's school, straight away.
+        out += SchoolNeedsRules.notices(mail, nowMs)
         // Routines, slice 3b: a routine that started by itself at its time.
         out += RoutineRules.notices(routines, nowMs, cal)
         if (workSchedule != null) ProtectedMailRules.morningNotice(mail, protectedTime, nowMs, workSchedule, holidays, cal)?.let { out += it }

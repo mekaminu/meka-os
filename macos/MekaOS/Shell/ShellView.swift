@@ -176,6 +176,7 @@ struct NeedsYouView: View {
     @State private var msgPage = 0
     @State private var fyiPage = 0
     @State private var mailPage = 0
+    @State private var schoolPage = 0
     @State private var scamPage = 0
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
@@ -214,24 +215,31 @@ struct NeedsYouView: View {
             fyi: NeedsYouLayoutRules.shared.fyi(chats: chats).map(\.title),
             chatsCount: Int32(model.digestGists.count + (model.discord?.cards.count ?? 0)),
             chatsPeek: NeedsYouGroupRules.shared.chatsPeek(groups: model.digestGists.map(\.title), discord: model.discord?.headline),
-            mailAny: mailMomentOn || model.mailNeeds != nil || model.mailChases != nil,
-            mailCount: Int32(Int(model.mailNeeds?.count ?? 0) + (model.mailChases?.rows.count ?? 0)),
+            mailAny: mailMomentOn || restMail != nil || model.mailChases != nil,
+            mailCount: Int32(Int(restMail?.count ?? 0) + (model.mailChases?.rows.count ?? 0)),
             mailPeek: NeedsYouGroupRules.shared.mailPeek(momentDue: model.mailMoment != nil,
-                                                         rows: model.mailNeeds?.every ?? [], chases: model.mailChases?.headline),
+                                                         rows: restMail?.every ?? [], chases: model.mailChases?.headline),
             // Slice 4b: every email that needs him pages in the box, except while the ten-minute inbox runs.
-            mailRows: model.mailMomentSession == nil ? Int32(model.mailNeeds?.every.count ?? 0) : 0,
+            mailRows: model.mailMomentSession == nil ? Int32(restMail?.every.count ?? 0) : 0,
             renewals: renewals,
             tidiedAny: tidiedAny,
             tidiedCount: MailScamListRules.shared.tidiedCount(tidiedToday: Int32(tiles.first.flatMap { Int($0.number) } ?? 0),
                                                               scams: model.mailScams),
             tidiedPeek: MailScamListRules.shared.peek(card: model.mailScams)
                 ?? (tiles.isEmpty ? (model.archivedForYou == nil ? "" : "Archived for you")
-                    : NeedsYouGroupRules.shared.tidiedPeek(tiles: tiles)))
+                    : NeedsYouGroupRules.shared.tidiedPeek(tiles: tiles)),
+            schoolCount: Int32(schoolMail?.count ?? 0),
+            schoolPeek: SchoolNeedsRules.shared.peek(card: schoolMail))
     }
+
+    /// School emails first, slice 1b: the school's emails, in their own box first, and the rest of Mail to answer.
+    private var schoolMail: MailNeedsCard? { SchoolNeedsRules.shared.school(card: model.mailNeeds) }
+    private var restMail: MailNeedsCard? { SchoolNeedsRules.shared.rest(card: model.mailNeeds) }
 
     var body: some View {
         let chats = model.triageChats
-        let counts = NeedsYouHeaderCounts(decide: decideCount, chats: chats, mail: Int(model.mailNeeds?.count ?? 0))
+        let counts = NeedsYouHeaderCounts(decide: decideCount, chats: chats, mail: Int(restMail?.count ?? 0),
+                                          school: Int(schoolMail?.count ?? 0))
         let f = facts(chats)
         let present = NeedsYouGroupRules.shared.present(facts: f, filter: filter)
         let open = openGroups
@@ -298,6 +306,12 @@ struct NeedsYouView: View {
 
     @ViewBuilder private func contents(_ group: NeedsYouGroup, facts f: NeedsYouGroupFacts, chats: [TriageChat]) -> some View {
         switch group {
+        case .school:
+            // School emails first, slice 1b: the school's emails as Mail to answer's thin rows, five a page.
+            MailNeedsView(palette: palette, firstIndex: 0, boxed: true, page: schoolPage, onPage: { next in
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { schoolPage = next }
+            }, part: .school)
+            .accessibilityIdentifier("needs-you-school")
         case .decide: decideSection
         case .messages:
             TriageCardsView(palette: palette, firstIndex: 0, rows: true, boxedPage: msgPage)
@@ -325,9 +339,9 @@ struct NeedsYouView: View {
                     .accessibilityIdentifier("needs-you-mail-lead")
             }
             if model.mailMomentSession != nil { MailMomentView(palette: palette, firstIndex: 0) }
-            MailNeedsView(palette: palette, firstIndex: 0, boxed: true, page: mailPage) { next in
+            MailNeedsView(palette: palette, firstIndex: 0, boxed: true, page: mailPage, onPage: { next in
                 withAnimation(MekaMotion.expand(reduced: reduceMotion)) { mailPage = next }
-            }
+            }, part: .rest)
             MailChaseView(palette: palette, firstIndex: 0)
         case .renewals:
             MailFindView(palette: palette, firstIndex: 0, boxed: true)
@@ -389,7 +403,8 @@ struct NeedsYouView: View {
     /// Nothing to decide or answer: the breathing check ring beside a light line and what lands here (catalogue
     /// "Empty states"), what Navilife is doing with his mail, then what's coming (habits, Waiting on, renewals).
     @ViewBuilder private var emptyState: some View {
-        if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0 {
+        if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0
+            && schoolMail == nil {
             HStack(spacing: MekaSpace.m) {
                 BreathingRingView(palette: palette, check: true)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {

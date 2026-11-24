@@ -1698,6 +1698,8 @@ class Integrations(
                 // Junk fix slice 2: Unsubscribe on the card when the email says how (never the link itself).
                 canUnsubscribe = MailUnsubscribeRules.plan(h.listUnsubscribe, h.oneClickUnsubscribe).method != UnsubscribeMethod.NONE,
                 note = notes[h.id] ?: "",
+                // School emails first, slice 1b: the apps put it in From the school, first in Needs you.
+                school = reasons[h.id] == MailSortReason.SCHOOL,
             ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)

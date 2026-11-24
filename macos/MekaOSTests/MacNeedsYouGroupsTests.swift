@@ -6,20 +6,36 @@ import XCTest
 /// NeedsYouGroupRules as on the Fold; what he leaves open is kept on this Mac; long groups page five at a time.
 final class MacNeedsYouGroupsTests: XCTestCase {
     private func facts(decide: Int32 = 0, foot: String? = nil, messages: [String] = [], fyi: [String] = [],
-                       mail: Bool = false, mailRows: Int32 = 0) -> NeedsYouGroupFacts {
+                       mail: Bool = false, mailRows: Int32 = 0, school: Int32 = 0) -> NeedsYouGroupFacts {
         NeedsYouGroupFacts(decideCount: decide, decidePeek: decide > 0 ? "\(decide) tasks" : "", afterWorkFoot: foot,
                            messages: messages, fyi: fyi, chatsCount: 0, chatsPeek: "", mailAny: mail, mailCount: mail ? 3 : 0,
                            mailPeek: mail ? "Sam" : "", mailRows: mailRows, renewals: nil, tidiedAny: false, tidiedCount: 0,
-                           tidiedPeek: "")
+                           tidiedPeek: "", schoolCount: school, schoolPeek: school > 0 ? "Christmas fair" : "")
     }
 
     @MainActor
     func testToDecideAndMessagesOpenFirstAndWhatHeLeavesOpenIsKept() {
-        XCTAssertEqual(NeedsYouOpenGroups.decode(nil), [NeedsYouGroup.decide, NeedsYouGroup.messages])
+        XCTAssertEqual(NeedsYouOpenGroups.decode(nil), [NeedsYouGroup.school, NeedsYouGroup.decide, NeedsYouGroup.messages])
         let kept = NeedsYouOpenGroups.encode([NeedsYouGroup.fyi, NeedsYouGroup.mail])
-        XCTAssertEqual(kept, "fyi,mail")
+        XCTAssertEqual(kept, "fyi,mail,school-closed")
         XCTAssertEqual(NeedsYouOpenGroups.decode(kept), [NeedsYouGroup.fyi, NeedsYouGroup.mail])
-        XCTAssertEqual(NeedsYouOpenGroups.decode(""), [])
+        XCTAssertEqual(NeedsYouOpenGroups.decode(NeedsYouOpenGroups.encode([])), [])
+    }
+
+    /// School emails first, slice 1b: From the school leads the boxes with its count, and the subtitle and Decide chip
+    /// count it.
+    @MainActor
+    func testTheSchoolsEmailsComeFirst() {
+        let f = facts(decide: 1, mail: true, school: 2)
+        XCTAssertEqual(NeedsYouGroupRules.shared.present(facts: f, filter: .all).map(\.id), ["school", "decide", "mail"])
+        let head = NeedsYouGroupRules.shared.headOf(group: .school, facts: f, open: [], msgPage: 0, fyiPage: 0, mailPage: 0)
+        XCTAssertEqual(head.title, "From the school")
+        XCTAssertEqual(head.count, "2")
+        XCTAssertEqual(head.peek, "Christmas fair")
+        XCTAssertEqual(NeedsYouGroup.school.symbol, "graduationcap")
+        let counts = NeedsYouHeaderCounts(decide: 1, chats: [], mail: 3, school: 2)
+        XCTAssertEqual(counts.subtitle, "2 from the school · 1 to decide")
+        XCTAssertEqual(counts.chips[1].label, "Decide 3")
     }
 
     @MainActor
