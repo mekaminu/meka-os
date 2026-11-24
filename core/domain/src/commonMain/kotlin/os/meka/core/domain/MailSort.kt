@@ -68,7 +68,12 @@ enum class MailSortReason(val line: String) {
      * The unread count went up (2026-10-18: six "Run failed: ci" emails unread): an automatic alert from a service's
      * own no-reply address (a build, a favourite, a mention), a notification even when it carries a mailing-list header.
      */
-    SERVICE_ALERT("An automatic alert from a service you use · nothing to answer");
+    SERVICE_ALERT("An automatic alert from a service you use · nothing to answer"),
+    /**
+     * School emails first, slice 1 (Meka 2026-11-24): from the children's school, its own domain or the messaging
+     * service it sends through ([SchoolMailRules.isSchoolMail]): always Needs you, never tidied, never a newsletter.
+     */
+    SCHOOL("From the children's school · always yours, never tidied");
 
     companion object {
         fun of(stored: String?): MailSortReason? = entries.firstOrNull { it.name == stored }
@@ -183,6 +188,8 @@ object MailSortRules {
             "SPAM" in labels -> sure(MailSort.JUNK, MailSortReason.SPAM)
             // Account-security mail from the provider's real domain: kept, whatever its other headers say.
             MailSecurityRules.sorted(f.fromAddress, f.subject) != null -> MailSecurityRules.sorted(f.fromAddress, f.subject)!!
+            // School emails first: a school's own domain or the messaging service it sends through, even as a list.
+            SchoolMailRules.serviceSender(f.fromAddress) && scam?.kind != MailScamKind.SCAM -> sure(MailSort.NEEDS_YOU, MailSortReason.SCHOOL)
             domain != null && PUBLIC_SUFFIXES.any { endsWithDomain(domain, it) } -> sure(MailSort.NEEDS_YOU, MailSortReason.PUBLIC_BODY)
             // A company named with a threat or a promise from a domain that isn't the company's: a possible scam, kept.
             scam?.kind == MailScamKind.SCAM -> sure(MailSort.NEEDS_YOU, MailSortReason.SCAM)
@@ -266,6 +273,17 @@ object MailSortRules {
         val a = fromAddress?.trim()?.trimStart('<')?.trimEnd('>')?.lowercase() ?: return s
         if (a !in own || s.reason == MailSortReason.SPAM || MailSecurityRules.kept(s.reason)) return s
         return MailSorted(MailSort.FYI, MailSortReason.OWN, true)
+    }
+
+    /**
+     * School emails first, slice 1: an email [school] says is the school's ([SchoolMailRules.isSchoolMail], with his
+     * household's About you) is Needs you, sure, as [MailSortReason.SCHOOL]; Gmail's spam, account-security mail and a
+     * possible scam keep their sort.
+     */
+    fun school(s: MailSorted, school: Boolean): MailSorted {
+        if (!school || s.reason == MailSortReason.SCHOOL || s.reason == MailSortReason.SPAM || s.reason == MailSortReason.SCAM ||
+            MailSecurityRules.kept(s.reason)) return s
+        return MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCHOOL, true)
     }
 
     /** True for a sort the AI should look at: the rules leaned the safe way (a person, or no sender). */

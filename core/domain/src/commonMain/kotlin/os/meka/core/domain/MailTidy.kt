@@ -99,12 +99,14 @@ object MailTidyRules {
         val address = fromAddress?.trim()?.trimStart('<')?.trimEnd('>')?.lowercase()
         if (address != null && address in keepAddresses) return true
         val domain = MailSortRules.domain(fromAddress) ?: return false
-        return (MailSortRules.PUBLIC_SUFFIXES + PROTECTED_DOMAINS).any { endsWithDomain(domain, it) }
+        return (MailSortRules.PUBLIC_SUFFIXES + PROTECTED_DOMAINS + SchoolMailRules.SERVICE_DOMAINS).any { endsWithDomain(domain, it) }
     }
 
     fun plan(f: MailTidyFacts): MailTidy {
         val s = f.sorted ?: return MailTidy.KEEP
         if (!f.inInbox || f.replied || protectedSender(f.fromAddress, f.keepAddresses)) return MailTidy.KEEP
+        // School emails first (2026-11-24): the school's mail is never tidied, his own rules included.
+        if (s.reason == MailSortReason.SCHOOL) return MailTidy.KEEP
         // Account-security mail is never tidied, not even by his "always tidy" on the sender.
         if (MailSecurityRules.kept(s.reason)) return MailTidy.KEEP
         // His "never tidy" wins over everything below, the unsubscribed sender's Trash included.

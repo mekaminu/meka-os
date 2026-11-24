@@ -1342,28 +1342,32 @@ class MailSyncTest {
         i.syncAccount(id)
         val day = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.of("Europe/London")).toLocalDate().plusDays(10)
         val dayText = day.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+        // School emails first, slice 1: no School's email or website typed in About you, only the children.
+        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.CHILDREN, FieldValue.Text("Alex|7|Oakfield School\nSam|10|Oakfield School"))
         gmail.mailbox["s1"] = msg("s1", 0, "office@oakfield.sch.uk").copy(subject = "Trip payment", preview = "Please pay £12 for Alex's trip to the farm by $dayText.")
         gmail.mailbox["s2"] = msg("s2", 0, "office@oakfield.sch.uk").copy(subject = "Reminder: trip payment", preview = "Please pay £12 for Alex's trip by $dayText.")
         gmail.mailbox["s3"] = msg("s3", 0, "office@otherschool.example").copy(subject = "Trip payment", preview = "Please pay £15 by $dayText.")
-        gmail.nextRound = { MailChanges(fetch = listOf("s1", "s2", "s3"), cursor = "h2") }
-        // Nobody marked as the school yet: nothing read.
+        // Sent through a messaging service, as a list: still the school's, Needs you, never a newsletter.
+        gmail.mailbox["s4"] = msg("s4", 0, "noreply@pmx.parentmail.co.uk").copy(
+            fromName = "Oakfield School", subject = "Christmas fair", preview = "Our Christmas fair is on $dayText, 12:00 to 16:00.", listId = "<news.parentmail.co.uk>",
+        )
+        gmail.nextRound = { MailChanges(fetch = listOf("s1", "s2", "s3", "s4"), cursor = "h2") }
         i.syncAccount(id)
-        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
-        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.SCHOOL_WEBSITE, FieldValue.Text("https://www.oakfield.sch.uk"))
-        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.CHILDREN, FieldValue.Text("Alex|7|Oakfield School\nSam|10|Oakfield School"))
-        gmail.nextRound = { MailChanges(cursor = "h3") }
-        i.syncAccount(id)
-        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
-        val (_, f) = finds.entries.single()
-        assertEquals(FieldValue.Text(os.meka.core.domain.SchoolMailRules.KIND_SCHOOL), f[os.meka.core.domain.MailFindFields.KIND])
-        assertEquals(FieldValue.Text("Trip payment"), f[os.meka.core.domain.MailFindFields.WHAT])
-        assertEquals(FieldValue.Int64(1200), f[os.meka.core.domain.MailFindFields.PENCE])
-        assertEquals(FieldValue.Text("Alex"), f[os.meka.core.domain.MailFindFields.WHO])
+        assertEquals(MailSort.NEEDS_YOU, ms.sortOf(id, "s4")!!.sort)
+        assertEquals(MailSortReason.SCHOOL, ms.sortOf(id, "s4")!!.reason)
+        assertEquals(MailSortReason.SCHOOL, ms.sortOf(id, "s1")!!.reason)
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values
+        assertEquals(2, finds.size, finds.toString())
+        val trip = finds.single { it[os.meka.core.domain.MailFindFields.WHAT] == FieldValue.Text("Trip payment") }
+        assertEquals(FieldValue.Text(os.meka.core.domain.SchoolMailRules.KIND_SCHOOL), trip[os.meka.core.domain.MailFindFields.KIND])
+        assertEquals(FieldValue.Int64(1200), trip[os.meka.core.domain.MailFindFields.PENCE])
+        assertEquals(FieldValue.Text("Alex"), trip[os.meka.core.domain.MailFindFields.WHO])
+        assertTrue(finds.any { it[os.meka.core.domain.MailFindFields.WHAT] == FieldValue.Text("School fair") })
         // Nothing reaches School without his Add, and the next check adds nothing.
         assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.SCHOOL_ITEM).size)
         gmail.nextRound = { MailChanges(cursor = "h4") }
         i.syncAccount(id)
-        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+        assertEquals(2, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
     }
 
     @Test

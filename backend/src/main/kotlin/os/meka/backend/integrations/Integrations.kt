@@ -1037,10 +1037,16 @@ class Integrations(
         }
     }
 
-    /** The senders he marked as the school in About you ([SchoolMailRules.senders]); empty when none or unreadable. */
-    private fun schoolSenders(householdId: String): Set<String> = runCatching {
-        SchoolMailRules.senders(AboutYouRules.read(reader.entity(householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)))
-    }.getOrDefault(emptySet())
+    /**
+     * Who counts as the school for the household ([SchoolMailRules.Known]): the senders he marked in About you and the
+     * children's schools' names; none when unreadable (the school's own domains and messaging services still count).
+     */
+    private fun schoolKnown(householdId: String): SchoolMailRules.Known = runCatching {
+        SchoolMailRules.Known.of(AboutYouRules.read(reader.entity(householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)))
+    }.getOrDefault(SchoolMailRules.Known.NONE)
+
+    private fun isSchool(h: MailHeader, known: SchoolMailRules.Known): Boolean =
+        SchoolMailRules.isSchoolMail(h.fromAddress, h.fromName, h.subject, h.preview, known)
 
     /**
      * School and family logistics from email, slice 1: the emails of the last [SchoolMailRules.WINDOW_DAYS] days from a
@@ -1053,12 +1059,11 @@ class Integrations(
      */
     internal fun schoolMail(a: AccountRow, ms: MailStore) {
         val profile = AboutYouRules.read(reader.entity(a.householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID))
-        val senders = SchoolMailRules.senders(profile)
-        if (senders.isEmpty()) return
+        // School emails first, slice 1: no setup needed: the school's own domain, its messaging service or its name.
+        val known = SchoolMailRules.Known.of(profile)
         val nowMs = now()
         val candidates = ms.messages(a.id).filter { h ->
-            nowMs - h.receivedAtMs <= SchoolMailRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
-                SchoolMailRules.fromSchool(h.fromAddress, senders)
+            nowMs - h.receivedAtMs <= SchoolMailRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L && isSchool(h, known)
         }
         if (candidates.isEmpty()) return
         val previews = ms.previews(a.id, candidates.map { it.id })
@@ -1130,10 +1135,10 @@ class Integrations(
      */
     internal fun subscriptions(a: AccountRow, ms: MailStore) {
         val nowMs = now()
-        val school = schoolSenders(a.householdId)
+        val school = schoolKnown(a.householdId)
         val candidates = ms.messages(a.id).filter { h ->
             nowMs - h.receivedAtMs <= LifeAuditRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
-                !SchoolMailRules.fromSchool(h.fromAddress, school) &&
+                !isSchool(h, school) &&
                 MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
                     .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
         }
@@ -1175,10 +1180,10 @@ class Integrations(
     internal fun bills(a: AccountRow, ms: MailStore) {
         val nowMs = now()
         // School logistics: the school's payments are School's dates (with School's own reminder), never a second bill.
-        val school = schoolSenders(a.householdId)
+        val school = schoolKnown(a.householdId)
         val candidates = ms.messages(a.id).filter { h ->
             nowMs - h.receivedAtMs <= MailBillRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
-                !SchoolMailRules.fromSchool(h.fromAddress, school) &&
+                !isSchool(h, school) &&
                 MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
                     .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
         }
@@ -2604,10 +2609,12 @@ class Integrations(
     private fun sortHeaders(a: AccountRow, ms: MailStore) {
         val known = knownPeople(a.householdId)
         val own = ownAddresses(a)
+        // School emails first, slice 1: the school's mail is Needs you, never a newsletter or tidied.
+        val school = schoolKnown(a.householdId)
         for (round in 0 until SORT_ROUNDS) {
             val batch = ms.unsorted(a.id, SORT_BATCH)
             if (batch.isEmpty()) break
-            val sorts = batch.associate { h -> h.id to sortOne(h, known, own) }
+            val sorts = batch.associate { h -> h.id to sortOne(h, known, own, school) }
             ms.setSorts(a.id, sorts)
             // Slice 5a: who sends the newsletters and promos (oldest first, so the newest one's headers win).
             batch.asReversed().filter { h -> sorts[h.id]?.let { it.sure && (it.sort == MailSort.NEWSLETTER || it.sort == MailSort.PROMO) } == true }
@@ -2615,7 +2622,7 @@ class Integrations(
             if (batch.size < SORT_BATCH) break
         }
         resortSecurity(a, ms)
-        resortNeedsYou(a, ms, known, own)
+        resortNeedsYou(a, ms, known, own, school)
         askAi(a, ms, known)
     }
 
@@ -2624,8 +2631,14 @@ class Integrations(
         runCatching { store.accounts(a.householdId).map { it.email.lowercase() }.toSet() }.getOrDefault(emptySet()) + a.email.lowercase()
 
     /** One header's sort: the rules, then his correspondents ([MailSortRules.known]) and his own addresses ([MailSortRules.mine]). */
-    private fun sortOne(h: MailHeader, known: Set<String>, own: Set<String>): MailSorted =
-        MailSortRules.mine(MailSortRules.known(MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)), h.fromAddress, known), h.fromAddress, own)
+    private fun sortOne(h: MailHeader, known: Set<String>, own: Set<String>, school: SchoolMailRules.Known = SchoolMailRules.Known.NONE): MailSorted =
+        MailSortRules.mine(
+            MailSortRules.school(
+                MailSortRules.known(MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)), h.fromAddress, known),
+                isSchool(h, school),
+            ),
+            h.fromAddress, own,
+        )
 
     /**
      * Inbox junk fix (Meka, 2026-10-17: "13 emails need you" was mostly junk): inbox mail sorted Needs you before the
@@ -2633,8 +2646,8 @@ class Integrations(
      * the rules now say something sure and different ([MailScamRules.resort]). Headers only; nothing in the mailbox moves
      * (Autopilot then plans the new Promos and Notifications as usual).
      */
-    internal fun resortNeedsYou(a: AccountRow, ms: MailStore, known: Set<String>, own: Set<String>) {
-        val again = ms.inboxSorted(a.id).mapNotNull { (h, s) -> MailScamRules.resort(s, sortOne(h, known, own))?.let { h.id to it } }.toMap()
+    internal fun resortNeedsYou(a: AccountRow, ms: MailStore, known: Set<String>, own: Set<String>, school: SchoolMailRules.Known = SchoolMailRules.Known.NONE) {
+        val again = ms.inboxSorted(a.id).mapNotNull { (h, s) -> MailScamRules.resort(s, sortOne(h, known, own, school))?.let { h.id to it } }.toMap()
         if (again.isNotEmpty()) ms.setSorts(a.id, again)
     }
 

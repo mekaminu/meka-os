@@ -304,7 +304,7 @@ object MailScamRules {
 
     private val BODY_SKIPS = setOf(
         MailSortReason.KNOWN_PERSON, MailSortReason.OWN, MailSortReason.PUBLIC_BODY, MailSortReason.SECURITY,
-        MailSortReason.SECURITY_CODE, MailSortReason.SCAM,
+        MailSortReason.SECURITY_CODE, MailSortReason.SCAM, MailSortReason.SCHOOL,
     )
 
     /**
@@ -328,6 +328,9 @@ object MailScamRules {
      * correspondents' mail ([MailSortReason.KNOWN_PERSON]), public bodies and account-security mail stay as they are.
      */
     fun resort(current: MailSorted, again: MailSorted): MailSorted? {
+        // School emails first (2026-11-24): the school's mail sorted before the rule (a newsletter from its messaging
+        // service) becomes the school's, whatever it was, except Gmail's spam and a possible scam (its body check's).
+        if (again.reason == MailSortReason.SCHOOL) return again.takeIf { current.reason !in NOT_SCHOOL }
         if (current.sort != MailSort.NEEDS_YOU) return null
         if (current.reason in STAYS) return null
         if (!again.sure || again == current) return null
@@ -336,8 +339,10 @@ object MailScamRules {
         return again
     }
 
+    private val NOT_SCHOOL = setOf(MailSortReason.SCHOOL, MailSortReason.SPAM, MailSortReason.SCAM)
+
     private val STAYS = setOf(
         MailSortReason.KNOWN_PERSON, MailSortReason.PUBLIC_BODY, MailSortReason.SECURITY, MailSortReason.SECURITY_CODE,
-        MailSortReason.SCAM, MailSortReason.BRAND_NOTICE, MailSortReason.SPAM,
+        MailSortReason.SCAM, MailSortReason.BRAND_NOTICE, MailSortReason.SPAM, MailSortReason.SCHOOL,
     )
 }

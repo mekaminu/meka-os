@@ -207,7 +207,7 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "oakfield.sch.uk", "Add it to open the school's INSET days from School",
         "School's website, the school's web address, for example oakfield.sch.uk"),
     SCHOOL_MAIL(AboutYouFields.SCHOOL_MAIL, "School's email", "office@oakfield.sch.uk",
-        "Add the addresses the school writes from so its trips, payments and days off are offered for School",
+        "Optional: Navilife already knows the school's own address, its messaging service and its name; add any other address it writes from",
         "School's email, the addresses the school writes from, with commas, for example office@oakfield.sch.uk, parentmail.co.uk"),
     CLUBS(AboutYouFields.CLUBS, "Clubs", "OFC Oakfield Town, HRFC", "Add the children's clubs so their fixtures get kit reminders and their names",
         "Clubs, each club's short name first, for example OFC Oakfield Town, HRFC"),

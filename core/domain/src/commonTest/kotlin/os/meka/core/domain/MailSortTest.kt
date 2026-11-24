@@ -28,7 +28,8 @@ class MailSortTest {
         for (from in listOf("noreply@tax.service.gov.uk", "office@oakfield.sch.uk", "appointments@nhs.net", "x@gov.uk")) {
             val s = sorted(mail(from = from, unsubscribe = "<https://example.com/u>", labels = listOf("INBOX", "CATEGORY_UPDATES")))
             assertEquals(MailSort.NEEDS_YOU, s.sort, from)
-            assertEquals(MailSortReason.PUBLIC_BODY, s.reason, from)
+            // School emails first (2026-11-24): a school's own domain is the school's.
+            assertEquals(if (from.endsWith("sch.uk")) MailSortReason.SCHOOL else MailSortReason.PUBLIC_BODY, s.reason, from)
             assertTrue(s.sure)
         }
         // Only the real suffix counts.

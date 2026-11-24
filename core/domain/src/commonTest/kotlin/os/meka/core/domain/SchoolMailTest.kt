@@ -276,4 +276,61 @@ class SchoolMailTest {
         val lib = find(weekly(null, "Library books go back every Wednesday.").single())
         assertEquals("In School: Library books · every Wednesday · in Kids' week", SchoolMailRules.addedLine(lib, received))
     }
+
+    // ---- School emails first, slice 1: the school recognised with no setup ----
+
+    private val known = SchoolMailRules.Known(emptySet(), listOf("Oakfield Primary School"))
+
+    @Test
+    fun aSchoolsOwnDomainOrItsMessagingServiceIsTheSchoolsWithNoSetup() {
+        for (from in listOf("office@oakfield.sch.uk", "noreply@pmx.parentmail.co.uk", "messages@arbor-education.com", "no-reply@schoolcomms.com")) {
+            assertTrue(SchoolMailRules.serviceSender(from), from)
+            assertTrue(SchoolMailRules.isSchoolMail(from, null, "Christmas fair", null, SchoolMailRules.Known.NONE), from)
+        }
+        // Not lookalikes, and not account mail from a service.
+        assertFalse(SchoolMailRules.serviceSender("deals@notparentmail.co.uk"))
+        assertFalse(SchoolMailRules.isSchoolMail("deals@shop.example", "Shop", "Back to school sale", null, SchoolMailRules.Known.NONE))
+        assertFalse(SchoolMailRules.isSchoolMail("noreply@parentmail.co.uk", null, "Reset your password", null, SchoolMailRules.Known.NONE))
+        // What he typed in About you still counts.
+        assertTrue(SchoolMailRules.isSchoolMail("head@oakfield.example", null, "Hello", null, SchoolMailRules.Known(setOf("oakfield.example"), emptyList())))
+    }
+
+    @Test
+    fun anEmailNamingTheChildrensSchoolIsTheSchools() {
+        // The whole name, or its own part beside a school word, in the sender's name or the subject.
+        assertTrue(SchoolMailRules.isSchoolMail("pta.mail@gmail.example", "Oakfield PTA", "Christmas fair", null, known))
+        assertTrue(SchoolMailRules.isSchoolMail("x@messages.example", "Messages", "Oakfield Primary School: Christmas fair", null, known))
+        assertTrue(SchoolMailRules.isSchoolMail("x@messages.example", "Oakfield Primary", "Dates for parents", null, known))
+        // The bare word alone (a road, a shop) isn't, nor a preview from a sender with no school word.
+        assertFalse(SchoolMailRules.isSchoolMail("x@shop.example", "Oakfield Garden Centre", "Christmas trees in", null, known))
+        assertFalse(SchoolMailRules.isSchoolMail("x@shop.example", "Shop", "Offers", "Delivered to Oakfield Primary School parents", known))
+        assertTrue(SchoolMailRules.isSchoolMail("x@service.example", "School office", "Notice", "Oakfield Primary School will close at 13:00", known))
+        // Another school, and no children's school typed: nothing by name.
+        assertFalse(SchoolMailRules.isSchoolMail("x@m.example", "Elmwood School", "Fair", null, known))
+        assertFalse(SchoolMailRules.isSchoolMail("x@m.example", "Oakfield PTA", "Fair", null, SchoolMailRules.Known.NONE))
+        assertEquals(listOf("Oakfield School"), SchoolMailRules.schoolNames(AboutYou(children = listOf(AboutChild("Alex", 7, "Oakfield School"), AboutChild("Sam", 10, "oakfield school")))))
+    }
+
+    @Test
+    fun theSchoolsMailIsAlwaysNeedsYouNeverANewsletterNeverTidied() {
+        val list = MailSortRules.sort(MailSortFacts("noreply@pmx.parentmail.co.uk", "Oakfield School", "Christmas fair", listOf("INBOX", "CATEGORY_UPDATES"), "<https://u.example>", "<news.parentmail.co.uk>"))
+        assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCHOOL, true), list)
+        // Named by his data on the server: a list from a PTA's own address is the school's too.
+        val pta = MailSortRules.sort(MailSortFacts("pta.mail@gmail.example", "Oakfield PTA", "Fair", listOf("INBOX"), "<https://u.example>", null))
+        assertEquals(MailSort.NEWSLETTER, pta.sort)
+        assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCHOOL, true), MailSortRules.school(pta, true))
+        assertEquals(pta, MailSortRules.school(pta, false))
+        // Gmail's spam and a possible scam keep theirs.
+        val spam = MailSorted(MailSort.JUNK, MailSortReason.SPAM, true)
+        assertEquals(spam, MailSortRules.school(spam, true))
+        // Never tidied, his "always tidy" included.
+        assertEquals(MailTidy.KEEP, MailTidyRules.plan(MailTidyFacts("pta.mail@gmail.example", true, MailSortRules.school(pta, true), emptySet(), rule = MailSenderRule.TIDY)))
+        assertTrue(MailTidyRules.protectedSender("noreply@pmx.parentmail.co.uk", emptySet()))
+        // Mail already sorted a newsletter becomes the school's; spam and a body-checked scam don't.
+        val school = MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCHOOL, true)
+        assertEquals(school, MailScamRules.resort(pta, school))
+        assertNull(MailScamRules.resort(school, school))
+        assertNull(MailScamRules.resort(spam, school))
+        assertNull(MailScamRules.resort(MailSorted(MailSort.NEEDS_YOU, MailSortReason.SCAM, true), school))
+    }
 }

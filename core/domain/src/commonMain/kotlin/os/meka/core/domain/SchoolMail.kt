@@ -176,6 +176,73 @@ object SchoolMailRules {
     }
 
     /**
+     * School emails first, slice 1 (Meka 2026-11-24: "the school email needs a priority as I miss what it says"): the
+     * messaging services UK schools send through (a parent never types these). Mail from one of these, or from any
+     * school's own `sch.uk` domain, is the school's with no setup: always Needs you, never tidied, never a newsletter.
+     */
+    val SERVICE_DOMAINS = listOf(
+        "parentmail.co.uk", "parentpay.com", "schoolcomms.com", "arbor-education.com", "arbor.sc", "groupcall.com",
+        "teachers2parents.co.uk", "weduc.co.uk", "weduc.com", "classdojo.com", "seesaw.me", "studybugs.com",
+        "schoolgateway.com", "bromcom.com", "mychildatschool.com", "edulinkone.com", "teamsatchel.com", "scholarpack.com",
+        "tapestryjournal.com", "marvellousme.com", "parentsquare.com", "schoolspider.co.uk",
+    )
+    /** Schools' own domains in England and Wales (and their subdomains). */
+    const val SCHOOL_SUFFIX = "sch.uk"
+
+    /** Whether [fromAddress] is a school's own domain or a school messaging service ([SERVICE_DOMAINS]). */
+    fun serviceSender(fromAddress: String?): Boolean {
+        val domain = MailSortRules.domain(fromAddress) ?: return false
+        return (SERVICE_DOMAINS + SCHOOL_SUFFIX).any { domain == it || domain.endsWith(".$it") }
+    }
+
+    /** Words every school name shares; what's left ("Oakfield") is the name to look for. */
+    private val GENERIC = Regex(
+        """\b(the|school|schools|primary|junior|juniors|infant|infants|nursery|academy|college|high|secondary|c\s+of\s+e|ce|rc|church\s+of\s+england|catholic|community|federation|trust|st|saint|and|&)\b""", I,
+    )
+    /** A school word beside the bare name ("Oakfield" alone could be a road or a shop). */
+    private val SCHOOL_WORD = Regex("""\b(school|academy|primary|pupils?|class|year\s+\d|reception|parents?|carers?|term|headteacher|pta|fair|fayre)\b""", I)
+
+    /** The children's schools' names from About you (each child's school), once each. */
+    fun schoolNames(a: AboutYou): List<String> =
+        a.children.mapNotNull { it.school?.trim()?.takeIf { s -> s.length >= 3 } }.distinctBy { it.lowercase() }
+
+    /**
+     * Whether [text] names one of [names]: the whole name ("Oakfield Primary School"), or its own part ("Oakfield", at
+     * least four letters, as a whole word) beside a school word ("Oakfield PTA", "Oakfield … Year 2 parents").
+     */
+    fun namesSchool(text: String?, names: List<String>): Boolean {
+        val t = text?.lowercase()?.takeIf { it.isNotBlank() } ?: return false
+        return names.any { raw ->
+            val n = raw.lowercase().replace(Regex("""\s+"""), " ").trim()
+            if (n.length >= 6 && n in t) return@any true
+            val core = GENERIC.replace(n, " ").replace(Regex("""[^a-z' -]"""), " ").replace(Regex("""\s+"""), " ").trim()
+            core.length >= 4 && Regex("""(?<![a-z])${Regex.escape(core)}(?![a-z])""").containsMatchIn(t) && SCHOOL_WORD.containsMatchIn(t)
+        }
+    }
+
+    /** Who counts as the school for one household: his own lines ([senders]) and the children's schools ([schoolNames]). */
+    data class Known(val senders: Set<String>, val names: List<String>) {
+        companion object {
+            val NONE = Known(emptySet(), emptyList())
+            fun of(a: AboutYou) = Known(senders(a), schoolNames(a))
+        }
+    }
+
+    /**
+     * School emails first, slice 1: whether an email is the school's **with no setup**: from a sender he listed
+     * ([fromSchool]), a school's own domain or a messaging service ([serviceSender]), or naming one of the children's
+     * schools in its sender's name or subject ([namesSchool]; the preview counts only with a messaging-style sender
+     * name, so a shop's email that mentions a school isn't one). Account mail (codes, password resets) is not.
+     */
+    fun isSchoolMail(fromAddress: String?, fromName: String?, subject: String?, preview: String?, known: Known): Boolean {
+        if (NOISE.containsMatchIn(subject.orEmpty())) return false
+        if (fromSchool(fromAddress, known.senders) || serviceSender(fromAddress)) return true
+        if (known.names.isEmpty()) return false
+        if (namesSchool(fromName, known.names) || namesSchool(subject, known.names)) return true
+        return namesSchool(preview, known.names) && fromName?.let { SCHOOL_WORD.containsMatchIn(it) } == true
+    }
+
+    /**
      * About you's **School's email** typed as "office@oakfield.sch.uk, parentmail.co.uk": addresses or domains, split by
      * commas, semicolons or spaces, each cleaned ([AboutYouRules.email] / a website's host), kept once, up to
      * [MAX_SENDERS]; stored as "office@oakfield.sch.uk, parentmail.co.uk". Null when one can't be either.
