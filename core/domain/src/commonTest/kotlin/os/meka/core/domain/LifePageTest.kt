@@ -84,7 +84,7 @@ class LifePageTest {
     @Test
     fun theFuelTileNeverPromisesPricesTheCardDoesntShow() {
         // Found and fixing week 4, A22: "Fuel / prices below" sat over a card asking for location.
-        fun label(state: String) = CarPageRules.page(CarsView.EMPTY, emptyList(), TimersView.EMPTY, FuelView(state, "", emptyList()), day, at(9), cal).tiles[1].label
+        fun label(state: String) = CarPageRules.page(CarsView(listOf(car(CarRules.ENTITY_ID, "Car", row("mot", "MOT", day + 21))), true), emptyList(), TimersView.EMPTY, FuelView(state, "", emptyList()), day, at(9), cal).tiles[1].label
         assertEquals("needs location", label(FuelRules.NO_LOCATION))
         assertEquals("prices off", label(FuelRules.OFF))
         assertEquals("looking…", label(FuelRules.LOOKING))
@@ -94,14 +94,33 @@ class LifePageTest {
     }
 
     @Test
-    fun anEmptyCarPageSaysSoInWordsNeverALoneDash() {
+    fun aBlankCarPageSaysItOnceWithNoTilesOrCards() {
+        // Walk-through 2026-11-22 A15: "No dates / added yet" over "No dates yet · + Add puts…", "Not parked / right now"
+        // over "Not parked. When you leave…", See all on an empty Fuel card; now only the one line and its button.
         val p = CarPageRules.page(CarsView.EMPTY, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal)
-        assertEquals(listOf("No dates", "Fuel", "Not parked"), p.tiles.map { it.number })
-        assertTrue(ScreenSenseRules.problems(p.tiles.flatMap { listOf(it.number, it.label) }).isEmpty())
-        assertTrue(p.cards.filter { it.key != CarPageRules.BLUETOOTH }.all { it.rows.isEmpty() && it.empty != null })
-        // The one car there always is can still be linked to its Bluetooth.
-        assertEquals(CarBluetoothRules.NOT_LINKED, p.cards.single { it.key == CarPageRules.BLUETOOTH }.rows.single().line)
-        assertNull(p.cards[1].more)
+        assertTrue(CarPageRules.blank(CarsView.EMPTY, emptyList(), TimersView.EMPTY))
+        assertEquals(0, p.tileCount)
+        assertEquals(0, p.cards.size)
+        assertFalse("+ Add" in CarPageRules.EMPTY_LINE)
+        assertEquals("Add the car's dates", CarPageRules.ADD_FIRST)
+        assertEquals(CarPageRules.INFO, p.info)
+        assertEquals(listOf("parked", "timer", "date"), p.addChoices.map { it.key })
+        assertTrue(ScreenSenseRules.problems(listOf(CarPageRules.EMPTY_LINE)).isEmpty())
+        // Fuel prices already found near him keep their card on a blank page, with nothing else.
+        assertEquals(listOf(CarPageRules.FUEL), CarPageRules.page(CarsView.EMPTY, emptyList(), TimersView.EMPTY, fuel, day, at(9), cal).cards.map { it.key })
+        // The Mac's blank page: no tiles or cards either.
+        val mac = CarPageRules.macPage(CarsView.EMPTY, TimersView.EMPTY, day)
+        assertEquals(0, mac.tileCount)
+        assertEquals(0, mac.cards.size)
+        // A registration, a date or a second car brings the page back.
+        assertFalse(CarPageRules.blank(CarsView(listOf(CarView("AB12 CDE", emptyList(), "")), true), emptyList(), TimersView.EMPTY))
+        assertFalse(CarPageRules.blank(CarsView(listOf(car(CarRules.ENTITY_ID, "Car"), car("car2", "Car 2")), true), emptyList(), TimersView.EMPTY))
+        val one = CarsView(listOf(car(CarRules.ENTITY_ID, "Car", row("mot", "MOT", day + 21))), true)
+        val q = CarPageRules.page(one, emptyList(), TimersView.EMPTY, FuelView.IDLE, day, at(9), cal)
+        assertEquals(listOf("3 wks", "Fuel", "Not parked"), q.tiles.map { it.number })
+        assertTrue(ScreenSenseRules.problems(q.tiles.flatMap { listOf(it.number, it.label) }).isEmpty())
+        assertEquals(CarPageRules.PARKED_EMPTY, q.cards[1].empty)
+        assertNull(q.cards[1].more)
     }
 
     @Test

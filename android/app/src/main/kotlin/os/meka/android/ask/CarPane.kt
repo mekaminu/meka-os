@@ -304,7 +304,18 @@ fun CarPane(
                 onAdd = { haptics.tick(); addChosen = null; addOpen = true },
             )
         }
-        item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(1))) }
+        if (CarPageRules.blank(cars, rows, timers)) {
+            // Walk-through 2026-11-22 A15: no dates, not parked and no timer says it once, in one raised card with its
+            // one button, which opens the car's dates as + Add → A date does.
+            item(key = "empty") {
+                LifeEmptyCard(CarPageRules.EMPTY_LINE, CarPageRules.ADD_FIRST, Modifier.appear(rememberAppearance(1))) {
+                    haptics.tick(); onDates()
+                }
+            }
+        }
+        if (page.tiles.isNotEmpty()) {
+            item(key = "tiles") { LifeNumberTiles(page.tiles, Modifier.appear(rememberAppearance(1))) }
+        }
         item(key = "said") {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "park-said-line") { s ->

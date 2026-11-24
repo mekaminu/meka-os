@@ -175,6 +175,29 @@ object CarPageRules {
         AddChoice(ADD_DATE, "A date", "MOT, tax, insurance or service: opens the car's dates"),
     )
 
+    /**
+     * Walk-through 2026-11-22 A15: a blank Car page said it twice over ("No dates / added yet" over "No dates yet · + Add
+     * puts the MOT…", "Not parked / right now" over "Not parked. When you leave the car…"), with See all on a Fuel card
+     * holding nothing and a Bluetooth row for a car with no dates. Now this line is said once, in one raised card with
+     * [ADD_FIRST] under it, and no tiles or cards follow until a date is added, the car is parked or a timer runs; fuel
+     * prices already found near him keep their card. The ⓘ still says what the page does, and + Add still offers all three.
+     */
+    const val EMPTY_LINE = "No car dates yet. Add the MOT, tax, insurance and service once; Navilife reminds you a month and a week before each is due."
+
+    /** The blank page's one button under [EMPTY_LINE]; it opens the car's dates, as + Add → A date does. */
+    const val ADD_FIRST = "Add the car's dates"
+
+    /**
+     * Whether the page is blank: one car with no registration, no dates and nothing run out, not parked and no parking
+     * timer (running or just ended), so only the one line and button show (with the Fuel card if it has prices).
+     */
+    fun blank(cars: CarsView, parked: List<ParkedRow>, timers: TimersView): Boolean =
+        cars.cars.size <= 1 && cars.first.registration == null && dated(cars).isEmpty() && !cars.first.isLapsed &&
+            parked.isEmpty() && timers.rows.isEmpty()
+
+    /** The Mac's blank page: as [blank], where parking stays on the phone. */
+    fun macBlank(cars: CarsView, timers: TimersView): Boolean = blank(cars, emptyList(), timers)
+
     /** One car's tracked date, with its car. */
     private data class Dated(val car: CarView, val row: CarRow, val day: Long)
 
@@ -217,6 +240,7 @@ object CarPageRules {
      */
     fun macPage(cars: CarsView, timers: TimersView, today: Long): LifePageView {
         val dates = dated(cars)
+        if (macBlank(cars, timers)) return LifePageView(ParkingRules.TITLE, MAC_INFO, emptyList(), emptyList(), ADD_TITLE, ADD_CHOICES.filter { it.key != ADD_PARKED })
         return LifePageView(
             ParkingRules.TITLE, MAC_INFO,
             listOf(
@@ -289,6 +313,10 @@ object CarPageRules {
         cars: CarsView, parked: List<ParkedRow>, timers: TimersView, fuel: FuelView, today: Long, nowMs: Long, cal: LocalCalendar,
         links: Map<String, CarLink> = emptyMap(), bluetoothAllowed: Boolean = true,
     ): LifePageView {
+        if (blank(cars, parked, timers)) {
+            val priced = fuelCard(fuel).takeIf { it.rows.isNotEmpty() }
+            return LifePageView(ParkingRules.TITLE, INFO, emptyList(), listOfNotNull(priced), ADD_TITLE, ADD_CHOICES)
+        }
         val many = cars.cars.size > 1
         val dates = dated(cars)
         val dateTile = dateTile(cars, dates, today)

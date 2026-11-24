@@ -45,6 +45,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.LifePageRules
+import os.meka.core.domain.DateGlue
 import os.meka.core.domain.CarPageRules
 import os.meka.core.domain.CarRules
 import os.meka.core.domain.FuelKind
@@ -167,7 +168,27 @@ class CarScreensTest {
         val cars = core.carsView.value
         ScreenShots.assertReadable(compose, name, cars.cars.flatMap { listOf(it.title, it.summary) }.filter { it.isNotBlank() }, mustShow = false)
         when (fill) {
-            Fill.EMPTY -> ScreenShots.assertShows(compose, name, LifePageRules.shown(CarPageRules.PARKED_EMPTY))
+            Fill.EMPTY -> {
+                // Walk-through 2026-11-22 A15: said once, with one button; no "No dates / added yet" or "Not parked /
+                // right now" tiles over their cards' own lines, no See all on an empty Fuel card, no Bluetooth row.
+                ScreenShots.assertShows(compose, name, CarPageRules.ADD_FIRST)
+                val drawn = ScreenShots.texts(compose).map { DateGlue.plain(it) }
+                listOf("added yet", "No dates yet", "Not parked", "right now", "Tap + Add", CarPageRules.FUEL, CarPageRules.BLUETOOTH, LifePageRules.SEE_ALL).forEach { w ->
+                    if (drawn.any { it.contains(w) }) fail("$name: \"$w\" on a blank Car page, beside \"${CarPageRules.EMPTY_LINE}\"")
+                }
+                val said = drawn.count { it.contains("No car dates yet") }
+                if (said != 1) fail("$name: \"No car dates yet\" said $said times")
+                if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                    fail("$name: number tiles on a blank Car page")
+                }
+                if (compose.onAllNodes(androidx.compose.ui.test.hasTestTag(os.meka.android.ask.LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) {
+                    fail("$name: the blank Car line isn't in its one raised card")
+                }
+                val before = datesTapped
+                compose.onNode(hasText(CarPageRules.ADD_FIRST), useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+                compose.waitForIdle()
+                if (datesTapped != before + 1) fail("$name: ${CarPageRules.ADD_FIRST} didn't open the car's dates")
+            }
             else -> {
                 val spots = ParkingStore.spots(context)
                 if (spots.size != (if (fill == Fill.MANY) 2 else 1)) fail("$name: ${spots.size} parked spots kept")

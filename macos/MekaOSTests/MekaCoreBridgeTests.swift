@@ -4569,6 +4569,10 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testLifePagesLinesWrapWholeOnTheMac() {
         let nb = LifeTileRules.shared.GLUE
         XCTAssertEqual(CarPageRules.shared.owner(title: "The Golf"), "the Golf's")
+        // Walk-through 2026-11-22 A15: a blank Car page says it once, with one button, no tiles or cards.
+        XCTAssertTrue(CarPageRules.shared.macBlank(cars: CarsView.companion.EMPTY, timers: TimersView.companion.EMPTY))
+        XCTAssertEqual(CarPageRules.shared.ADD_FIRST, "Add the car's dates")
+        XCTAssertEqual(CarPageRules.shared.macPage(cars: CarsView.companion.EMPTY, timers: TimersView.companion.EMPTY, today: 0).tileCount, 0)
         XCTAssertTrue(LifePageRules.shared.tileLabel(label: "to the Golf's MOT").hasSuffix("Golf's\(nb)MOT"))
         XCTAssertTrue(LifePageRules.shared.shown(text: MealsPageRules.shared.EMPTY_SUMMARY).hasSuffix(" in\(nb)one\(nb)tap."))
         XCTAssertEqual(BinsPageRules.shared.remindRowLine(), "The evening before · Today says it from 16:00")

@@ -86,7 +86,15 @@ struct CarSheet: View {
                     .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
                     .transition(.opacity)
                 }
-                LifeNumberTiles(page: view, palette: palette).staggeredAppear(1)
+                if view.tileCount > 0 {
+                    LifeNumberTiles(page: view, palette: palette).staggeredAppear(1)
+                } else if !adding {
+                    // Walk-through 2026-11-22 A15: no dates and no timer says it once, in one raised card whose button
+                    // opens every car's dates in Lists → Renewals, as + Add → A date does.
+                    LifeEmptyCard(line: page.EMPTY_LINE, button: page.ADD_FIRST, palette: palette, onTap: openDates)
+                        .staggeredAppear(1)
+                        .transition(.opacity)
+                }
                 if let said {
                     HStack {
                         Text(said).font(MekaType.caption).foregroundStyle(refused ? palette.accent : palette.textSecondary)
