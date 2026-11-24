@@ -193,7 +193,7 @@ class AdminPlacesScreensTest {
                 ScreenShots.assertLifePageWraps(compose, name, page)
                 page.tiles.forEach { ScreenShots.assertShows(compose, name, it.number) }
                 if (page.tiles.isNotEmpty()) assertToBookTileAgrees(name, page)
-                page.cards.first().rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
+                page.cards.firstOrNull()?.rows?.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.name) }
                 ScreenShots.assertReadable(compose, name, page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } }, mustShow = false)
                 if (fill == Fill.EMPTY) {
                     // Walk-through 2026-11-22 A15: said once, with one button; no "None" tiles, no To book card naming
