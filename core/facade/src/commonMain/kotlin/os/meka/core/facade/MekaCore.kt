@@ -11157,7 +11157,7 @@ class MekaCore(
         val edit = edits[C.editId(a.id)]
         val inCalendar = edit != null && !edit.undone && edits[C.deleteId(a.id)] == null
         val made = schoolMadeOf(a)
-        val removed = X.Removed(made.first, made.second.size, inCalendar)
+        val removed = os.meka.core.domain.SchoolChangeRules.Removed(made.first, made.second.size, inCalendar)
         activity.actRecorded(X.cancelledSummary(b, a, removed, today), A.WHY, A.SOURCE, level, A.detail(b), A.activityId(b.id)) {
             takeOutSchoolMade(a, made)
             replica.commitLocal(
