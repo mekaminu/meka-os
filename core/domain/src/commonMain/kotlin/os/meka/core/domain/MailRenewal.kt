@@ -84,6 +84,8 @@ data class MailFind(
     val place: String? = null,
     /** School emails first, slice 2: what to bring, wear or do and travel notes, one per line, the email's words, else null. */
     val notes: String? = null,
+    /** School emails first, slice 4a: the year or class it is for ("Year 3", "KS2"), the email's words; null = everyone. */
+    val forWhom: String? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -136,6 +138,8 @@ object MailFindFields {
     const val END_MINUTE = "endMinute"
     const val PLACE = "place"
     const val NOTES = "notes"
+    /** School emails first, slice 4a (server-written, once; additive): the year or class a school find is for, else absent (everyone). */
+    const val FOR_WHOM = "forWhom"
 }
 
 data class MailFindRow(
@@ -410,6 +414,7 @@ object MailRenewalRules {
             endMinute = f[MailFindFields.END_MINUTE]?.longOrNull?.toInt()?.takeIf { it in 1..24 * 60 },
             place = f[MailFindFields.PLACE]?.textOrNull?.takeIf { it.isNotBlank() },
             notes = f[MailFindFields.NOTES]?.textOrNull?.takeIf { it.isNotBlank() },
+            forWhom = f[MailFindFields.FOR_WHOM]?.textOrNull?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -492,6 +497,8 @@ object MailRenewalRules {
         finds: List<MailFind>, obligations: Collection<Map<String, FieldValue>>, nowMs: Long, cal: LocalCalendar,
         waiting: List<WaitingItem> = emptyList(), waits: List<FollowUpWait> = emptyList(),
         schoolItems: List<SchoolItem> = emptyList(),
+        /** Slice 4a: the children's school years ([SchoolYearRules.childYears]); null when not known. */
+        schoolYears: Set<Int>? = null,
     ): MailFindCard? {
         val today = cal.epochDayOf(nowMs)
         val renewals = finds.filter { f ->
@@ -513,7 +520,7 @@ object MailRenewalRules {
         val rows = open.take(SHOWN).map { f ->
             if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
             if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today, waits)
-            if (f.kind == SchoolMailRules.KIND_SCHOOL) return@map SchoolMailRules.row(f, today)
+            if (f.kind == SchoolMailRules.KIND_SCHOOL) return@map SchoolMailRules.row(f, today, SchoolYearRules.otherYear(f, schoolYears))
             if (LifeAuditRules.isSubscription(f)) return@map LifeAuditRules.row(f, today)
             if (f.kind == MailRefundRules.KIND_REFUND) return@map MailRefundRules.row(f, MailRefundRules.match(f, waiting, cal)!!, today)
             val title = title(f)

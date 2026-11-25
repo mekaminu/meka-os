@@ -108,8 +108,10 @@ object SchoolAutoRules {
      * Whether [f] is added on its own: an open school find never added on its own before, with a day still to come
      * (from [today]), not a weekly kit day or an undated ask, and not already in School ([SchoolMailRules.showable]).
      */
-    fun eligible(f: MailFind, items: List<SchoolItem>, today: Long): Boolean {
+    fun eligible(f: MailFind, items: List<SchoolItem>, today: Long, childYears: Set<Int>? = null): Boolean {
         if (f.kind != SchoolMailRules.KIND_SCHOOL || f.state != MailFindState.OPEN || f.autoAtMs != null) return false
+        // Slice 4a: an email for another year group is summarised, never added on its own.
+        if (SchoolYearRules.otherYear(f, childYears)) return false
         if (SchoolMailRules.isWeekly(f)) return false
         if (SchoolMailRules.isAsk(f) && SchoolMailRules.undated(f)) return false
         if (f.renewDay < today) return false
@@ -117,11 +119,37 @@ object SchoolAutoRules {
     }
 
     /** The finds to add now: [eligible], soonest first, at most what is left of today's [PER_DAY] after [addedToday]. */
-    fun due(finds: List<MailFind>, items: List<SchoolItem>, today: Long, addedToday: Int): List<MailFind> {
+    fun due(finds: List<MailFind>, items: List<SchoolItem>, today: Long, addedToday: Int, childYears: Set<Int>? = null): List<MailFind> {
         val room = PER_DAY - addedToday
         if (room <= 0) return emptyList()
-        return finds.filter { eligible(it, items, today) }
-            .sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id }).take(room)
+        // Slice 4a: the same thing sent again (a reminder, the other account, "Re: …") is added once: never when one
+        // like it was added on its own before (kept through Undo, so an undone one doesn't come back), and once a batch.
+        val done = finds.filter { it.kind == SchoolMailRules.KIND_SCHOOL && it.autoAtMs != null }
+        val out = mutableListOf<MailFind>()
+        for (f in finds.filter { eligible(it, items, today, childYears) }.sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.receivedDay }.thenBy { it.id })) {
+            if (done.any { sameThing(it, f) } || out.any { sameThing(it, f) }) continue
+            out += f
+            if (out.size >= room) break
+        }
+        return out
+    }
+
+    private val NOISE = Regex("""\b(?:reminder|re|fwd?|update|updated|urgent|important|final|change|changed|school|the|our|a)\b""")
+
+    private fun normTitle(s: String?): String =
+        (s ?: "").lowercase().map { if (it.isLetterOrDigit()) it else ' ' }.joinToString("").replace(NOISE, " ").replace(Regex("""\s+"""), " ").trim()
+
+    /** Slice 4a: whether [a] and [b] are the same school thing: the same day and kind, the same child (or either for all), the same name give or take "Reminder:". */
+    fun sameThing(a: MailFind, b: MailFind): Boolean {
+        if (a.id == b.id) return true
+        if (a.renewDay != b.renewDay || (a.schoolKind ?: "") != (b.schoolKind ?: "")) return false
+        // A trip and its payment on the same day are two things.
+        if (SchoolRules.isDue(a.what ?: "") != SchoolRules.isDue(b.what ?: "")) return false
+        val wa = a.who.orEmpty(); val wb = b.who.orEmpty()
+        if (wa.isNotEmpty() && wb.isNotEmpty() && !wa.equals(wb, ignoreCase = true)) return false
+        val ta = normTitle(a.what); val tb = normTitle(b.what)
+        if (ta.length < 3 || tb.length < 3) return ta == tb && ta.isNotEmpty()
+        return ta == tb || ta.contains(tb) || tb.contains(ta)
     }
 
     /** How many school finds were added on their own today (their marks). */
@@ -421,4 +449,57 @@ object SchoolDoneRules {
     /** The heads-ups ([HandleForMeRules.notices]): "Done for you · from the school" · the line, once each, opening Needs you. */
     fun notices(rows: List<DoneForYou>, finds: List<MailFind>, nowMs: Long, cal: LocalCalendar): List<Notice> =
         HandleForMeRules.notices(notifiable(rows, finds, nowMs, cal))
+}
+
+/*
+ * School emails first, slice 4a (Meka 2026-11-24 17:38; the board's "(4) Care"): **an email for another year group is
+ * summarised but nothing is added**. A school find keeps the year or class its sentence (or its email, when it names
+ * only one) is for ([MailFind.forWhom]: "Year 3", "Years 5 and 6", "Reception", "KS2"; "the whole school" is everyone).
+ * The children's school years come from About you's club age groups: in England the football age group and the school
+ * year share the 31 August cut-off, so an under-7 is in Year 2 and an under-10 in Year 5 (U(n) → Year n − 5). When any
+ * child has no age group, or the find names no year, nothing is held back (it is added as before). Held back, its card
+ * row says "Not your children's year" and Add still adds it on his tap.
+ */
+object SchoolYearRules {
+    const val NOT_YOURS = "Not your children's year"
+    /** A club age group U(n) is school Year n − [OFFSET] (Reception is 0, Nursery −1). */
+    const val OFFSET = 5
+
+    private val RANGE = Regex("""years?\s+(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})""")
+    private val PAIR = Regex("""years?\s+(\d{1,2})\s*(?:and|&)\s*(\d{1,2})""")
+    private val ONE = Regex("""years?\s+(\d{1,2})""")
+
+    /** The school year a club age group stands for: U7 → 2, U5 → 0 (Reception); null outside Nursery to Year 13. */
+    fun yearOf(ageGroup: Int?): Int? = ageGroup?.minus(OFFSET)?.takeIf { it in -1..13 }
+
+    /** The children's school years, or null when there are none or any child has no age group (then nothing is held back). */
+    fun childYears(children: List<AboutChild>): Set<Int>? {
+        if (children.isEmpty()) return null
+        val ys = children.map { yearOf(it.ageGroup) ?: return null }
+        return ys.toSet()
+    }
+
+    /** The years [forWhom] names: "Year 3" → {3}, "Years 5 and 6" → {5, 6}, "Years 3-6" → 3..6, "KS1" → {1, 2}; null = everyone or not read. */
+    fun years(forWhom: String?): Set<Int>? {
+        val t = forWhom?.lowercase()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (t.contains("whole") || t.startsWith("all")) return null
+        if (t.startsWith("reception")) return setOf(0)
+        if (t.startsWith("nursery")) return setOf(-1)
+        if (Regex("""^(?:ks\s?1|key\s+stage\s+1)$""").matches(t)) return setOf(1, 2)
+        if (Regex("""^(?:ks\s?2|key\s+stage\s+2)$""").matches(t)) return (3..6).toSet()
+        RANGE.find(t)?.let { m ->
+            val a = m.groupValues[1].toInt(); val b = m.groupValues[2].toInt()
+            return if (a <= b && b - a <= 13) (a..b).toSet() else null
+        }
+        PAIR.find(t)?.let { m -> return setOf(m.groupValues[1].toInt(), m.groupValues[2].toInt()) }
+        ONE.find(t)?.let { m -> return setOf(m.groupValues[1].toInt()) }
+        return null
+    }
+
+    /** Whether [f] is a school find for a year none of [childYears] is in (null years: never). */
+    fun otherYear(f: MailFind, childYears: Set<Int>?): Boolean {
+        if (childYears == null || f.kind != SchoolMailRules.KIND_SCHOOL) return false
+        val ys = years(f.forWhom) ?: return false
+        return ys.none { it in childYears }
+    }
 }

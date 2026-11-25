@@ -29,6 +29,8 @@ data class SchoolBodyFind(
     val endMinute: Int? = null,
     val place: String? = null,
     val notes: List<String> = emptyList(),
+    /** Slice 4a: the year or class it is for ("Year 3", "Years 5 and 6", "KS2"), its own sentence's, else the email's one; null = everyone. */
+    val forWhom: String? = null,
 )
 
 object SchoolBodyRules {
@@ -215,6 +217,7 @@ object SchoolBodyRules {
                 f, startMinute = own?.first, endMinute = own?.second,
                 place = sentence?.let(::place),
                 notes = sentence?.let(::notes).orEmpty(),
+                forWhom = sentence?.let(::forWhom),
             )
         }
         val dated = sents.filter { hasDate(it, receivedDay) }
@@ -236,8 +239,10 @@ object SchoolBodyRules {
         val firstPlace = sents.firstNotNullOfOrNull(::place)
         val allNotes = sents.flatMap(::notes).distinctBy { it.lowercase() }
         val single = finds.singleOrNull { !it.find.ask && !SchoolRules.isDue(it.find.title) }
-        val filled = finds.map { b ->
-            if (b === single) b.copy(
+        // Slice 4a: the email names one year group (or one span of them) for all of it: a find naming none takes it.
+        val emailFor = all.mapNotNull(::forWhom).distinctBy { it.lowercase() }.singleOrNull()
+        val filled = finds.map { b -> if (b.forWhom == null && emailFor != null) b.copy(forWhom = emailFor) else b }.map { b ->
+            if (b.find === single?.find) b.copy(
                 startMinute = b.startMinute ?: firstTime?.first, endMinute = if (b.startMinute == null) firstTime?.second else b.endMinute,
                 place = b.place ?: firstPlace, notes = (b.notes + allNotes).distinctBy { it.lowercase() }.take(4),
             ) else b
@@ -303,5 +308,6 @@ object SchoolBodyRules {
         b.endMinute?.let { put(MailFindFields.END_MINUTE, it.toLong().fv()) }
         b.place?.let { put(MailFindFields.PLACE, it.fv()) }
         if (b.notes.isNotEmpty()) put(MailFindFields.NOTES, b.notes.joinToString("\n").fv())
+        b.forWhom?.let { put(MailFindFields.FOR_WHOM, it.fv()) }
     }
 }

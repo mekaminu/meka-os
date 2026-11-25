@@ -9478,10 +9478,15 @@ class MekaCore(
         val waiting = lists.waitingItems()
         val waits = followUpWaits()
         val schoolItems = school.items()
-        _mailFinds.value = viewMemo.keep("From your mail finds", listOf(finds, radar, waiting, waits, schoolItems, minuteNow(), timeZone())) {
-            os.meka.core.domain.MailRenewalRules.card(finds, radar, nowMs(), ZoneCalendar(timeZone), waiting, waits, schoolItems)
+        val years = schoolYears()
+        _mailFinds.value = viewMemo.keep("From your mail finds", listOf(finds, radar, waiting, waits, schoolItems, years, minuteNow(), timeZone())) {
+            os.meka.core.domain.MailRenewalRules.card(finds, radar, nowMs(), ZoneCalendar(timeZone), waiting, waits, schoolItems, years)
         }
     }
+
+    /** School emails first, slice 4a: the children's school years from About you's age groups (null when any is missing). */
+    private fun schoolYears(): Set<Int>? =
+        runCatching { os.meka.core.domain.SchoolYearRules.childYears(aboutYou.profile().children) }.getOrNull()
 
     /** Follow-up radar, slice 3: his own waits per person (absent = the default 3 days). */
     private fun followUpWaits(): List<os.meka.core.domain.FollowUpWait> =
@@ -11012,7 +11017,7 @@ class MekaCore(
         val now = nowMs()
         val today = cal.epochDayOf(now)
         val finds = activity.mailFinds()
-        val due = A.due(finds, school.items(), today, A.addedToday(finds, now, cal))
+        val due = A.due(finds, school.items(), today, A.addedToday(finds, now, cal), schoolYears())
         if (due.isEmpty() || !schoolAutoAllowed()) return
         var added = 0
         for (f in due) {

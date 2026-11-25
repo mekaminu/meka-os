@@ -1088,7 +1088,7 @@ class Integrations(
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         val mirror = store.transaction { store.mirror(a.householdId, a.id) }
         val written = mutableSetOf<String>()
-        val all = bodyReads + reads.map { (h, day, sf) -> Triple(h, day, os.meka.core.domain.SchoolBodyFind(sf)) }
+        val all = bodyReads + reads.map { (h, day, sf) -> Triple(h, day, os.meka.core.domain.SchoolBodyFind(sf, forWhom = h.subject?.let(SchoolBodyRules::forWhom))) }
         for ((h, day, b) in all.sortedBy { it.first.receivedAtMs }) {
             val sf = b.find
             val id = SchoolMailRules.findId(a.id, sf)

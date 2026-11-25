@@ -529,9 +529,10 @@ object SchoolMailRules {
         }
     }
 
-    fun row(f: MailFind, today: Long): MailFindRow {
+    /** The card's row; [otherYear] (slice 4a): the email is for another year group, said on the line and never added on its own. */
+    fun row(f: MailFind, today: Long, otherYear: Boolean = false): MailFindRow {
         val title = title(f)
-        val line = line(f, today)
+        val line = line(f, today) + if (otherYear) " · " + SchoolYearRules.NOT_YOURS else ""
         val what = f.what ?: "it"
         return MailFindRow(
             id = f.id, title = title, line = line, from = MailRenewalRules.fromLine(f),
