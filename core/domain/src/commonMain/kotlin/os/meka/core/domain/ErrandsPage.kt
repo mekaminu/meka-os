@@ -6,7 +6,7 @@ package os.meka.core.domain
  * + Add (Things to do at a place, a field in the sheet: "Tesco: milk, batteries"), three numbers (errands waiting, the
  * places they wait at, done this week), then **Waiting** (a row a place, the place waiting longest first, what's
  * there in the grey line and how many on the right), **Done lately** (the last week, newest first) and, on the Fold
- * only, **Near-me reminders** (its one row: the switch's line, On or Off on the right, brass while it needs a look).
+ * only, **Near-me reminders** (its one row, [NEAR_ROW]: the switch's line, On or Off on the right, brass while it needs a look).
  * A place's row opens its sheet with each errand's Done and Remove (and, with near-me on, its spot's I'm here /
  * Forget spot); a done row's sheet has Back and Remove; the near-me row's sheet has the switch and the privacy line.
  * Built from the [ErrandView] both apps already have; nothing new is read or sent. Non-AI, pure.
@@ -62,6 +62,21 @@ object ErrandsPageRules {
     /** "1 to do", "3 to do": a place row's right-hand text. */
     fun toDo(n: Int): String = "$n to do"
 
+    /**
+     * Walk-through 2026-11-22 A15: the near-me card said "Near-me reminders" twice (the card's title and its one row's
+     * name) and "Off" twice ("Off · errands wait in the list" beside a trailing "Off"). The card keeps the title; its
+     * row says what the switch does ([NEAR_ROW]), its line drops the leading "On ·" / "Off ·" ([nearLine]) and On or
+     * Off is said once, on the right. The sheet keeps the switch's own line beside its Turn on / Turn off.
+     */
+    const val NEAR_ROW = "Nudge me as I arrive"
+
+    /** The near-me row's grey line: the switch's line without its "On ·" / "Off ·", which the row's right side says. */
+    fun nearLine(near: ErrandNearSetting): String {
+        val l = near.statusLine
+        val bare = listOf("Off · ", "On · ").firstOrNull { l.startsWith(it) }?.let { l.removePrefix(it) } ?: return l
+        return bare.replaceFirstChar { it.uppercaseChar() }
+    }
+
     /** Whether the near-me switch is on (its button offers Turn off). */
     fun nearOn(near: ErrandNearSetting): Boolean = near.actionLabel != "Turn on"
 
@@ -98,7 +113,7 @@ object ErrandsPageRules {
             add(LifePageRules.card(WAITING, WAITING, allRows(view, WAITING), empty = WAITING_EMPTY, count = waiting))
             add(LifePageRules.card(DONE, DONE, allRows(view, DONE), empty = DONE_EMPTY))
             if (near != null) {
-                add(LifePageRules.settings(NEAR, NEAR, listOf(PageRow(KEY_NEAR, NEAR, near.statusLine, if (nearOn(near)) "On" else "Off", near.lit))))
+                add(LifePageRules.settings(NEAR, NEAR, listOf(PageRow(KEY_NEAR, NEAR_ROW, nearLine(near), if (nearOn(near)) "On" else "Off", near.lit))))
             }
         }
         return LifePageView(TITLE, if (near != null) INFO_NEAR else INFO, tiles, cards, ADD_TITLE, ADD_CHOICES)

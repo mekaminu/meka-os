@@ -107,6 +107,26 @@ class ErrandsPageTest {
     }
 
     @Test
+    fun theNearMeCardSaysItsNameAndOffOnce() {
+        val off = ErrandsPageRules.page(view, ErrandPlaceRules.setting(false, false, false, 0)).cardAt(2)
+        val row = off.rowAt(0)
+        assertEquals(ErrandsPageRules.NEAR, off.title)
+        assertEquals(ErrandsPageRules.NEAR_ROW, row.name)
+        assertEquals("Errands wait in the list", row.line)
+        assertEquals("Off", row.whenText)
+        val said = listOf(off.title, row.name, row.line, row.whenText)
+        assertEquals(1, said.count { it.contains("Near-me reminders") })
+        assertEquals(1, said.count { Regex("\\bOff\\b").containsMatchIn(it) })
+        val on = ErrandsPageRules.page(view, ErrandPlaceRules.setting(true, true, true, 2)).cardAt(2).rowAt(0)
+        assertEquals("Watching 2 places", on.line)
+        assertEquals("On", on.whenText)
+        assertEquals("Save a place's spot with I'm here", ErrandsPageRules.nearLine(ErrandPlaceRules.setting(true, true, true, 0)))
+        // A line that needs a look keeps its words; it has no On/Off of its own.
+        val needs = ErrandPlaceRules.setting(true, false, false, 0)
+        assertEquals(needs.statusLine, ErrandsPageRules.nearLine(needs))
+    }
+
+    @Test
     fun moreThanFivePlacesHaveSeeAll() {
         val many = (1..7).map { ErrandGroup("Shop $it", "shop $it", listOf(ErrandRow("e$it", "thing", null, false))) }
         val v = ErrandView(many, emptyList(), "7 errands at 7 places", 7)

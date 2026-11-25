@@ -214,6 +214,12 @@ class LifePlacesScreensTest {
                         fail("$name: the blank Errands line isn't in its one raised card")
                     }
                 }
+                // Walk-through 2026-11-22 A15: the near-me card said its name and "Off" twice each.
+                ScreenShots.texts(compose).map { os.meka.core.domain.DateGlue.plain(it) }.let { drawn ->
+                    val named = drawn.count { it.contains(ErrandsPageRules.NEAR) }
+                    if (named > 1) fail("$name: \"${ErrandsPageRules.NEAR}\" said $named times")
+                    drawn.firstOrNull { it.startsWith("Off ·") || it.startsWith("On ·") }?.let { fail("$name: \"$it\" beside the row's own On/Off") }
+                }
                 rows.forEach { r -> if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case") }
                 val raw = rows.map { it.title }.filter { it.first().isLowerCase() }.toSet()
                 ScreenShots.texts(compose).firstOrNull { it in raw }?.let { fail("$name: \"$it\" reads lower case") }
