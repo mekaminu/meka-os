@@ -53,7 +53,7 @@ data class TomorrowPeek(val line: String, val spoken: String)
  * "Last day to cancel · Gym £35" (a cancel-by day tomorrow); either may be null. [count] is how many in all, for the peek.
  * Read from the renewals radar he keeps on Lists (not the locked Money tab), so nothing new shows on Today unlocked.
  */
-data class TomorrowBills(val due: String?, val cancel: String?, val count: Int, val spoken: String)
+data class TomorrowBills(val due: String?, val cancel: String?, val count: Int, val spoken: String, val dueCount: Int = 0)
 
 data class TomorrowPreview(
     /** "Tomorrow · Wed 7 Oct" */
@@ -91,6 +91,13 @@ data class TomorrowPreview(
 
 /** Tomorrow's header lines, each said once ([ShutdownRules.heading]). */
 data class TomorrowHeading(val label: String, val first: String?, val counts: String?)
+
+/**
+ * One line of the Tomorrow sheet's card ([ShutdownRules.facts]): "Starts at 07:00 · Gym before work", the work day, the
+ * first train, the weather, school, bills, study. Every fact is drawn in the one style; [lit] ones (a train that often runs
+ * late, school kit, a last day to cancel) in the accent. [spoken] is the screen reader's sentence when it differs.
+ */
+data class TomorrowFact(val text: String, val lit: Boolean = false, val spoken: String? = null)
 
 data class ShutdownView(
     /** Show the "Shut down the day" card in Today: it's the evening, you're not at work and you haven't yet. */
@@ -270,6 +277,27 @@ object ShutdownRules {
         )
     }
 
+    /**
+     * Walk-through 2026-11-22 A15: the Tomorrow sheet's header was four sentence lines in four sizes and greys with no card
+     * ("Starts at 07:00 · Gym before work / Work 09:00–15:30 · … / Due tomorrow · Water bill £32.50 / 1 event · 2 tasks"),
+     * and said "Tomorrow" under the page's own "Tomorrow" title. Now the date and the counts share the one label row
+     * ([heading]) and everything else about the day is one card of facts in one style, in this order: the first thing,
+     * work, the first train, the weather, school, bills due, a last day to cancel, study. None says "tomorrow" again: the
+     * sheet's title does ("Bill due · Water bill £32.50", "School · Sam: PE kit").
+     */
+    fun facts(p: TomorrowPreview): List<TomorrowFact> = buildList {
+        p.first?.let { add(TomorrowFact("Starts at ${it.time} · ${shorten(it.title)}")) }
+        p.workLine?.let { add(TomorrowFact(it)) }
+        p.train?.let { add(TomorrowFact(it.text, lit = it.lit, spoken = it.spoken)) }
+        p.weatherLine?.let { add(TomorrowFact(it)) }
+        p.school?.let { add(TomorrowFact("School · " + it.text.removePrefix("Tomorrow · "), lit = true, spoken = it.spoken)) }
+        p.bills?.let { b ->
+            b.due?.let { add(TomorrowFact((if (b.dueCount == 1) "Bill due · " else "Bills due · ") + it.removePrefix("Due tomorrow · "))) }
+            b.cancel?.let { add(TomorrowFact(it, lit = true)) }
+        }
+        p.study?.let { add(TomorrowFact(it.text, lit = it.lit, spoken = it.spoken)) }
+    }
+
     /** The Tomorrow peek shows on Today from 17:00 (Meka 2026-10-26), or from the evening's start when that is earlier. */
     const val PEEK_FROM_MIN = 17 * 60
 
@@ -339,7 +367,7 @@ object ShutdownRules {
             due.takeIf { it.isNotEmpty() }?.let { "Due tomorrow: " + it.joinToString(", ", transform = ::bit) },
             cancel.takeIf { it.isNotEmpty() }?.let { "Last day to cancel: " + it.joinToString(", ", transform = ::bit) },
         ).joinToString(". ")
-        return TomorrowBills(dueLine, cancelLine, due.size + cancel.size, spoken)
+        return TomorrowBills(dueLine, cancelLine, due.size + cancel.size, spoken, dueCount = due.size)
     }
 
     /**

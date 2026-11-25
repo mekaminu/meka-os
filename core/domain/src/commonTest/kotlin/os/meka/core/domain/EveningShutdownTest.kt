@@ -348,6 +348,37 @@ class EveningShutdownTest {
     }
 
     @Test
+    fun tomorrowsSheetIsOneCardOfFactsThatNeverSayTomorrow() {
+        // Walk-through 2026-11-22 A15: four sentence lines in four styles, and "Due tomorrow" under the "Tomorrow" title.
+        val day = today()
+        ta.create(NewTask("Gym before work", scheduledAtMs = at(day + 1, 7)))
+        val p = view().tomorrow.copy(
+            workLine = "Work 09:00–15:30 · leave 07:40 · home about 16:50",
+            weatherLine = "9–15°, light rain from 15:00",
+            school = SchoolLine("Tomorrow · Sam: PE kit", "School tomorrow: Sam, PE kit."),
+            bills = TomorrowBills("Due tomorrow · Water bill £32.50", "Last day to cancel · Gym £35", 2, "spoken", dueCount = 1),
+        )
+        val facts = ShutdownRules.facts(p)
+        assertEquals(listOf(
+            "Starts at 07:00 · Gym before work",
+            "Work 09:00–15:30 · leave 07:40 · home about 16:50",
+            "9–15°, light rain from 15:00",
+            "School · Sam: PE kit",
+            "Bill due · Water bill £32.50",
+            "Last day to cancel · Gym £35",
+        ), facts.map { it.text })
+        assertEquals(listOf(false, false, false, true, false, true), facts.map { it.lit })
+        facts.forEach { assertFalse(it.text.contains("tomorrow", ignoreCase = true), it.text) }
+        // Two bills due say "Bills".
+        val two = p.copy(bills = p.bills!!.copy(due = "Due tomorrow · Car tax £190 · Water bill £32.50", dueCount = 2))
+        assertTrue(ShutdownRules.facts(two).any { it.text == "Bills due · Car tax £190 · Water bill £32.50" })
+        // The first thing is a fact, never a second line beside the heading's.
+        assertEquals(ShutdownRules.heading(p, titled = true).first, facts.first().text)
+        val bare = p.copy(first = null, workLine = null, weatherLine = null, school = null, bills = null, train = null, study = null)
+        assertTrue(ShutdownRules.facts(bare).isEmpty(), ShutdownRules.facts(bare).toString())
+    }
+
+    @Test
     fun anEmptyTomorrowSaysNothingOnceOnTheSheet() {
         val p = view().tomorrow
         // The sheet says "Nothing planned for tomorrow yet." itself, so the header adds no counts line.

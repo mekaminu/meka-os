@@ -56,6 +56,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.InstantTaskRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ShutdownRules
+import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.TaskMove
 import os.meka.core.domain.TomorrowPeek
 import os.meka.core.domain.TomorrowRow
@@ -130,7 +131,7 @@ fun TomorrowPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ 
                 Text("Tomorrow", style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.padding(bottom = MekaSpace.xs).appear(rememberAppearance(0)))
             }
-            item(key = "header") { TomorrowHeader(v, Modifier.appear(rememberAppearance(1)), titled = true) }
+            item(key = "header") { TomorrowSheetHeader(v, Modifier.appear(rememberAppearance(1))) }
             item(key = "said") {
                 AnimatedContent(
                     targetState = failed ?: said,
@@ -168,6 +169,49 @@ fun TomorrowPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ 
             MekaPane(visible = editing != null) {
                 shown?.let { t ->
                     DetailPane(t, conflicts.filter { it.taskId == t.id }, actions, Modifier.fillMaxSize(), onClose = { editingId = null })
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Walk-through 2026-11-22 A15: the sheet's header under its "Tomorrow" title. The date and the counts share one label row
+ * ("THU 22 OCT" · "1 event · 2 tasks"), and the rest of the day is one card of facts in one style
+ * ([ShutdownRules.facts]): the first thing, work, the first train, weather, school, bills, study; lit ones in the accent.
+ * It was four sentence lines in four sizes and greys with no card, and said "Due tomorrow" under the title.
+ */
+@Composable
+private fun TomorrowSheetHeader(v: ShutdownView, modifier: Modifier) {
+    val p = v.tomorrow
+    val reduced = Meka.reducedMotion
+    val h = ShutdownRules.heading(p, titled = true)
+    val facts = ShutdownRules.facts(p)
+    Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(h.label, Modifier.weight(1f))
+            // The counts roll over to their new value as tasks move.
+            AnimatedContent(
+                targetState = h.counts,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "tomorrow-counts",
+            ) { s -> if (s != null) Text(LoneWordGlue.kept(s), style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1) }
+        }
+        if (facts.isNotEmpty()) {
+            val shape = RoundedCornerShape(MekaRadius.m)
+            Column(
+                Modifier.fillMaxWidth().clip(shape).lightCardEdge(shape).background(Meka.colors.surfaceRaised)
+                    .testTag("tomorrow-facts").padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                facts.forEach { f ->
+                    Text(
+                        LoneWordGlue.kept(f.text), style = MekaType.itemMeta,
+                        color = if (f.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                        modifier = Modifier.testTag("tomorrow-fact").then(
+                            f.spoken?.let { said -> Modifier.semantics { contentDescription = said } } ?: Modifier,
+                        ),
+                    )
                 }
             }
         }

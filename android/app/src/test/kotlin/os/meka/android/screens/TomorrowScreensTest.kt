@@ -50,6 +50,7 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MekaSchema
+import os.meka.core.domain.ShutdownRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
@@ -225,7 +226,22 @@ class TomorrowScreensTest {
         // A22: the gym is before he leaves at 07:40, so its row carries no "After you leave" mark.
         val gymRow = rows.first { it.title == ShotLife.GYM }
         assertTrue(gymRow.detail?.contains("After you leave") != true, "$name: the gym clashes with leaving (${gymRow.detail})")
-        assertTrue(shows(LoneWordGlue.kept("Due tomorrow · Water bill £32.50")), "$name: tomorrow's bill isn't shown")
+        // Walk-through 2026-11-22 A15: the day's facts are one card in one style, and none says "tomorrow" under the
+        // title ("Due tomorrow · Water bill £32.50" did); the counts share the date's row.
+        assertTrue(shows(LoneWordGlue.kept("Bill due · Water bill £32.50")) && !shows("Due tomorrow"), "$name: tomorrow's bill isn't shown once")
+        val facts = compose.onAllNodes(SemanticsMatcher("fact") { it.config.getOrNull(SemanticsProperties.TestTag) == "tomorrow-fact" }, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        val factTexts = facts.map { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } ?: "" }
+        assertEquals(ShutdownRules.facts(core.shutdownView.value.tomorrow).map { LoneWordGlue.kept(it.text) }, factTexts, "$name: the card's facts")
+        assertTrue(factTexts.size >= 3 && factTexts.none { it.contains("tomorrow", ignoreCase = true) }, "$name: $factTexts")
+        val factCard = compose.onNodeWithTag("tomorrow-facts", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        facts.forEach { assertTrue(it.boundsInRoot.top >= factCard.top && it.boundsInRoot.bottom <= factCard.bottom + 0.5f, "$name: a fact sits outside the card") }
+        val counts = compose.onAllNodes(hasText(LoneWordGlue.kept("1 event · 2 tasks")), useUnmergedTree = true).fetchSemanticsNodes()
+        val date = compose.onAllNodes(hasText("THU 22 OCT"), useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue(counts.size == 1 && date.size == 1, "$name: the date and counts aren't each shown once")
+        assertTrue(kotlin.math.abs(counts[0].boundsInRoot.center.y - date[0].boundsInRoot.center.y) < 12f * dp,
+            "$name: the counts aren't on the date's row")
+        assertTrue(counts[0].boundsInRoot.bottom <= factCard.top, "$name: the counts sit inside the card")
         // Walk-through 2026-11-15 A16: under the "Tomorrow" title the header says the day, the first time and the counts
         // once each: "THU 22 OCT", "Starts at 07:00 · Gym before work", "1 event · 2 tasks" (no "first at 07:00" again).
         assertTrue(shows("THU 22 OCT") && !shows("TOMORROW · THU 22 OCT"), "$name: the date is said with Tomorrow again")

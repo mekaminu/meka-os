@@ -80,43 +80,35 @@ struct TomorrowSheet: View {
                 let rows = model.tomorrowRows(p.rows)
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                        // A16: each thing said once; under the sheet's "Tomorrow" title the label is the date alone.
+                        // Walk-through 2026-11-22 A15: the date and the counts share one label row, and the rest of the
+                        // day is one card of facts in one style (ShutdownRules.facts): the first thing, work, the first
+                        // train, weather, school, bills, study; lit ones in the accent. It was four sentence lines in four
+                        // sizes and greys with no card, and said "Due tomorrow" under the "Tomorrow" title.
                         let heading = ShutdownRules.shared.heading(p: p, titled: true)
-                        SectionLabel(heading.label, palette).staggeredAppear(1)
-                        if let first = heading.first {
-                            Text(LoneWordGlue.shared.kept(line: first)).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).staggeredAppear(1)
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionLabel(heading.label, palette)
+                            Spacer(minLength: MekaSpace.s)
+                            if let counts = heading.counts {
+                                Text(LoneWordGlue.shared.kept(line: counts)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                                    .lineLimit(1).contentTransition(.opacity)
+                            }
                         }
-                        if let work = p.workLine {
-                            Text(LoneWordGlue.shared.kept(line: work)).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(1)
-                        }
-                        if let train = p.train {
-                            Text(LoneWordGlue.shared.kept(line: train.text)).font(MekaType.caption)
-                                .foregroundStyle(train.lit ? palette.accent : palette.textSecondary)
-                                .accessibilityLabel(train.spoken).staggeredAppear(1)
-                        }
-                        if let weather = p.weatherLine {
-                            Text(LoneWordGlue.shared.kept(line: weather)).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(1)
-                        }
-                        if let school = p.school {
-                            Text(LoneWordGlue.shared.kept(line: school.text)).font(MekaType.caption).foregroundStyle(palette.accent)
-                                .accessibilityLabel(school.spoken).staggeredAppear(1)
-                        }
-                        // Tomorrow on Today, slice 2: bills and renewals due tomorrow, and a last day to cancel (in the accent).
-                        if let bills = p.bills {
-                            VStack(alignment: .leading, spacing: 0) {
-                                if let due = bills.due {
-                                    Text(LoneWordGlue.shared.kept(line: due)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                                }
-                                if let cancel = bills.cancel {
-                                    Text(LoneWordGlue.shared.kept(line: cancel)).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .staggeredAppear(1)
+                        let facts = ShutdownRules.shared.facts(p: p)
+                        if !facts.isEmpty {
+                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+                                    Text(LoneWordGlue.shared.kept(line: fact.text)).font(MekaType.itemMeta)
+                                        .foregroundStyle(fact.lit ? palette.accent : palette.textSecondary)
+                                        .accessibilityLabel(fact.spoken ?? fact.text)
                                 }
                             }
-                            .accessibilityElement(children: .ignore).accessibilityLabel(bills.spoken).staggeredAppear(1)
-                        }
-                        // Plan a lesson for a day: "Study · 2 lessons · about 1 h · Pivot tables, Dashboards".
-                        if let study = p.study {
-                            Text(LoneWordGlue.shared.kept(line: study.text)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                                .accessibilityLabel(study.spoken).staggeredAppear(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.m)
+                            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                            .lightCardEdge(palette)
+                            .padding(.bottom, MekaSpace.xs)
+                            .staggeredAppear(1)
                         }
                         if let said = model.tomorrowSaid {
                             Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
