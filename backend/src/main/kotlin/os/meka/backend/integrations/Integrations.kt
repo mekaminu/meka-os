@@ -1088,7 +1088,12 @@ class Integrations(
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         val mirror = store.transaction { store.mirror(a.householdId, a.id) }
         val written = mutableSetOf<String>()
-        val all = bodyReads + reads.map { (h, day, sf) -> Triple(h, day, os.meka.core.domain.SchoolBodyFind(sf, forWhom = h.subject?.let(SchoolBodyRules::forWhom))) }
+        val all = bodyReads + reads.map { (h, day, sf) -> Triple(h, day, os.meka.core.domain.SchoolBodyFind(
+                sf, forWhom = h.subject?.let(SchoolBodyRules::forWhom),
+                // School emails first, slice 4b: a weekday that isn't the date's, or "next Friday", stays a card to confirm.
+                unclear = SchoolBodyRules.unclear(listOfNotNull(h.subject, previews[h.id] ?: h.preview).joinToString(". "), day),
+            ),
+        ) }
         for ((h, day, b) in all.sortedBy { it.first.receivedAtMs }) {
             val sf = b.find
             val id = SchoolMailRules.findId(a.id, sf)

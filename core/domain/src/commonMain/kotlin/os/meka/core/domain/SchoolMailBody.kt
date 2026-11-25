@@ -31,6 +31,8 @@ data class SchoolBodyFind(
     val notes: List<String> = emptyList(),
     /** Slice 4a: the year or class it is for ("Year 3", "Years 5 and 6", "KS2"), its own sentence's, else the email's one; null = everyone. */
     val forWhom: String? = null,
+    /** Slice 4b: its date can't be read for sure ([SchoolBodyRules.unclear]); kept as a card to confirm. */
+    val unclear: Boolean = false,
 )
 
 object SchoolBodyRules {
@@ -40,6 +42,8 @@ object SchoolBodyRules {
     const val BRING = "Bring / do"
     const val DEADLINE = "Deadline"
     const val FOR = "For"
+    /** Slice 4b: the card row's words for a date that can't be read for sure. */
+    const val CHECK_DATE = "Check the date"
     /** The card's lines, at most. */
     const val MAX_LINES = 5
     /** Finds from one email, at most (a whole term's dates is School's yearly look's job). */
@@ -192,6 +196,38 @@ object SchoolBodyRules {
         cap(v.replace(Regex("""\s+"""), " ").replace(Regex("""^the\s+""", I), "").lowercase()).replace(Regex("""\bks\s?(\d)""", I), "KS$1")
     }
 
+    // ---- Unclear dates (slice 4b) ----
+
+    private val WEEKDAY_ISO = listOf(
+        listOf("monday", "mon"), listOf("tuesday", "tue", "tues"), listOf("wednesday", "wed", "weds"),
+        listOf("thursday", "thu", "thur", "thurs"), listOf("friday", "fri"), listOf("saturday", "sat"), listOf("sunday", "sun"),
+    )
+    private const val WD = """monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|weds|wed|thurs|thur|thu|fri|sat|sun"""
+    /** "Friday 28th November", "Fri, 28 Nov", "Saturday the 28th of November". */
+    private val WEEKDAY_DATE = Regex("""\b($WD)\.?,?\s+(?:the\s+)?(\d{1,2}(?:st|nd|rd|th)?)(?:\s+of)?\s+([a-z]{3,9})\b""", I)
+    /** "next Friday": this coming one or the one after? */
+    private val NEXT_WEEKDAY = Regex("""\bnext\s+($WD)\b""", I)
+
+    private fun isoOf(word: String): Int? = WEEKDAY_ISO.indexOfFirst { word.lowercase() in it }.takeIf { it >= 0 }?.plus(1)
+
+    /**
+     * Whether the date [s] gives (read from an email that came on [receivedDay]) can't be taken as sure: a weekday that
+     * isn't that date's ("Friday 28 November" when the 28th is a Saturday), or "next Friday" with no date beside it.
+     * Such a find stays a card to confirm ("Check the date"); it is never added on its own.
+     */
+    fun unclear(s: String, receivedDay: Long): Boolean {
+        for (m in WEEKDAY_DATE.findAll(s)) {
+            val iso = isoOf(m.groupValues[1]) ?: continue
+            val day = MailWeekRules.dayOf("${m.groupValues[2]} ${m.groupValues[3]}", receivedDay) ?: continue
+            if (CivilDate.isoDayOfWeek(day) != iso) return true
+        }
+        if (NEXT_WEEKDAY.containsMatchIn(s)) {
+            val dated = SchoolRules.findSpan(s, receivedDay) is SpanFound.Days || WEEKDAY_DATE.containsMatchIn(s)
+            if (!dated) return true
+        }
+        return false
+    }
+
     // ---- The whole email ----
 
     /**
@@ -206,7 +242,7 @@ object SchoolBodyRules {
         val sents = sentences(body)
         val all = listOfNotNull(subject) + sents
         val finds = mutableListOf<SchoolBodyFind>()
-        fun keep(f: SchoolMailFind, sentence: String?) {
+        fun keep(f: SchoolMailFind, sentence: String?, unclearIn: String? = sentence) {
             if (f.ask && f.endDay > f.startDay) return
             if (finds.size >= MAX_FINDS) return
             if (finds.any { it.find.title.equals(f.title, true) && it.find.startDay == f.startDay && it.find.who == f.who }) return
@@ -218,6 +254,7 @@ object SchoolBodyRules {
                 place = sentence?.let(::place),
                 notes = sentence?.let(::notes).orEmpty(),
                 forWhom = sentence?.let(::forWhom),
+                unclear = unclearIn?.let { unclear(it, receivedDay) } ?: false,
             )
         }
         val dated = sents.filter { hasDate(it, receivedDay) }
@@ -230,7 +267,8 @@ object SchoolBodyRules {
             list.filter { !it.ask || it.endDay == it.startDay }.forEach { keep(it, s) }
         }
         // The subject and the opening's own read, as slice 1 did, so nothing it found is lost.
-        SchoolMailRules.readAll(subject, sents.take(3).joinToString(". "), receivedDay, children).forEach { keep(it, null) }
+        val opening = sents.take(3).joinToString(". ")
+        SchoolMailRules.readAll(subject, opening, receivedDay, children).forEach { keep(it, null, listOfNotNull(subject, opening).joinToString(". ")) }
         finds.sortBy { it.find.startDay }
 
         // The email's own time, place and notes fill its one event's gaps (one event per email is the usual case; its
@@ -309,5 +347,6 @@ object SchoolBodyRules {
         b.place?.let { put(MailFindFields.PLACE, it.fv()) }
         if (b.notes.isNotEmpty()) put(MailFindFields.NOTES, b.notes.joinToString("\n").fv())
         b.forWhom?.let { put(MailFindFields.FOR_WHOM, it.fv()) }
+        if (b.unclear) put(MailFindFields.UNCLEAR_DATE, true.fv())
     }
 }

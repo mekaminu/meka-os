@@ -112,6 +112,8 @@ object SchoolAutoRules {
         if (f.kind != SchoolMailRules.KIND_SCHOOL || f.state != MailFindState.OPEN || f.autoAtMs != null) return false
         // Slice 4a: an email for another year group is summarised, never added on its own.
         if (SchoolYearRules.otherYear(f, childYears)) return false
+        // Slice 4b: a date that can't be read for sure stays a card to confirm, never a guess.
+        if (f.unclearDate) return false
         if (SchoolMailRules.isWeekly(f)) return false
         if (SchoolMailRules.isAsk(f) && SchoolMailRules.undated(f)) return false
         if (f.renewDay < today) return false

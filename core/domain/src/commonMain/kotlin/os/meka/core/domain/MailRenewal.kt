@@ -86,6 +86,8 @@ data class MailFind(
     val notes: String? = null,
     /** School emails first, slice 4a: the year or class it is for ("Year 3", "KS2"), the email's words; null = everyone. */
     val forWhom: String? = null,
+    /** School emails first, slice 4b: its date can't be read for sure (the weekday and date disagree, "next Friday"); never added on its own. */
+    val unclearDate: Boolean = false,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -140,6 +142,8 @@ object MailFindFields {
     const val NOTES = "notes"
     /** School emails first, slice 4a (server-written, once; additive): the year or class a school find is for, else absent (everyone). */
     const val FOR_WHOM = "forWhom"
+    /** School emails first, slice 4b (server-written, once; additive): true when a school find's date is unclear, else absent. */
+    const val UNCLEAR_DATE = "unclearDate"
 }
 
 data class MailFindRow(
@@ -415,6 +419,7 @@ object MailRenewalRules {
             place = f[MailFindFields.PLACE]?.textOrNull?.takeIf { it.isNotBlank() },
             notes = f[MailFindFields.NOTES]?.textOrNull?.takeIf { it.isNotBlank() },
             forWhom = f[MailFindFields.FOR_WHOM]?.textOrNull?.takeIf { it.isNotBlank() },
+            unclearDate = f[MailFindFields.UNCLEAR_DATE]?.boolOrNull == true,
         )
     }
 
