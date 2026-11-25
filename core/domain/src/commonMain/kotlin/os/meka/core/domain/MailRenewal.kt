@@ -522,7 +522,10 @@ object MailRenewalRules {
         }
         val promisesAll = finds.filter { MailPromiseRules.showable(it, waiting, today) }
         val followUps = finds.filter { MailFollowUpRules.showable(it, waiting, today, waits) }
-        val school = finds.filter { SchoolMailRules.showable(it, schoolItems, today) }
+        // Slice 4e: a cancellation to check, about a date he has, is a row with Take it out (first: it sorts on its email's day).
+        val replacedSet = SchoolChangeRules.replacedByAnswered(finds)
+        val checks = finds.mapNotNull { b -> SchoolChangeRules.checkTarget(b, finds, today, replacedSet)?.let { b.id to it } }.toMap()
+        val school = finds.filter { SchoolMailRules.showable(it, schoolItems, today) || it.id in checks }
         // Life audit, slice 1: subscriptions the 60 days of mail show.
         val subs = finds.filter { LifeAuditRules.showable(it, finds, obligations, today, cal) }
         // Returns and warranties, completeness slice 2: a refund email that closes a refund row on Waiting for.
@@ -535,6 +538,7 @@ object MailRenewalRules {
         val rows = open.take(SHOWN).map { f ->
             if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
             if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today, waits)
+            checks[f.id]?.let { a -> return@map SchoolChangeRules.checkRow(f, a, today) }
             if (f.kind == SchoolMailRules.KIND_SCHOOL) return@map SchoolMailRules.row(f, today, SchoolYearRules.otherYear(f, schoolYears))
             if (LifeAuditRules.isSubscription(f)) return@map LifeAuditRules.row(f, today)
             if (f.kind == MailRefundRules.KIND_REFUND) return@map MailRefundRules.row(f, MailRefundRules.match(f, waiting, cal)!!, today)

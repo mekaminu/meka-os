@@ -426,4 +426,44 @@ class SchoolMailFacadeTest {
         val row = fold.activityView.value.days.flatMap { it.rows }.single { it.id == SchoolAutoRules.activityId(id) }
         assertTrue(row.summary.contains("task Sat") && !row.summary.contains("reminder"), row.summary)
     }
+
+    @Test
+    fun anUndatedCancellationWaitsForHisTakeItOut() = runTest {
+        // Slice 4e: the school says the fair is cancelled but gives no date: nothing is taken out until he says so.
+        val ida = fairDoneForHim()
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val idb = schoolEmail(
+            "Christmas fair",
+            "Dear parents,\n\nUnfortunately the Christmas fair has been cancelled.\n\nThank you",
+            received + 1,
+        )
+        assertTrue(ida != idb)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        // Still in School, its tasks still there, and a row to check on both apps.
+        assertEquals(1, fold.schoolView.value.dates.size)
+        val deleted = os.meka.core.domain.ActionableFields.DELETED
+        assertTrue(serverTask(SchoolAutoRules.taskId(ida, "day"))[deleted] != FieldValue.Bool(true))
+        val row = fold.mailFinds.value!!.rows.single()
+        assertEquals(idb, row.id)
+        assertEquals("Take it out", row.addLabel)
+        assertEquals("Keep it", row.notNeededLabel)
+        assertTrue(row.line.startsWith("School fair · Sat 24 Oct · the school says it's cancelled"), row.line)
+        assertEquals(listOf(idb), mac.mailFinds.value!!.rows.map { it.id })
+
+        // Take it out: gone from School and its tasks, with the change's Done for you row.
+        assertTrue(fold.addMailFind(idb).startsWith("Taken out: School fair"))
+        assertTrue(fold.schoolView.value.dates.isEmpty())
+        assertNull(fold.mailFinds.value)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(FieldValue.Bool(true), serverTask(SchoolAutoRules.taskId(ida, "day"))[deleted])
+        assertTrue(mac.schoolView.value.dates.isEmpty())
+        assertEquals(listOf(SchoolDoneRules.rowId(idb)), fold.doneForYou.value.map { it.id })
+
+        // Undo on the bar: the fair is back and the row to check with it.
+        fold.undoMailFind()
+        assertEquals(1, fold.schoolView.value.dates.size)
+        assertEquals(listOf(idb), fold.mailFinds.value!!.rows.map { it.id })
+    }
 }

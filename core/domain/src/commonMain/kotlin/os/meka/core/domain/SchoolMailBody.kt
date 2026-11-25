@@ -35,6 +35,8 @@ data class SchoolBodyFind(
     val unclear: Boolean = false,
     /** Slice 4c: [SchoolChangeRules.CANCELLED] or [SchoolChangeRules.MOVED] when its sentence says so ([SchoolBodyRules.change]). */
     val change: String? = null,
+    /** Slice 4e: a cancellation whose sentence gives no date ("the fair has been cancelled"); its day is the email's, a placeholder. */
+    val undated: Boolean = false,
 )
 
 object SchoolBodyRules {
@@ -318,6 +320,17 @@ object SchoolBodyRules {
                 else -> kept.forEach { keep(it, s) }
             }
         }
+        // Slice 4e: a sentence that calls something off with no date of its own ("Unfortunately the Christmas fair has
+        // been cancelled") is still read, as a cancellation with no date given: never acted on alone, a card to check.
+        for (s in sents) {
+            if (finds.size >= MAX_FINDS) break
+            if (hasDate(s, receivedDay) || change(s) != SchoolChangeRules.CANCELLED || LINKY.containsMatchIn(s)) continue
+            undatedCancel(s, subjectTopic, receivedDay, children)?.let { f ->
+                if (finds.none { it.change == SchoolChangeRules.CANCELLED && it.find.title.equals(f.title, true) }) {
+                    finds += SchoolBodyFind(f, forWhom = forWhom(s), unclear = true, change = SchoolChangeRules.CANCELLED, undated = true)
+                }
+            }
+        }
         // The subject and the opening's own read, as slice 1 did, so nothing it found is lost.
         val opening = sents.take(3).joinToString(". ")
         SchoolMailRules.readAll(subject, opening, receivedDay, children).filter { it.startDay !in oldDays }
@@ -329,7 +342,7 @@ object SchoolBodyRules {
         val firstTime = sents.firstNotNullOfOrNull(::times)
         val firstPlace = sents.firstNotNullOfOrNull(::place)
         val allNotes = sents.flatMap(::notes).distinctBy { it.lowercase() }
-        val single = finds.singleOrNull { !it.find.ask && !SchoolRules.isDue(it.find.title) }
+        val single = finds.singleOrNull { !it.find.ask && !SchoolRules.isDue(it.find.title) && !it.undated }
         // Slice 4a: the email names one year group (or one span of them) for all of it: a find naming none takes it.
         val emailFor = all.mapNotNull(::forWhom).distinctBy { it.lowercase() }.singleOrNull()
         val filled = finds.map { b -> if (b.forWhom == null && emailFor != null) b.copy(forWhom = emailFor) else b }.map { b ->
@@ -339,6 +352,21 @@ object SchoolBodyRules {
             ) else b
         }
         return SchoolBodyRead(filled, summary(filled, all, receivedDay))
+    }
+
+    /**
+     * Slice 4e: what an undated cancelling sentence calls off, read as School reads a dated one (its cancelling words
+     * aside, the email's day standing in for the date it doesn't give), else from the subject's topic; null when it names
+     * no school thing. A weekly kit day or an ask is not one (those stop on their own).
+     */
+    private fun undatedCancel(s: String, subjectTopic: String?, receivedDay: Long, children: List<String>): SchoolMailFind? {
+        val r = s.replace(CANCEL_RE, " ")
+        val on = " on " + CivilDate.longLabel(receivedDay)
+        val read = SchoolMailRules.readAll(null, r + on, receivedDay, children).ifEmpty {
+            subjectTopic?.let { t -> SchoolMailRules.readAll(null, "$r. ${t.replace(CANCEL_RE, " ")}$on", receivedDay, children) }.orEmpty()
+        }
+        return read.firstOrNull { it.kind == SchoolKind.DAY && !it.ask && it.startDay == receivedDay }
+            ?.copy(endDay = receivedDay, pence = null)
     }
 
     private fun hasDate(s: String, receivedDay: Long): Boolean {
@@ -351,7 +379,8 @@ object SchoolBodyRules {
     /** The card: When · Where · Cost · Bring / do · Deadline, then For when there is room; at most [MAX_LINES]. */
     private fun summary(finds: List<SchoolBodyFind>, texts: List<String>, receivedDay: Long): List<SchoolSummaryLine> {
         val out = mutableListOf<SchoolSummaryLine>()
-        val events = finds.filter { !SchoolRules.isDue(it.find.title) && !it.find.ask }
+        // Slice 4e: a dated event leads the When line; a cancellation with no date only when there is nothing else.
+        val events = finds.filter { !SchoolRules.isDue(it.find.title) && !it.find.ask }.sortedBy { it.undated }
         val deadlines = finds.filter { SchoolRules.isDue(it.find.title) || it.find.ask }
         events.firstOrNull()?.let { e ->
             val day = if (e.find.kind == SchoolKind.WEEKLY) "Every " + CivilDate.DAY_LONG[CivilDate.isoDayOfWeek(e.find.startDay) - 1]
@@ -359,6 +388,11 @@ object SchoolBodyRules {
             val time = e.startMinute?.let { ", " + timeLabel(it, e.endMinute) }.orEmpty()
             val more = if (events.size > 1) " (+${events.size - 1} more)" else ""
             // Slice 4c: the card says a date was called off or moved, not just the date.
+            if (e.undated) {
+                // Slice 4e: "Cancelled · Christmas fair · no date given".
+                out += SchoolSummaryLine(WHEN, "Cancelled · ${e.find.title} · no date given")
+                return@let
+            }
             val tag = when (e.change) {
                 SchoolChangeRules.CANCELLED -> "Cancelled · was "
                 SchoolChangeRules.MOVED -> "Moved to "

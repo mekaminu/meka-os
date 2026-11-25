@@ -36,6 +36,17 @@ object SchoolChangeRules {
      * own words, [a]'s email no later than [b]'s; a cancellation is about [a]'s own day, a move about another day.
      */
     fun about(b: MailFind, a: MailFind): Boolean {
+        // Slice 4e: a cancellation whose date can't be read for sure (or that gives none) never acts on its own.
+        if (b.unclearDate) return false
+        return sameThing(b, a) && when (b.schoolChange) {
+            CANCELLED -> a.renewDay == b.renewDay
+            MOVED -> a.renewDay != b.renewDay
+            else -> false
+        }
+    }
+
+    /** [about] without the day: both the school's, the same kind, child and name, [a]'s email no later than [b]'s. */
+    private fun sameThing(b: MailFind, a: MailFind): Boolean {
         if (a.id == b.id || a.kind != SchoolMailRules.KIND_SCHOOL || b.kind != SchoolMailRules.KIND_SCHOOL) return false
         if (a.schoolChange == CANCELLED || a.receivedDay > b.receivedDay) return false
         if (SchoolRules.isDue(a.what ?: "") != SchoolRules.isDue(b.what ?: "")) return false
@@ -45,12 +56,50 @@ object SchoolChangeRules {
         if (wa.isNotEmpty() && wb.isNotEmpty() && !wa.equals(wb, ignoreCase = true)) return false
         val ta = title(a.what); val tb = title(b.what)
         if (ta.length < 3 || tb.length < 3) return false
-        if (!(ta == tb || ta.contains(tb) || tb.contains(ta))) return false
-        return when (b.schoolChange) {
-            CANCELLED -> a.renewDay == b.renewDay
-            MOVED -> a.renewDay != b.renewDay
-            else -> false
-        }
+        return ta == tb || ta.contains(tb) || tb.contains(ta)
+    }
+
+    // ---- Slice 4e: a cancellation to check ----
+
+    /** Slice 4e: [b] is a cancellation that waits for his check: its date can't be read for sure, or it gives none. */
+    fun toCheck(b: MailFind): Boolean =
+        b.kind == SchoolMailRules.KIND_SCHOOL && b.schoolChange == CANCELLED && b.unclearDate && b.state == MailFindState.OPEN
+
+    /** The finds a standing change took out or moved, read from the finds alone (an undone change's find is open again). */
+    fun replacedByAnswered(finds: List<MailFind>): Set<String> =
+        finds.filter { it.replacesId != null && it.state == MailFindState.ADDED }.mapNotNull { it.replacesId }.toSet()
+
+    /**
+     * Slice 4e: what cancellation [b] to check would take out: the soonest date he has (answered Added, still to come)
+     * of the same thing, any day; null when he has none (the email's card says it; nothing to take out).
+     */
+    fun checkTarget(b: MailFind, finds: List<MailFind>, today: Long, replaced: Set<String> = replacedByAnswered(finds)): MailFind? {
+        if (!toCheck(b)) return null
+        return finds.filter { a -> a.state == MailFindState.ADDED && a.renewDay >= today && a.id !in replaced && sameThing(b, a) }
+            .minByOrNull { it.renewDay }
+    }
+
+    const val TAKE_OUT = "Take it out"
+    const val KEEP = "Keep it"
+    const val SAYS_CANCELLED = "the school says it's cancelled"
+    const val CHECK = "check it's this one"
+
+    /**
+     * Slice 4e: the card's row for cancellation [b] to check, about [a]: "School fair · Sat 28 Nov · the school says it's
+     * cancelled · check it's this one", with Take it out (his confirmation) and Keep it.
+     */
+    fun checkRow(b: MailFind, a: MailFind, today: Long): MailFindRow {
+        val title = SchoolMailRules.title(b)
+        val what = a.what ?: b.what ?: "School date"
+        val line = listOf(what, RenewalRules.dayWord(a.renewDay, today), SAYS_CANCELLED, CHECK).joinToString(" · ")
+        return MailFindRow(
+            id = b.id, title = title, line = line, from = MailRenewalRules.fromLine(b),
+            business = b.account == MailLabel.BUSINESS.label,
+            spoken = "$title. $line. From your ${b.account} mail.",
+            addSpoken = "Take $what out of School, your tasks and your calendar",
+            notNeededSpoken = "Keep $what",
+            addLabel = TAKE_OUT, notNeededLabel = KEEP,
+        )
     }
 
     /**
@@ -81,6 +130,10 @@ object SchoolChangeRules {
 
     /** The change's link to what it took out or moved, written with its auto mark (outside the recorded change). */
     fun replacesFields(targetId: String): Map<String, FieldValue> = mapOf(MailFindFields.REPLACES to targetId.fv())
+
+    /** Slice 4e: the bar's line after Take it out: "Taken out: School fair · Sat 28 Nov · from School, your tasks and calendar". */
+    fun takenOutLine(a: MailFind, today: Long): String =
+        "Taken out: ${a.what ?: "School date"} · ${RenewalRules.dayWord(a.renewDay, today)} · from School, your tasks and calendar"
 
     /** What a cancellation took out: the School line, how many tasks, whether a calendar entry is being taken back. */
     data class Removed(val school: Boolean, val tasks: Int, val calendar: Boolean)

@@ -139,4 +139,55 @@ class SchoolMailChangeTest {
         assertTrue(X.replaced(listOf(had, cancel), undone).isEmpty())
         assertEquals(listOf(SchoolDoneRules.rowId("a")), SchoolDoneRules.rows(listOf(had, cancel), undone, { null }, { null }, now, cal).map { it.id })
     }
+
+    @Test
+    fun anUndatedCancellationIsReadAsOneToCheck() {
+        // Slice 4e: "the fair has been cancelled" with no date in its sentence.
+        val r = SchoolBodyRules.read(
+            "Christmas fair",
+            "Dear Parents,\nUnfortunately the Christmas fair has been cancelled.\nThank you",
+            today,
+        )
+        val c = r.finds.single()
+        assertTrue(c.undated)
+        assertTrue(c.unclear)
+        assertEquals(SchoolChangeRules.CANCELLED, c.change)
+        assertEquals(today, c.find.startDay)
+        val fair = SchoolBodyRules.read("Christmas fair", "Our Christmas fair is on Saturday 28 November, 12pm-4pm.", today).finds.single()
+        assertEquals(fair.find.title, c.find.title)
+        assertEquals(SchoolKind.DAY, c.find.kind)
+        assertEquals(FieldValue.Bool(true), SchoolBodyRules.findFields(c)[MailFindFields.UNCLEAR_DATE])
+        assertTrue(r.summary.first().value.startsWith("Cancelled · "), r.summary.toString())
+        assertTrue(r.summary.first().value.endsWith("no date given"), r.summary.toString())
+        // A dated event in the same email leads the card; a plain email with no cancelling words reads nothing new.
+        val both = SchoolBodyRules.read(
+            "News", "Dear Parents,\nUnfortunately the Christmas fair has been cancelled.\nOur disco is on Friday 27 November, 5pm-7pm.", today,
+        )
+        assertEquals(2, both.finds.size, both.finds.toString())
+        assertTrue(both.summary.first().value.startsWith("Fri 27 Nov"), both.summary.toString())
+        assertTrue(SchoolBodyRules.read("News", "Dear Parents,\nThank you for a lovely term.", today).finds.isEmpty())
+    }
+
+    @Test
+    fun aCancellationToCheckNeverActsAloneAndOffersTakeItOut() {
+        val X = SchoolChangeRules
+        val had = find("a", "School fair", sat, state = MailFindState.ADDED, auto = 1L)
+        val check = find("b", "School fair", today, received = today, change = X.CANCELLED).copy(unclearDate = true)
+        // Never automatic.
+        assertFalse(X.about(check, had))
+        assertTrue(X.pending(listOf(had, check), today).isEmpty())
+        // A row to check, about the date he has, any day.
+        assertEquals("a", X.checkTarget(check, listOf(had, check), today)?.id)
+        val row = X.checkRow(check, had, today)
+        assertEquals(X.TAKE_OUT, row.addLabel)
+        assertEquals("School fair · Sat 28 Nov · the school says it's cancelled · check it's this one", row.line)
+        // Nothing he has (another thing, or already taken out): no row.
+        val disco = find("c", "School disco", sat, state = MailFindState.ADDED, auto = 1L)
+        assertNull(X.checkTarget(check, listOf(disco, check), today))
+        val done = check.copy(id = "d", state = MailFindState.ADDED, replacesId = "a")
+        assertNull(X.checkTarget(check, listOf(had, check, done), today))
+        // The card leads with it.
+        val card = MailRenewalRules.card(listOf(had, check), emptyList(), CivilDate.DAY_MS * today + 12 * 3_600_000L, LocalCalendar.UTC)
+        assertEquals("b", card!!.rows.first().id)
+    }
 }
