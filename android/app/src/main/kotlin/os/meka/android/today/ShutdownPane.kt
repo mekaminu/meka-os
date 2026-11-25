@@ -184,7 +184,7 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
 
         // The smart wake alarm (Alarms, slice 1): confirm MEKA's suggestion or set your own.
         item(key = "wake") {
-            WakeSection(core, Modifier.padding(top = MekaSpace.l), under = v.tomorrow.animateItem().appear(rememberAppearance(3)))
+            WakeSection(core, Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(3)), under = v.tomorrow)
         }
 
         // On this day (Screenshots and photos, slice 4): a photo from this date in past years, picked on the phone.
