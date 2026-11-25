@@ -8,6 +8,7 @@ import os.meka.core.domain.EventEditFields
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.SchoolAutoRules
 import os.meka.core.domain.SchoolCalendarRules
+import os.meka.core.domain.SchoolDoneRules
 import os.meka.core.domain.SchoolBodyRules
 import os.meka.core.domain.SchoolMailRules
 import os.meka.core.sync.FieldValue
@@ -19,6 +20,7 @@ import os.meka.core.sync.SyncService
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -268,5 +270,54 @@ class SchoolMailFacadeTest {
         val deletes = serverEdits().filterValues { it[EventEditFields.KIND] == FieldValue.Text("DELETE") }
         assertEquals(setOf(SchoolCalendarRules.deleteId(id)), deletes.keys)
         assertEquals(FieldValue.Text("g1"), deletes.values.single()[EventEditFields.EVENT_ID])
+    }
+
+    @Test
+    fun aSchoolDateDoneForHimIsADoneForYouRowAndOneHeadsUpOnBothAppsWithUndoAndClear() = runTest {
+        // Slice 3c: the fair added on its own is said: a Done for you row "From the school" with Undo, Change and Clear
+        // on both apps, and one heads-up "Done for you · from the school". Undo there takes it all away.
+        val body = "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall. " +
+            "Entry is £1 per adult.\n\nThank you"
+        val b = SchoolBodyRules.read("Christmas fair", body, received).finds.single()
+        val id = SchoolMailRules.findId("acc1", b.find)
+        serverWrite(id, SchoolMailRules.serverFields(b.find, "Oakfield Primary", "Personal", "Christmas fair", received) + SchoolBodyRules.findFields(b))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val rowId = SchoolDoneRules.rowId(id)
+        val row = fold.doneForYou.value.single { it.id == rowId }
+        assertTrue(row.from.startsWith("From the school · "), row.from)
+        assertTrue(row.line.startsWith("School fair · Sat 24 Oct, 12:00–16:00 · in School"), row.line)
+        assertEquals(SchoolAutoRules.taskId(id, "day"), row.changeTaskId)
+        assertEquals("School fair", row.changeTitle)
+        assertEquals(listOf(rowId), mac.doneForYou.value.map { it.id })
+        val notice = fold.noticesNow().single { it.key == "handled:$rowId" }
+        assertEquals("Done for you · from the school", notice.title)
+        assertEquals(row.line, notice.text)
+
+        // Clear on the Mac: the row goes on both; what it made stays.
+        assertTrue(mac.clearDoneForYou(rowId))
+        assertTrue(mac.doneForYou.value.isEmpty())
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        assertTrue(fold.doneForYou.value.isEmpty())
+        assertEquals(1, fold.schoolView.value.dates.size)
+        assertTrue(fold.noticesNow().none { it.key == "handled:$rowId" })
+        assertFalse(fold.undoDoneForYou(rowId), "a cleared row has no Undo here (Activity keeps it)")
+    }
+
+    @Test
+    fun undoOnTheSchoolRowTakesEverythingAway() = runTest {
+        val body = "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall.\n\nThank you"
+        val b = SchoolBodyRules.read("Christmas fair", body, received).finds.single()
+        val id = SchoolMailRules.findId("acc1", b.find)
+        serverWrite(id, SchoolMailRules.serverFields(b.find, "Oakfield Primary", "Personal", "Christmas fair", received) + SchoolBodyRules.findFields(b))
+        val fold = core("android")
+        assertTrue(fold.syncNow())
+        val rowId = SchoolDoneRules.rowId(id)
+        assertTrue(fold.undoDoneForYou(rowId))
+        assertTrue(fold.doneForYou.value.isEmpty())
+        assertTrue(fold.schoolView.value.dates.isEmpty())
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+        assertFalse(fold.undoDoneForYou(rowId))
     }
 }

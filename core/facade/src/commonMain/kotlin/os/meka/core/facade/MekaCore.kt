@@ -4889,6 +4889,14 @@ class MekaCore(
      * and takes the row away on both apps. False when it was already undone or cleared.
      */
     suspend fun undoDoneForYou(id: String): Boolean = onCore {
+        os.meka.core.domain.SchoolDoneRules.findIdOf(id)?.let { findId ->
+            // School emails first, slice 3c: a school row's Undo is its Activity entry's (the calendar event follows).
+            if (schoolDoneRows().none { it.id == id }) return@onCore false
+            val outcome = activity.undo(os.meka.core.domain.SchoolAutoRules.activityId(findId))
+            refresh()
+            activityChanged()
+            return@onCore outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE && outcome != os.meka.core.domain.UndoOutcome.TOO_LATE
+        }
         val row = requestCards.doneForYou().firstOrNull { it.id == id } ?: return@onCore false
         row.taskIds.forEach { t -> if (tasks.get(t) != null) tasks.delete(t) }
         followBlocks(row.taskIds)
@@ -4936,11 +4944,34 @@ class MekaCore(
     }
 
     /** The Done for you rows with Obi's suggested steps still open on each (its chips). Caller is on the core. */
-    private fun doneForYouRows(): List<os.meka.core.domain.DoneForYou> = requestCards.doneForYou().map { r ->
+    private fun doneForYouRows(): List<os.meka.core.domain.DoneForYou> = (requestCards.doneForYou().map { r ->
         if (r.homeDay != null || r.taskIds.size < 2) r
         else r.copy(suggestions = os.meka.core.domain.HandleForMeRules.suggestions(r) { id ->
             tasks.get(id)?.takeIf { !it.lifecycle.isTerminal }?.title
         })
+    } + schoolDoneRows()).sortedByDescending { it.atMs }
+
+    /**
+     * School emails first, slice 3c: the Done for you rows for the school's dates added on their own
+     * ([os.meka.core.domain.SchoolDoneRules.rows]). Caller is on the core.
+     */
+    private fun schoolDoneRows(): List<os.meka.core.domain.DoneForYou> {
+        val finds = activity.mailFinds().filter { it.kind == os.meka.core.domain.SchoolMailRules.KIND_SCHOOL && it.autoAtMs != null }
+        if (finds.isEmpty()) return emptyList()
+        val entries = activity.items().filter { it.source == os.meka.core.domain.SchoolAutoRules.SOURCE }.associateBy { it.id }
+        return os.meka.core.domain.SchoolDoneRules.rows(
+            finds, entries,
+            clearedAt = { id -> replica.entity(os.meka.core.domain.EntityTypes.AGENT_ACTION, id)?.get(os.meka.core.domain.SchoolDoneRules.CLEARED_AT)?.longOrNull },
+            taskTitle = { id -> tasks.get(id)?.takeIf { !it.lifecycle.isTerminal }?.title },
+            nowMs = nowMs(), cal = ZoneCalendar(timeZone),
+        )
+    }
+
+    /** The school rows that notify ([os.meka.core.domain.SchoolDoneRules.notifiable]). Caller is on the core. */
+    private fun schoolDoneNotifiable(): List<os.meka.core.domain.DoneForYou> {
+        val rows = schoolDoneRows()
+        if (rows.isEmpty()) return emptyList()
+        return os.meka.core.domain.SchoolDoneRules.notifiable(rows, activity.mailFinds(), nowMs(), ZoneCalendar(timeZone))
     }
 
     /**
@@ -4956,7 +4987,19 @@ class MekaCore(
     }
 
     /** Clear on a Done for you row: seen, gone from Needs you on both apps; what it made stays. */
-    suspend fun clearDoneForYou(id: String): Boolean = onCore { requestCards.dropHandled(id, undone = false).also { refresh() } }
+    suspend fun clearDoneForYou(id: String): Boolean = onCore {
+        os.meka.core.domain.SchoolDoneRules.findIdOf(id)?.let { findId ->
+            // School emails first, slice 3c: Clear marks the school row's Activity entry; what it made stays.
+            if (schoolDoneRows().none { it.id == id }) return@onCore false
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.AGENT_ACTION, os.meka.core.domain.SchoolAutoRules.activityId(findId),
+                mapOf(os.meka.core.domain.SchoolDoneRules.CLEARED_AT to nowMs().fv()),
+            )
+            refresh()
+            return@onCore true
+        }
+        requestCards.dropHandled(id, undone = false).also { refresh() }
+    }
 
     /** About you → Handle her requests for me. */
     suspend fun setAboutYouPartnerHandle(on: Boolean): Boolean = onCore { aboutYou.setPartnerHandle(on) }
@@ -15502,7 +15545,7 @@ class MekaCore(
             _lists.value, _fasting.value, _shutdown.value, _today.value, nowMs(), ZoneCalendar(timeZone), _brief.value, _review.value.card,
             currentEvents(), _eventMarks.value, _sessions.value, all, weather.forecast(),
             requests = requestCards.open(), settings = notifyPrefs.settings(), signIns = signIns.all(),
-            doneForYou = requestCards.doneForYou(),
+            doneForYou = requestCards.doneForYou() + schoolDoneNotifiable(),
             lines = lineStatus.snapshot(), office = officeToday(),
             callCredit = callCredit.current(), callAssistantOn = _workMode.value.callAssistant,
             school = school.items(), schoolCovers = _school.value.covers,

@@ -227,6 +227,53 @@ class SchoolMailAutoTest {
         )
         assertEquals(SchoolCalendarRules.withCalendar(line, "google"), SchoolCalendarRules.withCalendar(SchoolCalendarRules.withCalendar(line, "google"), "google"))
     }
+    private fun entry(f: MailFind, atMs: Long, undone: Long? = null) = ActivityItem(
+        id = SchoolAutoRules.activityId(f.id), atMs = atMs, kind = ActivityKind.CHANGED,
+        summary = "From the school: School fair · Sat 28 Nov, 12:00–16:00 · in School, reminders Wed and Fri, tasks Fri and Sat",
+        detail = null, why = SchoolAutoRules.WHY, source = SchoolAutoRules.SOURCE, level = null, changes = emptyList(),
+        undoneAtMs = undone, undoNote = null,
+    )
+
+    @Test
+    fun aSchoolDateDoneForHimIsADoneForYouRowWithUndoChangeAndClear() {
+        // Slice 3c.
+        val added = fair.copy(autoAtMs = now - 60_000, state = MailFindState.ADDED)
+        val titles = mapOf(SchoolAutoRules.taskId("f1", "day") to "School fair", SchoolAutoRules.taskId("f1", "prep") to "Get ready")
+        val rows = SchoolDoneRules.rows(listOf(added), mapOf(SchoolAutoRules.activityId("f1") to entry(added, now - 60_000)), { null }, titles::get, now, cal)
+        val r = rows.single()
+        assertEquals("school:f1", r.id)
+        assertEquals("From the school · 17:59", r.from)
+        assertEquals("School fair · Sat 28 Nov, 12:00–16:00 · in School, reminders Wed and Fri, tasks Fri and Sat", r.line)
+        assertEquals(listOf(SchoolAutoRules.taskId("f1", "day"), SchoolAutoRules.taskId("f1", "prep")), r.taskIds)
+        assertEquals("School fair", r.changeTitle)
+        assertEquals("Undo", r.undoLabel)
+        assertEquals("Change", r.changeLabel)
+        assertEquals("f1", SchoolDoneRules.findIdOf(r.id))
+        assertNull(SchoolDoneRules.findIdOf("msg#0"))
+        // One heads-up, from the school.
+        val n = SchoolDoneRules.notices(rows, listOf(added), now, cal).single()
+        assertEquals("Done for you · from the school", n.title)
+        assertEquals(r.line, n.text)
+        assertEquals(NoticeTarget.NEEDS_YOU, n.target)
+    }
+
+    @Test
+    fun undoneClearedOldOrCatchUpRowsAreNotShownOrNotSaid() {
+        val added = fair.copy(autoAtMs = now - 60_000, state = MailFindState.ADDED)
+        val key = SchoolAutoRules.activityId("f1")
+        fun rows(e: ActivityItem, cleared: Long? = null) =
+            SchoolDoneRules.rows(listOf(added), mapOf(key to e), { cleared }, { "x" }, now, cal)
+        assertTrue(rows(entry(added, now - 60_000, undone = now)).isEmpty())
+        assertTrue(rows(entry(added, now - 60_000), cleared = now).isEmpty())
+        assertTrue(rows(entry(added, now - HandleForMeRules.SHOWN_MS - 1)).isEmpty())
+        // A find never added on its own (his Add) has no row.
+        assertTrue(SchoolDoneRules.rows(listOf(fair), mapOf(key to entry(fair, now)), { null }, { "x" }, now, cal).isEmpty())
+        // The 30-day catch-up: an older email's date shows its row but says nothing.
+        val old = added.copy(receivedDay = today - 12)
+        val shown = SchoolDoneRules.rows(listOf(old), mapOf(key to entry(old, now - 60_000)), { null }, { "x" }, now, cal)
+        assertEquals(1, shown.size)
+        assertTrue(SchoolDoneRules.notices(shown, listOf(old), now, cal).isEmpty())
+    }
 }
 
 /** The whole path from a long email's words to what is made (the facade test sends the same email). */
@@ -263,4 +310,5 @@ class SchoolMailAutoFromEmailTest {
 object SchoolMailAutoFixture {
     const val BODY = "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall. " +
         "Entry is £1 per adult. Please note there is no parking at school.\n\nThank you"
+
 }

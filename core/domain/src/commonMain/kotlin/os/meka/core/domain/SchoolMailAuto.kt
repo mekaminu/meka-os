@@ -349,3 +349,76 @@ object SchoolCalendarRules {
         }
     }
 }
+
+/*
+ * School emails first, slice 3c (Meka 2026-11-24 17:38: "…set a notification… so I remember"): what was done for him
+ * from the school's emails is **said**, as his wife's requests are: one "Done for you" row per school date in Needs you
+ * (beside From the school, both apps, the same row as hers: "From the school · 22:14" over Activity's line, with Undo,
+ * Change and Clear) and one heads-up as it is done ("Done for you · from the school" · "Christmas fair · Sat 28 Nov,
+ * 12:00–16:00 · in Google and School, reminders Wed and Fri, tasks Fri and Sat"). Undo is Activity's Undo (everything
+ * it made goes, the calendar event too, and the card comes back for Add); Change opens the task on the day (else the
+ * task it made); Clear only takes the row away (a mark on the Activity entry, synced). A date added from an older
+ * email (the 30-day catch-up) gets its row but no heads-up of its own. The line is Navilife's words built from the
+ * server's fixed finds, never the email's text beyond its title.
+ */
+object SchoolDoneRules {
+    /** The row ids start with this, so Undo / Clear know a school row from one of hers. */
+    const val PREFIX = "school:"
+    const val PERSON = "the school"
+    /** Clear's mark on the Activity entry (an `agent_action` field, LWW). */
+    const val CLEARED_AT = "doneClearedAtMs"
+    /** A date notifies only when its email came in this many days ago at most (today or yesterday). */
+    const val FRESH_DAYS = 1L
+
+    fun rowId(findId: String): String = PREFIX + findId
+    fun findIdOf(rowId: String): String? = rowId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.takeIf { it.isNotEmpty() }
+
+    /** The tasks a find's plan makes, the one Change opens first: the task on the day, a deadline's, then the day before's. */
+    fun taskIds(findId: String): List<String> =
+        listOf("day", "due", "prep").map { SchoolAutoRules.taskId(findId, it) }
+
+    /** "Christmas fair · Sat 28 Nov, 12:00–16:00 · in School, …" (Activity's line without its "From the school: "). */
+    fun line(summary: String): String = summary.removePrefix("From the school: ").trim()
+
+    /**
+     * The rows: each school find added on its own whose Activity entry is not undone or cleared and was made in the last
+     * [HandleForMeRules.SHOWN_MS]; newest first. [clearedAt] reads Clear's mark of an entry; [taskTitle] is an open task's
+     * title, null once it is gone or done (Change opens the first still open; the Mac finds it by title and id).
+     */
+    fun rows(
+        finds: List<MailFind>,
+        entries: Map<String, ActivityItem>,
+        clearedAt: (String) -> Long?,
+        taskTitle: (String) -> String?,
+        nowMs: Long,
+        cal: LocalCalendar,
+    ): List<DoneForYou> = finds.mapNotNull { f ->
+        if (f.kind != SchoolMailRules.KIND_SCHOOL || f.autoAtMs == null) return@mapNotNull null
+        val e = entries[SchoolAutoRules.activityId(f.id)] ?: return@mapNotNull null
+        if (e.source != SchoolAutoRules.SOURCE || e.undoneAtMs != null || clearedAt(e.id) != null) return@mapNotNull null
+        if (e.atMs < nowMs - HandleForMeRules.SHOWN_MS) return@mapNotNull null
+        val line = line(e.summary).ifEmpty { return@mapNotNull null }
+        DoneForYou(
+            id = rowId(f.id),
+            from = HandleForMeRules.from("the school", cal.minuteOfDay(e.atMs)),
+            line = line,
+            spoken = HandleForMeRules.spoken(PERSON, line),
+            atMs = e.atMs,
+            taskIds = taskIds(f.id).filter { taskTitle(it) != null },
+            homeDay = null,
+            changeTitle = taskIds(f.id).firstNotNullOfOrNull(taskTitle),
+            person = PERSON,
+        )
+    }.sortedByDescending { it.atMs }
+
+    /** The rows that notify: those whose email came in today or yesterday (the catch-up's older ones only show). */
+    fun notifiable(rows: List<DoneForYou>, finds: List<MailFind>, nowMs: Long, cal: LocalCalendar): List<DoneForYou> {
+        val today = cal.epochDayOf(nowMs)
+        val byId = finds.associateBy { it.id }
+        return rows.filter { r -> findIdOf(r.id)?.let(byId::get)?.let { today - it.receivedDay <= FRESH_DAYS } == true }
+    }
+
+    /** The heads-ups ([HandleForMeRules.notices]): "Done for you · from the school" · the line, once each, opening Needs you. */
+    fun notices(rows: List<DoneForYou>, finds: List<MailFind>, nowMs: Long, cal: LocalCalendar): List<Notice> =
+        HandleForMeRules.notices(notifiable(rows, finds, nowMs, cal))
+}
