@@ -36,6 +36,7 @@ import os.meka.core.domain.AboutField
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.GoalHorizon
+import os.meka.core.domain.DateGlue
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.WeekAheadRules
 import os.meka.core.domain.MekaSchema
@@ -290,7 +291,11 @@ class WeekAheadScreensTest {
         val spanish = core.weekAheadView.value.goals.goals.first { it.title == "Learn Spanish" }
         if (spanish.picked) fail("$name: Learn Spanish starts picked")
         tap(name, "Learn Spanish", hasContentDescription(spanish.spoken))
-        until { core.weekAheadView.value.goals.picked == 2 }
+        // Waits for the screen too (2026-11-25: once the shot was taken before the pick drew, byte for byte the foot shot).
+        until {
+            core.weekAheadView.value.goals.picked == 2 &&
+                ScreenShots.texts(compose).any { DateGlue.plain(it).contains("2 picked") }
+        }
         if (core.weekAheadView.value.goals.line != "2 picked · up to 3") fail("$name: after a pick \"${core.weekAheadView.value.goals.line}\"")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
         ScreenShots.assertShows(compose, name, LoneWordGlue.measured("2 picked · up to 3"))
