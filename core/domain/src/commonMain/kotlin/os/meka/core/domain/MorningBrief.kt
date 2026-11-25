@@ -91,11 +91,29 @@ data class MorningBriefView(
      * ([CarLapseRules.briefLine]); null while every car is legal.
      */
     val carLine: String? = null,
-    /** Week board slice 5: "3 carried over · 5 planned · about 4h" under the day's summary ([BoardTodayRules.plan]); null with nothing to do. */
+    /** Week board slice 5: "3 carried over from earlier days · about 4h of tasks" under the day's summary ([BoardTodayRules.plan]); null with nothing to do. */
     val planLine: String? = null,
     /** Week board item (10): "Thursday is stacking up: Trip form, Council tax and Gym" within two days; null otherwise. */
     val pressureLine: String? = null,
+    /** Waiting-for chases due today, all of them (the [waiting] rows show at most [BriefRules.MAX_WAITING]). */
+    val chaseDue: Int = 0,
 ) {
+    /**
+     * Walk-through 2026-11-22 A15: the line under WAITING ON. The label says "Waiting on" and each row says its own
+     * "chase today", so the pane no longer adds "Waiting on 1 thing · 1 to chase today" over one row; only chases the
+     * rows don't show are counted ("2 more to chase today"). Null otherwise. [waitingLine] stays for speech and Bedside.
+     */
+    val waitingHead: String? get() = BriefRules.waitingHead(waiting, chaseDue)
+
+    /** A15: the brief's habits under their own HABITS label, the noun said by the label: "1 to do today"; null with none. */
+    val habitsShown: String? get() = habitsLine?.let(BriefRules::habitsShown)
+
+    /**
+     * A15: the running fast under its own FASTING label ("Started 03:45 · goal at 19:45"), so it no longer sits under
+     * "You · 1 habit to do today" reading as if fasting were the habit; null when not fasting.
+     */
+    val fastingShown: String? get() = fastingLine?.let(BriefRules::fastingShown)
+
     /**
      * [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. A task already
      * in Focus above isn't drawn again (walk-through 2026-11-08 A8: the Focus task was repeated under Today), so Today
@@ -221,6 +239,20 @@ object BriefRules {
         val head = "Waiting on " + ShutdownRules.count(total, "thing")
         return if (due > 0) "$head · $due to chase today" else head
     }
+
+    /** A15: chases due that the shown rows don't already say ("2 more to chase today"); null when the rows say them all. */
+    fun waitingHead(shown: List<WaitingItem>, due: Int): String? {
+        val rest = due - shown.count { it.state == DueState.DUE }
+        return if (rest > 0) "$rest more to chase today" else null
+    }
+
+    /** A15: "1 habit to do today" → "1 to do today", "All habits on track" → "All on track", under a HABITS label. */
+    fun habitsShown(line: String): String =
+        line.replace(" habits ", " ").replace(" habit ", " ").replaceFirstChar { it.uppercase() }
+
+    /** A15: "Fasting · started 03:45 · goal at 19:45" → "Started 03:45 · goal at 19:45", under a FASTING label. */
+    fun fastingShown(line: String): String =
+        line.removePrefix("Fasting · ").replaceFirstChar { it.uppercase() }
 
     /** The fixture's title in the card is shortened at a word past this many characters. */
     const val MAX_FIXTURE_CHARS = 32
@@ -430,6 +462,7 @@ class MorningBrief(
             taskCount = dayTasks.size,
             daySummary = daySummary,
             planLine = plan.line,
+            chaseDue = lists.chaseDue,
             overdueCount = overdue,
             waiting = lists.waiting.take(BriefRules.MAX_WAITING),
             waitingTotal = lists.waiting.size,

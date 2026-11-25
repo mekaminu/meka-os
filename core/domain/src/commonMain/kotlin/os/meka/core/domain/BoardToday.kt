@@ -14,12 +14,15 @@ data class DayPlan(val carried: Int, val planned: Int, val minutes: Int?) {
      */
     val worthSaying: Boolean get() = !isEmpty && (carried > 0 || minutes != null)
 
-    /** "3 carried over · 5 planned · about 4h"; null when not [worthSaying]. */
+    /**
+     * "3 carried over from earlier days · about 4h of tasks"; null when not [worthSaying]. Walk-through 2026-11-22 A15:
+     * it sits under the day's "4 events · 4 tasks", so it no longer says "4 planned" again, and the time says what it
+     * is the time of ("of tasks", not a bare "about 3h 30m").
+     */
     val line: String? get() = if (!worthSaying) null else listOfNotNull(
-        carried.takeIf { it > 0 }?.let { "$it carried over" },
-        planned.takeIf { it > 0 }?.let { "$it planned" },
-        minutes?.let { "about ${TaskEstimateRules.label(it)}" },
-    ).joinToString(" · ")
+        carried.takeIf { it > 0 }?.let { if (it == 1) "1 carried over from an earlier day" else "$it carried over from earlier days" },
+        minutes?.let { "about ${TaskEstimateRules.label(it)} of tasks" },
+    ).joinToString(" · ").replaceFirstChar { it.uppercase() }
 
     /** The spoken brief: "Three carried over from earlier days and five planned, about 4 hours in all."; null when not [worthSaying]. */
     val sentence: String? get() {
@@ -39,7 +42,7 @@ data class DayPlan(val carried: Int, val planned: Int, val minutes: Int?) {
  * - [anytimeOrder]: Today's Anytime tasks (and so Up next, when nothing is planned at a time) follow the order he set on
  *   the Board's Today column ([TaskFields.BOARD_RANK]): the cards he placed first, by place; then the rest as before,
  *   by priority, then as added.
- * - [plan]: the morning brief's "3 carried over · 5 planned · about 4h" from today's open tasks: carried are those
+ * - [plan]: the morning brief's "3 carried over from earlier days · about 4h of tasks" from today's open tasks: carried are those
  *   [RollOverRules.carries]; the time is each task's estimate, else Navilife's guess ([TaskEstimateRules.suggest]),
  *   said only when at least half the tasks have one, rounded to the quarter hour under an hour and the half hour above.
  *   With nothing carried and no time to give, the brief says nothing more than its day's count already does.

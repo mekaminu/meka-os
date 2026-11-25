@@ -106,7 +106,7 @@ struct BriefSheet: View {
                         Text(LoneWordGlue.shared.kept(line: v.daySummary)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
                             .staggeredAppear(1)
-                        // Week board slice 5: "3 carried over · 5 planned · about 4h".
+                        // Week board slice 5 (A15: no second count): "3 carried over from earlier days · about 4h of tasks".
                         if let plan = v.planLine {
                             Text(LoneWordGlue.shared.kept(line: plan)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                                 .contentTransition(.opacity)
@@ -124,9 +124,12 @@ struct BriefSheet: View {
                             BriefDayRow(line: r, palette: palette).staggeredAppear(1)
                         }
 
-                        if let waitingLine = v.waitingLine {
+                        // Walk-through 2026-11-22 A15: the label and the rows say it; only chases the rows don't show are counted.
+                        if !v.waiting.isEmpty {
                             SectionLabel("Waiting on", palette).padding(.top, MekaSpace.l).staggeredAppear(2)
-                            Text(LoneWordGlue.shared.kept(line: waitingLine)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(2)
+                            if let head = v.waitingHead {
+                                Text(LoneWordGlue.shared.kept(line: head)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(2)
+                            }
                             ForEach(v.waiting, id: \.id) { w in
                                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                                     Text(LoneWordGlue.shared.kept(line: w.title)).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -154,12 +157,14 @@ struct BriefSheet: View {
                             }
                         }
 
-                        let extras = [v.habitsLine, v.fastingLine].compactMap { $0 }
-                        if !extras.isEmpty {
-                            SectionLabel("You", palette).padding(.top, MekaSpace.l).staggeredAppear(4)
-                            ForEach(extras, id: \.self) { line in
-                                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(4)
-                            }
+                        // A15: habits and a running fast each under their own label, so the fast doesn't read as the habit.
+                        if let habits = v.habitsShown {
+                            SectionLabel("Habits", palette).padding(.top, MekaSpace.l).staggeredAppear(4)
+                            Text(LoneWordGlue.shared.kept(line: habits)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(4)
+                        }
+                        if let fast = v.fastingShown {
+                            SectionLabel("Fasting", palette).padding(.top, v.habitsShown == nil ? MekaSpace.l : MekaSpace.m).staggeredAppear(4)
+                            Text(LoneWordGlue.shared.kept(line: fast)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(4)
                         }
 
                         HStack {

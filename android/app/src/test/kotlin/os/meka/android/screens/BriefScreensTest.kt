@@ -239,7 +239,7 @@ class BriefScreensTest {
         if (atTop) ScreenShots.assertShows(compose, name, "Good morning")
         val lines = listOfNotNull(
             listOfNotNull(v.dateLabel, v.workLine).joinToString(" · "), v.protectedLine, v.weatherLine, v.school?.text,
-            v.focusMore, v.needsYouLine, v.daySummary, v.planLine, v.pressureLine, v.waitingLine, v.habitsLine, v.fastingLine,
+            v.focusMore, v.needsYouLine, v.daySummary, v.planLine, v.pressureLine, v.waitingHead, v.habitsShown, v.fastingShown,
             "“${v.oneLiner}”",
         ) + v.asks.map { it.line } + v.waiting.map { it.meta } + v.headlines.map { it.meta } + v.attention.mapNotNull { it.detail } +
             // Walk-through 2026-11-15, A15 (g3a 15): the Focus task's "…football run with / Sam" and headlines ending on a
@@ -283,8 +283,24 @@ class BriefScreensTest {
                 v.dayLines.firstOrNull { it.taskId in focus }?.let { fail("$name: \"${it.title}\" is in Focus and again under Today") }
                 if (v.habitsLine?.contains("habit") != true) fail("$name: the habits line \"${v.habitsLine}\" doesn't say habit, so it reads as tasks")
                 assertIsTodaysWednesday(name, v)
+                assertSaidOnce(name, v)
             }
         }
+    }
+
+    /**
+     * Walk-through 2026-11-22 A15 on the Brief: "Waiting on 1 thing · 1 to chase today" over the one row that says
+     * "chase today", "4 planned · about 3h 30m" under "4 events · 4 tasks", and "You · 1 habit to do today" over the
+     * fast, as if fasting were the habit. Each is now said once, under its own label.
+     */
+    private fun assertSaidOnce(name: String, v: os.meka.core.domain.MorningBriefView) {
+        fun drawn(text: String) = compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().size
+        v.waitingLine?.let { if (drawn(it) > 0) fail("$name: \"$it\" is said again under the WAITING ON label") }
+        if (v.chaseDue <= v.waiting.count { it.state == os.meka.core.domain.DueState.DUE } && v.waitingHead != null)
+            fail("$name: \"${v.waitingHead}\" counts chases the rows already say")
+        v.planLine?.let { if (Regex("\\d+ planned").containsMatchIn(it)) fail("$name: \"$it\" counts the tasks again under \"${v.daySummary}\"") }
+        if (drawn("Fasting · ") > 0) fail("$name: the fast says \"Fasting\" again under its FASTING label")
+        if (drawn("habit to do") > 0 || drawn("habits to do") > 0) fail("$name: the habits line says habit again under its HABITS label")
     }
 
     /**

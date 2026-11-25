@@ -55,7 +55,7 @@ class BoardTodayTest {
         )
         val plan = BoardTodayRules.plan(ShutdownRules.left(tasks, window), tasks, window)
         assertEquals(DayPlan(2, 3, 240), plan)
-        assertEquals("2 carried over · 3 planned · about 4h", plan.line)
+        assertEquals("2 carried over from earlier days · about 4h of tasks", plan.line)
         assertEquals("Two carried over from earlier days and three planned, about 4 hours in all.", plan.sentence)
     }
 
@@ -67,7 +67,8 @@ class BoardTodayTest {
         // Just "3 planned" would repeat the day's count: nothing more is said.
         assertNull(p.line)
         assertNull(p.sentence)
-        assertEquals("3 planned · about 1h 30m", DayPlan(0, 3, 90).line)
+        assertEquals("About 1h 30m of tasks", DayPlan(0, 3, 90).line)
+        assertEquals("1 carried over from an earlier day", DayPlan(1, 2, null).line)
         assertEquals("Three tasks planned, about an hour and a half in all.", DayPlan(0, 3, 90).sentence)
         // Navilife's guess from a similar task counts as a time.
         val guessed = listOf(task("x", "Call the garage", estimate = 30), task("y", "Call the garage again"))

@@ -624,6 +624,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         let v = core.briefView.value
         XCTAssertEqual(v.day.map(\.title), ["Post the letter"])
         XCTAssertEqual(v.waitingLine, "Waiting on 1 thing · 1 to chase today")
+        // Walk-through 2026-11-22 A15: the sheet says nothing over the one row that already says "chase today".
+        XCTAssertNil(v.waitingHead)
         XCTAssertEqual(v.waiting.first?.state, .due)
         XCTAssertFalse(v.seenToday)
         // Calm Today: a glance never counts as read; open long enough, it does whenever the card is offered.

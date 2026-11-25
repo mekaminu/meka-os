@@ -7535,3 +7535,11 @@ Confirmed in the code: on the Fold, Errands' near-me card had the title "Near-me
 - core `AutonomyRules.answerUnder(said, summary)`: the last tap's line, or null when it only repeats the header (same words after the first " · "); Resumed and a row's reset line still show.
 - Fold `AutonomyPane` and Mac `AutonomySheet` show `answerUnder` instead of the raw line.
 - Tests: core `AutonomyTest.thePausedHeaderIsSaidOnce`; the Fold's `SpeakUpAutonomyScreensTest` autonomy by-hand fails if "asks before everything" shows more than once while paused. Mac checked nightly.
+
+### Found and fixing, week 5 — slice 75 (2026-11-25): A15 on the Brief
+- The Brief said three things twice (g3b finding 7, `brief/cover-dark-many.png`, `brief/cover-dark-many-foot.png`): "WAITING ON / Waiting on 1 thing · 1 to chase today" over the one row that says "Casey · chase today"; "4 events · 4 tasks · first at 10:00" then "4 planned · about 3h 30m" (which four, 3h 30m of what?); "YOU · 1 habit to do today" over "Fasting · started 03:45 · goal at 19:45", reading as if fasting were the habit.
+- core `MorningBriefView.waitingHead` (`BriefRules.waitingHead`): under the label only chases the rows don't show ("2 more to chase today"), else nothing; the view carries `chaseDue`. `waitingLine` is unchanged for speech and Bedside.
+- core `DayPlan.line` no longer repeats the task count and says what the time is of: "About 3h 30m of tasks", "2 carried over from earlier days · about 4h of tasks", "1 carried over from an earlier day" (help tip updated; the spoken sentence is unchanged).
+- core `habitsShown` / `fastingShown`: habits under their own HABITS label ("1 to do today", "All on track"), the fast under FASTING ("Started 03:45 · goal at 19:45"); the YOU label is gone.
+- Fold `BriefPane` and Mac `BriefSheet` draw the Waiting on section from the rows (label, optional head), and Habits and Fasting as two labels.
+- Tests: core `MorningBriefTest.theBriefSaysEachThingOnce`, `BoardTodayTest` lines, `MekaCoreTest` (`waitingHead` null over one chase); the Fold's `BriefScreensTest` many shots fail on the old waiting line drawn, "N planned" in the plan line, "Fasting · " or "habit to do" drawn; Mac `MekaCoreBridgeTests` checks `waitingHead`. Mac checked nightly. core-verify 4692 tests green.

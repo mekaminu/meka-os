@@ -529,6 +529,8 @@ class MekaCoreTest {
         assertEquals("Work 09:00–17:30", v.workLine)
         assertEquals(listOf("Post the letter"), v.day.map { it.title })
         assertEquals("Waiting on 1 thing · 1 to chase today", v.waitingLine)
+        assertNull(v.waitingHead)
+        assertEquals(1, v.chaseDue)
         assertEquals("1 task · 1 to chase", v.cardLine)
         val posted = a.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
         assertEquals(listOf("Morning brief"), posted.post.map { it.title })

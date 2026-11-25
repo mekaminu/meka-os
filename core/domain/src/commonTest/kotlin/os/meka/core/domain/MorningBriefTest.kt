@@ -250,6 +250,23 @@ class MorningBriefTest {
         assertEquals(listOf("Car insurance", "Review: Keep the old car"), v.attention.map { it.title })
         assertEquals("d-$decision", v.attention.last().id)
         assertEquals("Nothing planned yet · 1 to chase · 2 things on your lists", v.cardLine)
+        // A15: the pane's WAITING ON label and the rows say it; nothing is said again over them.
+        assertNull(v.waitingHead)
+    }
+
+    @Test
+    fun theBriefSaysEachThingOnce() {
+        // Walk-through 2026-11-22 A15 on the Brief: "Waiting on 1 thing · 1 to chase today" over the one row that says
+        // "chase today"; "4 planned · about 3h 30m" under "4 events · 4 tasks"; "You · 1 habit to do today" over the fast.
+        val due = WaitingItem("w", "Quote", "Casey", null, 0L, null, 0L, DueState.DUE, "Casey · chase today", false)
+        assertNull(BriefRules.waitingHead(listOf(due), 1))
+        assertEquals("2 more to chase today", BriefRules.waitingHead(listOf(due), 3))
+        assertEquals("About 3h 30m of tasks", DayPlan(0, 4, 210).line)
+        assertEquals("1 to do today", BriefRules.habitsShown("1 habit to do today"))
+        assertEquals("1 behind · 2 to do today", BriefRules.habitsShown("1 habit behind · 2 to do today"))
+        assertEquals("All on track", BriefRules.habitsShown("All habits on track"))
+        assertEquals("Started 03:45 · goal at 19:45", BriefRules.fastingShown("Fasting · started 03:45 · goal at 19:45"))
+        assertEquals("36-hour fast · day 2", BriefRules.fastingShown("36-hour fast · day 2"))
     }
 
     @Test

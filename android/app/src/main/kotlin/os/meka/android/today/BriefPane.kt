@@ -240,7 +240,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             Column(Modifier.animateItem().appear(rememberAppearance(1))) {
                 SectionLabel("Today")
                 Text(LoneWordGlue.kept(v.daySummary), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
-                // Week board slice 5: "3 carried over · 5 planned · about 4h".
+                // Week board slice 5 (A15: no second count): "3 carried over from earlier days · about 4h of tasks".
                 v.planLine?.let { plan ->
                     Text(LoneWordGlue.kept(plan), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 }
@@ -262,12 +262,14 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             BriefDayRow(r, Modifier.animateItem().appear(rememberAppearance(1)), tick)
         }
 
-        val waitingLine = v.waitingLine
-        if (waitingLine != null) {
+        // Walk-through 2026-11-22 A15: the label and the rows say it; only chases the rows don't show are counted.
+        if (v.waiting.isNotEmpty()) {
             item(key = "h-waiting") {
                 Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(2))) {
                     SectionLabel("Waiting on")
-                    Text(LoneWordGlue.kept(waitingLine), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                    v.waitingHead?.let { head ->
+                        Text(LoneWordGlue.kept(head), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                    }
                 }
             }
             items(v.waiting, key = { "w-" + it.id }) { w -> WaitingLine(w, Modifier.animateItem().appear(rememberAppearance(2))) }
@@ -286,12 +288,15 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             items(v.attention, key = { "a-" + it.id }) { a -> AttentionLine(a, Modifier.animateItem().appear(rememberAppearance(3))) }
         }
 
-        val extras = listOfNotNull(v.habitsLine, v.fastingLine)
-        if (extras.isNotEmpty()) {
+        // A15: habits and a running fast each under their own label, so the fast doesn't read as the habit.
+        val you = listOfNotNull(v.habitsShown?.let { "Habits" to it }, v.fastingShown?.let { "Fasting" to it })
+        if (you.isNotEmpty()) {
             item(key = "h-you") {
                 Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(4))) {
-                    SectionLabel("You")
-                    extras.forEach { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs)) }
+                    you.forEachIndexed { i, (label, line) ->
+                        SectionLabel(label, if (i > 0) Modifier.padding(top = MekaSpace.m) else Modifier)
+                        Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs))
+                    }
                 }
             }
         }
