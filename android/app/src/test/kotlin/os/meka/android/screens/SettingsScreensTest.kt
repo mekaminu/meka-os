@@ -18,11 +18,14 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -42,6 +45,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.ABOUT_EDIT_SHEET_TAG
 import os.meka.android.ask.ABOUT_YOU_LIST_TAG
 import os.meka.android.ask.AboutYouPane
 import os.meka.android.ask.SETTINGS_LIST_TAG
@@ -269,8 +273,12 @@ class SettingsScreensTest {
         val v = core.aboutYouView.value
         ScreenShots.assertShows(compose, name, AboutYouRules.TITLE)
         ScreenShots.assertShows(compose, name, v.summary)
-        // An empty field shows one short example on one line (the quality gate's rule for hints).
-        ScreenShots.assertEachOneLine(compose, name, AboutField.entries.map { it.hint } + AboutYouRules.CHILD_HINT)
+        // Walk-through week 5, A17: no open input box on the page; each line is a row that opens its sheet.
+        if (compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()) fail("$name: an open text box on the page")
+        v.rows.forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(AboutYouRules.rowSpoken(r)) and hasClickAction()).fetchSemanticsNodes().isEmpty() &&
+                r.field == AboutField.SHOWN_NAME) fail("$name: Your name isn't a row that opens its sheet")
+        }
         ScreenShots.assertEachOneLine(compose, name, AboutField.entries.map { it.label })
         ScreenShots.assertNoLoneWords(compose, name, v.rows.mapNotNull { it.line } + listOfNotNull(v.watchLine))
         // A field's line sits with its field, clear of the next label (slice 25's shots: they ran together).
@@ -485,15 +493,36 @@ class SettingsScreensTest {
         fun v() = core.aboutYouView.value
         fun value(f: AboutField) = v().rows.first { it.field == f }.value
         val undo = hasText("Undo")
-        // A field keeps what's typed.
+        fun row(f: AboutField) = v().rows.first { it.field == f }
+        fun sheetOpen() = compose.onAllNodesWithTag(ABOUT_EDIT_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+        // Walk-through week 5, A17: a row opens its sheet, holding what's there; Save keeps what's typed and closes it.
+        if (sheetOpen()) fail("$name: a sheet is open before any row is tapped")
+        tap(t, name, "Your name", hasContentDescription(AboutYouRules.rowSpoken(row(AboutField.SHOWN_NAME))))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: Your name's row opened no sheet")
+        val held = row(AboutField.SHOWN_NAME).value!!
+        if (compose.onAllNodesWithText(held, useUnmergedTree = true).fetchSemanticsNodes().size < 2) fail("$name: the sheet doesn't hold \"$held\"")
         type(t, name, AboutField.SHOWN_NAME.spokenHint, "Jordan Lee", replace = true)
-        until { value(AboutField.SHOWN_NAME) == "Jordan Lee" }
-        if (value(AboutField.SHOWN_NAME) != "Jordan Lee") fail("$name: Done on Your name kept \"${value(AboutField.SHOWN_NAME)}\"")
-        // A blank clears it; Undo puts it back.
+        until { value(AboutField.SHOWN_NAME) == "Jordan Lee" && !sheetOpen() }
+        if (value(AboutField.SHOWN_NAME) != "Jordan Lee") fail("$name: Save on Your name kept \"${value(AboutField.SHOWN_NAME)}\"")
+        if (sheetOpen()) fail("$name: Your name's sheet stayed open after Save")
+        // A refused line keeps the sheet open with why, in the sheet.
+        tap(t, name, "Partner's email", hasContentDescription(AboutYouRules.rowSpoken(row(AboutField.PARTNER_EMAIL))))
+        until { sheetOpen() }
+        type(t, name, AboutField.PARTNER_EMAIL.spokenHint, "not an email", replace = true)
+        turns()
+        if (!sheetOpen()) fail("$name: a refused email closed its sheet")
+        if (compose.onAllNodesWithText(AboutYouRules.NOT_EMAIL, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: the sheet doesn't say why")
+        tap(t, name, "Close", hasText("Close") and hasAnyAncestor(hasTestTag(ABOUT_EDIT_SHEET_TAG)))
+        until { !sheetOpen() }
+        if (value(AboutField.PARTNER_EMAIL) == "not an email") fail("$name: the refused email was kept")
+        // Clear clears it; Undo under the row puts it back.
         val home = value(AboutField.HOME) ?: fail("$name: Home isn't kept")
-        type(t, name, AboutField.HOME.spokenHint, "", replace = true)
-        until { value(AboutField.HOME) == null }
-        if (value(AboutField.HOME) != null) fail("$name: a blank Home kept \"${value(AboutField.HOME)}\"")
+        tap(t, name, "Home", hasContentDescription(AboutYouRules.rowSpoken(row(AboutField.HOME))))
+        until { sheetOpen() }
+        tap(t, name, "Clear", hasContentDescription("${AboutYouRules.CLEAR} Home"))
+        until { value(AboutField.HOME) == null && !sheetOpen() }
+        if (value(AboutField.HOME) != null) fail("$name: Clear kept Home \"${value(AboutField.HOME)}\"")
         tap(t, name, "Undo", undo)
         until { value(AboutField.HOME) == home }
         if (value(AboutField.HOME) != home) fail("$name: Undo didn't put Home back (\"${value(AboutField.HOME)}\")")
@@ -516,10 +545,12 @@ class SettingsScreensTest {
         tap(t, name, "Undo", undo, last = true)
         until { v().children.size == kids }
         if (v().children.none { it.name == child.name }) fail("$name: Undo didn't bring ${child.name} back")
-        // The child field adds one.
+        // + Add a child opens its sheet, which adds one.
+        tap(t, name, AboutYouRules.ADD_CHILD, hasContentDescription(v().childDescription) and hasClickAction())
+        until { sheetOpen() }
         type(t, name, v().childDescription, "Casey, U5, Oakfield School")
-        until { v().children.any { it.name == "Casey" } }
-        if (v().children.none { it.name == "Casey" }) fail("$name: Done on the child field added nobody")
+        until { v().children.any { it.name == "Casey" } && !sheetOpen() }
+        if (v().children.none { it.name == "Casey" }) fail("$name: Add on the child sheet added nobody")
         assertTouchTargets(name)
         // Walk-through 2026-11-15 A14 ("About you by-hand starting mid-scroll"): the child field left the list scrolled to
         // its foot, so the shot began on a field cut by the top edge with no title. It goes back to the top first, so the

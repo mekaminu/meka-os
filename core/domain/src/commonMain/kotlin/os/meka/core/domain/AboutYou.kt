@@ -223,7 +223,11 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
  * One row of the pane: the label, what's held (null when empty) and the line under it: what to add while empty, none once
  * filled (walk-through 2026-11-15 A16: "In your data" under every field said what the summary already says).
  */
-data class AboutRow(val field: AboutField, val label: String, val value: String?, val hint: String, val line: String?, val spokenHint: String = "$label, $hint")
+data class AboutRow(
+    val field: AboutField, val label: String, val value: String?, val hint: String, val line: String?, val spokenHint: String = "$label, $hint",
+    /** What the line is for, held or not (the empty line's words, naming the partner once she's named): the sheet's note. */
+    val purpose: String = field.emptyLine,
+)
 
 /** A child's row: "Alex" and "Under 7s · Oakfield School". */
 data class AboutChildRow(val index: Int, val name: String, val line: String, val spoken: String)
@@ -250,6 +254,11 @@ data class AboutYouView(
     val handleLine: String? = null,
     /** The partner's name as typed (null: none), so the Fold's watch list can show her row's switch as About you's. */
     val partnerName: String? = null,
+    /**
+     * The handle switch's title: "Handle Morgan's requests for me" once a partner is named (walk-through week 5, A17:
+     * the page said "their" in one line and "her" in the next), else [HandleForMeRules.TITLE].
+     */
+    val handleTitle: String = HandleForMeRules.TITLE,
 ) {
     companion object {
         val EMPTY: AboutYouView = AboutYouRules.view(AboutYou.EMPTY, LocalCalendar.UTC, 0L)
@@ -261,6 +270,23 @@ data class AboutYouView(
  * [undo] is the text Undo writes back (the value before a clear), null when there's nothing to undo.
  */
 data class AboutSaved(val line: String, val refused: Boolean = false, val undo: String? = null)
+
+/**
+ * One About you line's edit sheet (walk-through week 5, A17: no open input boxes on a page): the row on the page shows
+ * what's held and opens this. [title] the field's label; [value] what the field starts holding; [hint] its short
+ * example; [spokenHint] what TalkBack reads for the field; [note] the fuller how-to or what the line is for; [clearLabel]
+ * shown only when something is held. [field] null for the add-a-child sheet.
+ */
+data class AboutEditSheet(
+    val field: AboutField?,
+    val title: String,
+    val value: String,
+    val hint: String,
+    val spokenHint: String,
+    val note: String,
+    val saveLabel: String = AboutYouRules.SAVE,
+    val clearLabel: String? = null,
+)
 
 /** Non-AI, pure. */
 object AboutYouRules {
@@ -298,6 +324,60 @@ object AboutYouRules {
     const val TOO_MANY = "That's the most children About you holds."
     const val WATCH_ON = "On · Navilife flags what they ask you for in messages"
     const val WATCH_OFF = "Off · their messages are treated like anyone's"
+    const val SAVE = "Save"
+    const val CLEAR = "Clear"
+    const val ADD_CHILD = "+ Add a child"
+    const val ADD_CHILD_TITLE = "Add a child"
+    const val CHILD_NOTE = "Their name, then the age group and school if you like. Remove takes one off again."
+    const val NOT_ADDED = "not added"
+
+    // ---- Walk-through week 5, A17: rows that open a sheet, and one name for the partner ----
+
+    /** "Morgan's". */
+    fun possessive(name: String): String = "$name's"
+
+    /** What a row reads to TalkBack and the hand tests: "Your name, Jordan" or "Home, not added". */
+    fun rowSpoken(r: AboutRow): String = "${r.label}, ${r.value ?: NOT_ADDED}"
+
+    /** The short example a field shows, naming the partner once she's named ("Morgan's mobile number"). */
+    fun hint(f: AboutField, partner: String?): String = when {
+        partner == null -> f.hint
+        f == AboutField.PARTNER_PHONE -> "${possessive(partner)} mobile number"
+        f == AboutField.PARTNER_EMAIL -> "${possessive(partner)} email address"
+        else -> f.hint
+    }
+
+    /** What an empty line is for, naming the partner once she's named: never "their" in one line and "her" in the next. */
+    fun emptyLine(f: AboutField, partner: String?): String = when {
+        partner == null -> f.emptyLine
+        f == AboutField.PARTNER_PHONE -> "Add it so calls from $partner always ring"
+        f == AboutField.PARTNER_EMAIL -> "Add it so Inbox autopilot never tidies ${possessive(partner)} emails away"
+        else -> f.emptyLine
+    }
+
+    /** Watch for requests' line, by her name. */
+    fun watchLine(partner: String, on: Boolean): String =
+        if (on) "On · Navilife flags what $partner asks you for in messages" else "Off · ${possessive(partner)} messages are treated like anyone's"
+
+    /** Handle her requests for me, by her name: the title and its line. */
+    fun handleTitle(partner: String): String = "Handle ${possessive(partner)} requests for me"
+    fun handleLine(partner: String, on: Boolean): String =
+        if (on) "On · what $partner asks for is added at once, with reminders and the steps to get ready; you're told what was done"
+        else "Off · ${possessive(partner)} requests wait in Needs you for you to add"
+
+    /**
+     * The sheet a row opens: the field holding what's there, its example, the fuller how-to when the field has one (the
+     * spoken hint less its label), else what the line is for; Clear only when something is held.
+     */
+    fun editSheet(r: AboutRow): AboutEditSheet {
+        val fuller = r.field.spokenHint.removePrefix("${r.label}, ").takeIf { r.field.spokenHint != "${r.label}, ${r.field.hint}" }
+        val note = fuller?.replaceFirstChar { it.uppercase() } ?: r.purpose
+        return AboutEditSheet(r.field, r.label, r.value ?: "", r.hint, r.spokenHint, note,
+            clearLabel = if (r.value != null) CLEAR else null)
+    }
+
+    /** + Add a child's sheet. */
+    fun childSheet(): AboutEditSheet = AboutEditSheet(null, ADD_CHILD_TITLE, "", CHILD_HINT, CHILD_DESCRIPTION, CHILD_NOTE, saveLabel = "Add")
 
     // ---- Slice 2: whether each app has it (release 2's gate) ----
 
@@ -648,9 +728,11 @@ object AboutYouRules {
     // ---- The pane ----
 
     fun view(a: AboutYou, cal: LocalCalendar, nowMs: Long): AboutYouView {
+        val partner = a.partnerName?.trim()?.takeIf { it.isNotEmpty() }
         val rows = AboutField.entries.map { f ->
             val v = value(a, f)
-            AboutRow(f, f.label, v, f.hint, if (v == null) f.emptyLine else null, f.spokenHint)
+            val purpose = emptyLine(f, partner)
+            AboutRow(f, f.label, v, hint(f, partner), if (v == null) purpose else null, f.spokenHint, purpose)
         }
         val kids = a.children.mapIndexed { i, c ->
             AboutChildRow(i, c.name, childLine(c), "${c.name}, ${childLine(c)}")
@@ -662,13 +744,14 @@ object AboutYouRules {
             childHint = CHILD_HINT,
             childrenEmpty = if (a.children.isEmpty()) NO_CHILDREN else null,
             partnerWatch = a.partnerWatch,
-            watchLine = a.partnerName?.let { if (a.partnerWatch) WATCH_ON else WATCH_OFF },
+            watchLine = partner?.let { watchLine(it, a.partnerWatch) } ?: a.partnerName?.let { if (a.partnerWatch) WATCH_ON else WATCH_OFF },
             isEmpty = a.isEmpty,
             partnerHandle = a.partnerHandle,
             // Only while her messages are watched: handling needs them read.
-            handleLine = a.partnerName?.takeIf { a.partnerWatch }?.let { if (a.partnerHandle) HandleForMeRules.ON else HandleForMeRules.OFF },
+            handleLine = a.partnerName?.takeIf { a.partnerWatch }?.let { partner?.let { p -> handleLine(p, a.partnerHandle) } ?: if (a.partnerHandle) HandleForMeRules.ON else HandleForMeRules.OFF },
             callName = CallNameRules.called(a.shownName),
-            partnerName = a.partnerName?.trim()?.takeIf { it.isNotEmpty() },
+            partnerName = partner,
+            handleTitle = partner?.let { handleTitle(it) } ?: HandleForMeRules.TITLE,
         )
     }
 

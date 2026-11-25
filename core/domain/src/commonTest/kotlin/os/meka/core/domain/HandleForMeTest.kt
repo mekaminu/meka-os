@@ -210,9 +210,9 @@ class HandleForMeTest {
         assertTrue(store.setPartnerHandle(false))
         assertFalse(store.profile().partnerHandle)
         val v = AboutYouRules.view(store.profile().copy(partnerName = "Alex"), LocalCalendar.UTC, 0L)
-        assertEquals(HandleForMeRules.OFF, v.handleLine)
+        assertEquals(AboutYouRules.handleLine("Alex", on = false), v.handleLine)
         assertNull(AboutYouRules.view(AboutYou(partnerName = "Alex", partnerWatch = false), LocalCalendar.UTC, 0L).handleLine)
-        assertEquals(HandleForMeRules.ON, AboutYouRules.view(AboutYou(partnerName = "Alex"), LocalCalendar.UTC, 0L).handleLine)
+        assertEquals(AboutYouRules.handleLine("Alex", on = true), AboutYouRules.view(AboutYou(partnerName = "Alex"), LocalCalendar.UTC, 0L).handleLine)
     }
 
     @Test

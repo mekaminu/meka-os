@@ -33,7 +33,7 @@ struct AboutYouSheet: View {
                     ForEach(Array(v.rows.enumerated()), id: \.element.field.key) { i, row in
                         let partner = row.field.key == AboutYouFields.shared.PARTNER_EMAIL
                         line(row, watch: partner ? v.watchLine : nil, watching: v.partnerWatch,
-                             handle: partner ? v.handleLine : nil, handling: v.partnerHandle)
+                             handle: partner ? v.handleLine : nil, handling: v.partnerHandle, handleTitle: v.handleTitle)
                             .staggeredAppear(2 + i)
                     }
                     children(v).staggeredAppear(2 + v.rows.count)
@@ -53,7 +53,7 @@ struct AboutYouSheet: View {
     }
 
     @ViewBuilder
-    private func line(_ row: AboutRow, watch: String?, watching: Bool, handle: String?, handling: Bool) -> some View {
+    private func line(_ row: AboutRow, watch: String?, watching: Bool, handle: String?, handling: Bool, handleTitle: String) -> some View {
         let key = row.field.key
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             // A field's line belongs to its field: a wider gap before the next label (quality gate slice 26).
@@ -87,17 +87,18 @@ struct AboutYouSheet: View {
                 }
                 .padding(.top, MekaSpace.xs)
             }
-            // "Handle her requests for me" (2026-11-11): on by default, shown while her messages are watched.
+            // "Handle her requests for me" (2026-11-11): on by default, shown while her messages are watched; titled by
+            // her name once she's named ("Handle Morgan's requests for me", walk-through week 5 A17).
             if let handle {
                 HStack {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(HandleForMeRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(handleTitle).font(MekaType.body).foregroundStyle(palette.textPrimary)
                         Text(handle).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
                             .animation(MekaMotion.appear(reduced: reduceMotion), value: handle)
                     }
                     Spacer()
-                    Toggle(HandleForMeRules.shared.TITLE, isOn: Binding(get: { handling }, set: { model.setAboutYouPartnerHandle($0) }))
+                    Toggle(handleTitle, isOn: Binding(get: { handling }, set: { model.setAboutYouPartnerHandle($0) }))
                         .labelsHidden().toggleStyle(.switch).tint(palette.accent)
                 }
                 .padding(.top, MekaSpace.xs)

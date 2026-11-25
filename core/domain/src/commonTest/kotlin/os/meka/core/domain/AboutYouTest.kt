@@ -139,10 +139,10 @@ class AboutYouTest {
         assertNull(s.profile().partnerName)
         s.set(AboutField.PARTNER_NAME, cleared.undo!!)
         assertEquals("Sam", s.profile().partnerName)
-        assertEquals(AboutYouRules.WATCH_ON, s.view(LocalCalendar.UTC).watchLine)
+        assertEquals(AboutYouRules.watchLine("Sam", on = true), s.view(LocalCalendar.UTC).watchLine)
         assertTrue(s.setPartnerWatch(false))
         assertFalse(s.setPartnerWatch(false))
-        assertEquals(AboutYouRules.WATCH_OFF, s.view(LocalCalendar.UTC).watchLine)
+        assertEquals(AboutYouRules.watchLine("Sam", on = false), s.view(LocalCalendar.UTC).watchLine)
         assertEquals(AboutYouRules.TYPED, s.view(LocalCalendar.UTC).summary)
 
         assertEquals("Added Alex · Under 7s · Oakfield School", s.addChild("Alex, U7, Oakfield School").line)

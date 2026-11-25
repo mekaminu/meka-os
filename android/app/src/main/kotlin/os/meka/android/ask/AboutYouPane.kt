@@ -5,7 +5,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,9 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -30,14 +26,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -49,10 +42,10 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
-import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.core.domain.AboutEditSheet
 import os.meka.core.domain.AboutField
 import os.meka.core.domain.AboutRow
 import os.meka.core.domain.AboutSaved
@@ -64,14 +57,16 @@ const val ABOUT_YOU_LIST_TAG = "about-you-list"
 
 /**
  * Ask → Settings → About you (rule 13, slice 1): who's who, home and work, typed once and kept in Meka's own synced data
- * rather than MEKA's code. Each line is a field holding what's there; Done saves it (blank clears it, with Undo). The
- * partner's "Watch for requests" switch, then the children (one row each with Remove, and a field to add one:
- * "Alex, U7, Oakfield School"). The Mac's About you sheet edits the same profile.
+ * rather than MEKA's code. Each line is a card row showing what's held (or what the line is for) that opens its own
+ * sheet to change it (walk-through week 5, A17: no open input boxes on a page); Save keeps it, Clear or a blank clears
+ * it, with Undo under the row. The partner's "Watch for requests" switch, then the children (one row each with Remove,
+ * and + Add a child, which opens its sheet: "Alex, U7, Oakfield School"). The Mac's About you sheet edits the same
+ * profile.
  *
- * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and each line under a field
- * cross-fade (a refused line blends to the accent with a tick haptic; a save gives a light haptic); sections and rows
- * stagger in 40 ms apart; children arrive and leave with the list's item motion; the switch's pill blends its colour
- * with a tick haptic. Reduced motion: cross-fades.
+ * Motion: the pane springs up (MekaPane) with the row's title travelling in; a row's sheet rises over a fading scrim;
+ * the summary, each row's value and the line under it cross-fade (a refusal blends to the accent in the sheet with a
+ * tick haptic; a save gives a light haptic); sections and rows stagger in 40 ms apart; children arrive and leave with
+ * the list's item motion; the switch's pill blends its colour with a tick haptic. Reduced motion: cross-fades.
  */
 @Composable
 fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
@@ -80,11 +75,26 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
     val v by core.aboutYouView.collectAsState()
     // What the last save on each field said ("children" for the add-a-child field).
     val said = remember { mutableStateMapOf<String, AboutSaved>() }
-    val childText = remember { mutableStateMapOf<String, String>() }
+    // The sheet open (a line's, or + Add a child's) and what its last save refused.
+    var open by remember { mutableStateOf<AboutEditSheet?>(null) }
+    var refusal by remember { mutableStateOf<String?>(null) }
 
     fun react(key: String, r: AboutSaved) {
         said[key] = r
         if (r.refused) haptics.tick() else haptics.light()
+    }
+
+    open?.let { sheet ->
+        AboutEditSheetView(sheet, refusal,
+            onSave = { typed ->
+                scope.launch {
+                    val field = sheet.field
+                    val r = runCatching { if (field != null) core.setAboutYou(field, typed) else core.addAboutYouChild(typed) }.getOrNull() ?: return@launch
+                    if (r.refused) { refusal = r.line; haptics.tick() } // the sheet stays open with the words to fix
+                    else { open = null; refusal = null; react(field?.key ?: "children", r) }
+                }
+            },
+            onClose = { open = null; refusal = null })
     }
 
     LazyColumn(
@@ -106,12 +116,12 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         itemsIndexed(v.rows, key = { _, r -> "about-${r.field.key}" }) { i, row ->
-            // A field's line belongs to its field: 16 dp more before the next label (24 dp in all), 32 dp more before a
-            // new group (Your name, Home, Your mobile), so the fields no longer run together (quality gate slice 26).
-            Column(Modifier.animateItem().padding(top = if (row.field == AboutField.SHOWN_NAME || row.field == AboutField.HOME || row.field == AboutField.MOBILE) MekaSpace.xl else MekaSpace.m)
+            // Each line is its own card, 8 dp apart; 32 dp more before a new group (Your name, Home, Your mobile), so the
+            // groups read apart (quality gate slice 26).
+            Column(Modifier.animateItem().padding(top = if (row.field == AboutField.SHOWN_NAME || row.field == AboutField.HOME || row.field == AboutField.MOBILE) MekaSpace.xl else MekaSpace.xxs)
                 .appear(rememberAppearance(2 + i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 AboutLine(row, said[row.field.key],
-                    onSave = { typed -> scope.launch { runCatching { core.setAboutYou(row.field, typed) }.getOrNull()?.let { react(row.field.key, it) } } },
+                    onOpen = { refusal = null; open = AboutYouRules.editSheet(row) },
                     onUndo = { back -> scope.launch { runCatching { core.setAboutYou(row.field, back) }.getOrNull()?.let { react(row.field.key, it) } } })
                 if (row.field == AboutField.PARTNER_EMAIL) v.watchLine?.let { line ->
                     WatchRow(v.partnerWatch, line) {
@@ -121,7 +131,7 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 // "Handle her requests for me" (2026-11-11): on by default, shown while her messages are watched.
                 if (row.field == AboutField.PARTNER_EMAIL) v.handleLine?.let { line ->
-                    WatchRow(v.partnerHandle, line, title = os.meka.core.domain.HandleForMeRules.TITLE) {
+                    WatchRow(v.partnerHandle, line, title = v.handleTitle) {
                         haptics.tick()
                         scope.launch { runCatching { core.setAboutYouPartnerHandle(!v.partnerHandle) } }
                     }
@@ -157,47 +167,42 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
         item(key = "children-add") {
             val line = said["children"]
             Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(v.childHint, value = childText["add"] ?: "", onValue = { childText["add"] = it }, description = v.childDescription) { typed ->
-                    scope.launch {
-                        val r = runCatching { core.addAboutYouChild(typed) }.getOrNull() ?: return@launch
-                        react("children", r)
-                        if (r.refused) childText["add"] = typed // keep the words to fix
-                    }
-                }
+                Text(AboutYouRules.ADD_CHILD, style = MekaType.metaStrong, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { refusal = null; open = AboutYouRules.childSheet() }
+                        .semantics { contentDescription = v.childDescription }
+                        .minTouch().padding(horizontal = MekaSpace.xs))
                 SaidLine(line) { back -> scope.launch { runCatching { core.addAboutYouChild(back) }.getOrNull()?.let { react("children", it) } } }
             }
         }
     }
 }
 
-/** One About you line: its label, a field holding what's there (Done saves; blank clears) and the line under it. */
+/**
+ * One About you line: a card row with its label, what's held (or what the line is for) and ›, opening its sheet; the
+ * line under it says what the last save did, with Undo after a clear.
+ */
 @Composable
-private fun AboutLine(row: AboutRow, said: AboutSaved?, onSave: (String) -> Unit, onUndo: (String) -> Unit) {
-    var text by remember(row.value) { mutableStateOf(row.value ?: "") }
-    Text(row.label, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+private fun AboutLine(row: AboutRow, said: AboutSaved?, onOpen: () -> Unit, onUndo: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = AboutYouRules.rowSpoken(row) }
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        if (text.isEmpty()) Text(row.hint, style = MekaType.body, color = Meka.colors.textTertiary)
-        BasicTextField(
-            value = text,
-            onValueChange = { text = it },
-            singleLine = true,
-            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-            cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = when (row.field) {
-                AboutField.PARTNER_EMAIL -> KeyboardType.Email
-                AboutField.SCHOOL_WEBSITE -> KeyboardType.Uri
-                AboutField.PARTNER_PHONE, AboutField.MOBILE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> KeyboardType.Phone
-                else -> KeyboardType.Text
-            }),
-            keyboardActions = KeyboardActions(onDone = { onSave(text) }),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = row.spokenHint },
-        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Text(row.label, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            Crossfade(row.value, animationSpec = MekaMotion.appear(reduced), label = "about-value") { value ->
+                if (value != null) Text(value, style = MekaType.body, color = Meka.colors.textPrimary)
+                else row.line?.let { Text(os.meka.core.domain.LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
+            }
+        }
+        Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
     }
     if (said != null) SaidLine(said, onUndo)
-    else row.line?.let { Text(os.meka.core.domain.LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
 }
 
 /** What the last save said, lit in the accent when refused, with Undo after a clear or a removal. */

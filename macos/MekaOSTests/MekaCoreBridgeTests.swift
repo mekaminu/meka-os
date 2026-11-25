@@ -3722,6 +3722,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         let v = core.aboutYouView.value
         XCTAssertFalse(v.isEmpty)
         XCTAssertEqual(v.rows.first { $0.field == .partnerName }?.value, "Sam")
+        // Walk-through week 5, A17: the partner is named, not "their" then "her".
+        XCTAssertEqual(v.handleTitle, "Handle Sam's requests for me")
+        XCTAssertEqual(v.watchLine, "On · Navilife flags what Sam asks you for in messages")
         XCTAssertEqual(v.children.map(\.name), ["Alex"])
         let gone = try await core.removeAboutYouChild(index: 0)
         XCTAssertEqual(gone.undo, "Alex, U7, Oakfield School")
