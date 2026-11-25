@@ -285,7 +285,11 @@ class MoneyTradingLayoutScreensTest {
         }
         scrollTo("money-foot-info")
         assertTrue(showsText(MoneyTradingLayout.ADDRESSES_HEAD), "the addresses card should be in the layout shot")
-        assertTrue(showsText(MoneyTradingLayout.FOOT_SHORT), "Trading's foot line should be in the layout shot")
+        // Walk-through week 5, A15: with figures read the card wears Read-only, so the foot doesn't say it again.
+        val foot = MoneyTradingLayout.foot(core.moneyView.value.trading!!)
+        assertEquals(MoneyTradingLayout.FOOT_MARKED, foot)
+        assertTrue(showsText(foot), "Trading's foot line should be in the layout shot")
+        if (showsText(MoneyTradingLayout.FOOT_SHORT)) fail("Read-only is said by the equity card's mark and again at the foot")
         val shot = java.io.File(ScreenShots.path("money", "inner-dark-trading-layout"))
         compose.onNodeWithTag("screen").captureRoboImage(shot.path)
         val top = java.io.File(ScreenShots.path("money", "inner-dark-trading-risk"))
@@ -397,6 +401,12 @@ class MoneyTradingLayoutScreensTest {
         ScreenShots.assertNoBrokenWords(compose, "cover-dark-trading-tiles")
         scrollTo("money-trades-card")
         if (showsText(t.trades?.summary ?: fail("no trades summary"))) fail("YOUR TRADES still repeats the trades closed and won")
+        // Walk-through week 5, A15 on Trading: BTC is the only coin, so its one line names it ("BTC after fees and
+        // funding +…") instead of "After fees and funding" sitting over a BTC row with the same figure.
+        val shown = TradingTiles.trades(t) ?: fail("no trades card")
+        assertTrue(shown.coins.isEmpty(), "one coin's row repeats the line above it")
+        assertTrue(showsText("BTC after fees and funding"), "the one line names the coin")
+        if (showsText(MoneyTradingLayout.FOOT_SHORT)) fail("Read-only is said by the equity card's mark and again at the foot")
         scrollTo("money-trading-alerts-card")
         val row = TradingTiles.alertsRow(t.alerts ?: fail("no alerts"))
         assertTrue(showsText(row.title), "ALERTS is one row: ${row.title}")
@@ -406,6 +416,10 @@ class MoneyTradingLayoutScreensTest {
         tap("money-alerts-row")
         assertTrue(shows("money-alerts-sheet"), "the alerts row opens its sheet")
         assertTrue(showsText(t.alerts!!.dropLabel), "the sheet holds the choices")
+        // Walk-through week 5, A15 on Trading: the sheet's line no longer spells out the four choices its chips show.
+        assertTrue(showsText(TradingTiles.ALERTS_SHEET_LINE), "the sheet says when the alerts come, once")
+        if (showsText(t.alerts!!.line)) fail("the sheet's paragraph still spells out every choice the chips show")
+        ScreenShots.assertNoDotEndingALine(compose, "cover-dark-trading-alerts-sheet", listOf(TradingTiles.ALERTS_SHEET_LINE))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("money", "cover-dark-trading-alerts-sheet"))
         compose.onNodeWithContentDescription(t.alerts!!.liqChips.first { !it.on }.spoken, useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)

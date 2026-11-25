@@ -44,14 +44,25 @@ object TradingTiles {
     fun trades(t: TradingView): TradingTradesView? {
         val tr = t.trades ?: return null
         if (t.tiles == null) return tr
-        return tr.copy(summary = null, lines = tr.lines.filter { it.label == AFTER })
+        val after = tr.lines.filter { it.label == AFTER }
+        // Walk-through week 5, A15 on Trading: with one coin its row said the same figure straight under "After fees and
+        // funding" (and the tiles already say its trades, fees and funding), so the one line names the coin instead.
+        val one = tr.coins.singleOrNull()?.takeIf { tr.moreLine == null && after.isNotEmpty() }
+            ?: return tr.copy(summary = null, lines = after)
+        return tr.copy(summary = null, lines = after.map { it.copy(label = "${one.title} $AFTER_LOWER") }, coins = emptyList())
     }
 
     private const val AFTER = "After fees and funding"
+    private const val AFTER_LOWER = "after fees and funding"
 
     // ALERTS as one row.
     const val ALERTS_SHEET = "Alerts"
     const val ALERTS_DONE = "Done"
+    /**
+     * Walk-through week 5, A15 on Trading: the sheet's line says only what its four chip rows can't (they show each
+     * choice already): when the near-liquidation one comes, and that no alert shows an amount.
+     */
+    const val ALERTS_SHEET_LINE = "The near-liquidation alert comes even in quiet hours, and no alert shows an amount on the lock screen."
 
     /** ALERTS' one row: "3 of 4 on" over "Near liquidation 10% · a drop 10% · a big order off · funding 0.5%". */
     fun alertsRow(a: TradingAlertsView): TradingAlertsRow {

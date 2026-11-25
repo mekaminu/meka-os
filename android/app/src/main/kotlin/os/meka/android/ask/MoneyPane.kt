@@ -562,8 +562,9 @@ fun MoneyPane(
             }
         }
         // Layout rule (c): Trading says "read-only · not trading advice" once, at its foot; the tracker's lines behind ⓘ.
+        // Walk-through week 5, A15: once the equity card wears its Read-only mark, the foot says only "Not trading advice".
         item(key = "trading-foot") {
-            MoneyTabFoot(Modifier.animateItem(), text = MoneyTradingLayout.FOOT_SHORT) {
+            MoneyTabFoot(Modifier.animateItem(), text = MoneyTradingLayout.foot(t)) {
                 haptics.tick()
                 MoneyTabs.info(MoneyTab.TRADING, v)?.let { info = MoneyInfo(MoneyTabs.INFO_TITLE, if (kestrel != null) it + TradingKestrel.INFO else it) }
             }
@@ -1859,23 +1860,17 @@ private fun TradingAddressFields(onAdd: (String) -> Unit) {
  */
 @Composable
 private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit) {
-    val reduced = Meka.reducedMotion
     // Layout rules on Trading: the card's label (a.head) sits above the card.
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Crossfade(a.line, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-line") { l ->
-            Text(moneyShown(l), style = MekaType.caption, color = Meka.colors.textSecondary)
-        }
+        // Walk-through week 5, A15: the line says only what the chip rows below can't (they show each choice already).
+        Text(TradingTiles.ALERTS_SHEET_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
         listOf(a.liqLabel to a.liqChips, a.dropLabel to a.dropChips, a.fillLabel to a.fillChips, a.fundingLabel to a.fundingChips)
             .filter { it.second.isNotEmpty() }.forEach { (label, chips) ->
             Text(label, style = MekaType.body, color = Meka.colors.textPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                // The chosen one fills with the accent (MoneyChip, the appear tween), not gold words alone.
                 chips.forEach { c -> key(c.kind + c.key) {
-                    val col by animateColorAsState(if (c.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-alert-${c.kind}-${c.key}")
-                    Text(c.label, style = MekaType.caption, color = col,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-                            .clickable(role = Role.RadioButton) { if (!c.on) onAlert(c.kind, c.key) }
-                            .semantics { contentDescription = c.spoken }.minTouch()
-                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                    MoneyChip(c.label, c.on, tag = "trading-alert-${c.kind}-${c.key}", description = c.spoken) { if (!c.on) onAlert(c.kind, c.key) }
                 } }
             }
         }

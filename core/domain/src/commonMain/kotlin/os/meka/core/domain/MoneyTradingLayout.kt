@@ -22,6 +22,14 @@ object MoneyTradingLayout {
     const val ADDRESSES_HEAD = "YOUR ADDRESSES"
     /** Layout rule (c) on Trading: said once, at the foot. Trading isn't financial advice either; it says so in its own words. */
     const val FOOT_SHORT = "Read-only · not trading advice"
+    /** Walk-through week 5, A15 on Trading: once the equity card carries its Read-only mark, the foot doesn't say it again. */
+    const val FOOT_MARKED = "Not trading advice"
+
+    /** Whether the equity card shows its [READ_ONLY] mark: once a figure is read (the card, or the total before it). */
+    fun marked(t: TradingView): Boolean = t.equity != null || t.total != null
+
+    /** Trading's one foot line: [FOOT_SHORT] before any figure, [FOOT_MARKED] once the card says Read-only itself. */
+    fun foot(t: TradingView): String = if (marked(t)) FOOT_MARKED else FOOT_SHORT
     /** Layout rule (e): YOUR ADDRESSES' one row that opens the add sheet, and the sheet's words. */
     const val ADD_TITLE = "Add an address"
     const val ADD_FIRST = "Add your Hyperliquid address"

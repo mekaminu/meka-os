@@ -2506,7 +2506,8 @@ struct MoneySheet: View {
             }
             if on("trading-foot", col) {
                 HStack(spacing: MekaSpace.xs) {
-                    Text(MoneyTradingLayout.shared.FOOT_SHORT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    // Walk-through week 5, A15: once the equity card wears Read-only, the foot says only "Not trading advice".
+                    Text(MoneyTradingLayout.shared.foot(t: t)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     Spacer()
                     infoButton("foot-trading", title: MoneyTabs.shared.INFO_TITLE,
                                lines: MoneyTradingLayout.shared.info(t: t) + (model.tradingKestrel == nil ? [] : [TradingKestrel.shared.INFO]))
@@ -2842,13 +2843,15 @@ struct MoneySheet: View {
     private func tradingAlerts(_ a: TradingAlertsView) -> some View {
         // Layout rules on Trading: the label (a.head) sits above the card.
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text(a.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
+            // Walk-through week 5, A15: the line says only what the chip rows below can't (they show each choice).
+            Text(TradingTiles.shared.ALERTS_SHEET_LINE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
             alertChips(a.liqLabel, a.liqChips)
             alertChips(a.dropLabel, a.dropChips)
             if !a.fillChips.isEmpty { alertChips(a.fillLabel, a.fillChips) }
             if !a.fundingChips.isEmpty { alertChips(a.fundingLabel, a.fundingChips) }
         }
+        // a.line still changes with every choice, so it drives the chips' fill.
         .animation(MekaMotion.appear(reduced: reduceMotion), value: a.line)
     }
 
@@ -2924,12 +2927,14 @@ struct MoneySheet: View {
                         let key = c.key
                         Task { said = await model.setTradingAlert(kind: kind, key: key) }
                     } label: {
-                        Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.accent : palette.textSecondary)
+                        // Walk-through week 5, A15: the chosen one fills with the accent, not gold words alone.
+                        Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.onAccent : palette.textPrimary)
                             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                            .background(c.on ? palette.accent : palette.surfaceRaised, in: Capsule())
                     }
                     .buttonStyle(MekaPressStyle())
                     .accessibilityLabel(c.spoken)
+                    .accessibilityAddTraits(c.on ? .isSelected : [])
                 }
             }
         }

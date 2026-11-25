@@ -62,11 +62,39 @@ class TradingTilesTest {
         assertNotNull(full.summary)
         val shown = assertNotNull(TradingTiles.trades(t))
         assertNull(shown.summary)
-        assertEquals(listOf("After fees and funding"), shown.lines.map { it.label })
-        assertEquals(full.coins, shown.coins)
+        // Walk-through week 5, A15: one coin names itself on the one line instead of a row saying the same figure.
+        assertEquals(listOf("BTC after fees and funding"), shown.lines.map { it.label })
+        assertEquals(full.coins.single().amount, shown.lines.single().amount)
+        assertTrue(shown.coins.isEmpty())
+        // Two coins keep their rows under "After fees and funding".
+        val two = TradingTracker.view(listOf(wallet(a1, listOf(stats("BTC", 3, 2, 9_000, 600, -300), stats("ETH", 1, 0, -2_000, 100, 0)))), 2L, cal)
+        val both = assertNotNull(TradingTiles.trades(two))
+        assertEquals(listOf("After fees and funding"), both.lines.map { it.label })
+        assertEquals(listOf("BTC", "ETH"), both.coins.map { it.title }.sorted())
         // Without tiles, YOUR TRADES is as it was.
         assertEquals(full, TradingTiles.trades(t.copy(tiles = null)))
         assertNull(TradingTiles.trades(t.copy(trades = null)))
+    }
+
+    @Test
+    fun tradingSaysEachThingOnce() {
+        // Walk-through week 5, A15 on Trading: the alerts sheet's line names none of the four choices its chip rows show.
+        val a = TradingAlerts.view(TradingAlertSetting.DEFAULT)
+        val line = TradingTiles.ALERTS_SHEET_LINE
+        (a.liqChips + a.dropChips + a.fillChips + a.fundingChips).filter { it.key != "off" }.forEach { c ->
+            assertTrue(!line.contains(c.label), "the sheet's line says ${c.label} again: $line")
+        }
+        assertTrue(!line.contains("·"), "one sentence, never a line ending on a dot")
+        // The foot says Read-only only while the equity card has no mark of its own.
+        val none = TradingTracker.view(emptyList(), 2L, object : LocalCalendar {
+            override fun epochDayOf(epochMs: Long) = epochMs.floorDiv(86_400_000L)
+            override fun minuteOfDay(epochMs: Long) = (epochMs.mod(86_400_000L) / 60_000L).toInt()
+            override fun toEpochMs(epochDay: Long, minuteOfDay: Int) = epochDay * 86_400_000L + minuteOfDay * 60_000L
+        })
+        assertEquals(MoneyTradingLayout.FOOT_SHORT, MoneyTradingLayout.foot(none))
+        val read = none.copy(total = "\$6,500.00")
+        assertEquals("Not trading advice", MoneyTradingLayout.foot(read))
+        assertEquals(1, Regex("Read-only").findAll(MoneyTradingLayout.READ_ONLY + " " + MoneyTradingLayout.foot(read)).count())
     }
 
     @Test

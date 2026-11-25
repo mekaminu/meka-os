@@ -4621,6 +4621,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         let on = TradingAlerts.shared.view(s: TradingAlertSetting.companion.DEFAULT)
         XCTAssertEqual(TradingTiles.shared.alertsRow(a: on).title, "All 4 alerts on")
         XCTAssertEqual(TradingTiles.shared.ALERTS_SHEET, "Alerts")
+        // Walk-through week 5, A15: the sheet's line names none of the choices its chips show; the foot says Read-only
+        // only while the equity card has no mark of its own.
+        XCTAssertFalse(TradingTiles.shared.ALERTS_SHEET_LINE.contains("10%"))
+        XCTAssertEqual(MoneyTradingLayout.shared.FOOT_MARKED, "Not trading advice")
     }
     /// Money → Trading's Obi risk line and Kestrel card reach the Mac: nothing to say without an account read.
     func testTradingRiskAndKestrelOnTheMac() {
