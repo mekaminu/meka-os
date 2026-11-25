@@ -238,7 +238,11 @@ class AskMekaFacadeTest {
         c.askMeka("When's half term?")
         val ctx = server.asked.last().second
         assertEquals(
-            listOf("Day off · Half term · Mon 26 – Fri 30 Oct · Max and Felix", "Every Tuesday · PE · Max · next Tue 13 Oct"),
+            // School emails first, slice 6: the week's school things lead (SchoolAskRules.weekLines).
+            listOf(
+                "School this week · today to Wed 14 Oct · 1 thing", "Tue 13 Oct · PE (every Tuesday) · Max",
+                "Day off · Half term · Mon 26 – Fri 30 Oct · Max and Felix", "Every Tuesday · PE · Max · next Tue 13 Oct",
+            ),
             ctx.items.filter { it.kind == AskItemKind.SCHOOL }.map { it.line },
         )
         assertFalse(ctx.untrusted)
