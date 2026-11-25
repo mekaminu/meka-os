@@ -248,6 +248,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/mail/cover-dark-many.png](docs/screens/fold/mail/cover-dark-many.png)
 - [fold/mail/cover-dark-offline.png](docs/screens/fold/mail/cover-dark-offline.png)
 - [fold/mail/cover-dark-one-below.png](docs/screens/fold/mail/cover-dark-one-below.png)
+- [fold/mail/cover-dark-prep-by-hand.png](docs/screens/fold/mail/cover-dark-prep-by-hand.png)
 - [fold/mail/cover-light-many-below.png](docs/screens/fold/mail/cover-light-many-below.png)
 - [fold/mail/cover-light-many.png](docs/screens/fold/mail/cover-light-many.png)
 - [fold/mail/inner-dark-empty.png](docs/screens/fold/mail/inner-dark-empty.png)
