@@ -397,4 +397,33 @@ class SchoolMailFacadeTest {
         assertEquals(SchoolDoneRules.rowId(idc), row.id)
         assertTrue(row.line.startsWith("School fair moved to Sun 25 Oct, 12:00–16:00 (was Sat 24 Oct) · in School"), row.line)
     }
+
+    @Test
+    fun theSchoolEmailSwitchesSetOnTheMacShapeWhatTheFoldMakes() = runTest {
+        // Slice 4d: on the Mac he turns off the task the day before and the reminder 3 days before; the Fold follows.
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(mac.syncNow())
+        assertTrue(mac.schoolLeadView.value.rows.all { it.on && it.enabled })
+        assertEquals("The next school events get no task the day before", mac.setSchoolLead(os.meka.core.domain.SchoolLeadRules.PREP_TASK, false))
+        mac.setSchoolLead(os.meka.core.domain.SchoolLeadRules.EARLY, false)
+        assertNull(mac.setSchoolLead("nope", false))
+        val rows = mac.schoolLeadView.value.rows.associateBy { it.key }
+        assertFalse(rows.getValue(os.meka.core.domain.SchoolLeadRules.DAY_BEFORE).enabled)
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        val seen = fold.schoolLeadView.value.rows.associateBy { it.key }
+        assertFalse(seen.getValue(os.meka.core.domain.SchoolLeadRules.PREP_TASK).on)
+        assertFalse(seen.getValue(os.meka.core.domain.SchoolLeadRules.EARLY).on)
+        assertTrue(seen.getValue(os.meka.core.domain.SchoolLeadRules.DAY_TASK).on)
+
+        val id = fairDoneForHim()
+        assertTrue(fold.syncNow()); assertTrue(fold.syncNow())
+        assertEquals("School fair", fold.schoolView.value.dates.single().title)
+        val day = serverTask(SchoolAutoRules.taskId(id, "day"))
+        assertEquals(FieldValue.Text("School fair"), day[os.meka.core.domain.ActionableFields.TITLE])
+        assertFalse(day[os.meka.core.domain.TaskFields.REMIND_AT] is FieldValue.Int64, "no reminder 3 days before")
+        assertTrue(serverTask(SchoolAutoRules.taskId(id, "prep")).isEmpty())
+        val row = fold.activityView.value.days.flatMap { it.rows }.single { it.id == SchoolAutoRules.activityId(id) }
+        assertTrue(row.summary.contains("task Sat") && !row.summary.contains("reminder"), row.summary)
+    }
 }

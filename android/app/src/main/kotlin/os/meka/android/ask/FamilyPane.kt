@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -55,6 +56,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
+import os.meka.android.designsystem.wordsTap
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.FamilyLink
@@ -62,6 +64,7 @@ import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.FamilyRow
 import os.meka.core.domain.FamilyRules
 import os.meka.core.domain.FamilyState
+import os.meka.core.domain.SchoolLeadRow
 import os.meka.core.facade.MekaCore
 
 /**
@@ -74,6 +77,11 @@ import os.meka.core.facade.MekaCore
  * summary and each line cross-fade; rows stagger in 40 ms apart; a waiting link's line is lit in the accent; Make a
  * link presses in with a light haptic and the "Link made" block unfolds (expand spring); Turn off gives a tick haptic and
  * the row's line cross-fades to "Turned off". Reduced motion: cross-fades.
+ *
+ * School emails first, slice 4d: under the links, **School emails**: four switches for what each school event added for
+ * him makes (task on the day, reminder 3 days before, task the day before, its reminder). A tap flips its pill at once
+ * (tick haptic), the line cross-fades and a short line under the block says what changed; a reminder whose task is off
+ * is dimmed and says it needs that task. Synced, so the Mac shows the same.
  */
 @Composable
 fun FamilyPane(core: MekaCore, onClose: () -> Unit) {
@@ -87,6 +95,9 @@ fun FamilyPane(core: MekaCore, onClose: () -> Unit) {
     var made by remember { mutableStateOf<FamilyLink?>(null) }
     LaunchedEffect(Unit) { runCatching { core.refreshFamily() } }
     val v = view
+    val lead by core.schoolLeadView.collectAsState()
+    // Slice 4d: what the last switch tap changed, under the School emails block.
+    var leadSaid by remember { mutableStateOf<String?>(null) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
@@ -155,6 +166,60 @@ fun FamilyPane(core: MekaCore, onClose: () -> Unit) {
                     link?.let { shareFamilyLink(context, it) }
                 }
             }
+        }
+        // School emails first, slice 4d: the lead-time switches (local and synced, so shown whether or not the server answers).
+        Text(lead.title, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+            modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(8)))
+        Text(LoneWordGlue.kept(lead.line), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(8)))
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).appear(rememberAppearance(9)),
+        ) {
+            lead.rows.forEach { row ->
+                SchoolLeadSwitch(row) {
+                    haptics.tick()
+                    scope.launch { leadSaid = runCatching { core.setSchoolLead(row.key, !row.on) }.getOrNull() }
+                }
+            }
+        }
+        AnimatedVisibility(
+            leadSaid != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Crossfade(leadSaid.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "school-lead-said") { l ->
+                Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.accent)
+            }
+        }
+    }
+}
+
+/** Slice 4d: one School emails switch: its title over its line, and an On/Off pill lit in the accent; dimmed when it can't be switched. */
+@Composable
+private fun SchoolLeadSwitch(row: SchoolLeadRow, onClick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val pill by animateColorAsState(if (row.on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "lead-pill")
+    val ink by animateColorAsState(if (row.on) Meka.colors.background else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "lead-ink")
+    val words = if (row.enabled) Meka.colors.textPrimary else Meka.colors.textTertiary
+    val base = Modifier.fillMaxWidth()
+    Row(
+        (if (row.enabled) base.wordsTap(role = Role.Switch, onClick = onClick) else base)
+            .semantics(mergeDescendants = true) { contentDescription = "${row.title}. ${row.line}"; stateDescription = if (row.on) "On" else "Off" }
+            .minTouch().padding(vertical = MekaSpace.xxs).testTag("school-lead:${row.key}"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(row.title, style = MekaType.body, color = words)
+            Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "lead-line") { l ->
+                Text(LoneWordGlue.kept(l), style = MekaType.caption, color = if (row.enabled) Meka.colors.textSecondary else Meka.colors.textTertiary)
+            }
+        }
+        Box(
+            Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(pill)
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        ) {
+            Text(if (row.on) "On" else "Off", style = MekaType.itemMeta, color = ink, maxLines = 1, softWrap = false)
         }
     }
 }

@@ -334,6 +334,8 @@ class MekaCore(
     /** Family (sharing slice 4): the links as the server last listed them, in memory only (the server holds them). */
     private var familyMembers: List<os.meka.core.domain.FamilyMember> = emptyList()
     private val _family = MutableStateFlow<os.meka.core.domain.FamilyView?>(null)
+    /** School emails first, slice 4d: Family → School emails' switches ([schoolLeadView]). */
+    private val _schoolLead = MutableStateFlow(os.meka.core.domain.SchoolLeadRules.view(os.meka.core.domain.SchoolLead(), true))
     private var deviceLinkApi: DeviceLinkApi? = transport as? DeviceLinkApi
     /** Recovery key (slice 2): the household's key as the server last said, when it was read, and the pane's state. */
     private var recoveryApi: RecoveryApi? = transport as? RecoveryApi
@@ -10985,6 +10987,25 @@ class MekaCore(
         replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.SchoolAutoRules.ENTITY_ID)?.fields,
     )
 
+    /** Slice 4d: Family → School emails' four switches (on until he turns one off), synced. */
+    private fun schoolLead(): os.meka.core.domain.SchoolLead = os.meka.core.domain.SchoolLeadRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.SchoolAutoRules.ENTITY_ID)?.fields,
+    )
+
+    /**
+     * School emails first, slice 4d: Settings → Family → School emails, what each school event added for him makes (a
+     * task on the day with a reminder 3 days before, a task the day before with its reminder), each a switch.
+     */
+    val schoolLeadView: StateFlow<os.meka.core.domain.SchoolLeadView> = _schoolLead.asStateFlow()
+
+    /** Sets one of [schoolLeadView]'s switches ([os.meka.core.domain.SchoolLeadRules.KEYS]); returns the line to show, or null for an unknown key. */
+    suspend fun setSchoolLead(key: String, on: Boolean): String? = onCore {
+        val fields = os.meka.core.domain.SchoolLeadRules.fields(key, on, nowMs()) ?: return@onCore null
+        replica.commitLocal(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.SchoolAutoRules.ENTITY_ID, fields)
+        refresh()
+        os.meka.core.domain.SchoolLeadRules.switchedLine(key, on)
+    }
+
     /** ADR-006: may the school's dates add themselves? Level 4 under the rule his switch made; the kill switch holds them. */
     private fun schoolAutoAllowed(): Boolean {
         val rule = os.meka.core.domain.SchoolAutoRules.RULE_ID
@@ -11024,7 +11045,7 @@ class MekaCore(
             val entry = A.activityId(f.id)
             replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailFindAutoRules.markFields(now))
             if (activity.has(entry)) continue
-            val plan = A.plan(f, now, cal)
+            val plan = A.plan(f, now, cal, schoolLead())
             runCatching {
                 activity.actRecorded(A.summary(f, plan, now, cal), A.WHY, A.SOURCE, AutonomyLevel.AUTO_UNDER_RULE.name, A.detail(f), entry) {
                     makeSchoolPlan(f, plan, now, cal)
@@ -11118,7 +11139,7 @@ class MekaCore(
                         )
                     }
                 } else {
-                    val plan = A.plan(b, now, cal)
+                    val plan = A.plan(b, now, cal, schoolLead())
                     activity.actRecorded(X.movedSummary(b, a, plan, now, cal), A.WHY, A.SOURCE, AutonomyLevel.AUTO_UNDER_RULE.name, A.detail(b), entry) {
                         takeOutSchoolMade(a, made)
                         makeSchoolPlan(b, plan, now, cal)
@@ -11187,7 +11208,7 @@ class MekaCore(
             if (!on || edit != null || f.renewDay < today) continue
             val accounts = _editAccounts.value
             if (accounts.isEmpty()) continue
-            if (!C.wanted(f, A.plan(f, now, cal)) || C.alreadyThere(f, shown, cal) || !schoolCalendarAllowed()) continue
+            if (!C.wanted(f, A.plan(f, now, cal, schoolLead())) || C.alreadyThere(f, shown, cal) || !schoolCalendarAllowed()) continue
             val last = os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all())
             val target = accounts.firstOrNull { it.key == last } ?: accounts.first()
             val r = calendarEdits.add(target.provider, target.email, C.draft(f, cal), id = editId)
@@ -14816,6 +14837,8 @@ class MekaCore(
             autoAddSchoolFinds()
             // Slice 3b: and into his real calendar (or taken back from it after Undo).
             schoolEventsToCalendar()
+            // Slice 4d: Family → School emails' switches, as both apps last wrote them.
+            _schoolLead.value = os.meka.core.domain.SchoolLeadRules.view(schoolLead(), schoolAutoOn())
             // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
             archivedChanged()
             // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.

@@ -18,6 +18,8 @@ struct FamilySheet: View {
     /// The link just made: its name, address and share text (Strings only), while the sheet is open.
     @State private var made: (name: String, url: String, shareText: String, note: String)?
     @State private var copied = false
+    /// Slice 4d: what the last School emails switch changed.
+    @State private var leadSaid: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -96,6 +98,35 @@ struct FamilySheet: View {
                 .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
+            // School emails first, slice 4d: what each school event added for him makes, each a switch (synced with the Fold).
+            if let lead = model.schoolLead {
+                Text(lead.title).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .padding(.top, MekaSpace.m).staggeredAppear(8)
+                Text(LoneWordGlue.shared.kept(line: lead.line)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true).staggeredAppear(8)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    ForEach(lead.rows, id: \.key) { row in
+                        SchoolLeadSwitch(row: row, palette: palette) {
+                            MekaHaptics.tick()
+                            let key = row.key
+                            let on = !row.on
+                            Task {
+                                let said = await model.setSchoolLead(key, on: on)
+                                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { leadSaid = said }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xs)
+                .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .staggeredAppear(9)
+                if let leadSaid {
+                    Text(LoneWordGlue.shared.kept(line: leadSaid)).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .contentTransition(.opacity)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                }
+            }
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
@@ -149,6 +180,36 @@ private struct FamilyRowView: View {
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(row.title). \(row.line)")
+    }
+}
+
+/// Slice 4d: one School emails switch: its title over its line, and a small switch; dimmed when it can't be switched
+/// (a reminder whose task is off, or school events off altogether).
+private struct SchoolLeadSwitch: View {
+    let row: SchoolLeadRow
+    let palette: MekaPalette
+    let onFlip: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: MekaSpace.m) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(row.title).font(MekaType.body).foregroundStyle(row.enabled ? palette.textPrimary : palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: row.line)).font(MekaType.caption)
+                    .foregroundStyle(row.enabled ? palette.textSecondary : palette.textTertiary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(get: { row.on }, set: { _ in onFlip() }))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(!row.enabled)
+        }
+        .padding(.vertical, MekaSpace.xxs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.title). \(row.line)")
     }

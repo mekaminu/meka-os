@@ -42,7 +42,13 @@ data class SchoolAutoTask(
 )
 
 /** What one find makes: its School line (or not) and its tasks. */
-data class SchoolAutoPlan(val findId: String, val schoolLine: Boolean, val tasks: List<SchoolAutoTask>)
+data class SchoolAutoPlan(
+    val findId: String,
+    val schoolLine: Boolean,
+    val tasks: List<SchoolAutoTask>,
+    /** An event (not a deadline, an ask or a day off): it goes into his calendar ([SchoolCalendarRules.wanted]). */
+    val event: Boolean = false,
+)
 
 object SchoolAutoFields {
     const val ON = "on"
@@ -194,8 +200,8 @@ object SchoolAutoRules {
     private fun remindAt(day: Long, nowMs: Long, cal: LocalCalendar): Long? =
         cal.toEpochMs(day, REMIND_MINUTE).takeIf { it > nowMs + MIN_LEAD_MS }
 
-    /** What adding [f] on its own makes, as of [nowMs]. */
-    fun plan(f: MailFind, nowMs: Long, cal: LocalCalendar): SchoolAutoPlan {
+    /** What adding [f] on its own makes, as of [nowMs]; an event's tasks and reminders follow [lead] (slice 4d). */
+    fun plan(f: MailFind, nowMs: Long, cal: LocalCalendar, lead: SchoolLead = SchoolLead()): SchoolAutoPlan {
         val today = cal.epochDayOf(nowMs)
         val day = f.renewDay
         val notes = taskNotes(f)
@@ -213,12 +219,18 @@ object SchoolAutoRules {
             return SchoolAutoPlan(f.id, schoolLine = true, tasks = listOf(SchoolAutoTask(taskId(f.id, "due"), title, day, null, null, notes, due = true)))
         }
         val tasks = mutableListOf<SchoolAutoTask>()
-        if (day - 1 >= today) tasks += SchoolAutoTask(taskId(f.id, "prep"), prepTitle(f), day - 1, null, remindAt(day - 1, nowMs, cal), notes)
-        tasks += SchoolAutoTask(
-            taskId(f.id, "day"), eventTitle(f), day, f.startMinute?.takeIf { day > today || it > cal.minuteOfDay(nowMs) },
-            remindAt(day - EARLY_DAYS, nowMs, cal), notes,
-        )
-        return SchoolAutoPlan(f.id, schoolLine = true, tasks = tasks)
+        if (lead.prepTask && day - 1 >= today) {
+            tasks += SchoolAutoTask(
+                taskId(f.id, "prep"), prepTitle(f), day - 1, null, remindAt(day - 1, nowMs, cal).takeIf { lead.dayBefore }, notes,
+            )
+        }
+        if (lead.dayTask) {
+            tasks += SchoolAutoTask(
+                taskId(f.id, "day"), eventTitle(f), day, f.startMinute?.takeIf { day > today || it > cal.minuteOfDay(nowMs) },
+                remindAt(day - EARLY_DAYS, nowMs, cal).takeIf { lead.early }, notes,
+            )
+        }
+        return SchoolAutoPlan(f.id, schoolLine = true, tasks = tasks, event = true)
     }
 
     private fun weekday(day: Long, today: Long): String = when (day) {
@@ -290,7 +302,7 @@ object SchoolCalendarRules {
 
     /** Whether [plan] puts [f] in his calendar: an event (it has a task on the day) still to come. */
     fun wanted(f: MailFind, plan: SchoolAutoPlan): Boolean =
-        plan.schoolLine && plan.tasks.any { it.id == SchoolAutoRules.taskId(f.id, "day") }
+        plan.schoolLine && plan.event
 
     /** The event: its title, its time (all day without one), the place, and the notes. */
     fun draft(f: MailFind, cal: LocalCalendar): EventDraft {

@@ -497,6 +497,8 @@ final class CoreModel {
     private(set) var family: FamilyView?
     /// A link is being made or turned off.
     private(set) var familyBusy = false
+    /// School emails first, slice 4d: Family → School emails' switches (synced with the Fold); nil until the core says.
+    private(set) var schoolLead: SchoolLeadView?
     /// Ask → More → Watch (Galaxy Watch slice 1): link a watch with the code it shows.
     var showWatch = false
     /// The linked watches as the server last listed them; nil until read once.
@@ -828,6 +830,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await f in core.familyView { self?.family = f }
+        })
+        observers.append(Task { [weak self] in
+            for await l in core.schoolLeadView { self?.schoolLead = l }
         })
         observers.append(Task { [weak self] in
             for await w in core.watchLinkView { self?.watchLink = w }
@@ -2904,6 +2909,12 @@ final class CoreModel {
         familyBusy = true
         defer { familyBusy = false }
         return try? await core.inviteFamily(name: name)
+    }
+
+    /// Slice 4d: flips one School emails switch; returns the line saying what changed. Only Strings and a Bool cross.
+    func setSchoolLead(_ key: String, on: Bool) async -> String? {
+        guard let core else { return nil }
+        return try? await core.setSchoolLead(key: key, on: on)
     }
 
     /// Turns a link off at once. Only the id String crosses.

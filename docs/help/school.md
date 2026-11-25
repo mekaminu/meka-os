@@ -19,3 +19,4 @@ tip: Each new email from the school is a notification straight away, and waits i
 tip: A request with no date of its own, like "please send in a named coat", shows there too; Add makes it a task for the next school morning, not a School date.
 tip: When the school writes that PE (or swimming, forest school, library books) is on certain days each week, each day shows there too; Add puts it in School as a weekly day, so Kids shows "PE kit" the day before.
 tip: When the school writes that a date is cancelled or moved, what Navilife made for it (the School line, the tasks, the calendar entry) is taken out or moved to the new day, and Done for you says so, with Undo.
+tip: In Family, under School emails, choose what each school event added for you gets: a task on the day (with a reminder 3 days before) and a task the day before (with its reminder); turn any off and the next school dates follow.
