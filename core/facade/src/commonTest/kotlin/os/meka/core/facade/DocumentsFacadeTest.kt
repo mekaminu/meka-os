@@ -42,7 +42,10 @@ class DocumentsFacadeTest {
         fold.syncNow(); mac.syncNow()
         val row = mac.documentsView.value.rows.single()
         assertEquals("Railcard", row.title)
-        assertEquals("Expires in 2 weeks", row.status)
+        assertEquals("2 weeks left", row.status)
+        // Week 5, A15: one document's card says it all, so the page's line is the count; Obi's summary keeps the name.
+        assertEquals("1 document", mac.documentsView.value.pageLine)
+        assertEquals("Driving licence 12 Nov 2031", mac.documentsView.value.addHint)
         assertFalse(row.statusLit)
 
         // Sunday 10:00: the window is open, lit, and a heads-up opens the Vault.

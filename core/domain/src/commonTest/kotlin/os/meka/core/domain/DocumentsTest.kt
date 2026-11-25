@@ -76,12 +76,12 @@ class DocumentsTest {
         assertEquals("Renew now · expires in 5 months", passport.status)
         assertTrue(passport.statusLit)
         assertEquals("Expires Sat 3 Apr 2027", passport.line)
-        assertEquals("Expires in 7 months", theo.status)
+        assertEquals("7 months left", theo.status)
         assertFalse(theo.statusLit)
         assertEquals("Passport · expires Thu 20 May 2027", theo.line)
         assertEquals("No expiry", cert.status)
         assertEquals("Certificate", cert.line)
-        assertEquals("Theo passport. Passport · expires Thu 20 May 2027. Expires in 7 months", theo.spoken)
+        assertEquals("Theo passport. Passport · expires Thu 20 May 2027. 7 months left", theo.spoken)
 
         assertEquals("1 document · next to run out: Theo passport, May 2027", DocumentRules.view(listOf(items[0]), mon).summary)
         assertEquals(DocumentsView.EMPTY, DocumentRules.view(emptyList(), mon))
@@ -137,6 +137,31 @@ class DocumentsTest {
         assertEquals(listOf("Railcard"), dMac.items().map { it.title })
         assertEquals("Added Passport · expires Thu 1 Oct 2026 · it has run out: renew it", dFold.add("Passport expired 1 Oct 2026").line)
         assertEquals("Added Will · no expiry", dFold.add("Will").line)
+    }
+
+    @Test
+    fun theVaultSaysEachDocumentOnce() {
+        // Week 5, A15 (Vault's passport three times): the hint offers a kind not on the list, one document's page line
+        // is the count alone (its card says what runs out), and a card's status no longer repeats "Expires".
+        val today = CivilDate.toEpochDay(2026, 10, 21)
+        DocumentRules.HINTS.forEach { (kind, hint) ->
+            val r = DocumentRules.read(hint, today)
+            assertTrue(r is DocumentRules.Read.Doc && r.entry.kind == kind, "\"$hint\" reads as a ${kind.label}")
+            assertTrue(hint.length <= 28, "\"$hint\" fits one line")
+        }
+        val passport = DocumentItem("p1", "Passport", DocKind.PASSPORT, CivilDate.toEpochDay(2029, 3, 3), 0L)
+        val one = DocumentRules.view(listOf(passport), today)
+        assertEquals("1 document", one.pageLine)
+        assertTrue("Passport" in one.summary, "Obi's line still names it")
+        assertFalse("Passport" in one.addHint, "the hint doesn't repeat the passport on the list")
+        val row = one.rows.single()
+        assertEquals("Expires Sat 3 Mar 2029", row.line)
+        assertEquals("2 years left", row.status)
+        val railcard = DocumentItem("r1", "Railcard", DocKind.RAILCARD, CivilDate.toEpochDay(2027, 5, 31), 0L)
+        val two = DocumentRules.view(listOf(passport, railcard), today)
+        assertEquals(two.summary, two.pageLine)
+        assertEquals("Driving licence 12 Nov 2031", two.addHint)
+        assertEquals(DocumentRules.ADD_HINT, DocumentsView.EMPTY.addHint)
     }
 
     @Test

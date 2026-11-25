@@ -34,12 +34,13 @@ struct VaultDocumentsSection: View {
             Text("DOCUMENTS")
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textTertiary)
                 .staggeredAppear(firstIndex)
-            Text(v?.summary ?? DocumentRules.shared.EMPTY_LINE).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            // Week 5, A15: one document's card says it all, so the line is the count; the hint is a kind not on the list.
+            Text(v?.pageLine ?? DocumentRules.shared.EMPTY_LINE).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.summary)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.pageLine)
                 .staggeredAppear(firstIndex + 1)
-            TextField(DocumentRules.shared.ADD_HINT, text: $text)
+            TextField(v?.addHint ?? DocumentRules.shared.ADD_HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel(DocumentRules.shared.ADD_SPOKEN)
                 .onSubmit {

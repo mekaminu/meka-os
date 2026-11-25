@@ -85,8 +85,16 @@ data class DocumentsView(
     val rows: List<DocumentRow>,
     /** "3 documents · 1 to renew", "3 documents · next to run out: Railcard, May 2027", or the empty line. */
     val summary: String,
+    /** The add field's hint: an example of a kind not on the list yet ([DocumentRules.addHint]). */
+    val addHint: String = DocumentRules.ADD_HINT,
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
+
+    /**
+     * The line under DOCUMENTS on the page (week 5, A15): with one document its card already says what runs out and
+     * when, so the line is the count alone; with more, [summary] (which Obi also says) names the next to run out.
+     */
+    val pageLine: String get() = if (rows.size == 1) "1 document" else summary
 
     companion object { val EMPTY = DocumentsView(emptyList(), DocumentRules.EMPTY_LINE) }
 }
@@ -113,6 +121,18 @@ object DocumentRules {
 
     /** The add field's hint: one example on one line (the quality gate's rule for hints, slice 20). */
     const val ADD_HINT = "Passport expires 3 Mar 2029"
+    /**
+     * Week 5, A15: the hint never repeats a document already on the list (the passport said three times), so it
+     * offers the first example of a kind not there yet; each reads as a document.
+     */
+    val HINTS: List<Pair<DocKind, String>> = listOf(
+        DocKind.PASSPORT to ADD_HINT,
+        DocKind.DRIVING_LICENCE to "Driving licence 12 Nov 2031",
+        DocKind.RAILCARD to "Railcard 05/2027",
+        DocKind.INSURANCE to "Home insurance renews 4 Jan",
+    )
+
+    fun addHint(kinds: Collection<DocKind>): String = HINTS.firstOrNull { it.first !in kinds }?.second ?: HINTS.last().second
     /** What TalkBack / VoiceOver read for the field: the full how-to the hint used to carry. */
     const val ADD_SPOKEN = "Add a document with the day it runs out, like Passport expires 3 Mar 2029, Driving licence 12 Nov 2031 or Railcard 05/2027"
     /** Under the Vault's title on both apps (quality gate slice 42: the renewal half no longer repeats in [EMPTY_LINE]). */
@@ -276,7 +296,7 @@ object DocumentRules {
     /** The renewal window is open (or it has run out). */
     fun due(d: DocumentItem, today: Long): Boolean = d.expiresDay != null && d.expiresDay - today <= d.kind.leadDays
 
-    /** "No expiry", "Expires in 2 years", "Renew now · expires in 4 months", "Expires today", "Expired 12 days ago". */
+    /** "No expiry", "2 years left", "Renew now · expires in 4 months", "Expires today", "Expired 12 days ago". */
     fun status(d: DocumentItem, today: Long): String {
         val e = d.expiresDay ?: return "No expiry"
         val left = e - today
@@ -285,7 +305,8 @@ object DocumentRules {
             left == 0L -> "Expires today"
             left == 1L -> "Renew now · expires tomorrow"
             due(d, today) -> "Renew now · expires in ${spanWords(left)}"
-            else -> "Expires in ${spanWords(left)}"
+            // Week 5, A15: the row's line already says "Expires Sat 3 Mar 2029", so the status says what's left.
+            else -> "${spanWords(left)} left".replaceFirstChar { it.uppercase() }
         }
     }
 
@@ -318,7 +339,7 @@ object DocumentRules {
             }
             else -> "$count · none runs out"
         }
-        return DocumentsView(rows, summary)
+        return DocumentsView(rows, summary, addHint(items.map { it.kind }))
     }
 
     /** The line after adding: "Added Theo passport · expires Thu 20 May 2027 · renew from Fri 20 Nov 2026". */

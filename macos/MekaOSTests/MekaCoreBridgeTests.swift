@@ -3665,7 +3665,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         let row = core.documentsView.value.rows[0]
         XCTAssertEqual(row.title, "Passport")
         XCTAssertFalse(row.statusLit)
-        XCTAssertTrue(row.status.hasPrefix("Expires in "), row.status)
+        XCTAssertTrue(row.status.hasSuffix(" left"), row.status)
+        XCTAssertEqual(core.documentsView.value.pageLine, "1 document")
+        XCTAssertEqual(core.documentsView.value.addHint, "Driving licence 12 Nov 2031")
         let removed = try await core.removeDocument(id: row.id)
         XCTAssertTrue(removed.boolValue)
         XCTAssertTrue(core.documentsView.value.rows.isEmpty)

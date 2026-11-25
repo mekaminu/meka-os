@@ -70,6 +70,9 @@ import os.meka.core.facade.MekaCore
  * Slice 4: Open copy asks for his fingerprint first ([VaultLockRules]); leaving the Vault or the app going to the
  * background locks the copies again and closes a shown one.
  *
+ * Week 5, A15: each document is said once: with one, the line under DOCUMENTS is the count alone ([DocumentsView.pageLine]),
+ * the field's hint is a kind not on the list yet ([DocumentsView.addHint]) and a card's status says what's left.
+ *
  * Motion: the section staggers in with the screen; the summary and the line under the field cross-fade (a refused line
  * lit in the accent); rows grow in and out on the expand spring; the status blends to the accent when a renewal window
  * opens; an opened row grows on the expand spring; Add gives a light haptic (a tick when refused), Remove a tick.
@@ -112,10 +115,10 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
     ) {
         Text("DOCUMENTS", style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(firstIndex)))
-        Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "docs-summary") { s ->
+        Crossfade(v.pageLine, animationSpec = MekaMotion.appear(reduced), label = "docs-summary") { s ->
             Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(firstIndex + 1)))
         }
-        Field(DocumentRules.ADD_HINT, Modifier.appear(rememberAppearance(firstIndex + 2)), description = DocumentRules.ADD_SPOKEN) { text ->
+        Field(v.addHint, Modifier.appear(rememberAppearance(firstIndex + 2)), description = DocumentRules.ADD_SPOKEN) { text ->
             scope.launch {
                 val r = runCatching { core.addDocument(text) }.getOrNull()
                 if (r?.refused == false) haptics.light() else haptics.tick()

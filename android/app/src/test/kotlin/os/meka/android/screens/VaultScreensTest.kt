@@ -138,14 +138,20 @@ class VaultScreensTest {
         if (summary.total == 0) compose.onNodeWithText(DataExport.EXPORT_BUTTON).assertIsNotEnabled()
         if (place == Place.VAULT) {
             val v = core.documentsView.value
-            ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
-            ScreenShots.assertEachOneLine(compose, name, listOf(DocumentRules.ADD_HINT))
+            ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.pageLine))
+            ScreenShots.assertEachOneLine(compose, name, listOf(v.addHint))
+            // Week 5, A15: no document is named again by the page's line or the field's hint.
+            if (v.rows.size == 1) {
+                val title = v.rows.single().title
+                if (title in v.pageLine || title in v.addHint) fail("$name: \"$title\" said again above its card")
+                if (v.rows.single().status.startsWith("Expires in")) fail("$name: the card says \"Expires\" twice")
+            }
             ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.title, it.line, it.status) }, mustShow = false)
-            ScreenShots.assertNoLoneWords(compose, name, listOf(DocumentRules.NOTE, DocumentRules.VAULT_LINE, v.summary))
+            ScreenShots.assertNoLoneWords(compose, name, listOf(DocumentRules.NOTE, DocumentRules.VAULT_LINE, v.pageLine))
             // The line under the title and the summary under DOCUMENTS never say the same thing twice.
             val tail = DocumentRules.VAULT_LINE.substringAfter(";", "").trim()
-            if (tail.isNotEmpty() && tail in v.summary) fail("$name: the Vault's line and its summary both say \"$tail\"")
-            if (fill == Fill.EMPTY && v.summary != DocumentRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with no documents")
+            if (tail.isNotEmpty() && tail in v.pageLine) fail("$name: the Vault's line and its summary both say \"$tail\"")
+            if (fill == Fill.EMPTY && v.pageLine != DocumentRules.EMPTY_LINE) fail("$name: \"${v.pageLine}\" with no documents")
             if (fill == Fill.MANY && v.rows.size != 6) fail("$name: ${v.rows.size} rows for six documents")
             if (fill == Fill.MANY && v.rows.none { it.statusLit }) fail("$name: the licence running out next month isn't lit")
         }
