@@ -8,5 +8,5 @@ mac: LIFE_ADMIN
 mac_where: Ask → Daily → Life admin hour
 ---
 what: one hour a week booked for forms, calls, renewals and replies, gathered from your tasks and the renewals radar.
-how: Pick a day and a time once (Saturday 10:00 by default); the hour moves round meetings by itself and a heads-up at its start lists the jobs.
-tip: Skip one week and that hour is free again.
+how: Tap + Add (or Pick the day) and choose a day and a time once; the hour moves round meetings by itself and a heads-up at its start lists the jobs.
+tip: Tap this week's hour under The hour to skip it, and that hour is free again.

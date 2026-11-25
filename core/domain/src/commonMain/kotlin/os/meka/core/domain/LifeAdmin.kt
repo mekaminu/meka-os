@@ -91,6 +91,8 @@ data class LifeAdminView(
     val heldTaskIds: Set<String> = emptySet(),
     /** Of [jobCount], how many are overdue (the heads-up says "2 overdue"). */
     val overdueCount: Int = 0,
+    /** Every job gathered, uncut (the page's See all, week 5 A16); [jobs] is the first [LifeAdminRules.SHOWN]. */
+    val allJobs: List<LifeAdminJob> = emptyList(),
 ) {
     companion object {
         val EMPTY = LifeAdminView(
@@ -276,7 +278,7 @@ object LifeAdminRules {
         val held = if (next == null) emptySet()
         else jobs.filter { it.kind == LifeAdminJobKind.TASK }.map { it.id.removePrefix(TASK_PREFIX) }.toSet()
         return LifeAdminView(
-            true, s.weekday, s.startMin, summary, current, skipped, next, jobs.take(SHOWN), jobs.size, held, jobs.count { it.overdue },
+            true, s.weekday, s.startMin, summary, current, skipped, next, jobs.take(SHOWN), jobs.size, held, jobs.count { it.overdue }, jobs,
         )
     }
 

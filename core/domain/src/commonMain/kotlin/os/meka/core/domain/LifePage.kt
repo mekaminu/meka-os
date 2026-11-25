@@ -78,7 +78,7 @@ object LifePageRules {
     const val INFO_LABEL = "What this page does"
 
     /** The first words "None" reads with as a sentence ("None to book", "None booked yet"); before a noun it's "No". */
-    private val NONE_READS_WITH = setOf("to", "booked", "done", "on", "up", "kept", "promised", "for", "due", "needed", "yet", "weekly", "coming", "placed", "finished")
+    private val NONE_READS_WITH = setOf("to", "booked", "done", "on", "up", "kept", "promised", "for", "due", "needed", "yet", "weekly", "coming", "placed", "finished", "waiting", "overdue")
 
     /**
      * A tile with nothing to count that reads as one sentence (walk-through A16): "None to book", but "No favourites",

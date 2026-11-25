@@ -6154,6 +6154,13 @@ class MekaCore(
 
     // ---- Life admin hour (V1, slice 1; Ask → More → Life admin hour) ----
 
+    /**
+     * Week 5 A16: Ask → Life admin hour in the page shape (both apps); [all] is the jobs card's See all. Only an Ask page's
+     * words; nothing is read or sent.
+     */
+    fun lifeAdminPage(view: os.meka.core.domain.LifeAdminView = _lifeAdmin.value, all: Boolean = false): os.meka.core.domain.LifePageView =
+        os.meka.core.domain.LifeAdminPageRules.page(view, todayEpochDay(), ZoneCalendar(timeZone), all)
+
     /** Books the hour every week on [weekday] (ISO 1..7) from [startMin]. Returns the summary line, or null when nothing changed. */
     suspend fun setLifeAdmin(weekday: Int, startMin: Int): String? = onCore {
         if (!lifeAdmin.set(weekday, startMin)) return@onCore null

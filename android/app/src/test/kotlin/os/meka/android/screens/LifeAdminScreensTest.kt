@@ -11,6 +11,10 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteractionCollection
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -31,10 +35,18 @@ import os.meka.android.ask.LifeAdminPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
-import os.meka.android.work.WORK_COLUMN_MAX
+import os.meka.android.ask.LIFE_ADMIN_HOUR_SHEET_TAG
+import os.meka.android.ask.LIFE_ADMIN_JOB_SHEET_TAG
+import os.meka.android.ask.LIFE_ADMIN_LIST_TAG
+import os.meka.android.ask.LIFE_ADMIN_WEEK_SHEET_TAG
+import os.meka.android.ask.LIFE_EMPTY_TAG
+import os.meka.android.ask.LIFE_TILE_TAG
 import os.meka.core.domain.CarRules
 import os.meka.core.domain.LifeAdminJobKind
+import os.meka.core.domain.LifeAdminPageRules
 import os.meka.core.domain.LifeAdminRules
+import os.meka.core.domain.LifeAdminSetting
+import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ObligationKind
@@ -137,29 +149,38 @@ class LifeAdminScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
-    /** Every chip is there and sits inside the pane's width (they wrap; on the cover screen they scrolled off the edge). */
-    private fun assertChipsInView(name: String, labels: List<String>) {
-        val pane = compose.onNodeWithTag("life-admin-pane").fetchSemanticsNode().boundsInRoot
-        labels.forEach { label ->
-            val n = compose.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes().firstOrNull()
-                ?: fail("$name: no \"$label\" chip")
-            val right = n.positionInRoot.x + n.size.width
-            if (n.positionInRoot.x < pane.left - 1f || right > pane.right + 1f) {
-                fail("$name: \"$label\" sits outside the pane (${n.positionInRoot.x / compose.density.density}–${right / compose.density.density} dp)")
+    private fun shows(m: SemanticsMatcher) = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+
+    /** The words drawn on the page now. */
+    private fun drawn(): List<String> = compose.onAllNodes(SemanticsMatcher("text") { it.config.getOrNull(SemanticsProperties.Text) != null }, useUnmergedTree = true)
+        .fetchSemanticsNodes().flatMap { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text.replace('\u00A0', ' ') } }
+
+    /**
+     * Scrolls the pane's own list (bounded: at most 20 steps of 60 % down, then 40 up) until a node matching [m] is
+     * composed, then returns the matches, failing with [what] if none.
+     */
+    private fun reach(name: String, m: SemanticsMatcher, what: String): SemanticsNodeInteractionCollection {
+        fun found() = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+        if (!found()) {
+            val list = compose.onNodeWithTag(LIFE_ADMIN_LIST_TAG)
+            val step = list.fetchSemanticsNode().size.height * 0.6f
+            for (dy in List(20) { step } + List(40) { -step }) {
+                if (found()) break
+                list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
+                compose.mainClock.advanceTimeBy(1_000)
             }
+            turns(500)
         }
+        val n = compose.onAllNodes(m)
+        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no $what")
+        return n
     }
 
-    /** Unfolded, the pane is a centred column at most 600 dp wide, not rows stretched across the page. */
-    private fun assertColumnWidth(name: String) {
-        val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
-        val pane = compose.onNodeWithTag("life-admin-pane").fetchSemanticsNode().boundsInRoot
-        val d = compose.density.density
-        if (pane.width / d > WORK_COLUMN_MAX.value + 1f) fail("$name: the pane is ${(pane.width / d).toInt()} dp wide, not a column")
-        val left = pane.left - screen.left
-        val right = screen.right - pane.right
-        if (kotlin.math.abs(left - right) > 2 * d) fail("$name: the column isn't centred (${(left / d).toInt()} dp | ${(right / d).toInt()} dp)")
+    private fun tap(name: String, what: String, matcher: SemanticsMatcher) {
+        reach(name, matcher and hasClickAction(), "\"$what\" to tap")[0].performSemanticsAction(SemanticsActions.OnClick)
     }
+
+    private fun tiles() = compose.onAllNodes(hasTestTag(LIFE_TILE_TAG), useUnmergedTree = true).fetchSemanticsNodes()
 
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
@@ -188,30 +209,46 @@ class LifeAdminScreensTest {
         ScreenShots.assertNumbersWhole(compose, name)
         ScreenShots.assertShows(compose, name, "Life admin hour")
         val v = core.lifeAdminView.value
-        val lines = listOf(v.summary, LifeAdminRules.NOTE) + (if (v.on && v.jobs.isEmpty()) listOf(LifeAdminRules.NO_JOBS) else emptyList()) +
-            v.jobs.mapNotNull { it.lineShown } + v.jobs.map { it.title }
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
-        ScreenShots.assertNoLoneWords(compose, name, lines)
-        ScreenShots.assertNoDotStartingALine(compose, name, lines)
-        ScreenShots.assertNoDotEndingALine(compose, name, listOf(v.summary) + v.jobs.mapNotNull { it.lineShown })
-        val chips = LifeAdminRules.WEEKDAY_CHOICES + LifeAdminRules.START_CHOICES.map(LocalClock::formatMinute)
-        ScreenShots.assertEachOneLine(compose, name, chips)
-        assertChipsInView(name, chips)
+        val page = core.lifeAdminPage(v)
+        val lines = page.cards.flatMap { c -> c.rows.flatMap { listOf(it.name, it.line) } + listOfNotNull(c.empty) } +
+            (if (LifeAdminPageRules.blank(v)) listOf(LifeAdminPageRules.EMPTY_LINE) else emptyList())
+        ScreenShots.assertNoLoneWords(compose, name, lines.filter { it.isNotEmpty() })
+        ScreenShots.assertNoDotStartingALine(compose, name, lines.filter { it.isNotEmpty() })
         assertTouchTargets(name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
+        // Week 5 A16: the page shape. No open chip rows on the page (they live in + Add's sheet), and never the old
+        // page's summary, WHEN label or note.
+        val words = drawn()
+        (LifeAdminRules.WEEKDAY_CHOICES + LifeAdminRules.START_CHOICES.map(LocalClock::formatMinute)).forEach { chip ->
+            if (shows(hasText(chip) and hasClickAction())) fail("$name: the \"$chip\" chip is on the page, not in + Add's sheet")
+        }
+        listOf("WHEN", "GATHERED INTO IT", LifeAdminRules.NOTE, LifeAdminRules.OFF_LINE).forEach { w ->
+            if (words.any { it.contains(w) }) fail("$name: \"$w\" is still on the page")
+        }
+        if (!shows(hasContentDescription(LifePageRules.INFO_LABEL))) fail("$name: no ⓘ beside the title")
+        if (!shows(hasContentDescription("Add"))) fail("$name: no + Add")
         when (fill) {
             Fill.EMPTY -> {
                 if (v.on) fail("$name: the hour is on with nothing set ($v)")
-                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(LifeAdminRules.OFF_LINE))
+                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(LifeAdminPageRules.EMPTY_LINE))
+                if (tiles().isNotEmpty()) fail("$name: tiles on the blank page")
+                if (compose.onAllNodes(hasTestTag(LIFE_EMPTY_TAG), useUnmergedTree = true).fetchSemanticsNodes().size != 1) fail("$name: not one blank card")
+                tap(name, LifeAdminPageRules.ADD_FIRST, hasText(LifeAdminPageRules.ADD_FIRST))
+                until { shows(hasTestTag(LIFE_ADMIN_HOUR_SHEET_TAG)) }
+                if (!shows(hasText("Sat") and hasClickAction() and hasAnyAncestor(hasTestTag(LIFE_ADMIN_HOUR_SHEET_TAG)))) {
+                    fail("$name: ${LifeAdminPageRules.ADD_FIRST} didn't open the hour's chooser")
+                }
             }
             Fill.ONE -> {
                 if (v.jobCount != 2) fail("$name: ${v.jobCount} jobs gathered, not the renewal and the call (${v.jobs})")
                 if (v.jobs.first().title != "Home insurance") fail("$name: the renewal isn't first (${v.jobs})")
-                ScreenShots.assertShows(compose, name, v.jobs.first().lineShown!!)
-                ScreenShots.assertShows(compose, name, LifeAdminRules.SKIP_LABEL)
+                if (tiles().size != 3) fail("$name: ${tiles().size} tiles, not three")
+                ScreenShots.assertShows(compose, name, LifeAdminPageRules.JOBS)
+                ScreenShots.assertShows(compose, name, LifeAdminPageRules.HOUR)
+                ScreenShots.assertShows(compose, name, v.thisWeek!!.whenLine)
             }
             Fill.MANY -> {
-                if (v.jobCount <= v.jobs.size) fail("$name: ${v.jobCount} jobs all listed; the fixture should overflow")
+                if (v.jobCount <= LifePageRules.MAX_ROWS) fail("$name: ${v.jobCount} jobs; the fixture should overflow the card")
                 if (v.overdueCount != 1) fail("$name: ${v.overdueCount} overdue, not the school form")
                 if (v.jobs.first().title != ShotCar.INSURANCE) fail("$name: the nearest renewal isn't first (${v.jobs})")
                 // A13: every car date gathered here (the insurance, and the MOT within its four weeks) is on Car's Dates too.
@@ -221,45 +258,81 @@ class LifeAdminScreensTest {
                 if (missing.isNotEmpty()) fail("$name: Life admin gathers $missing, which Car's Dates don't hold")
                 val firstTask = v.jobs.firstOrNull { it.kind == LifeAdminJobKind.TASK }
                 if (firstTask?.overdue != true) fail("$name: the overdue form isn't the first task (${v.jobs.map { it.title }})")
-                assertColumnWidth(name)
+                // Five rows and See all, never all eleven jobs as cards.
+                if (shows(hasText(v.jobs[LifePageRules.MAX_ROWS].title))) fail("$name: a sixth job is on the page before See all")
+                reach(name, hasText("${LifePageRules.SEE_ALL} ›"), "See all on Gathered into it")
+                // Week 5 A16: open, the page runs the full width like its siblings, not a centred column.
+                val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
+                val pane = compose.onNodeWithTag(LIFE_ADMIN_LIST_TAG).fetchSemanticsNode().boundsInRoot
+                if (pane.width < screen.width - 2 * compose.density.density) fail("$name: the page is a ${(pane.width / compose.density.density).toInt()} dp column")
             }
         }
         return core
     }
 
-    /** Works by hand: Sun moves the hour to Sunday; Skip this week skips it, Keep it keeps it; Turn off turns it off. */
+    /**
+     * Works by hand: See all shows every job and Fewer folds it; the setting's row opens the chooser, where Sun moves the
+     * hour to Sunday; this week's row opens Skip this week, which skips it, and Keep it keeps it; a task's row opens Done,
+     * which ticks it off; Turn off in the chooser turns it off and the page is one blank card again.
+     */
     private fun byHand(core: MekaCore) {
         val name = "life-admin-by-hand"
-        val sun = compose.onAllNodes(hasText("Sun") and hasClickAction())
-        if (sun.fetchSemanticsNodes().isEmpty()) fail("$name: no Sun chip")
-        sun[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { core.lifeAdminView.value.weekday == 7 }
-        if (core.lifeAdminView.value.weekday != 7) fail("$name: Sun left the hour on day ${core.lifeAdminView.value.weekday}")
-        // The new summary crossfades in after the write lands; wait for it (it raced once in CI run 43696220561).
-        ScreenShots.awaitShows(compose, name, LoneWordGlue.kept(core.lifeAdminView.value.summary))
+        fun v() = core.lifeAdminView.value
+        val hourSheet = hasAnyAncestor(hasTestTag(LIFE_ADMIN_HOUR_SHEET_TAG))
+        val weekSheet = hasAnyAncestor(hasTestTag(LIFE_ADMIN_WEEK_SHEET_TAG))
+        val jobSheet = hasAnyAncestor(hasTestTag(LIFE_ADMIN_JOB_SHEET_TAG))
+        fun closeSheet(sheet: SemanticsMatcher) {
+            tap(name, "the sheet's Close", hasText("Close") and sheet)
+            until { !shows(sheet) }
+        }
 
-        val skip = compose.onAllNodes(hasText(LifeAdminRules.SKIP_LABEL) and hasClickAction())
-        if (skip.fetchSemanticsNodes().isEmpty()) fail("$name: no Skip this week")
-        skip[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { core.lifeAdminView.value.skipped }
-        if (!core.lifeAdminView.value.skipped) fail("$name: Skip this week left the hour booked")
+        tap(name, LifePageRules.SEE_ALL, hasText("${LifePageRules.SEE_ALL} ›"))
+        turns()
+        val last = v().allJobs.last().title
+        reach(name, hasText(last), "the last job after See all")
+        tap(name, LifeAdminPageRules.FEWER, hasText("${LifeAdminPageRules.FEWER} ›"))
+        turns()
+
+        tap(name, "the hour's setting", hasText(LifeAdminRules.everyLine(LifeAdminSetting(v().weekday, v().startMin))))
+        until { shows(hasTestTag(LIFE_ADMIN_HOUR_SHEET_TAG)) }
+        assertTouchTargets(name)
+        tap(name, "Sun", hasText("Sun") and hourSheet)
+        until { v().weekday == 7 }
+        if (v().weekday != 7) fail("$name: Sun left the hour on day ${v().weekday}")
+        closeSheet(hourSheet)
+
+        val week = v().thisWeek ?: fail("$name: no hour this week once it's on Sunday")
+        tap(name, week.whenLine, hasText(week.whenLine) and !weekSheet)
+        until { shows(hasTestTag(LIFE_ADMIN_WEEK_SHEET_TAG)) }
+        tap(name, LifeAdminRules.SKIP_LABEL, hasText(LifeAdminRules.SKIP_LABEL) and weekSheet)
+        until { v().skipped }
+        if (!v().skipped) fail("$name: Skip this week left the hour booked")
         ScreenShots.awaitShows(compose, name, LifeAdminRules.KEEP_LABEL)
-        // Week 5 A11: the by-hand shot shows what the hand did (the hour moved to Sunday, this week skipped with Keep it),
-        // not the one state again.
+        closeSheet(weekSheet)
+        // Week 5 A11: the by-hand shot shows what the hand did (the hour moved to Sunday, this week skipped, the next
+        // hour beside it), not the one state again.
+        ScreenShots.awaitShows(compose, name, LifeAdminPageRules.SKIPPED_LINE)
         ScreenShots.reshootAfterHand(compose, "life-admin", "cover-dark-by-hand")
-        val keep = compose.onAllNodes(hasText(LifeAdminRules.KEEP_LABEL) and hasClickAction())
-        if (keep.fetchSemanticsNodes().isEmpty()) fail("$name: no Keep it once skipped")
-        keep[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { !core.lifeAdminView.value.skipped }
-        if (core.lifeAdminView.value.skipped) fail("$name: Keep it left the hour skipped")
+        tap(name, week.whenLine, hasText(week.whenLine) and !weekSheet)
+        until { shows(hasTestTag(LIFE_ADMIN_WEEK_SHEET_TAG)) }
+        tap(name, LifeAdminRules.KEEP_LABEL, hasText(LifeAdminRules.KEEP_LABEL) and weekSheet)
+        until { !v().skipped }
+        if (v().skipped) fail("$name: Keep it left the hour skipped")
+        closeSheet(weekSheet)
 
-        val off = compose.onAllNodes(hasText(LifeAdminRules.OFF_LABEL) and hasClickAction())
-        if (off.fetchSemanticsNodes().isEmpty()) fail("$name: no Turn off")
-        off[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { !core.lifeAdminView.value.on }
-        if (core.lifeAdminView.value.on) fail("$name: Turn off left the hour on")
-        // The Off line crossfades in after the write lands; wait for it (it raced once in CI run 1548).
-        ScreenShots.awaitShows(compose, name, LoneWordGlue.kept(LifeAdminRules.OFF_LINE))
+        val task = v().jobs.first { it.kind == LifeAdminJobKind.TASK }
+        tap(name, task.title, hasText(task.title) and !jobSheet)
+        until { shows(hasTestTag(LIFE_ADMIN_JOB_SHEET_TAG)) }
+        tap(name, LifeAdminPageRules.DONE, hasContentDescription("${LifeAdminPageRules.DONE}, ${task.title}"))
+        until { v().allJobs.none { it.id == task.id } }
+        if (v().allJobs.any { it.id == task.id }) fail("$name: Done left ${task.title} gathered")
+
+        tap(name, "+ Add", hasContentDescription("Add"))
+        until { shows(hasTestTag(LIFE_ADMIN_HOUR_SHEET_TAG)) }
+        tap(name, LifeAdminRules.OFF_LABEL, hasText(LifeAdminRules.OFF_LABEL) and hourSheet)
+        until { !v().on }
+        if (v().on) fail("$name: Turn off left the hour on")
+        ScreenShots.awaitShows(compose, name, LoneWordGlue.kept(LifeAdminPageRules.EMPTY_LINE))
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { pane("cover-dark-empty", Fill.EMPTY) }
@@ -268,5 +341,5 @@ class LifeAdminScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { pane("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerEmpty() { pane("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { pane("inner-dark-many", Fill.MANY) }
-    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun byHand() { byHand(pane("cover-dark-by-hand", Fill.MANY)) }
 }

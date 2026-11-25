@@ -3566,6 +3566,12 @@ final class CoreModel {
         return core.schoolPage(view: school ?? SchoolView.companion.EMPTY)
     }
 
+    /// Ask → Life admin hour in the page shape (week 5 A16); `all` is the jobs card's See all (a Bool crosses).
+    func lifeAdminPage(all: Bool) -> LifePageView? {
+        guard let core else { return nil }
+        return core.lifeAdminPage(view: lifeAdmin ?? LifeAdminView.companion.EMPTY, all: all)
+    }
+
     /// Ask → Date night in the page shape (slice 11).
     func dateNightPage() -> LifePageView? {
         guard let core else { return nil }
