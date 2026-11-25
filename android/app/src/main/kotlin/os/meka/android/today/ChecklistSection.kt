@@ -2,7 +2,9 @@ package os.meka.android.today
 
 import os.meka.android.designsystem.wordsTap
 import os.meka.android.designsystem.minTouch
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
@@ -352,38 +354,89 @@ internal object StepFocus {
     fun take(taskId: String): Boolean = (pending == taskId).also { if (it) pending = null }
 }
 
+/**
+ * The checklist's add (walk-through 2026-11-22 A17: no open box in the sheet): one "+ Add an item · or paste a list"
+ * row; a tap opens the field in place (expand spring + fade; reduced motion fades), focused, with Done beside it. Enter
+ * (or a pasted list) adds and keeps the field open for the next; Done adds what's typed and folds it back to the row.
+ * "Break it down" opens it at once.
+ */
 @Composable
 private fun AddItemField(task: Task, actions: TodayActions) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
     // Not saveable: leaving (an unfold included) adds what was typed, so it mustn't come back to be added twice.
     val textState = remember(task.id) { mutableStateOf("") }
     var text by textState
+    var open by remember(task.id) { mutableStateOf(StepFocus.pending == task.id) }
     // An item typed but not yet added is added when the detail closes or shows another task, as if Done had been
     // pressed ([TextAutosave]: typing is never lost). Reads this task's own field, not the next task's.
     val add by rememberUpdatedState(actions.addStep)
     DisposableEffect(task.id) { onDispose { TextAutosave.pendingAdd(textState.value)?.let { add(task.id, it) } } }
-    // Break it down: the field takes the focus once the detail has opened (the keyboard rises and the focused field
-    // scrolls itself into view).
+    // Break it down: the field opens and takes the focus once the detail has opened (the keyboard rises and the
+    // focused field scrolls itself into view).
     val focus = remember { FocusRequester() }
     LaunchedEffect(task.id, StepFocus.pending) {
         if (StepFocus.pending == task.id) {
+            open = true
             delay(MekaChoreography.checkDrawMs.toLong())
             if (StepFocus.take(task.id)) runCatching { focus.requestFocus() }
         }
     }
-    Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = MekaSpace.xs), contentAlignment = Alignment.CenterStart) {
-        if (text.isEmpty()) Text(ChecklistRules.ADD_HINT, style = MekaType.body, color = Meka.colors.textTertiary)
-        BasicTextField(
-            value = text,
-            // A paste with several lines (or Enter on a keyboard) adds them all at once, each line an item.
-            onValueChange = { v ->
-                if ('\n' in v) { if (v.isNotBlank()) actions.addStep(task.id, v); text = "" } else text = v
-            },
-            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-            cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { actions.addStep(task.id, text); text = "" } }),
-            modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Add checklist items" },
-        )
+    var tapped by remember(task.id) { mutableStateOf(false) }
+    LaunchedEffect(open, tapped) { if (open && tapped) { tapped = false; runCatching { focus.requestFocus() } } }
+    AnimatedContent(
+        open,
+        transitionSpec = {
+            if (reduced) fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true))
+            else (fadeIn(MekaMotion.appear(false)) + expandVertically(MekaMotion.expand(false))) togetherWith fadeOut(MekaMotion.appear(false))
+        },
+        label = "checklist-add",
+    ) { shown ->
+        if (!shown) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button) { haptics.light(); open = true; tapped = true }
+                    .minTouch().padding(vertical = MekaSpace.xs)
+                    .semantics(mergeDescendants = true) { contentDescription = ChecklistRules.ADD_ROW },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(ChecklistRules.ADD_ROW, style = MekaType.body, color = Meka.colors.accent)
+                Spacer(Modifier.width(MekaSpace.xs))
+                Text(ChecklistRules.ADD_ROW_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                    .background(Meka.colors.surfaceRaised).padding(start = MekaSpace.m),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f).heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
+                    if (text.isEmpty()) Text(ChecklistRules.ADD_HINT, style = MekaType.body, color = Meka.colors.textTertiary, maxLines = 1)
+                    BasicTextField(
+                        value = text,
+                        // A paste with several lines (or Enter on a keyboard) adds them all at once, each line an item.
+                        onValueChange = { v ->
+                            if ('\n' in v) { if (v.isNotBlank()) actions.addStep(task.id, v); text = "" } else text = v
+                        },
+                        textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                        cursorBrush = SolidColor(Meka.colors.accent),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { actions.addStep(task.id, text); text = "" } }),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Add checklist items" },
+                    )
+                }
+                Text(
+                    ChecklistRules.ADD_DONE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) {
+                            haptics.tick()
+                            if (text.isNotBlank()) actions.addStep(task.id, text)
+                            text = ""; open = false
+                        }
+                        .minTouch().padding(horizontal = MekaSpace.m),
+                )
+            }
+        }
     }
 }
 

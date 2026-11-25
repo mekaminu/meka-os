@@ -7590,3 +7590,10 @@ The walk-through (g5-ask-01 finding 8) found Activity's filter chips "All / Remi
 - Fold: `ActivityShowSheetView.kt` (row and sheet); `ActivityPane`; `TalkActivityScreensTest`: no filter chip clickable on the page, one Show row with its value as a tall target, by hand Show → Reminders closes the sheet and narrows the days, Show → All brings them back before Undo.
 - Mac: `ActivitySheet.swift` picker style menu. Mac checked nightly.
 
+
+### Found and fixing, week 5 — slice 84 (2026-11-25): A17 on the task sheet's notes and checklist add
+
+The walk-through (g2-needs-00 finding 11) found the task sheet's "Add notes…" box and "Add an item… (or paste a list)" open inputs (`needs-you/inner-dark-task-open.png`). Now neither box shows until asked for: the checklist ends in one row, "+ Add an item · or paste a list", which opens the field in place, focused, with Done beside it (Enter or a pasted list adds and keeps it open for the next; Done adds what's typed and folds it back; Break it down opens it at once; typing is still added when the detail closes). Notes is "+ Add notes" with no notes, or the notes whole in a raised card; a tap opens the editor, focused, with Done at its foot that saves (trimmed) and closes; an emptied field clears the notes and the row comes back. Motion: expand spring + fade, reduced motion fades.
+- Core: `TaskNotesRules` (LABEL, ADD, HINT, DONE, `shown`, `saved`), `ChecklistRules.ADD_ROW/ADD_ROW_LINE/ADD_DONE`; `TaskSheetInputsTest`.
+- Fold: `TaskDetailRows.NotesSection`, `ChecklistSection.AddItemField`; `TaskSheetInputsTest` (screens): no field before a tap, both rows tall targets, items added on Enter and Done, notes saved trimmed and shown, cleared notes bring the row back.
+- Mac: `NotesEditor` (TaskDetailRows.swift), new `ChecklistAddRow` (RepeatViews.swift). Mac checked nightly.

@@ -30,6 +30,14 @@ object ChecklistRules {
     const val MAX_ADD = 30
     const val MAX_TEXT = 200
     const val ADD_HINT = "Add an item… (or paste a list)"
+    /**
+     * Walk-through 2026-11-22 A17: the task sheet keeps no open box under the list. This row says what it does and
+     * opens the field ([ADD_HINT]) in place on a tap; "Break it down" opens it at once.
+     */
+    const val ADD_ROW = "+ Add an item"
+    const val ADD_ROW_LINE = "or paste a list"
+    /** Closes the open field, adding what was typed. */
+    const val ADD_DONE = "Done"
     const val TICKED_LABEL = "Ticked"
     const val UNTICK_ALL = "Untick all"
     const val COMPLETE_OFFER = "All ticked · complete the task?"

@@ -48,14 +48,7 @@ struct StepsList: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
-    @State private var newStep = ""
     @State private var shopping = false
-    @FocusState private var addFocused: Bool
-
-    private func addPending(to id: String) {
-        if let step = TextAutosave.shared.pendingAdd(typed: newStep) { model.addStep(id, step) }
-        newStep = ""
-    }
 
     var body: some View {
         let view = model.checklistView(task)
@@ -111,6 +104,68 @@ struct StepsList: View {
                 .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            ChecklistAddRow(task: task, palette: palette)
+            ChecklistTemplatesBar(task: task, empty: toTick.isEmpty && ticked.isEmpty, palette: palette)
+        }
+        .sheet(isPresented: $shopping) { ShopModeSheet(source: .checklist(task.id), palette: palette) }
+        .animation(MekaMotion.replan(reduced: reduceMotion), value: toTick.map(\.id) + ["|"] + ticked.map(\.id))
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.offerComplete == true)
+    }
+}
+
+/// The checklist's add (walk-through 2026-11-22 A17: no open box in the task's detail): one "+ Add an item · or paste a
+/// list" row; a click opens the field in place (fade and expand; Reduce Motion fades), focused, with Done beside it.
+/// Return (or a pasted list) adds and keeps it open for the next; Done adds what's typed and folds it back. Break it
+/// down opens it at once. What's typed but not added is added when the detail closes or shows another task.
+private struct ChecklistAddRow: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let task: MekaTask
+    let palette: MekaPalette
+    @State private var newStep = ""
+    @State private var open = false
+    @FocusState private var addFocused: Bool
+
+    private func addPending(to id: String) {
+        if let step = TextAutosave.shared.pendingAdd(typed: newStep) { model.addStep(id, step) }
+        newStep = ""
+    }
+
+    var body: some View {
+        Group {
+            if open { field } else { row }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .onChange(of: task.id) { oldId, _ in addPending(to: oldId); open = false }
+        .onDisappear { addPending(to: task.id) }
+        // Break it down: the field opens and takes the focus once the task's detail shows.
+        .task(id: "\(task.id)|\(model.breakDownTaskID ?? "")") {
+            guard model.breakDownTaskID == task.id else { return }
+            model.breakDownTaskID = nil
+            open = true
+            try? await Task.sleep(for: .milliseconds(250))
+            addFocused = true
+        }
+    }
+
+    private var row: some View {
+        Button {
+            MekaHaptics.light(); open = true; addFocused = true
+        } label: {
+            HStack(spacing: MekaSpace.xs) {
+                Text(ChecklistRules.shared.ADD_ROW).font(MekaType.body).foregroundStyle(palette.accent)
+                Text(ChecklistRules.shared.ADD_ROW_LINE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(ChecklistRules.shared.ADD_ROW)
+        .transition(.opacity)
+    }
+
+    private var field: some View {
+        HStack(spacing: MekaSpace.xs) {
             TextField(ChecklistRules.shared.ADD_HINT, text: $newStep, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(MekaType.body)
@@ -121,22 +176,16 @@ struct StepsList: View {
                 .onChange(of: newStep) { _, typed in
                     if typed.contains("\n") { model.addStep(task.id, typed); newStep = "" }
                 }
-                // An item typed but not yet added is added when the detail closes or shows another task, as if
-                // Return had been pressed (TextAutosave: typing is never lost).
-                .onChange(of: task.id) { oldId, _ in addPending(to: oldId) }
-                .onDisappear { addPending(to: task.id) }
-                // Break it down: the field takes the focus once the task's detail shows.
-                .task(id: "\(task.id)|\(model.breakDownTaskID ?? "")") {
-                    guard model.breakDownTaskID == task.id else { return }
-                    model.breakDownTaskID = nil
-                    try? await Task.sleep(for: .milliseconds(250))
-                    addFocused = true
-                }
-            ChecklistTemplatesBar(task: task, empty: toTick.isEmpty && ticked.isEmpty, palette: palette)
+            Button(ChecklistRules.shared.ADD_DONE) {
+                MekaHaptics.tick(); addPending(to: task.id); open = false
+            }
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.itemMeta)
+            .foregroundStyle(palette.accent)
         }
-        .sheet(isPresented: $shopping) { ShopModeSheet(source: .checklist(task.id), palette: palette) }
-        .animation(MekaMotion.replan(reduced: reduceMotion), value: toTick.map(\.id) + ["|"] + ticked.map(\.id))
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.offerComplete == true)
+        .padding(MekaSpace.xs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 

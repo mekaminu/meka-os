@@ -38,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -54,6 +56,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.DayPickerDialog
 import os.meka.core.domain.Task
 import os.meka.core.domain.TaskWhenRules
+import os.meka.core.domain.TaskNotesRules
 
 /**
  * When (Fold review 2026-10-08, item 8): the row says "Today · 14:30" and unfolds in place (expand spring; reduced
@@ -195,14 +198,19 @@ private fun StepText(symbol: String, description: String, onClick: () -> Unit) {
 }
 
 /**
- * Notes: a multi-line field under the rows. Saved a moment after typing stops and when the detail closes; blank
- * clears them. A change from the other device shows once you aren't typing.
+ * Notes (walk-through 2026-11-22 A17: no open box in the sheet): with no notes, one "+ Add notes" row; with notes,
+ * they show whole in a raised card. A tap on either opens the field in place (expand spring + fade; reduced motion
+ * fades), focused, with Done at its foot. Saved a moment after typing stops, on Done and when the detail closes;
+ * blank clears them and the row comes back. A change from the other device shows once you aren't typing.
  */
 @Composable
 internal fun NotesSection(task: Task, actions: TodayActions) {
-    SectionLabel("Notes", Modifier.padding(top = MekaSpace.l))
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    SectionLabel(TaskNotesRules.LABEL, Modifier.padding(top = MekaSpace.l))
     var text by remember(task.id) { mutableStateOf(task.notes.orEmpty()) }
     var dirty by remember(task.id) { mutableStateOf(false) }
+    var editing by remember(task.id) { mutableStateOf(false) }
     // Synced notes arrive when nothing is waiting to be saved here.
     LaunchedEffect(task.notes) { if (!dirty) text = task.notes.orEmpty() }
     val save: () -> Unit = {
@@ -215,18 +223,63 @@ internal fun NotesSection(task: Task, actions: TodayActions) {
         if (dirty) { delay(NOTES_SAVE_MS); save() }
     }
     DisposableEffect(task.id) { onDispose { save() } }
-    Box(
-        Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
-            .background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-    ) {
-        if (text.isEmpty()) Text("Add notes…", style = MekaType.body, color = Meka.colors.textTertiary)
-        BasicTextField(
-            value = text,
-            onValueChange = { text = it; dirty = true },
-            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-            cursorBrush = SolidColor(Meka.colors.accent),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).semantics { contentDescription = "Notes" },
-        )
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(editing) { if (editing) runCatching { focus.requestFocus() } }
+    AnimatedContent(
+        editing,
+        transitionSpec = {
+            if (reduced) fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true))
+            else (fadeIn(MekaMotion.appear(false)) + expandVertically(MekaMotion.expand(false))) togetherWith fadeOut(MekaMotion.appear(false))
+        },
+        label = "notes",
+    ) { open ->
+        val shown = TaskNotesRules.shown(text)
+        when {
+            open -> Column(
+                Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                    .background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+            ) {
+                Box(Modifier.fillMaxWidth()) {
+                    if (text.isEmpty()) Text(TaskNotesRules.HINT, style = MekaType.body, color = Meka.colors.textTertiary)
+                    BasicTextField(
+                        value = text,
+                        onValueChange = { text = it; dirty = true },
+                        textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+                        cursorBrush = SolidColor(Meka.colors.accent),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).focusRequester(focus)
+                            .semantics { contentDescription = TaskNotesRules.LABEL },
+                    )
+                }
+                Row(Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        TaskNotesRules.DONE, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                            .clickable(role = Role.Button) {
+                                haptics.tick()
+                                val keep = TaskNotesRules.saved(text).orEmpty()
+                                if (keep != text) { text = keep; dirty = true }
+                                save(); editing = false
+                            }
+                            .minTouch().padding(horizontal = MekaSpace.xs),
+                    )
+                }
+            }
+            shown != null -> Text(
+                shown, style = MekaType.body, color = Meka.colors.textPrimary,
+                modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
+                    .background(Meka.colors.surfaceRaised)
+                    .clickable(role = Role.Button) { haptics.light(); editing = true }
+                    .semantics { contentDescription = TaskNotesRules.EDIT_DESCRIPTION }
+                    .padding(MekaSpace.m),
+            )
+            else -> Text(
+                TaskNotesRules.ADD, style = MekaType.body, color = Meka.colors.accent,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button) { haptics.light(); editing = true }
+                    .minTouch().padding(vertical = MekaSpace.xs),
+            )
+        }
     }
 }
 

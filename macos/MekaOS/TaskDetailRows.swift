@@ -160,31 +160,26 @@ struct ReminderRow: View {
     }
 }
 
-/// Notes: a multi-line editor, saved a moment after typing stops and when the detail closes; blank clears them.
+/// Notes (walk-through 2026-11-22 A17: no open box in the detail): with no notes, one "+ Add notes" row; with notes,
+/// they show whole in a raised card. A click on either opens the editor in place (fade and expand; Reduce Motion
+/// fades), focused, with Done at its foot. Saved a moment after typing stops, on Done and when the detail closes;
+/// blank clears them and the row comes back.
 struct NotesEditor: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     let task: MekaTask
     let palette: MekaPalette
     @State private var text = ""
     @State private var dirty = false
+    @State private var editing = false
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            SectionLabel("Notes", palette).padding(.top, MekaSpace.m)
-            ZStack(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text("Add notes…").font(MekaType.body).foregroundStyle(palette.textTertiary)
-                        .padding(.top, 1).padding(.leading, 5) // rhythm: ok (lines the placeholder up with TextEditor's own text inset)
-                }
-                TextEditor(text: Binding(get: { text }, set: { text = $0; dirty = true }))
-                    .font(MekaType.body)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 72)
-                    .accessibilityLabel("Notes")
-            }
-            .padding(MekaSpace.xs)
-            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+            SectionLabel(TaskNotesRules.shared.LABEL, palette).padding(.top, MekaSpace.m)
+            content
         }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: editing)
         .onAppear { text = task.notes ?? "" }
         // Synced notes arrive while nothing here is waiting to be saved.
         .onChange(of: task.notes) { _, new in if !dirty { text = new ?? "" } }
@@ -194,6 +189,59 @@ struct NotesEditor: View {
             if !Task.isCancelled { save() }
         }
         .onDisappear { save() }
+    }
+
+    @ViewBuilder private var content: some View {
+        if editing {
+            editor
+        } else if let shown = TaskNotesRules.shared.shown(notes: text) {
+            Button { MekaHaptics.light(); editing = true; focused = true } label: {
+                Text(shown).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(MekaSpace.m)
+                    .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(TaskNotesRules.shared.EDIT_DESCRIPTION)
+            .transition(.opacity)
+        } else {
+            Button(TaskNotesRules.shared.ADD) { MekaHaptics.light(); editing = true; focused = true }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.body)
+                .foregroundStyle(palette.accent)
+                .transition(.opacity)
+        }
+    }
+
+    private var editor: some View {
+        VStack(alignment: .trailing, spacing: MekaSpace.xs) {
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(TaskNotesRules.shared.HINT).font(MekaType.body).foregroundStyle(palette.textTertiary)
+                        .padding(.top, 1).padding(.leading, 5) // rhythm: ok (lines the placeholder up with TextEditor's own text inset)
+                }
+                TextEditor(text: Binding(get: { text }, set: { text = $0; dirty = true }))
+                    .font(MekaType.body)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 72)
+                    .focused($focused)
+                    .accessibilityLabel(TaskNotesRules.shared.LABEL)
+            }
+            Button(TaskNotesRules.shared.DONE) { MekaHaptics.tick(); finish() }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+        }
+        .padding(MekaSpace.xs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func finish() {
+        let keep = TaskNotesRules.shared.saved(text: text) ?? ""
+        if keep != text { text = keep; dirty = true }
+        save()
+        editing = false
     }
 
     private func save() {
