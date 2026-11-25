@@ -348,8 +348,8 @@ class SchoolMailFacadeTest {
         val disco = schoolEmail(
             "Halloween disco", "Dear parents,\n\nThe Halloween disco is on Friday 30 October, 5pm-7pm in the school hall.\n\nThank you", older,
         )
-        val choir = schoolEmail(
-            "Choir concert", "Dear parents,\n\nThe choir concert is on Thursday 29 October, 2pm-3pm in the school hall.\n\nThank you", received,
+        val cakes = schoolEmail(
+            "Cake sale", "Dear parents,\n\nThe cake sale is on Thursday 29 October, 2pm-3pm in the school hall.\n\nThank you", received,
         )
         val fold = core("android")
         val mac = core("mac")
@@ -365,7 +365,7 @@ class SchoolMailFacadeTest {
             assertTrue(summary.text.indexOf("(Sat 24 Oct)") in 0 until summary.text.indexOf("(Fri 30 Oct)"), summary.text)
             assertFalse(summary.text.contains("(Thu 29 Oct)"), summary.text)
             assertTrue(notices.none { it.key == "handled:${SchoolDoneRules.rowId(fair)}" || it.key == "handled:${SchoolDoneRules.rowId(disco)}" })
-            assertTrue(notices.any { it.key == "handled:${SchoolDoneRules.rowId(choir)}" })
+            assertTrue(notices.any { it.key == "handled:${SchoolDoneRules.rowId(cakes)}" })
         }
         // Undo one of them on the Fold: the summary names only what still stands.
         assertTrue(fold.undoDoneForYou(SchoolDoneRules.rowId(disco)))
