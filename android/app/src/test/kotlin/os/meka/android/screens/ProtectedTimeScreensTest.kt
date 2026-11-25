@@ -217,7 +217,8 @@ class ProtectedTimeScreensTest {
         if (!sheetOpen()) fail("$name: Evenings from didn't open its sheet")
         tap(ProtectedChoiceRules.eveningsSheet(core.protectedView.value).choices.first { it.label == "19:30" }.spoken)
         val moved = LoneWordGlue.kept(ProtectedRules.summary(os.meka.core.domain.ProtectedSetting(true, 19 * 60 + 30, false)))
-        until { core.protectedView.value.fromMin == 19 * 60 + 30 && onScreen(moved) && !sheetOpen() }
+        // The sheet first: while its window is up there are two roots, and reading the screen's words needs one.
+        until { core.protectedView.value.fromMin == 19 * 60 + 30 && !sheetOpen() && onScreen(moved) }
         if (core.protectedView.value.fromMin != 19 * 60 + 30) fail("$name: 19:30 left the evening at ${core.protectedView.value.fromMin}")
         if (sheetOpen()) fail("$name: the sheet stayed open after a choice")
 
