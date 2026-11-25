@@ -87,7 +87,7 @@ struct TomorrowSheet: View {
                         let heading = ShutdownRules.shared.heading(p: p, titled: true)
                         HStack(alignment: .firstTextBaseline) {
                             SectionLabel(heading.label, palette)
-                            Spacer(minLength: MekaSpace.s)
+                            Spacer(minLength: MekaSpace.xs)
                             if let counts = heading.counts {
                                 Text(LoneWordGlue.shared.kept(line: counts)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                                     .lineLimit(1).contentTransition(.opacity)
