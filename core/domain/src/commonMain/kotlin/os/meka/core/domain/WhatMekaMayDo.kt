@@ -301,6 +301,17 @@ object AutonomyRules {
     fun pausedLine(paused: Boolean): String =
         if (paused) "Paused · Navilife asks before everything" else "Resumed · Navilife does what you've trusted it with again"
 
+    /**
+     * Found and fixing, week 5, A15: the line shown under the header after the last tap, or null when it would only
+     * repeat the header ("Paused · Navilife asks before everything" under "Paused since 17:15 · Navilife asks before
+     * everything"). A line that says something new (Resumed, a row's reset) still shows.
+     */
+    fun answerUnder(said: String?, summary: String): String? {
+        if (said.isNullOrBlank()) return null
+        fun tail(s: String) = s.substringAfter(" · ", s).trim().trimEnd('.')
+        return if (tail(said) == tail(summary) || said.trim() == summary.trim()) null else said
+    }
+
     /** The undo bar's line after a row's action, or null when [k]'s row offers none. */
     fun resetLine(k: TrustKind, before: TrustState): String? = when {
         before.trusted -> "Navilife will ask before it ${k.plural.replaceFirst(" ", "s ")} again."

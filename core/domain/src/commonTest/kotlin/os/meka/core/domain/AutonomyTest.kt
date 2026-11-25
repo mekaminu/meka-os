@@ -119,4 +119,16 @@ class AutonomyTest {
         assertEquals(0, AutonomyRules.lit(paused.sections))
         assertEquals("Paused · Navilife asks before everything", paused.summary)
     }
+
+    /** Found and fixing, week 5, A15: the paused header is said once; the last tap's line shows only when it says something new. */
+    @Test
+    fun thePausedHeaderIsSaidOnce() {
+        val header = "Paused since 17:15 · Navilife asks before everything"
+        assertEquals(null, AutonomyRules.answerUnder(AutonomyRules.pausedLine(true), header))
+        assertEquals(null, AutonomyRules.answerUnder(AutonomyRules.pausedLine(true), "Paused · Navilife asks before everything"))
+        assertEquals(null, AutonomyRules.answerUnder(null, header))
+        assertEquals(AutonomyRules.pausedLine(false), AutonomyRules.answerUnder(AutonomyRules.pausedLine(false), AutonomyRules.NONE_LINE))
+        val reset = "Navilife will ask before it adds tasks again."
+        assertEquals(reset, AutonomyRules.answerUnder(reset, header))
+    }
 }

@@ -28,7 +28,7 @@ struct AutonomySheet: View {
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                     .staggeredAppear(1)
-                if let said = model.autonomySaid {
+                if let said = rules.answerUnder(said: model.autonomySaid, summary: v.summary) {
                     Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: said)

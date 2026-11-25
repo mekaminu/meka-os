@@ -363,6 +363,9 @@ class SpeakUpAutonomyScreensTest {
         until { core.autonomyView.value.paused && onScreen(AutonomyRules.RESUME) }
         if (!core.autonomyView.value.paused) fail("$name: Pause left Navilife running")
         if (!onScreen("Paused since 17:15")) fail("$name: the summary doesn't say paused since 17:15")
+        // Found and fixing, week 5, A15: the header is said once, never "Paused · Navilife asks before everything" again under it.
+        val asks = ScreenShots.texts(compose).count { DateGlue.plain(it).contains("asks before everything") }
+        if (asks != 1) fail("$name: \"asks before everything\" shows $asks times while paused")
         // Walk-through 2026-11-15 A12 ("autonomy by-hand = one"): the shot was One's opening screen; it is taken again
         // while paused, the one state no other shot shows (Ask first at the end returns it to a fresh install's page).
         ScreenShots.reshootAfterHand(compose, "autonomy", "cover-dark-by-hand")

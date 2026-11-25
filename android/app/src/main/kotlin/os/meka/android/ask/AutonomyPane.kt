@@ -89,8 +89,10 @@ fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
             Text(LoneWordGlue.kept(s), style = MekaType.body, color = if (v.paused) Meka.colors.accent else Meka.colors.textSecondary,
                 modifier = Modifier.appear(rememberAppearance(1)))
         }
-        AnimatedVisibility(said != null, enter = unfold(), exit = fold()) {
-            Crossfade(said.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "autonomy-said") { line ->
+        // A15: the last tap's line shows only when it says something the header doesn't.
+        val under = AutonomyRules.answerUnder(said, v.summary)
+        AnimatedVisibility(under != null, enter = unfold(), exit = fold()) {
+            Crossfade(under.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "autonomy-said") { line ->
                 Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
