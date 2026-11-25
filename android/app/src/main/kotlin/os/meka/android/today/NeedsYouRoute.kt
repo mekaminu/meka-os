@@ -903,7 +903,8 @@ internal fun NeedsYouColumn(
         }
         due.forEachIndexed { i, card ->
             item(key = "appointment-${card.id}") {
-                AppointmentCardView(card, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
+                AppointmentCardView(card, remember(card.title) { core.appointmentBookSheet(card.title) }, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
+                    bookRefused = null // a second refusal of the same words opens the sheet again
                     scope.launch {
                         val r = runCatching { core.bookAppointment(card.id, typed) }.getOrNull() ?: return@launch
                         if (r.refused) bookRefused = card.id to r.line
@@ -1093,7 +1094,8 @@ internal fun NeedsYouColumn(
         }
         due.forEachIndexed { i, card ->
             item(key = "appointment-${card.id}") {
-                AppointmentDecideView(card, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
+                AppointmentDecideView(card, remember(card.title) { core.appointmentBookSheet(card.title) }, bookRefused?.takeIf { it.first == card.id }?.second, onBooked = { typed ->
+                    bookRefused = null // a second refusal of the same words opens the sheet again
                     scope.launch {
                         val r = runCatching { core.bookAppointment(card.id, typed) }.getOrNull() ?: return@launch
                         if (r.refused) bookRefused = card.id to r.line

@@ -3,6 +3,7 @@ package os.meka.android.screens
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -17,11 +18,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.today.APPOINTMENT_BOOK_SHEET_TAG
 import os.meka.android.today.AppointmentDecideView
 import os.meka.android.today.DateNightDecideView
 import os.meka.android.today.NEEDS_YOU_DECIDE_TAG
 import os.meka.android.today.NeedsYouHead
 import os.meka.android.today.SchoolCoverDecideView
+import os.meka.core.domain.AppointmentBookRules
 import os.meka.core.domain.AppointmentNudge
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DateNightNudge
@@ -34,7 +37,7 @@ import kotlin.test.fail
  * The approved Needs you look, slice 4 on the Fold (`docs/design/needs-you/needs-you.dc.html`): a school day off, date
  * night and a due appointment as compact TO DECIDE cards, from invented cards (rule 13), on the cover and inner screens,
  * Dark and Light (saved under `needs-you/decide-others-*`). Each tap still does what the full card's did, and the
- * appointment's Booked… opens its When? field inside the card.
+ * appointment's Booked… opens its sheet of days and times (A17).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -64,6 +67,7 @@ class NeedsYouDecideOthersScreensTest {
         "Book somewhere and arrange cover", "Booked takes this off Needs you.", "Date night in 4 days")
     private val dentist = AppointmentNudge("dentist", "Due Mon 14 Dec · every 6 months", "Dentist",
         "Last went Sun 14 Jun. Booked the next one?", "", "Dentist due today.")
+    private val book = AppointmentBookRules.sheet("Dentist", TODAY)
 
     private val taps = mutableListOf<String>()
 
@@ -83,7 +87,7 @@ class NeedsYouDecideOthersScreensTest {
                     NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.DECIDE_HEAD, 3))
                     SchoolCoverDecideView(cover, { home -> taps += if (home) "home" else "covered" })
                     DateNightDecideView(night, onBooked = { taps += "booked" }, onSkip = { taps += "skip" })
-                    AppointmentDecideView(dentist, null, onBooked = { taps += "when:$it" }, onWent = { taps += "went" },
+                    AppointmentDecideView(dentist, book, null, onBooked = { taps += "when:$it" }, onWent = { taps += "went" },
                         onNotYet = { taps += "not yet" }, onCall = { taps += "call" }, onEmail = { taps += "email" })
                 }
             }
@@ -122,13 +126,30 @@ class NeedsYouDecideOthersScreensTest {
         if (taps != want) fail("the taps answered $taps, not $want")
     }
 
+    /** A17 (walk-through 2026-11-22): Booked… opens a sheet of chips, not an open input box inside the card. */
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun bookedOpensTheWhenFieldInsideTheCard() {
+    fun bookedOpensItsSheetOfDaysAndTimesNotABoxOnTheCard() {
         draw(ThemeChoice.DARK)
-        if (onScreen(dentist.whenHint)) fail("the When? field shows before Booked…")
+        fun shown(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        if (shown(book.typeHint) || shown(AppointmentBookRules.QUESTION)) fail("the sheet shows before Booked…")
+        if (shown("Tue 20 Oct")) fail("the old example date, two months before the card's due day, is still on the page")
         compose.onNodeWithText("Booked…", useUnmergedTree = true).performClick()
         turns(1_000)
-        if (!onScreen(dentist.whenHint)) fail("Booked… didn't open the When? field")
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "decide-others-booked-open"))
+        if (compose.onAllNodesWithTag(APPOINTMENT_BOOK_SHEET_TAG).fetchSemanticsNodes().size != 1) fail("Booked… didn't open its sheet")
+        listOf(AppointmentBookRules.QUESTION, "Today", "Tomorrow", "Sun 20", "08:30", "17:00", "Or a later day", "Pick the day").forEach {
+            if (!shown(it)) fail("the sheet has no $it")
+        }
+        compose.onNodeWithText("Save", useUnmergedTree = true).performClick()
+        turns(300)
+        if (taps.any { it.startsWith("when:") }) fail("Save answered with no day chosen")
+        compose.onNodeWithText("Tomorrow", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("09:30", useUnmergedTree = true).performClick()
+        turns(500)
+        if (!shown("Tue 15 Dec · 09:30")) fail("the chosen day and time aren't said above Save")
+        compose.onNodeWithTag(APPOINTMENT_BOOK_SHEET_TAG).captureRoboImage(ScreenShots.path("needs-you", "decide-others-booked-open"))
+        compose.onNodeWithText("Save", useUnmergedTree = true).performClick()
+        turns(1_000)
+        if (taps.lastOrNull() != "when:Tue 15 Dec 9:30") fail("Save sent ${taps.lastOrNull()}, not the chosen day and time")
+        if (compose.onAllNodesWithTag(APPOINTMENT_BOOK_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()) fail("the sheet stayed open after Save")
     }
 }

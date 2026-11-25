@@ -5712,6 +5712,10 @@ class MekaCore(
     /** Went: a visit today (any booking and Not yet go). Null when it isn't on the list. */
     suspend fun appointmentWent(id: String): os.meka.core.domain.AppointmentDone? = onCore { appointments.went(id) }
 
+    /** Booked…'s sheet for [title]: the next week's days and the usual times as chips, by today's date (walk-through week 5, A17). */
+    fun appointmentBookSheet(title: String): os.meka.core.domain.AppointmentBookSheet =
+        os.meka.core.domain.AppointmentBookRules.sheet(title, todayEpochDay())
+
     /** Booked…: the day and time typed ("Tue 20 Oct 9:30"); refused when it can't be read. MEKA books nothing. */
     suspend fun bookAppointment(id: String, whenText: String): os.meka.core.domain.AppointmentDone? = onCore {
         val was = appointments.items().firstOrNull { it.id == id }

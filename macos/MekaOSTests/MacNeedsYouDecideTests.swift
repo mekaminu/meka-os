@@ -77,4 +77,18 @@ final class MacNeedsYouDecideTests: XCTestCase {
         XCTAssertEqual(c.more, [n.callLabel, n.emailLabel])
         XCTAssertEqual(NeedsYouDecideCardView.symbol(c.icon), "clock")
     }
+
+    /// Walk-through week 5, A17: Booked… opens a sheet of the next week's days and the usual times, and Save sends
+    /// words the booking reader reads back as that day and time.
+    @MainActor
+    func testBookedOpensASheetOfDaysAndTimes() {
+        let today: Int64 = 20_801 // Mon 14 Dec 2026
+        let rules = AppointmentBookRules.shared
+        let sheet = rules.sheet(title: "Dentist", today: today)
+        XCTAssertEqual(sheet.days.map { $0.label }, ["Today", "Tomorrow", "Wed 16", "Thu 17", "Fri 18", "Sat 19", "Sun 20"])
+        XCTAssertEqual(sheet.times.first?.label, "08:30")
+        XCTAssertEqual(sheet.typeHint, "Or a later day: “Thu 24 Dec 9:30”")
+        XCTAssertNil(rules.toSave(day: nil, minute: nil, typed: " "))
+        XCTAssertEqual(rules.toSave(day: KotlinLong(value: today + 1), minute: KotlinInt(value: 570), typed: ""), "Tue 15 Dec 9:30")
+    }
 }

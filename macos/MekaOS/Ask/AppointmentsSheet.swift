@@ -273,42 +273,132 @@ struct AppointmentsSheet: View {
 }
 
 /// Appointment nudges, slice 1: Needs you's card for one appointment that has come due, like the Fold's
-/// AppointmentCardView: "Due Mon 2 Nov · every 6 months" · "Dentist" · the question · Booked… · Went · Not yet.
-/// Booked… unfolds a field on the expand spring for the day and time; a date that can't be read stays on the card
-/// with the reason under the field, lit in the accent. Reduce Motion: cross-fades. MEKA books nothing. In the approved
-/// Needs you look (Mac slice 3) it is a compact NeedsYouDecideCardView: the title over its when and question on one
-/// line, Booked… · Went · Not yet, then Call to book · Copy email in a quieter row.
+/// AppointmentCardView: "Due Mon 2 Nov · every 6 months" · "Dentist" · the question · Booked… · Went · Not yet. In the
+/// approved Needs you look (Mac slice 3) it is a compact NeedsYouDecideCardView: the title over its when and question on
+/// one line, Booked… · Went · Not yet, then Call to book · Copy email in a quieter row. Booked… opens its sheet (the
+/// next week's days and the usual times as chips, a field for a later day; walk-through week 5, A17) rather than a box
+/// inside the card; a typed day that can't be read opens it again with the reason in the accent. MEKA books nothing.
 struct AppointmentNudgeRow: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.mekaReduceMotion) private var reduceMotion
     let card: AppointmentNudge
     let palette: MekaPalette
     @State private var asking = false
-    @State private var text = ""
+
+    private var refusal: String? {
+        guard let r = model.appointmentRefusal, r.id == card.id else { return nil }
+        return r.line
+    }
 
     var body: some View {
-        // The approved look (TO DECIDE, the Fold's slice 4): one compact card; Booked… opens When? inside it, and
-        // Call to book · Copy email sit in its quieter row.
         NeedsYouDecideCardView(card: NeedsYouDecideRules.shared.appointment(card: card), palette: palette,
-                               onYes: { MekaHaptics.light(); asking.toggle() },
+                               onYes: { MekaHaptics.light(); asking = true },
                                onNo: { model.appointmentNotYet(card.id) },
                                onChange: { model.appointmentWent(card.id) },
                                onMore: { i in
                                    if i == 0 { model.appointmentCallToBook(card.id) } else { model.appointmentCopyEmail(card.id) }
                                },
-                               below: asking ? AnyView(whenField) : nil)
-            .animation(MekaMotion.expand(reduced: reduceMotion), value: asking)
+                               below: nil)
+            .onChange(of: refusal) { _, line in if line != nil { asking = true } }
+            .sheet(isPresented: $asking) {
+                if let sheet = model.appointmentBookSheet(card.title) {
+                    AppointmentBookSheetView(sheet: sheet, refusal: refusal, palette: palette,
+                                             onSave: { words in asking = false; model.bookAppointment(card.id, when: words) },
+                                             onClose: { asking = false })
+                }
+            }
+    }
+}
+
+/// Booked…'s sheet on the Mac, like the Fold's AppointmentBookSheetView: the name and "When is it booked?", the day and
+/// time chips, a field for a later day (its example always ahead of today), the chosen line, Close and Save.
+struct AppointmentBookSheetView: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let sheet: AppointmentBookSheet
+    let refusal: String?
+    let palette: MekaPalette
+    let onSave: (String) -> Void
+    let onClose: () -> Void
+    @State private var day: Int64?
+    @State private var minute: Int32?
+    @State private var typed = ""
+
+    private var rules: AppointmentBookRules { AppointmentBookRules.shared }
+    private var words: String? {
+        rules.toSave(day: day.map { KotlinLong(value: $0) }, minute: minute.map { KotlinInt(value: $0) }, typed: typed)
+    }
+    private var chosen: String {
+        let t = typed.trimmingCharacters(in: .whitespaces)
+        return t.isEmpty ? rules.chosenLine(day: day.map { KotlinLong(value: $0) }, minute: minute.map { KotlinInt(value: $0) }) : t
     }
 
-    private var whenField: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            TextField(card.whenHint, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { model.bookAppointment(card.id, when: text) }
-            if let refusal = model.appointmentRefusal, refusal.id == card.id {
-                Text(refusal.line).font(MekaType.caption).foregroundStyle(palette.accent)
+            Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Text(sheet.question).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(sheet.dayLabel).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.top, MekaSpace.xs)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: MekaSpace.xs, alignment: .leading)],
+                      alignment: .leading, spacing: MekaSpace.xs) {
+                ForEach(sheet.days, id: \.day) { d in
+                    let value = d.day
+                    chip(d.label, lit: day == value) { day = day == value ? nil : value; typed = "" }
+                }
             }
+            Text(sheet.timeLabel).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.top, MekaSpace.xs)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: MekaSpace.xs, alignment: .leading)],
+                      alignment: .leading, spacing: MekaSpace.xs) {
+                ForEach(sheet.times, id: \.minute) { t in
+                    let value = t.minute
+                    chip(t.label, lit: minute == value) { minute = minute == value ? nil : value }
+                }
+            }
+            TextField(sheet.typeHint, text: $typed)
+                .textFieldStyle(.roundedBorder)
+                .onChange(of: typed) { _, t in if !t.trimmingCharacters(in: .whitespaces).isEmpty { day = nil } }
+                .onSubmit(save)
+            if let refusal {
+                Text(refusal).font(MekaType.caption).foregroundStyle(palette.accent)
+            }
+            Text(chosen).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: chosen)
+            Text(sheet.note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            HStack(spacing: MekaSpace.xs) {
+                Spacer()
+                Button("Close", action: onClose).buttonStyle(MekaPressStyle())
+                    .font(MekaType.metaStrong).foregroundStyle(palette.accent)
+                    .keyboardShortcut(.cancelAction)
+                Button(action: save) {
+                    Text(sheet.saveLabel).font(MekaType.metaStrong)
+                        .foregroundStyle(words != nil ? palette.onAccent : palette.textTertiary)
+                        .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.xs)
+                        .background(Capsule().fill(words != nil ? palette.accent : palette.surfaceRaised))
+                }
+                .buttonStyle(MekaPressStyle())
+                .disabled(words == nil)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, MekaSpace.xs)
         }
-        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        .padding(MekaSpace.l)
+        .frame(width: 460, alignment: .leading)
+        .background(palette.background)
+    }
+
+    private func save() {
+        guard let w = words else { return }
+        MekaHaptics.light()
+        onSave(w)
+    }
+
+    private func chip(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: { MekaHaptics.tick(); action() }) {
+            Text(label).font(MekaType.caption).lineLimit(1)
+                .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityAddTraits(lit ? .isSelected : [])
     }
 }

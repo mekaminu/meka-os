@@ -3578,6 +3578,12 @@ final class CoreModel {
         return core.dateNightPage(view: dateNight ?? DateNightView.companion.EMPTY)
     }
 
+    /// Booked…'s sheet on Needs you's appointment card: the next week's days and the usual times as chips, by today's
+    /// date (walk-through week 5, A17: no open input box on the card).
+    func appointmentBookSheet(_ title: String) -> AppointmentBookSheet? {
+        core?.appointmentBookSheet(title: title)
+    }
+
     /// Ask → Appointments in the page shape (slice 10).
     func appointmentsPage() -> LifePageView? {
         guard let core else { return nil }
@@ -6984,6 +6990,7 @@ final class CoreModel {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let core, !t.isEmpty else { return }
         MekaHaptics.light()
+        appointmentRefusal = nil // a second refusal of the same words opens the sheet again
         Task {
             do {
                 guard let done = try await core.bookAppointment(id: id, whenText: t) else { return }

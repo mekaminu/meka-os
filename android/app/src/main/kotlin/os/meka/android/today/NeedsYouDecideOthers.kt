@@ -1,25 +1,14 @@
 package os.meka.android.today
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import os.meka.android.designsystem.Meka
-import os.meka.android.designsystem.MekaMotion
-import os.meka.android.designsystem.MekaSpace
-import os.meka.android.designsystem.MekaType
-import os.meka.android.lists.Field
+import os.meka.core.domain.AppointmentBookSheet
 import os.meka.core.domain.AppointmentNudge
 import os.meka.core.domain.DateNightNudge
 import os.meka.core.domain.NeedsYouDecideRules
@@ -44,13 +33,15 @@ internal fun DateNightDecideView(card: DateNightNudge, onBooked: () -> Unit, onS
 
 /**
  * An appointment that has come due, compact: "Dentist" over "Due Mon 2 Nov · every 6 months · Last went …", then
- * Booked… · Went · Not yet and the quieter Call to book · Copy email. Booked… unfolds the When? field inside the card on
- * the expand spring (a cross-fade with reduced motion), as the full card did; a date it can't read leaves [refusal]
- * under the field in the accent. MEKA books nothing and calls no one.
+ * Booked… · Went · Not yet and the quieter Call to book · Copy email. Booked… opens its sheet ([book]: the next week's
+ * days and the usual times as chips, a field for a later day) over the page rather than a box inside the card
+ * (walk-through week 5, A17); Save closes it at once, and a typed day it can't read opens it again with [refusal] in the
+ * accent. MEKA books nothing and calls no one.
  */
 @Composable
 internal fun AppointmentDecideView(
     card: AppointmentNudge,
+    book: AppointmentBookSheet,
     refusal: String?,
     onBooked: (String) -> Unit,
     onWent: () -> Unit,
@@ -59,24 +50,13 @@ internal fun AppointmentDecideView(
     onEmail: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val reduced = Meka.reducedMotion
     var asking by rememberSaveable(card.id) { mutableStateOf(false) }
-    var text by rememberSaveable(card.id) { mutableStateOf("") }
+    LaunchedEffect(refusal) { if (refusal != null) asking = true }
     NeedsYouDecideShell(
         remember(card) { NeedsYouDecideRules.appointment(card) },
-        onYes = { asking = !asking }, onChange = onWent, onNo = onNotYet,
+        onYes = { asking = true }, onChange = onWent, onNo = onNotYet,
         onMore = { i -> if (i == 0) onCall() else onEmail() },
         modifier = modifier,
-    ) {
-        AnimatedVisibility(
-            visible = asking,
-            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
-            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(card.whenHint, value = text, onValue = { text = it }) { typed -> onBooked(typed) }
-                refusal?.let { Text(needsShown(it), style = MekaType.caption, color = Meka.colors.accent) }
-            }
-        }
-    }
+    )
+    if (asking) AppointmentBookSheetView(book, refusal, onSave = { words -> asking = false; onBooked(words) }, onClose = { asking = false })
 }
