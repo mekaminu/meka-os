@@ -7625,3 +7625,17 @@ that it syncs; a choice saves and closes it.
   closes, summary follows) and Work mail → Shows as it comes and back.
 - Mac: `ProtectedTimeSheet` shows the three as menus built from the same sheets; `testProtectedChoicesReachSwift`.
   Mac checked nightly. Motion catalogue's Protected time line updated.
+
+### Found and fixing, week 5 — slice 87 (2026-11-25): A17 on Week ahead's Sunday heads-up
+
+The walk-through (week ahead finding 5) found an open "On" pill over a time chip row "16:00 17:00 18:00 19:00" that
+wrapped "20:00" alone onto a second line on the cover. It is now one card row ("Sunday heads-up" · "18:00", or · "Off")
+opening Notifications' choice sheet: Off, then the times (a time set elsewhere among them), each with a line on what it
+does, the one in use lit, a note that it syncs; a choice saves and closes it.
+- Core: `WeekAheadChoices.kt` (`WeekAheadChoiceRules` row, sheet and `named`), reusing `NotifyChoiceRow` /
+  `NotifyChoice` / `NotifyChoiceSheet`; `WeekAheadChoicesTest`.
+- Fold: `WeekAheadPane`'s `HeadsUpSetting` uses `NotifyChoiceRowView` / `NotifyChoiceSheetView`; `WeekAheadScreensTest`
+  checks no On/Off or time chip is on the page, the foot shot shows the row, and by hand the row's sheet turns it Off
+  (sheet closes, row says Off) then 19:00.
+- Mac: `WeekAheadSheet`'s switch and time picker are one menu built from the same sheet; `testWeekAheadChoicesReachSwift`.
+  Mac checked nightly. Motion catalogue's Week ahead line updated.

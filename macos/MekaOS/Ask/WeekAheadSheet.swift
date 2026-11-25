@@ -9,13 +9,13 @@ import SwiftUI
 ///
 /// Slice 2: **▶ Listen** reads the week aloud in MEKA's voice (else the Mac's own); Listen on Sunday's heads-up opens
 /// the sheet already reading (`readWeekAheadOnOpen`). **Sunday heads-up**: on or off and its time (default 18:00),
-/// synced with the Fold; only a Bool and an Int32 cross to the core.
+/// synced with the Fold; only a Bool and an Int32 cross to the core. Walk-through week 5, A17: one menu (Off · 16:00 …).
 ///
 /// Goals, properly, item 6: **Goals for the week** — click up to three open goals to make them the week's goals (Today's
 /// "This week: …" line and the face's goal ring); with three picked the rest dim until one is unpicked.
 ///
 /// Motion: the sheet scale-fades (system); the summary cross-fades as it changes; the days and the family sync stagger
-/// in 40 ms apart; Listen's label cross-fades to "■ Stop"; the time picker fades away when the heads-up is off. A goal's
+/// in 40 ms apart; Listen's label cross-fades to "■ Stop"; the heads-up's menu shows the choice made. A goal's
 /// tick ring draws its check as it's picked; the line above cross-fades; the rest dim (opacity) once three are picked.
 /// Reduce Motion: cross-fades.
 struct WeekAheadSheet: View {
@@ -185,33 +185,26 @@ struct WeekAheadSheet: View {
         }
     }
 
-    /// Sunday heads-up: a switch and the time, synced with the Fold. The line under it cross-fades.
+    /// Sunday heads-up (walk-through week 5, A17): one menu saying what's chosen (Off, or the time), as the Fold's row
+    /// and sheet, not a switch beside a time picker. A pick sends only the choice's name; the core reads it back.
     private var headsUp: some View {
         let s = model.weekAheadSetting ?? WeekAheadSettingView.companion.EMPTY
-        let on = s.on
-        let minute = Int(s.minute)
+        let choices = WeekAheadChoiceRules.shared
+        let sheet = choices.sheet(s: s)
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        let current = s.minute
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            label("Sunday heads-up")
-            HStack(spacing: MekaSpace.m) {
-                Toggle(isOn: Binding(get: { on }, set: { model.setWeekAhead(on: $0, minute: minute) })) {
-                    Text(LoneWordGlue.shared.kept(line: s.summary)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: s.summary)
+            Picker(sheet.title, selection: Binding(get: { lit }, set: { name in
+                if name != lit, let pick = choices.named(name: name, current: current) {
+                    model.setWeekAhead(on: pick.on, minute: Int(pick.minute))
                 }
-                .toggleStyle(.switch)
-                if on {
-                    Picker("Time", selection: Binding(get: { minute }, set: { model.setWeekAhead(on: true, minute: $0) })) {
-                        ForEach(s.choices.map { Int($0.int32Value) }, id: \.self) { m in
-                            Text(LocalClock.companion.formatMinute(m: Int32(m))).tag(m)
-                        }
-                    }
-                    .labelsHidden().frame(width: 90)
-                    .transition(.opacity)
-                }
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
             }
+            .pickerStyle(.menu).fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
         }
         .padding(.top, MekaSpace.m)
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
     }
 
     private func label(_ text: String) -> some View {

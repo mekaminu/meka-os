@@ -3243,6 +3243,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(choices.mailNamed(name: choices.SHOW)?.boolValue, false)
     }
 
+    func testWeekAheadChoicesReachSwift() {
+        // Walk-through week 5, A17: the week ahead's Sunday heads-up is one menu built from the core's sheet; a pick sends
+        // only its name back and the core reads it to the setting.
+        let choices = WeekAheadChoiceRules.shared
+        let v = WeekAheadSettingView.companion.EMPTY
+        XCTAssertEqual(choices.sheet(s: v).choices.map { $0.label }, ["Off", "16:00", "17:00", "18:00", "19:00", "20:00"])
+        XCTAssertEqual(choices.sheet(s: v).choices.first(where: { $0.lit })?.label, "18:00")
+        XCTAssertEqual(choices.row(s: v).value, "18:00")
+        let off = choices.named(name: choices.OFF, current: v.minute)
+        XCTAssertEqual(off?.on, false)
+        XCTAssertEqual(off?.minute, 18 * 60)
+        XCTAssertEqual(choices.named(name: "1140", current: v.minute)?.minute, 19 * 60)
+        XCTAssertNil(choices.named(name: "soon", current: v.minute))
+    }
+
     func testDateNightNudgeReachesSwift() {
         // Date night, slice 2: Needs you's week-before card and its heads-up's row in Notifications reach the Mac; the
         // card's buttons send only an Int64 and a Bool (the undo bar gets a String back).

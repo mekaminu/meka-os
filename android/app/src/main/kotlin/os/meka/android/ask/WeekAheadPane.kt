@@ -1,18 +1,11 @@
 package os.meka.android.ask
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +23,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,13 +52,15 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
-import os.meka.android.work.SettingChip
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.android.designsystem.TickRing
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.WeekAheadDay
 import os.meka.core.domain.WeekAheadGoals
 import os.meka.core.domain.WeekAheadKind
 import os.meka.core.domain.WeekAheadLine
+import os.meka.core.domain.WeekAheadChoiceRules
 import os.meka.core.domain.WeekAheadSettingView
 import os.meka.core.domain.WeekAheadRules
 import os.meka.core.facade.MekaCore
@@ -76,7 +73,8 @@ import os.meka.core.facade.MekaCore
  *
  * Slice 2: **▶ Listen** reads the week aloud in MEKA's voice ([MekaSpeaker], the phone's own if the voice can't be
  * reached); Listen on Sunday's heads-up opens the pane already reading ([listenNow]). **Sunday heads-up** at the end:
- * on or off and its time (16:00–20:00, default 18:00), synced with the Mac.
+ * on or off and its time (16:00–20:00, default 18:00), synced with the Mac. Walk-through week 5, A17: one card row
+ * ("Sunday heads-up" · "18:00") opening a sheet of Off and the times, not an On pill over a chip row.
  *
  * Goals, properly, item 6: **Goals for the week** — tap up to three of Meka's open goals to make them the week's goals
  * (Today's "This week: …" line and the watch face's goal ring); a fourth waits, dimmed, until one is unpicked. Nothing
@@ -86,8 +84,8 @@ import os.meka.core.facade.MekaCore
  *
  * Motion: the pane springs up (MekaPane) with the More row's title travelling in; the summary cross-fades as it changes;
  * the days and the family sync stagger in 40 ms apart (the list's item motion as a day's lines change). Reduced motion:
- * cross-fades. Listen's label cross-fades to "■ Stop" while it reads (light haptic to start, tick to stop); the heads-up
- * chips blend with a tick and the times fold away when it's off. A goal's tick ring draws its check with a light haptic
+ * cross-fades. Listen's label cross-fades to "■ Stop" while it reads (light haptic to start, tick to stop); the heads-up's
+ * row opens its choice sheet (rises over a fading scrim; a choice ticks, saves and closes it). A goal's tick ring draws its check with a light haptic
  * as it's picked (unpicked: back to the outline with a tick); the line above cross-fades; the goals not picked dim when
  * three are (alpha cross-fade). Reduced motion: no draw, cross-fades.
  */
@@ -209,7 +207,6 @@ fun WeekAheadPane(
         }
         item(key = "heads-up") {
             HeadsUpSetting(setting, Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(4 + v.days.size))) { on, minute ->
-                haptics.tick()
                 scope.launch { runCatching { core.setWeekAhead(on, minute) } }
             }
         }
@@ -271,29 +268,20 @@ private fun WeekListenPill(speaking: Boolean, modifier: Modifier = Modifier, onC
     }
 }
 
-/** Sunday heads-up: on or off, then the time; synced (the Mac's sheet shows the same). */
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Sunday heads-up (walk-through week 5, A17: no open chip rows): one card row saying what's chosen ("Sunday heads-up" ·
+ * "18:00", or · "Off") that opens Notifications' choice sheet (Off, then the times, each with what it does, the one in
+ * use lit; a choice saves and closes it). Synced; the Mac's sheet shows one menu.
+ */
 @Composable
 private fun HeadsUpSetting(s: WeekAheadSettingView, modifier: Modifier, onSet: (Boolean, Int) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        SectionLabel("Sunday heads-up", Modifier.semantics { heading() })
-        Crossfade(s.summary, animationSpec = MekaMotion.appear(reduced), label = "week-heads-up-line") { line ->
-            Text(LoneWordGlue.measured(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
-        }
-        SettingChip(if (s.on) "On" else "Off", s.on, spoken = "Sunday heads-up, ${if (s.on) "on" else "off"}") { onSet(!s.on, s.minute) }
-        AnimatedVisibility(
-            s.on,
-            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
-            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
-        ) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                s.choices.forEach { m ->
-                    val label = os.meka.core.domain.LocalClock.formatMinute(m)
-                    SettingChip(label, m == s.minute, spoken = "Sundays at $label") { if (m != s.minute) onSet(true, m) }
-                }
-            }
-        }
+    var open by remember { mutableStateOf(false) }
+    NotifyChoiceRowView(WeekAheadChoiceRules.row(s), modifier) { open = true }
+    if (open) {
+        NotifyChoiceSheetView(WeekAheadChoiceRules.sheet(s), onChoose = { name ->
+            // The sheet gives its own tick haptic on a choice.
+            WeekAheadChoiceRules.named(name, s.minute)?.let { onSet(it.on, it.minute) }
+        }, onClose = { open = false })
     }
 }
 

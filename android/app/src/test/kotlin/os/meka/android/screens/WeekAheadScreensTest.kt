@@ -10,6 +10,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
@@ -29,6 +32,8 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.WeekAheadPane
+import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
@@ -38,6 +43,8 @@ import os.meka.core.domain.EventFields
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.LocalClock
+import os.meka.core.domain.WeekAheadChoiceRules
 import os.meka.core.domain.WeekAheadRules
 import os.meka.core.domain.MekaSchema
 import os.meka.core.facade.MekaCore
@@ -55,7 +62,7 @@ import kotlin.test.fail
  * younger boy's INSET day while at the office, a swimming lesson and football from the Kids calendar, a long meeting
  * at a place, the garden bin, two goals with one picked, the partner named), Dark and Light. Saved under `week-ahead/`
  * and read for nonsense, cut lines, broken words, split dates, times and numbers, a word left alone and a line starting
- * with a dot. By hand: Sunday heads-up's On turns it off (its times fold away) and back on; a goal's row picks it for
+ * with a dot. By hand: Sunday heads-up's row opens its sheet, Off turns it off and 19:00 back on (A17, week 5); a goal's row picks it for
  * the week ("1 picked · up to 3") and a second tap unpicks it. Events are written as the calendar mirror writes them.
  * Invented data only (rule 13).
  */
@@ -193,7 +200,7 @@ class WeekAheadScreensTest {
         if (atTop) ScreenShots.assertShows(compose, name, "Week ahead")
         val v = core.weekAheadView.value
         val setting = core.weekAheadSettingView.value
-        val lines = listOfNotNull(v.summary, v.mail, v.protectedLine, v.balance, setting.summary, v.goals.line.takeIf { it.isNotEmpty() }) +
+        val lines = listOfNotNull(v.summary, v.mail, v.protectedLine, v.balance, v.goals.line.takeIf { it.isNotEmpty() }) +
             v.sync + v.days.flatMap { d -> d.lines.map { it.text } + listOfNotNull(d.dayLine, d.weather, d.protectedLine).joinToString(" · ") } +
             v.goals.goals.flatMap { listOf(it.title, it.meta) }
         ScreenShots.assertNoLoneWords(compose, name, lines)
@@ -206,6 +213,12 @@ class WeekAheadScreensTest {
         ScreenShots.assertReadable(compose, name, v.days.flatMap { d -> d.lines.map { it.text } }, mustShow = false)
         // The range under the title reads on one line ("This week · Wed 21 – Sun 25 Oct").
         ScreenShots.assertEachOneLine(compose, name, listOf("${v.title} · ${v.rangeLabel}"))
+        // Walk-through week 5, A17: no open chip row for the Sunday heads-up; its times live in the row's sheet.
+        (listOf("On", "Off") + setting.choices.map(LocalClock::formatMinute)).forEach { label ->
+            if (compose.onAllNodes(hasText(label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG)).fetchSemanticsNodes().isNotEmpty()) {
+                fail("$name: a \"$label\" chip on the page; it belongs in the heads-up's sheet")
+            }
+        }
     }
 
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
@@ -256,31 +269,56 @@ class WeekAheadScreensTest {
     fun coverManyFoot() {
         val name = "cover-dark-many-foot"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
-        // Section labels draw upper case; the heads-up's chip is found by what TalkBack reads.
-        scrollTo(hasContentDescription("Sunday heads-up, on"))
+        // A17: the heads-up is one row saying its time, found by what TalkBack reads.
+        val row = WeekAheadChoiceRules.row(core.weekAheadSettingView.value)
+        scrollTo(hasContentDescription(row.spoken))
         check(core, name, atTop = false)
-        ScreenShots.assertShows(compose, name, "Sunday heads-up, on")
+        ScreenShots.assertShows(compose, name, "Sunday heads-up")
+        ScreenShots.assertShows(compose, name, "18:00")
     }
 
     // ---- By hand ----
 
-    /** Sunday heads-up's chip turns it off (the times fold away, the line says Off) and back on. */
+    private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
+    /** Taps the node TalkBack reads as [desc] (in the sheet's window too). */
+    private fun tapSaid(name: String, desc: String) {
+        val n = compose.onAllNodes(hasContentDescription(desc) and hasClickAction())
+        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$desc\" to tap")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+    }
+
+    /**
+     * Walk-through week 5, A17: the Sunday heads-up's row opens its sheet; Off turns it off and closes the sheet (the row
+     * says Off), then the row's sheet again and 19:00 turns it back on at 19:00.
+     */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun headsUpOffAndOnByHand() {
         val name = "cover-dark-heads-up"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
         if (!core.weekAheadSettingView.value.on) fail("$name: the heads-up starts off")
-        tap(name, "the heads-up's On", hasContentDescription("Sunday heads-up, on"))
-        until { !core.weekAheadSettingView.value.on }
-        if (core.weekAheadSettingView.value.on) fail("$name: tapping On left the heads-up on")
-        ScreenShots.assertShows(compose, name, LoneWordGlue.measured(core.weekAheadSettingView.value.summary))
-        if (compose.onAllNodes(hasContentDescription("Sundays at 18:00")).fetchSemanticsNodes().isNotEmpty()) fail("$name: off, but the times still show")
+        val onRow = WeekAheadChoiceRules.row(core.weekAheadSettingView.value)
+        tap(name, "the heads-up's row", hasContentDescription(onRow.spoken))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the heads-up's row didn't open its sheet")
+        tapSaid(name, WeekAheadChoiceRules.sheet(core.weekAheadSettingView.value).choices.first { it.name == WeekAheadChoiceRules.OFF }.spoken)
+        // The sheet first: while its window is up there are two roots, and reading the screen's words needs one.
+        until { !core.weekAheadSettingView.value.on && !sheetOpen() }
+        if (core.weekAheadSettingView.value.on) fail("$name: Off left the heads-up on")
+        if (sheetOpen()) fail("$name: the sheet stayed open after a choice")
+        val offRow = WeekAheadChoiceRules.row(core.weekAheadSettingView.value)
+        until { compose.onAllNodes(hasContentDescription(offRow.spoken)).fetchSemanticsNodes().isNotEmpty() }
+        scrollTo(hasContentDescription(offRow.spoken))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
-        tap(name, "the heads-up's Off", hasContentDescription("Sunday heads-up, off"))
-        until { core.weekAheadSettingView.value.on }
-        if (!core.weekAheadSettingView.value.on) fail("$name: tapping Off left the heads-up off")
-        scrollTo(hasContentDescription("Sundays at 18:00"))
-        ScreenShots.assertShows(compose, name, "18:00")
+        tap(name, "the heads-up's row (off)", hasContentDescription(offRow.spoken))
+        until { sheetOpen() }
+        tapSaid(name, WeekAheadChoiceRules.sheet(core.weekAheadSettingView.value).choices.first { it.label == "19:00" }.spoken)
+        until { core.weekAheadSettingView.value.let { it.on && it.minute == 19 * 60 } && !sheetOpen() }
+        val v = core.weekAheadSettingView.value
+        if (!v.on || v.minute != 19 * 60) fail("$name: 19:00 left the heads-up ${if (v.on) "at ${v.timeLabel}" else "off"}")
+        until { compose.onAllNodes(hasContentDescription(WeekAheadChoiceRules.row(v).spoken)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription(WeekAheadChoiceRules.row(v).spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say 19:00")
     }
 
     /** A goal's row picks it for the week and a second tap unpicks it; the line above says so each time. */
