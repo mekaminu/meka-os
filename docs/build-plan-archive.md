@@ -7639,3 +7639,19 @@ does, the one in use lit, a note that it syncs; a choice saves and closes it.
   (sheet closes, row says Off) then 19:00.
 - Mac: `WeekAheadSheet`'s switch and time picker are one menu built from the same sheet; `testWeekAheadChoicesReachSwift`.
   Mac checked nightly. Motion catalogue's Week ahead line updated.
+
+### Found and fixing, week 5 — slice 88 (2026-11-25): A17 on Mail settings
+
+The walk-through (mail finding 8) found Meeting prep's open "Off 5 10 15 30 min" chip row on the Mail page; the
+Ten-minute inbox (Morning · Evening · Off) and Warranty reminders (Off · £50 · £100 · £250 · £500) cards were the same
+shape. Each is now one card row ("Meeting prep" · "15 min", "Warranty reminders" · "£100 or more") opening
+Notifications' choice sheet: the choices with a line on what each does, the one in use lit, a note that it syncs; a
+choice saves and closes it.
+- Core: `MailChoices.kt` (`MailChoiceRules` rows, sheets and `moment` / `prep` / `warranty` by name), reusing
+  `NotifyChoiceRow` / `NotifyChoice` / `NotifyChoiceSheet`; `MailChoicesTest`.
+- Fold: `MailPane`'s `MailChoiceSetting` (the three chip cards are gone); `MailScreensTest` checks no choice chip is on
+  the page and Meeting prep's row reads its choice, and by hand (`prepByHand`) the row's sheet sets 30 min (sheet
+  closes, row says 30 min) then Off.
+- Mac: `MailSheet`'s three chip panels are one `MailChoicePanelView` each, a menu built from the same sheet;
+  `testMailChoicesReachSwift`. Mac checked nightly. Motion catalogue's Ten-minute inbox and Meeting prep lines updated.
+- Left: Chase waits' per-person chips and Obi on calls' cap row.

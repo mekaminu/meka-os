@@ -77,14 +77,18 @@ struct MailSheet: View {
                     .staggeredAppear(2)
                     // Slice 7: when the ten-minute inbox comes (synced with the Fold).
                     if let key = model.mailMomentKey {
-                        MomentPanelView(key: key, palette: palette) { picked in
+                        let t = MailMomentTime.companion.of(key: key) ?? MailMomentTime.morning
+                        MailChoicePanelView(row: MailChoiceRules.shared.momentRow(t: t), sheet: MailChoiceRules.shared.momentSheet(t: t), palette: palette) { name in
+                            guard let picked = MailChoiceRules.shared.moment(name: name)?.key else { return }
                             Task { await model.setMailMomentKey(picked) }
                         }
                         .staggeredAppear(2)
                     }
                     // Slice 3f: which orders put a warranty's end on Renewals (synced with the Fold).
                     if let key = model.mailWarrantyKey {
-                        WarrantyPanelView(key: key, palette: palette) { picked in
+                        let w = MailWarrantyLevel.companion.of(key: key) ?? MailWarrantyLevel.hundred
+                        MailChoicePanelView(row: MailChoiceRules.shared.warrantyRow(w: w), sheet: MailChoiceRules.shared.warrantySheet(w: w), palette: palette) { name in
+                            guard let picked = MailChoiceRules.shared.warranty(name: name)?.key else { return }
                             Task { await model.setMailWarrantyKey(picked) }
                         }
                         .staggeredAppear(2)
@@ -99,7 +103,9 @@ struct MailSheet: View {
                 }
                 // Meeting prep, slice 2: how early the prep comes, or Off (synced with the Fold; works without mail).
                 if let key = model.meetingPrepLeadKey {
-                    PrepLeadPanelView(key: key, palette: palette) { picked in
+                    let l = MeetingPrepLead.companion.of(key: key) ?? MeetingPrepLead.fifteen
+                    MailChoicePanelView(row: MailChoiceRules.shared.prepRow(l: l), sheet: MailChoiceRules.shared.prepSheet(l: l), palette: palette) { name in
+                        guard let picked = MailChoiceRules.shared.prep(name: name)?.key else { return }
                         Task { await model.setMeetingPrepLeadKey(picked) }
                     }
                     .staggeredAppear(2)
@@ -292,127 +298,33 @@ private struct LifeAuditPanelView: View {
     }
 }
 
-/// Slice 7: the ten-minute inbox's time — Morning · Evening · Off (the lit one fills with the accent on the appear
-/// curve, tick haptic); the line cross-fades. Only the key (a String) goes back to the model.
-private struct MomentPanelView: View {
-    let key: String
+/// Walk-through week 5, A17 (no open chip rows): the ten-minute inbox, meeting prep and warranty reminders are each one
+/// card row saying what's chosen, a menu of the choices built from the core's sheet (the one in use ticked). A pick
+/// sends only the choice's name (a String) back; the caller maps it to the setting's key. Synced with the Fold.
+private struct MailChoicePanelView: View {
+    let row: NotifyChoiceRow
+    let sheet: NotifyChoiceSheet
     let palette: MekaPalette
     let onPick: (String) -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
-    private let times: [MailMomentTime] = [.morning, .evening, .off]
 
     var body: some View {
-        let current = MailMomentTime.companion.of(key: key) ?? MailMomentTime.morning
-        let line = MailMomentRules.shared.settingLine(time: current)
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(MailMomentRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        HStack(spacing: MekaSpace.xs) {
+            Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Spacer(minLength: MekaSpace.xs)
+            Picker(row.title, selection: Binding(get: { lit }, set: { name in if name != lit { onPick(name) } })) {
+                ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
             }
-            .accessibilityElement(children: .combine)
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(times, id: \.key) { t in
-                    let lit = t.key == key
-                    Button(t.label) { if !lit { onPick(t.key) } }
-                        .buttonStyle(MekaPressStyle())
-                        .font(MekaType.itemMeta)
-                        .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
-                        .padding(.horizontal, MekaSpace.m)
-                        .padding(.vertical, MekaSpace.xxs)
-                        .background(Capsule().fill(lit ? palette.accent : palette.hairline))
-                        .accessibilityLabel("Ten-minute inbox: \(t.label)")
-                        .accessibilityAddTraits(lit ? .isSelected : [])
-                }
-            }
+            .labelsHidden().pickerStyle(.menu).fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
         }
-        .padding(MekaSpace.m)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: key)
-    }
-}
-
-/// Slice 3f: Warranty reminders — Off · £50 · £100 · £250 · £500 (the lit chip in the accent; the line cross-fades).
-/// Meeting prep, slice 2: Off · 5 · 10 · 15 · 30 min chips (the lit one in the accent, tick haptic); the line cross-fades.
-private struct PrepLeadPanelView: View {
-    let key: String
-    let palette: MekaPalette
-    let onPick: (String) -> Void
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-    private let leads: [MeetingPrepLead] = [.off, .five, .ten, .fifteen, .thirty]
-
-    var body: some View {
-        let current = MeetingPrepLead.companion.of(key: key) ?? MeetingPrepLead.fifteen
-        let line = MeetingPrepRules.shared.settingLine(lead: current)
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(MeetingPrepRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-            }
-            .accessibilityElement(children: .combine)
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(leads, id: \.key) { l in
-                    let lit = l.key == key
-                    Button(l.label) { if !lit { onPick(l.key) } }
-                        .buttonStyle(MekaPressStyle())
-                        .font(MekaType.itemMeta)
-                        .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
-                        .padding(.horizontal, MekaSpace.m)
-                        .padding(.vertical, MekaSpace.xxs)
-                        .background(Capsule().fill(lit ? palette.accent : palette.hairline))
-                        .accessibilityLabel("Meeting prep: \(l.label)")
-                        .accessibilityAddTraits(lit ? .isSelected : [])
-                }
-            }
-        }
-        .padding(MekaSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: key)
-    }
-}
-
-private struct WarrantyPanelView: View {
-    let key: String
-    let palette: MekaPalette
-    let onPick: (String) -> Void
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-    private let levels: [MailWarrantyLevel] = [.off, .fifty, .hundred, .twoFifty, .fiveHundred]
-
-    var body: some View {
-        let current = MailWarrantyLevel.companion.of(key: key) ?? MailWarrantyLevel.hundred
-        let line = MailWarrantyRules.shared.settingLine(level: current)
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(MailWarrantyRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-            }
-            .accessibilityElement(children: .combine)
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(levels, id: \.key) { l in
-                    let lit = l.key == key
-                    Button(l.label) { if !lit { onPick(l.key) } }
-                        .buttonStyle(MekaPressStyle())
-                        .font(MekaType.itemMeta)
-                        .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
-                        .padding(.horizontal, MekaSpace.m)
-                        .padding(.vertical, MekaSpace.xxs)
-                        .background(Capsule().fill(lit ? palette.accent : palette.hairline))
-                        .accessibilityLabel("Warranty reminders: \(l.label)")
-                        .accessibilityAddTraits(lit ? .isSelected : [])
-                }
-            }
-        }
-        .padding(MekaSpace.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: key)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.spoken)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: row.value)
     }
 }
 

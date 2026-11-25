@@ -3258,6 +3258,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.named(name: "soon", current: v.minute))
     }
 
+    func testMailChoicesReachSwift() {
+        // Walk-through week 5, A17: Mail's ten-minute inbox, meeting prep and warranty reminders are menus built from the
+        // core's sheets; a pick's name reads back to the setting's key.
+        let r = MailChoiceRules.shared
+        XCTAssertEqual(r.prepSheet(l: MeetingPrepLead.fifteen).choices.map { $0.label }, ["Off", "5 min", "10 min", "15 min", "30 min"])
+        XCTAssertEqual(r.prepSheet(l: MeetingPrepLead.fifteen).choices.first(where: { $0.lit })?.label, "15 min")
+        XCTAssertEqual(r.prepRow(l: MeetingPrepLead.off).value, "Off")
+        XCTAssertEqual(r.prep(name: "THIRTY")?.key, "30")
+        XCTAssertEqual(r.warrantyRow(w: MailWarrantyLevel.hundred).value, "£100 or more")
+        XCTAssertEqual(r.warranty(name: "FIFTY")?.key, "50")
+        XCTAssertEqual(r.momentSheet(t: MailMomentTime.evening).choices.first(where: { $0.lit })?.label, "Evening")
+        XCTAssertEqual(r.moment(name: "OFF")?.key, "off")
+        XCTAssertNil(r.prep(name: "soon"))
+    }
+
     func testDateNightNudgeReachesSwift() {
         // Date night, slice 2: Needs you's week-before card and its heads-up's row in Notifications reach the Mac; the
         // card's buttons send only an Int64 and a Bool (the undo bar gets a String back).

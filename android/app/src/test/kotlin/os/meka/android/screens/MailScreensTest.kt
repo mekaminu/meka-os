@@ -10,7 +10,10 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -30,6 +33,12 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.mail.MailPane
+import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.core.domain.MailChoiceRules
+import os.meka.core.domain.MailMomentTime
+import os.meka.core.domain.MailWarrantyLevel
+import os.meka.core.domain.MeetingPrepLead
 import os.meka.core.domain.LifeAuditReviewRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MailAccountFacts
@@ -59,7 +68,8 @@ import kotlin.test.fail
  * server can't be reached, with nothing connected, one Gmail sorted and tidied, and three accounts (one sorted, one whose
  * sign-in ended, one whose last check failed), each on the Fold's cover and inner screens, Dark (and the full one in
  * Light). Saved under `mail/` and read for nonsense, cut lines, broken words, split dates, times and numbers, a word left
- * alone and a line starting with a dot. Mail by hand: tap Autopilot's Turn off and Autopilot is off, its line saying so.
+ * alone and a line starting with a dot. Mail by hand: tap Autopilot's Turn off and Autopilot is off, its line saying so;
+ * Meeting prep's row opens its sheet and 30 min, then Off, save and close it (walk-through week 5, A17).
  * Talks to a stand-in server held in the test. Invented data only (rule 13): example.com addresses.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -241,6 +251,7 @@ class MailScreensTest {
         )
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
         switchesShort(name, v, cover = name.startsWith("cover"))
+        noChoiceChips(name, core)
         // Found and fixing week 5, A8: the Life audit counts the emails Needs you lists (its own rule), never the all-clear
         // over them.
         if (fill == Fill.ONE || fill == Fill.MANY) {
@@ -301,6 +312,61 @@ class MailScreensTest {
         return core
     }
 
+    /**
+     * Walk-through week 5, A17: no open chip row for the ten-minute inbox, meeting prep or warranty reminders; their
+     * choices live in each row's sheet, and Meeting prep's row (shown with or without mail) is on the page.
+     */
+    private fun noChoiceChips(name: String, core: MekaCore) {
+        val labels = MailMomentTime.entries.map { it.label } + MeetingPrepLead.entries.map { it.label } + MailWarrantyLevel.entries.map { it.label }
+        labels.toSet().forEach { label ->
+            if (compose.onAllNodes(hasText(label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG)).fetchSemanticsNodes().isNotEmpty())
+                fail("$name: a \"$label\" chip on the page; it belongs in its row's sheet")
+        }
+        val prep = runBlocking { core.meetingPrepLeadSetting() }
+        if (compose.onAllNodes(hasContentDescription(MailChoiceRules.prepRow(prep).spoken)).fetchSemanticsNodes().isEmpty())
+            fail("$name: no Meeting prep row reading \"${prep.label}\"")
+    }
+
+    private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
+    /** Taps the node TalkBack reads as [desc] (in the sheet's window too). */
+    private fun tapSaid(name: String, desc: String) {
+        val n = compose.onAllNodes(hasContentDescription(desc) and hasClickAction())
+        if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$desc\" to tap")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+    }
+
+    private fun until(check: () -> Boolean) {
+        repeat(40) {
+            if (check()) return
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
+    /** Works by hand (A17): Meeting prep's row opens its sheet; 30 min saves, closes it and the row says 30 min; then Off. */
+    private fun prepByHand(core: MekaCore) {
+        val name = "mail-prep-by-hand"
+        val before = runBlocking { core.meetingPrepLeadSetting() }
+        tapSaid(name, MailChoiceRules.prepRow(before).spoken)
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: Meeting prep's row didn't open its sheet")
+        tapSaid(name, MailChoiceRules.prepSheet(before).choices.first { it.name == MeetingPrepLead.THIRTY.name }.spoken)
+        until { runBlocking { core.meetingPrepLeadSetting() } == MeetingPrepLead.THIRTY && !sheetOpen() }
+        if (runBlocking { core.meetingPrepLeadSetting() } != MeetingPrepLead.THIRTY) fail("$name: 30 min didn't save")
+        if (sheetOpen()) fail("$name: the sheet stayed open after a choice")
+        val row = MailChoiceRules.prepRow(MeetingPrepLead.THIRTY).spoken
+        until { compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say 30 min")
+        tapSaid(name, row)
+        until { sheetOpen() }
+        tapSaid(name, MailChoiceRules.prepSheet(MeetingPrepLead.THIRTY).choices.first { it.name == MeetingPrepLead.OFF.name }.spoken)
+        until { runBlocking { core.meetingPrepLeadSetting() } == MeetingPrepLead.OFF && !sheetOpen() }
+        if (runBlocking { core.meetingPrepLeadSetting() } != MeetingPrepLead.OFF) fail("$name: Off didn't save")
+    }
+
     /** Works by hand: Autopilot's Turn off turns it off, and its line and button say so. */
     private fun autopilotByHand(core: MekaCore) {
         val before = runBlocking { core.mailAccounts() }?.autopilot ?: fail("Mail: no Autopilot with an account connected")
@@ -344,6 +410,7 @@ class MailScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyLight() { mail("cover-light-many", Fill.MANY, ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerEmpty() { mail("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { mail("inner-dark-many", Fill.MANY) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun prepByHand() { prepByHand(mail("cover-dark-prep-by-hand", Fill.EMPTY, below = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun autopilotByHand() {
         autopilotByHand(mail("cover-dark-by-hand", Fill.ONE, below = false))
         ScreenShots.reshootAfterHand(compose, "mail", "cover-dark-by-hand") // walk-through A15

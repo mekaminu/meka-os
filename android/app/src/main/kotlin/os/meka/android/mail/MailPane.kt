@@ -86,12 +86,14 @@ import os.meka.core.domain.MailSenderPanelRules
 import os.meka.core.domain.MailSenderRow
 import os.meka.core.domain.MailRuleRow
 import os.meka.core.domain.MailLabel
-import os.meka.core.domain.MailMomentRules
 import os.meka.core.domain.MailMomentTime
+import os.meka.core.domain.MailChoiceRules
+import os.meka.core.domain.NotifyChoiceRow
+import os.meka.core.domain.NotifyChoiceSheet
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.MeetingPrepLead
-import os.meka.core.domain.MeetingPrepRules
 import os.meka.core.domain.MailWarrantyLevel
-import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.MekaCore
 
@@ -205,21 +207,21 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     }
 
     fun setMoment(time: MailMomentTime) = scope.launch {
-        haptics.tick()
+        // The choice sheet gives its own tick haptic.
         message = null
         note = core.setMailMomentTime(time)
         momentTime = time
     }
 
     fun setPrepLead(lead: MeetingPrepLead) = scope.launch {
-        haptics.tick()
+        // The choice sheet gives its own tick haptic.
         message = null
         note = core.setMeetingPrepLead(lead)
         prepLead = lead
     }
 
     fun setWarranty(level: MailWarrantyLevel) = scope.launch {
-        haptics.tick()
+        // The choice sheet gives its own tick haptic.
         message = null
         note = core.setMailWarranty(level)
         warranty = level
@@ -319,13 +321,25 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
                 v.autopilot?.let { MarkReadCard(it, Modifier.appear(rememberAppearance(0))) { switchMarkRead(!it.markRead) } }
                 v.autopilot?.let { ReaderReadCard(it, Modifier.appear(rememberAppearance(0))) { switchReaderRead(!it.readerRead) } }
-                if (v.autopilot != null) momentTime?.let { t -> MomentCard(t, Modifier.appear(rememberAppearance(0))) { setMoment(it) } }
-                if (v.autopilot != null) warranty?.let { w -> WarrantyCard(w, Modifier.appear(rememberAppearance(0))) { setWarranty(it) } }
+                if (v.autopilot != null) momentTime?.let { t ->
+                    MailChoiceSetting(MailChoiceRules.momentRow(t), MailChoiceRules.momentSheet(t), Modifier.appear(rememberAppearance(0))) { n ->
+                        MailChoiceRules.moment(n)?.takeIf { it != t }?.let { setMoment(it) }
+                    }
+                }
+                if (v.autopilot != null) warranty?.let { w ->
+                    MailChoiceSetting(MailChoiceRules.warrantyRow(w), MailChoiceRules.warrantySheet(w), Modifier.appear(rememberAppearance(0))) { n ->
+                        MailChoiceRules.warranty(n)?.takeIf { it != w }?.let { setWarranty(it) }
+                    }
+                }
                 if (v.autopilot != null) waits?.let { p ->
                     WaitsCard(p, Modifier.appear(rememberAppearance(0)), onPick = { id, d -> changeWait(id, d) })
                 }
                 // Meeting prep, slice 2: works from the calendar alone, so it shows whether or not mail is connected.
-                prepLead?.let { l -> PrepLeadCard(l, Modifier.appear(rememberAppearance(0))) { setPrepLead(it) } }
+                prepLead?.let { l ->
+                    MailChoiceSetting(MailChoiceRules.prepRow(l), MailChoiceRules.prepSheet(l), Modifier.appear(rememberAppearance(0))) { n ->
+                        MailChoiceRules.prep(n)?.takeIf { it != l }?.let { setPrepLead(it) }
+                    }
+                }
                 v.rows.forEachIndexed { i, row ->
                     MailAccountCard(
                         row, Modifier.appear(rememberAppearance(i + 1)),
@@ -496,107 +510,15 @@ private fun MailAccountCard(
 }
 
 /**
- * Slice 7: the ten-minute inbox's time — Morning · Evening · Off chips (the lit one blends to the accent with a tick
- * haptic; the line cross-fades). Synced with the Mac.
+ * Walk-through week 5, A17 (no open chip rows on a page): Mail's one-choice setting as one card row saying what's
+ * chosen ("Meeting prep" · "15 min") that opens Notifications' choice sheet (rises over a fading scrim; the choices with
+ * what each does, the one in use lit; a choice ticks, saves and closes it; reduced motion: a cross-fade). Synced.
  */
 @Composable
-private fun MomentCard(time: MailMomentTime, modifier: Modifier, onPick: (MailMomentTime) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MailMomentRules.TITLE + ". " + MailMomentRules.settingLine(time) }) {
-            Text(MailMomentRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(MailMomentRules.settingLine(time), animationSpec = MekaMotion.appear(reduced), label = "moment-line") {
-                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            MailMomentTime.entries.forEach { t ->
-                val lit = t == time
-                val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "moment-chip")
-                val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "moment-ink")
-                Text(
-                    t.label, style = MekaType.itemMeta, color = ink,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                        .clickable(role = Role.Button) { if (!lit) onPick(t) }
-                        .semantics { selected = lit; contentDescription = "Ten-minute inbox: ${t.label}" }
-                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                )
-            }
-        }
-    }
-}
-
-/**
- * Meeting prep, slice 2: how early the prep comes — Off · 5 · 10 · 15 · 30 min chips (the lit one blends to the accent
- * with a tick haptic; the line cross-fades). Synced with the Mac.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun PrepLeadCard(lead: MeetingPrepLead, modifier: Modifier, onPick: (MeetingPrepLead) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MeetingPrepRules.TITLE + ". " + MeetingPrepRules.settingLine(lead) }) {
-            Text(MeetingPrepRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(MeetingPrepRules.settingLine(lead), animationSpec = MekaMotion.appear(reduced), label = "prep-line") {
-                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
-            }
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            MeetingPrepLead.entries.forEach { l ->
-                val lit = l == lead
-                val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "prep-chip")
-                val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "prep-ink")
-                Text(
-                    l.label, style = MekaType.itemMeta, color = ink,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                        .clickable(role = Role.Button) { if (!lit) onPick(l) }
-                        .semantics { selected = lit; contentDescription = "Meeting prep: ${l.label}" }
-                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                )
-            }
-        }
-    }
-}
-
-/**
- * Slice 3f: Warranty reminders — Off · £50 · £100 · £250 · £500 chips (the lit one blends to the accent with a tick
- * haptic; the line cross-fades). Synced with the Mac.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun WarrantyCard(level: MailWarrantyLevel, modifier: Modifier, onPick: (MailWarrantyLevel) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MailWarrantyRules.TITLE + ". " + MailWarrantyRules.settingLine(level) }) {
-            Text(MailWarrantyRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(MailWarrantyRules.settingLine(level), animationSpec = MekaMotion.appear(reduced), label = "warranty-line") {
-                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
-            }
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            MailWarrantyLevel.entries.forEach { l ->
-                val lit = l == level
-                val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "warranty-chip")
-                val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "warranty-ink")
-                Text(
-                    l.label, style = MekaType.itemMeta, color = ink,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                        .clickable(role = Role.Button) { if (!lit) onPick(l) }
-                        .semantics { selected = lit; contentDescription = "Warranty reminders: ${l.label}" }
-                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                )
-            }
-        }
-    }
+private fun MailChoiceSetting(row: NotifyChoiceRow, sheet: NotifyChoiceSheet, modifier: Modifier, onChoose: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    NotifyChoiceRowView(row, modifier) { open = true }
+    if (open) NotifyChoiceSheetView(sheet, onChoose = onChoose, onClose = { open = false })
 }
 
 /**
