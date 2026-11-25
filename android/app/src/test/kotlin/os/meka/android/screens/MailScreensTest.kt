@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -360,6 +361,9 @@ class MailScreensTest {
         val row = MailChoiceRules.prepRow(MeetingPrepLead.THIRTY).spoken
         until { compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isNotEmpty() }
         if (compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say 30 min")
+        // The by-hand shot is the row after its choice (its top before the taps is the empty shot byte for byte).
+        compose.onAllNodes(hasContentDescription(row))[0].performScrollTo()
+        ScreenShots.reshootAfterHand(compose, "mail", "cover-dark-prep-by-hand")
         tapSaid(name, row)
         until { sheetOpen() }
         tapSaid(name, MailChoiceRules.prepSheet(MeetingPrepLead.THIRTY).choices.first { it.name == MeetingPrepLead.OFF.name }.spoken)
