@@ -78,7 +78,8 @@ object LifeAdminPageRules {
     private fun overdueTile(view: LifeAdminView): PageTile =
         if (view.overdueCount == 0) LifePageRules.none("overdue") else PageTile("${view.overdueCount}", "overdue", true)
 
-    fun jobRow(j: LifeAdminJob): PageRow = PageRow(JOB_PREFIX + j.id, j.title, j.lineShown ?: "", "", j.overdue)
+    /** A job's row; its name keeps its last words together ([LoneWordGlue.kept]), as the old page's rows did. */
+    fun jobRow(j: LifeAdminJob): PageRow = PageRow(JOB_PREFIX + j.id, LoneWordGlue.kept(j.title), j.lineShown ?: "", "", j.overdue)
 
     private fun hourRows(view: LifeAdminView, today: Long): List<PageRow> = buildList {
         view.thisWeek?.let { w ->

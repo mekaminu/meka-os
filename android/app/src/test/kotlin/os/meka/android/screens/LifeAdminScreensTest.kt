@@ -259,7 +259,7 @@ class LifeAdminScreensTest {
                 val firstTask = v.jobs.firstOrNull { it.kind == LifeAdminJobKind.TASK }
                 if (firstTask?.overdue != true) fail("$name: the overdue form isn't the first task (${v.jobs.map { it.title }})")
                 // Five rows and See all, never all eleven jobs as cards.
-                if (shows(hasText(v.jobs[LifePageRules.MAX_ROWS].title))) fail("$name: a sixth job is on the page before See all")
+                if (shows(hasText(LoneWordGlue.kept(v.jobs[LifePageRules.MAX_ROWS].title)))) fail("$name: a sixth job is on the page before See all")
                 reach(name, hasText("${LifePageRules.SEE_ALL} ›"), "See all on Gathered into it")
                 // Week 5 A16: open, the page runs the full width like its siblings, not a centred column.
                 val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
@@ -288,7 +288,7 @@ class LifeAdminScreensTest {
 
         tap(name, LifePageRules.SEE_ALL, hasText("${LifePageRules.SEE_ALL} ›"))
         turns()
-        val last = v().allJobs.last().title
+        val last = LoneWordGlue.kept(v().allJobs.last().title)
         reach(name, hasText(last), "the last job after See all")
         tap(name, LifeAdminPageRules.FEWER, hasText("${LifeAdminPageRules.FEWER} ›"))
         turns()
@@ -321,7 +321,7 @@ class LifeAdminScreensTest {
         closeSheet(weekSheet)
 
         val task = v().jobs.first { it.kind == LifeAdminJobKind.TASK }
-        tap(name, task.title, hasText(task.title) and !jobSheet)
+        tap(name, task.title, hasText(LoneWordGlue.kept(task.title)) and !jobSheet)
         until { shows(hasTestTag(LIFE_ADMIN_JOB_SHEET_TAG)) }
         tap(name, LifeAdminPageRules.DONE, hasContentDescription("${LifeAdminPageRules.DONE}, ${task.title}"))
         until { v().allJobs.none { it.id == task.id } }

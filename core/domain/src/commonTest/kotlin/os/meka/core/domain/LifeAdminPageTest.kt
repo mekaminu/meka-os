@@ -71,7 +71,7 @@ class LifeAdminPageTest {
         assertEquals(11, card.count)
         assertEquals(LifePageRules.MAX_ROWS, card.rows.size)
         assertEquals(LifePageRules.SEE_ALL, card.more)
-        assertEquals("Home insurance", card.rows[0].name)
+        assertEquals("Home insurance", card.rows[0].name.replace('\u00A0', ' '))
         assertEquals("Renewal · due Mon 26 Oct", card.rows[0].line.replace(Regex("[\\u00A0\\u2060\\u202F]"), " "))
         // An overdue job says so once, in its line; nothing repeats it on the right.
         assertTrue(card.rows[1].line.contains("overdue"))
