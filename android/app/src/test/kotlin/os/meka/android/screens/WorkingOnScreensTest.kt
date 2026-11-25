@@ -321,7 +321,8 @@ class WorkingOnScreensTest {
             ScreenShots.assertEachOneLine(compose, name, listOfNotNull(c.did, c.need).map { LoneWordGlue.kept(it) })
         }
         // Walk-through 2026-11-08 A29: nothing said twice on the pane (the promise, the answer, a renewal, a call's name).
-        listOf("never sends, books or buys", "Obi has your answer").forEach { said ->
+        // Week 5 (A15): nor that Navilife never sends, in any words.
+        listOf("never sends, books or buys", "never send", "Obi has your answer").forEach { said ->
             val n = timesOnScreen(said)
             if (n > 1) fail("$name: \"$said\" is said $n times")
         }

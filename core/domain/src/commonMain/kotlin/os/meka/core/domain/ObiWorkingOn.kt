@@ -76,6 +76,7 @@ object WorkingOnRules {
     const val ENTITY_ID = "standing_errands"
     const val TITLE = "Obi is working on"
     const val ROW_LINE = "Renewals, birthdays, follow-ups, mail and school he keeps an eye on"
+    /** Walk-through 2026-11-22 A15: the one place the page says he never sends, books or buys (the sheet, the errands and drafts don't). */
     const val INTRO = "Obi keeps an eye on these for you and says when he needs you. He never sends, books or buys anything without your tap."
     /**
      * Walk-through 2026-11-15 A8: with errands on and nothing yet for them, the head says they're on ("3 standing
@@ -83,7 +84,7 @@ object WorkingOnRules {
      */
     fun emptyLine(on: Int): String =
         if (on <= 0) ALL_OFF_LINE
-        else "${plural(on, "standing errand")} on · nothing for them to watch yet · add a renewal, a birthday, something you're waiting on, your mail or the children"
+        else "${plural(on, "standing errand")} on · nothing for them to watch yet"
     const val ALL_OFF_LINE = "Every standing errand is off · turn one on below"
     const val SWITCHES = "Standing errands"
     /** The heading over the standing errands' cards, under the errands he asked for (part 3 slice 4). */

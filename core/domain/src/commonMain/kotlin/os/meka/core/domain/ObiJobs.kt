@@ -193,11 +193,11 @@ object ObiJobRules {
     const val TITLE = "Errands you asked for"
     const val HINT = "Find someone to service the boiler"
     /**
-     * The ask sheet's words, with the promise in full (the sheet stands on its own). Walk-through 2026-11-08 A29: the
-     * pane's section says only [PANE_INTRO], since the page's line above it already says he never sends, books or buys.
+     * The ask sheet's words. Walk-through 2026-11-22 A15: the promise (he never sends, books or buys) is said once, by the
+     * page's line ([WorkingOnRules.INTRO]) the sheet opens over, not again here, in [PANE_INTRO] or under each draft.
      */
-    const val INTRO = "Ask Obi to look into something. He works on it step by step and comes back when he needs you. He never sends, books or buys anything; a draft is for you to send."
-    const val PANE_INTRO = "Ask Obi to look into something. He works on it step by step and comes back when he needs you; a draft is for you to send."
+    const val INTRO = "He works on it step by step and comes back when he needs you."
+    const val PANE_INTRO = "Obi works on each one step by step and comes back when he needs you."
     const val EMPTY = "Nothing asked yet · try “find someone to service the boiler”"
     const val TOO_MANY = "Obi is already on $MAX_OPEN errands · stop one or wait for one to finish"
     const val BLANK = "Say what you'd like Obi to look into"
@@ -241,8 +241,8 @@ object ObiJobRules {
     fun cardLine(text: String): String = "Ask Obi to work on: $text"
     fun startedLine(text: String): String = "Obi is on it · $text · see Obi is working on"
 
-    /** Under every draft: Navilife never sends it. */
-    const val DRAFT_FOOT = "Navilife never sends this; copy it and send it yourself"
+    /** Under every draft (A15: what to do with it; the page's line says once that Navilife never sends). */
+    const val DRAFT_FOOT = "Copy it and send it yourself"
 
     private fun clean(s: String) = s.replace(Regex("""\s+"""), " ").trim()
 

@@ -24,13 +24,13 @@ class WorkingOnTest {
     fun anEmptyPaneSaysItsErrandsAreOnNeverNothingToKeepAnEyeOn() {
         // Walk-through 2026-11-15 A8: the head sat "Nothing to keep an eye on yet" over errands that are on (Turn off).
         val all = WorkingOnRules.view(WorkingOnSetting(), RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today)
-        assertEquals("5 standing errands on · nothing for them to watch yet · add a renewal, a birthday, something you're waiting on, your mail or the children", all.summary)
+        assertEquals("5 standing errands on · nothing for them to watch yet", all.summary)
         assertTrue(all.switches.all { it.on && it.action == "Turn off" })
         val two = WorkingOnRules.view(WorkingOnSetting(setOf(StandingErrand.INBOX, StandingErrand.SCHOOL, StandingErrand.RENEWALS)),
             RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today)
         assertTrue(two.summary.startsWith("2 standing errands on · nothing for them to watch yet"), two.summary)
         assertEquals(two.switches.count { it.on }, 2)
-        assertEquals("1 standing errand on · nothing for them to watch yet · add a renewal, a birthday, something you're waiting on, your mail or the children",
+        assertEquals("1 standing errand on · nothing for them to watch yet",
             WorkingOnRules.emptyLine(1))
         assertEquals(WorkingOnRules.ALL_OFF_LINE, WorkingOnRules.view(WorkingOnSetting(StandingErrand.entries.toSet()),
             RenewalsView.EMPTY, GiftsView.EMPTY, emptyList(), today).summary)
@@ -110,5 +110,19 @@ class WorkingOnTest {
         assertEquals(DailyLine("All off", false), WorkingOnRules.dailyLine(WorkingOnRules.view(WorkingOnSetting(StandingErrand.entries.toSet()), RenewalsView.EMPTY, GiftsView.EMPTY, w, today)))
         val i = DailyInputs(nowMinute = 600, workingOn = DailyLine("1 needs you", true))
         assertEquals(DailyLine("1 needs you", true), DailyRules.lines(i).of(DailyRow.WORKING_ON))
+    }
+
+    @Test
+    fun theWorkingOnPageSaysItsPromiseOnce() {
+        // Walk-through 2026-11-22 A15: the page's line, the errands' line, the ask sheet and every draft's foot each said
+        // that Navilife never sends; now only the page's line does, and the header is a count, not a list of instructions.
+        val words = listOf(WorkingOnRules.INTRO, ObiJobRules.PANE_INTRO, ObiJobRules.INTRO, ObiJobRules.DRAFT_FOOT,
+            BookingCallRules.INTRO, WorkingOnRules.emptyLine(5))
+        assertEquals(1, words.count { it.contains("never send") }, words.toString())
+        assertTrue(WorkingOnRules.INTRO.contains("never sends, books or buys"))
+        assertFalse(ObiJobRules.INTRO.contains("never"))
+        assertFalse(ObiJobRules.PANE_INTRO.contains("a draft is for you to send"))
+        assertTrue(BookingCallRules.INTRO.length < 170, BookingCallRules.INTRO)
+        assertEquals(1, WorkingOnRules.emptyLine(5).count { it == '·' })
     }
 }
