@@ -379,11 +379,29 @@ class EveningShutdownTest {
     }
 
     @Test
+    fun shutDownsTomorrowBlockSaysTheDayOnceAndNeverContradictsItsFacts() {
+        // Walk-through 2026-11-22 A15 (g3a 6, 11): "Nothing planned yet" under the work day, and the day said again under
+        // WAKE ALARM.
+        val p = view().tomorrow.copy(first = null, workLine = null, weatherLine = null, school = null, bills = null, train = null, study = null)
+        val working = p.copy(workLine = "Work 09:00–15:30 · leave 07:40 · home about 16:50")
+        assertEquals(ShutdownRules.NO_EVENTS_OR_TASKS, ShutdownRules.heading(working, titled = false).counts)
+        assertEquals("Nothing planned yet", ShutdownRules.heading(p, titled = false).counts)
+        // The sheet adds nothing: it says "Nothing planned for tomorrow yet." itself.
+        assertEquals(null, ShutdownRules.heading(working, titled = true).counts)
+        val label = "Tomorrow · " + CivilDate.shortLabel(today() + 1)
+        assertEquals(label, p.label)
+        assertEquals(null, ShutdownRules.wakeDayShown(label, p))
+        assertEquals("This morning · Wed 21 Oct", ShutdownRules.wakeDayShown("This morning · Wed 21 Oct", p))
+    }
+
+    @Test
     fun anEmptyTomorrowSaysNothingOnceOnTheSheet() {
         val p = view().tomorrow
         // The sheet says "Nothing planned for tomorrow yet." itself, so the header adds no counts line.
         assertEquals(ShutdownRules.heading(p, titled = true), TomorrowHeading(CivilDate.shortLabel(today() + 1), null, null))
-        assertEquals("Nothing planned yet", ShutdownRules.heading(p, titled = false).counts)
+        // Only a day with no facts either is "Nothing planned yet" on Shut down (a work day says no events or tasks).
+        val bare = p.copy(first = null, workLine = null, weatherLine = null, school = null, bills = null, train = null, study = null)
+        assertEquals("Nothing planned yet", ShutdownRules.heading(bare, titled = false).counts)
     }
 
     @Test

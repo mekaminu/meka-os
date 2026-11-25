@@ -94,22 +94,9 @@ struct TomorrowSheet: View {
                             }
                         }
                         .staggeredAppear(1)
-                        let facts = ShutdownRules.shared.facts(p: p)
-                        if !facts.isEmpty {
-                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                                ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
-                                    Text(LoneWordGlue.shared.kept(line: fact.text)).font(MekaType.itemMeta)
-                                        .foregroundStyle(fact.lit ? palette.accent : palette.textSecondary)
-                                        .accessibilityLabel(fact.spoken ?? fact.text)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.m)
-                            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-                            .lightCardEdge(palette)
+                        TomorrowFactsCard(facts: ShutdownRules.shared.facts(p: p), palette: palette)
                             .padding(.bottom, MekaSpace.xs)
                             .staggeredAppear(1)
-                        }
                         if let said = model.tomorrowSaid {
                             Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                                 .transition(.opacity)
@@ -184,5 +171,28 @@ private struct TomorrowTaskRow: View {
         }
         .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)
+    }
+}
+
+/// Tomorrow's facts (ShutdownRules.facts) in one raised card, one style, lit ones in the accent; nothing when there are
+/// none. Shared by the Tomorrow sheet and Shut down's tomorrow block (walk-through 2026-11-22 A15).
+struct TomorrowFactsCard: View {
+    let facts: [TomorrowFact]
+    let palette: MekaPalette
+
+    var body: some View {
+        if !facts.isEmpty {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+                    Text(LoneWordGlue.shared.kept(line: fact.text)).font(MekaType.itemMeta)
+                        .foregroundStyle(fact.lit ? palette.accent : palette.textSecondary)
+                        .accessibilityLabel(fact.spoken ?? fact.text)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.m)
+            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+            .lightCardEdge(palette)
+        }
     }
 }

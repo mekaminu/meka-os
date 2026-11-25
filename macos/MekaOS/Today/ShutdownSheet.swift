@@ -53,54 +53,21 @@ struct ShutdownSheet: View {
                         // Week board, item (11): how he feels; Tired or Stretched offers to lighten tomorrow.
                         FeelingSection(palette: palette).padding(.top, MekaSpace.l).staggeredAppear(2)
 
-                        // A16: tomorrow's header says each thing once.
+                        // Walk-through 2026-11-22 A15 (g3a 11): the label and the counts on one row, then the day's
+                        // facts in the Tomorrow sheet's one card. It was four tight lines in four type sizes.
                         let heading = ShutdownRules.shared.heading(p: v.tomorrow, titled: false)
-                        SectionLabel(heading.label, palette).padding(.top, MekaSpace.l).staggeredAppear(2)
-                        // Done for the day: tomorrow's first commitment.
-                        if let first = heading.first {
-                            Text(LoneWordGlue.shared.kept(line: first)).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).staggeredAppear(2)
-                        }
-                        if let work = v.tomorrow.workLine {
-                            Text(LoneWordGlue.shared.kept(line: work)).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(2)
-                        }
-                        // Done for the day, the first train: "First train · the 07:42 · leave by 07:32".
-                        if let train = v.tomorrow.train {
-                            Text(LoneWordGlue.shared.kept(line: train.text)).font(MekaType.caption)
-                                .foregroundStyle(train.lit ? palette.accent : palette.textSecondary)
-                                .accessibilityLabel(train.spoken).staggeredAppear(2)
-                        }
-                        // Tomorrow's weather (Weather slice 2).
-                        if let weather = v.tomorrow.weatherLine {
-                            Text(LoneWordGlue.shared.kept(line: weather)).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(2)
-                        }
-                        // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent.
-                        if let school = v.tomorrow.school {
-                            Text(LoneWordGlue.shared.kept(line: school.text)).font(MekaType.caption).foregroundStyle(palette.accent)
-                                .accessibilityLabel(school.spoken).staggeredAppear(2)
-                        }
-                        // Tomorrow on Today, slice 2: bills and renewals due tomorrow, and a last day to cancel.
-                        if let bills = v.tomorrow.bills {
-                            VStack(alignment: .leading, spacing: 0) {
-                                if let due = bills.due {
-                                    Text(LoneWordGlue.shared.kept(line: due)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                                }
-                                if let cancel = bills.cancel {
-                                    Text(LoneWordGlue.shared.kept(line: cancel)).font(MekaType.caption).foregroundStyle(palette.accent)
-                                }
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionLabel(heading.label, palette)
+                            Spacer(minLength: MekaSpace.xs)
+                            if let counts = heading.counts {
+                                Text(LoneWordGlue.shared.kept(line: counts)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                                    .lineLimit(1).contentTransition(.opacity)
                             }
-                            .accessibilityElement(children: .ignore).accessibilityLabel(bills.spoken).staggeredAppear(2)
                         }
-                        // Plan a lesson for a day: "Study · 2 lessons · about 1 h · Pivot tables, Dashboards".
-                        if let study = v.tomorrow.study {
-                            Text(LoneWordGlue.shared.kept(line: study.text)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                                .accessibilityLabel(study.spoken).staggeredAppear(2)
-                        }
-                        if let counts = heading.counts {
-                            Text(LoneWordGlue.shared.kept(line: counts))
-                                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                                .contentTransition(.opacity)
-                                .staggeredAppear(2)
-                        }
+                        .padding(.top, MekaSpace.l).staggeredAppear(2)
+                        TomorrowFactsCard(facts: ShutdownRules.shared.facts(p: v.tomorrow), palette: palette)
+                            .padding(.bottom, MekaSpace.xs)
+                            .staggeredAppear(2)
                         ForEach(v.tomorrow.rows, id: \.id) { r in
                             TomorrowLine(row: r, palette: palette)
                                 .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .move(edge: .top)))
@@ -108,7 +75,7 @@ struct ShutdownSheet: View {
                         }
                         // The smart wake alarm (Alarms, slice 1): confirm MEKA's suggestion or set your own.
                         if let wake = model.wake {
-                            WakeSection(wake: wake, palette: palette)
+                            WakeSection(wake: wake, palette: palette, under: v.tomorrow)
                                 .padding(.top, MekaSpace.l)
                                 .staggeredAppear(3)
                         }

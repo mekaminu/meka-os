@@ -58,6 +58,7 @@ import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ShutdownRules
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.TaskMove
+import os.meka.core.domain.TomorrowFact
 import os.meka.core.domain.TomorrowPeek
 import os.meka.core.domain.TomorrowRow
 import os.meka.core.facade.MekaCore
@@ -197,23 +198,31 @@ private fun TomorrowSheetHeader(v: ShutdownView, modifier: Modifier) {
                 label = "tomorrow-counts",
             ) { s -> if (s != null) Text(LoneWordGlue.kept(s), style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1) }
         }
-        if (facts.isNotEmpty()) {
-            val shape = RoundedCornerShape(MekaRadius.m)
-            Column(
-                Modifier.fillMaxWidth().clip(shape).lightCardEdge(shape).background(Meka.colors.surfaceRaised)
-                    .testTag("tomorrow-facts").padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-            ) {
-                facts.forEach { f ->
-                    Text(
-                        LoneWordGlue.kept(f.text), style = MekaType.itemMeta,
-                        color = if (f.lit) Meka.colors.accent else Meka.colors.textSecondary,
-                        modifier = Modifier.testTag("tomorrow-fact").then(
-                            f.spoken?.let { said -> Modifier.semantics { contentDescription = said } } ?: Modifier,
-                        ),
-                    )
-                }
-            }
+        TomorrowFactsCard(facts)
+    }
+}
+
+/**
+ * Tomorrow's facts ([ShutdownRules.facts]) in one raised card, one style, lit ones in the accent; nothing when there are
+ * none. Shared by the Tomorrow sheet and Shut down's tomorrow block (walk-through 2026-11-22 A15).
+ */
+@Composable
+internal fun TomorrowFactsCard(facts: List<TomorrowFact>, modifier: Modifier = Modifier) {
+    if (facts.isEmpty()) return
+    val shape = RoundedCornerShape(MekaRadius.m)
+    Column(
+        modifier.fillMaxWidth().clip(shape).lightCardEdge(shape).background(Meka.colors.surfaceRaised)
+            .testTag("tomorrow-facts").padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        facts.forEach { f ->
+            Text(
+                LoneWordGlue.kept(f.text), style = MekaType.itemMeta,
+                color = if (f.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                modifier = Modifier.testTag("tomorrow-fact").then(
+                    f.spoken?.let { said -> Modifier.semantics { contentDescription = said } } ?: Modifier,
+                ),
+            )
         }
     }
 }

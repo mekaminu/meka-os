@@ -1378,6 +1378,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(InstantTaskRules.shared.what(move: TaskMove.today), "Today")
         // Tomorrow on Today, slice 3: the sheet's editor finds nothing once the task isn't tomorrow's; the Fold's swipe rule.
         XCTAssertNil(ShutdownRules.shared.taskOf(p: ShutdownView.companion.EMPTY.tomorrow, taskId: "gym"))
+        // A15: under Shut down's tomorrow block the wake alarm says its day only when it's a different one.
+        XCTAssertNil(ShutdownRules.shared.wakeDayShown(wakeDayLabel: "Tomorrow", p: ShutdownView.companion.EMPTY.tomorrow))
+        XCTAssertEqual(ShutdownRules.shared.wakeDayShown(wakeDayLabel: "This morning · Wed 21 Oct", p: ShutdownView.companion.EMPTY.tomorrow), "This morning · Wed 21 Oct")
+        XCTAssertEqual(ShutdownRules.shared.heading(p: ShutdownView.companion.EMPTY.tomorrow, titled: false).counts, "Nothing planned yet")
         XCTAssertTrue(ShutdownRules.shared.swipePages(dragDp: -80, velocityDp: 0, widthDp: 360, toTomorrow: true))
         XCTAssertFalse(ShutdownRules.shared.swipePages(dragDp: 80, velocityDp: 0, widthDp: 360, toTomorrow: true))
     }

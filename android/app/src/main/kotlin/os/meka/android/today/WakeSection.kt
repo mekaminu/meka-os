@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +49,8 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AlarmRules
 import os.meka.core.domain.DurationGlue
+import os.meka.core.domain.ShutdownRules
+import os.meka.core.domain.TomorrowPreview
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 
@@ -59,7 +62,7 @@ import os.meka.core.facade.MekaCore
  * Motion: the digits slide the way the time moved, the line cross-fades, chips blend; reduced motion cross-fades.
  */
 @Composable
-internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
+internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier, under: TomorrowPreview? = null) {
     val w by core.wakeView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -77,7 +80,10 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
 
     Column(modifier.fillMaxWidth()) {
         SectionLabel("Wake alarm")
-        Text(w.dayLabel, style = MekaType.caption, color = Meka.colors.textTertiary)
+        // A15: under Shut down's tomorrow block the day is already said, so only a different day ("This morning · …") shows.
+        (if (under != null) ShutdownRules.wakeDayShown(w.dayLabel, under) else w.dayLabel)?.let {
+            Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.testTag("wake-day"))
+        }
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             WakeStep("‹", "Five minutes earlier") { step(-1) }
             AnimatedContent(

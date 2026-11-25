@@ -10,15 +10,24 @@ struct WakeSection: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let wake: WakeView
     let palette: MekaPalette
+    /// Shut down's tomorrow block above, which already says the day (A15): only a different day's label shows.
+    var under: TomorrowPreview? = nil
     /// The time picked before the alarm is set (nothing is written until Set alarm).
     @State private var draft: Int32?
+
+    private var dayShown: String? {
+        guard let under else { return wake.dayLabel }
+        return ShutdownRules.shared.wakeDayShown(wakeDayLabel: wake.dayLabel, p: under)
+    }
 
     private var minute: Int32 { wake.setMinute?.int32Value ?? draft ?? wake.minute }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             SectionLabel("Wake alarm", palette)
-            Text(wake.dayLabel).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            if let day = dayShown {
+                Text(day).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
             HStack(spacing: MekaSpace.xs) {
                 Button { step(-1) } label: { Image(systemName: "chevron.left") }
                     .buttonStyle(MekaPressStyle()).foregroundStyle(palette.textSecondary)

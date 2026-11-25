@@ -271,7 +271,8 @@ object ShutdownRules {
             first = p.first?.let { "Starts at ${it.time} · ${shorten(it.title)}" },
             counts = when {
                 counts.isNotEmpty() -> counts
-                p.rows.isEmpty() && !titled -> "Nothing planned yet"
+                // Walk-through 2026-11-22 g3a 6: "Nothing planned yet" sat right under the work day it then contradicted.
+                p.rows.isEmpty() && !titled -> if (facts(p).isEmpty()) "Nothing planned yet" else NO_EVENTS_OR_TASKS
                 else -> null
             },
         )
@@ -297,6 +298,16 @@ object ShutdownRules {
         }
         p.study?.let { add(TomorrowFact(it.text, lit = it.lit, spoken = it.spoken)) }
     }
+
+    /** Shut down's counts when tomorrow has facts (work, a bill, school) but no events or tasks. */
+    const val NO_EVENTS_OR_TASKS = "No events or tasks yet"
+
+    /**
+     * Walk-through 2026-11-22 A15 (g3a 11): Shut down said "Tomorrow · Thu 22 Oct" in its tomorrow block and again under
+     * WAKE ALARM. The wake alarm's day line is shown only when it is a different day from the block above it (just after
+     * midnight it reads "This morning · …"); null when the label above already says it.
+     */
+    fun wakeDayShown(wakeDayLabel: String, p: TomorrowPreview): String? = wakeDayLabel.takeIf { it != p.label }
 
     /** The Tomorrow peek shows on Today from 17:00 (Meka 2026-10-26), or from the evening's start when that is earlier. */
     const val PEEK_FROM_MIN = 17 * 60

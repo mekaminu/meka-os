@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -351,6 +352,49 @@ class ShutdownScreensTest {
         scrollTo(hasText("Shut down"))
         check(core, name, atTop = false)
         ScreenShots.assertShows(compose, name, "WAKE ALARM")
+        // A15 (g3a 11): the tomorrow block above already says "Tomorrow · Thu 22 Oct"; the wake alarm doesn't again.
+        val said = core.wakeView.value.dayLabel
+        if (compose.onAllNodes(hasTestTag("wake-day"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() || textNodes(said).isNotEmpty())
+            fail("$name: \"$said\" is said again under WAKE ALARM")
+    }
+
+    /**
+     * Walk-through 2026-11-22 A15 (g3a 11): Shut down's tomorrow block was four tight lines in four type sizes ("Starts at
+     * 07:00 · … / Work … / Due tomorrow · Water bill £32.50 / 1 event · 2 tasks"). Now the label and the counts share one
+     * row and the facts sit in the Tomorrow sheet's one card, the core's facts in its order, none saying tomorrow.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun tomorrowBlockIsOneCardOfFacts() {
+        val name = "cover-dark-many-tomorrow"
+        val core = setUp(ThemeChoice.DARK, Fill.MANY)
+        val p = core.shutdownView.value.tomorrow
+        val want = ShutdownRules.facts(p).map { it.text }
+        if (want.size < 3) fail("$name: the full evening's Thursday has only ${want.size} facts ($want)")
+        scrollTo(hasTestTag("tomorrow-facts"))
+        val card = compose.onAllNodes(hasTestTag("tomorrow-facts"), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
+            ?: fail("$name: no one card of tomorrow's facts")
+        val drawn = compose.onAllNodes(hasTestTag("tomorrow-fact"), useUnmergedTree = true).fetchSemanticsNodes()
+        val texts = drawn.map { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty().replace('\u00A0', ' ') }
+        if (texts != want) fail("$name: the card reads $texts, the core's facts are $want")
+        drawn.forEach { n ->
+            val r = n.boundsInRoot
+            if (r.top < card.boundsInRoot.top || r.bottom > card.boundsInRoot.bottom) fail("$name: a fact sits outside the card")
+        }
+        texts.forEach { if (it.contains("tomorrow", ignoreCase = true)) fail("$name: \"$it\" says tomorrow under the Tomorrow label") }
+        if (compose.onAllNodes(hasText("Due tomorrow", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: \"Due tomorrow\" is still drawn")
+        // The label and the counts on the one row above the card.
+        val head = ShutdownRules.heading(p, titled = false)
+        val row = compose.onNodeWithTag("shutdown-tomorrow-head", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        if (row.bottom > card.boundsInRoot.top + 1f) fail("$name: the label row isn't above the card")
+        listOfNotNull(head.label.uppercase(), head.counts).forEach { t ->
+            val nodes = compose.onAllNodes(SemanticsMatcher("reads \"$t\"") { n ->
+                n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == t
+            }, useUnmergedTree = true).fetchSemanticsNodes()
+            val n = nodes.singleOrNull() ?: fail("$name: \"$t\" shown ${nodes.size} times")
+            val b = n.boundsInRoot
+            if (b.top < row.top - 1f || b.bottom > row.bottom + 1f) fail("$name: \"$t\" isn't on the label row")
+        }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("shutdown", name))
     }
 
     // ---- By hand ----

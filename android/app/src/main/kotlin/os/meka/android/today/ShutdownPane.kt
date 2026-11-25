@@ -184,7 +184,7 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
 
         // The smart wake alarm (Alarms, slice 1): confirm MEKA's suggestion or set your own.
         item(key = "wake") {
-            WakeSection(core, Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(3)))
+            WakeSection(core, Modifier.padding(top = MekaSpace.l), under = v.tomorrow.animateItem().appear(rememberAppearance(3)))
         }
 
         // On this day (Screenshots and photos, slice 4): a photo from this date in past years, picked on the phone.
@@ -275,41 +275,27 @@ private fun LeftRow(
     }
 }
 
+/**
+ * Shut down's tomorrow block (walk-through 2026-11-22 A15, g3a 11): the label ("Tomorrow · Thu 22 Oct") and the counts on
+ * one row, then the day's facts in the same card as the Tomorrow sheet ([TomorrowFactsCard]). It was four tight lines in
+ * four type sizes with no gaps ("Starts at 07:00 · … / Work … / Due tomorrow · … / 1 event · 2 tasks").
+ */
 @Composable
 internal fun TomorrowHeader(v: ShutdownView, modifier: Modifier, titled: Boolean = false) {
     val p = v.tomorrow
     val reduced = Meka.reducedMotion
-    // A16: each thing said once; under the sheet's own "Tomorrow" title ([titled]) the label is the date alone.
     val h = ShutdownRules.heading(p, titled)
-    Column(modifier) {
-        SectionLabel(h.label)
-        // Tomorrow's first commitment, "Starts at 09:30 · Standup".
-        h.first?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textPrimary) }
-        p.workLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
-        // Done for the day, the first train: "First train · the 07:42 · leave by 07:32", in the accent when it often runs late.
-        p.train?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = if (it.lit) Meka.colors.accent else Meka.colors.textSecondary,
-            modifier = Modifier.semantics { contentDescription = it.spoken }) }
-        // Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
-        p.weatherLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
-        // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent so the kit gets packed.
-        p.school?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.semantics { contentDescription = it.spoken }) }
-        // Tomorrow on Today, slice 2: bills and renewals due tomorrow, and a last day to cancel (in the accent).
-        p.bills?.let { b ->
-            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = b.spoken }) {
-                b.due?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
-                b.cancel?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent) }
-            }
+    Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Row(Modifier.fillMaxWidth().testTag("shutdown-tomorrow-head"), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(h.label, Modifier.weight(1f))
+            // The counts roll over to their new value as items are carried in.
+            AnimatedContent(
+                targetState = h.counts,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "tomorrow-summary",
+            ) { s -> if (s != null) Text(LoneWordGlue.kept(s), style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1) }
         }
-        // Plan a lesson for a day: "Study · 2 lessons · about 1 h · Pivot tables, Dashboards".
-        p.study?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = Meka.colors.textSecondary,
-            modifier = Modifier.semantics { contentDescription = it.spoken }) }
-        // The summary rolls over to its new value as items are carried in.
-        AnimatedContent(
-            targetState = h.counts,
-            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
-            label = "tomorrow-summary",
-        ) { s -> if (s != null) Text(LoneWordGlue.kept(s), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
+        TomorrowFactsCard(ShutdownRules.facts(p))
     }
 }
 
