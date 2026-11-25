@@ -77,9 +77,19 @@ object MailAskRules {
     /** Whether [i] matches one of [terms]: a word of its sender or subject starting with the term. */
     fun matches(i: MailItem, terms: List<String>): Boolean {
         if (terms.isEmpty()) return false
+        // School emails first, slice 6: the school's own emails are "the school" however they're sent (a messaging
+        // service's name, a subject with no school word), so "what did the school say?" finds them.
+        if (i.school && terms.any { it == "school" || it == "schools" }) return true
         val ws = words((i.from + " " + i.subject).lowercase())
         return terms.any { t -> ws.any { it.startsWith(t) || (it.length >= 4 && t.startsWith(it)) } }
     }
+
+    /**
+     * School emails first, slice 6: a school email's summary card in words ("When: Sat 28 Nov, 12:00–16:00. Cost: £1 per
+     * adult"), so Obi says what it holds rather than its subject alone; null for any other email or one not read yet.
+     */
+    fun schoolSaid(i: MailItem): String? =
+        if (!i.school) null else SchoolBodyRules.spoken(i.schoolSummary.take(SchoolBodyRules.MAX_LINES))
 
     /** Emails of the last [MailNeedsRules.WINDOW_MS] still on a device: not gone from the inbox some other way. */
     private fun recent(items: List<MailItem>, nowMs: Long): List<MailItem> =
@@ -128,7 +138,7 @@ object MailAskRules {
         val lines = ordered.take(ASK_EMAILS).map { i ->
             listOfNotNull(
                 i.from, i.account, MailNeedsRules.whenLabel(i.receivedAtMs, nowMs, cal),
-                "“${i.subject.trim()}”", state(i, nowMs, cal), i.preview?.trim()?.takeIf { it.isNotEmpty() },
+                "“${i.subject.trim()}”", state(i, nowMs, cal), schoolSaid(i) ?: i.preview?.trim()?.takeIf { it.isNotEmpty() },
             ).joinToString(" · ")
         }
         return listOf(head) + lines
@@ -159,7 +169,7 @@ object MailAskRules {
             }
             val said = hits.take(LOCAL_EMAILS).joinToString("; ") { i ->
                 listOfNotNull("${i.from}: “${i.subject.trim()}”", "${i.account}, ${MailNeedsRules.whenLabel(i.receivedAtMs, nowMs, cal)}",
-                    state(i, nowMs, cal)).joinToString(", ")
+                    state(i, nowMs, cal), schoolSaid(i)).joinToString(", ")
             }
             val answer = if (hits.size == 1) "$said." else "${hits.size} emails: $said" + (if (hits.size > LOCAL_EMAILS) "; and ${hits.size - LOCAL_EMAILS} more." else ".")
             return if (tidiedSaid == null) answer else "$answer $tidiedSaid"

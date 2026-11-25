@@ -330,7 +330,8 @@ object AskRules {
                 health: List<String> = emptyList(), vault: List<String> = emptyList(), workingOn: List<String> = emptyList(), workingOnFromWeb: Boolean = false, team: List<String> = emptyList(), countdowns: List<String> = emptyList(),
                 days: AskDays? = null, dayLines: List<String> = emptyList(), dayEvents: List<CalendarEvent> = emptyList(), dayTasks: List<Task> = emptyList(),
                 movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList(),
-                trains: List<String> = emptyList(), trainsAsked: Boolean = false): AskContext {
+                trains: List<String> = emptyList(), trainsAsked: Boolean = false,
+                schoolFromOthers: Boolean = false, schoolAsked: Boolean = false): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -377,7 +378,9 @@ object AskRules {
         val shop = shopping?.takeIf { it.toBuy.isNotEmpty() || it.got.isNotEmpty() }?.let { shoppingLine(it) }
         // The forecast (weather item): numbers MEKA wrote into words itself, so never untrusted; kept whatever the day holds.
         val forecast = weather.take(WeatherRules.MAX_ASK_LINES).map { AskItem("", AskItemKind.WEATHER, it.take(MAX_LINE)) }
-        // The children's school year (school items, [SchoolRules.askLines]): Meka's own typed lines, never untrusted.
+        // The children's school year (school items, [SchoolRules.askLines], with the week's first: [SchoolAskRules.weekLines]).
+        // Since school emails first (slices 3a–5) most lines are written from the school's emails: [schoolFromOthers]
+        // then makes the context untrusted (below); [schoolAsked] puts them early in the tail, so they're never cut.
         val schoolYear = school.take(ObiArea.SCHOOL.max).map { AskItem("", AskItemKind.SCHOOL, line(it)) }
         // The week's dinners and the favourites (Meal plan slice 2, [MealRules.askLine]): Meka's and his wife's own
         // dinner names; his wife's favourites make the context untrusted like her shopping (below).
@@ -481,7 +484,7 @@ object AskRules {
         // board, in Navilife's words, never untrusted), first in the tail for a question about trains, else just before
         // the forecast, so a full context no longer cuts them before anything else.
         val trainLines = trains.take(MAX_TRAIN_LINES).map { AskItem("", AskItemKind.TRAINS, it.replace(Regex("""\s+"""), " ").trim().take(MAX_LINE)) }
-        val tail = (if (trainsAsked) trainLines else emptyList()) + dayItems + helpLines + notifyLines + mailLines + (if (studyLines.size > 1) studyLines else emptyList()) + moreFull + barcaLines + (if (kidLines.size > 1) kidLines else emptyList()) + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + (if (studyLines.size == 1) studyLines else emptyList()) + (if (kidLines.size == 1) kidLines else emptyList()) + moreCounts + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + (if (trainsAsked) emptyList() else trainLines) + forecast
+        val tail = (if (trainsAsked) trainLines else emptyList()) + (if (schoolAsked) schoolYear else emptyList()) + dayItems + helpLines + notifyLines + mailLines + (if (studyLines.size > 1) studyLines else emptyList()) + moreFull + barcaLines + (if (kidLines.size > 1) kidLines else emptyList()) + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + (if (studyLines.size == 1) studyLines else emptyList()) + (if (kidLines.size == 1) kidLines else emptyList()) + moreCounts + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + (if (schoolAsked) emptyList() else schoolYear) + (if (trainsAsked) emptyList() else trainLines) + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))
@@ -489,7 +492,7 @@ object AskRules {
         val keptRefs = kept.map { it.ref }.toSet()
         // Things his wife added are someone else's words, like a calendar invitation's title.
         val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty() || news.size > 1 || (workingOnFromWeb && workingOn.size > 1) || dayItems.any { it.kind == AskItemKind.EVENT })
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty() || news.size > 1 || (workingOnFromWeb && workingOn.size > 1) || dayItems.any { it.kind == AskItemKind.EVENT } || (schoolFromOthers && schoolYear.isNotEmpty()))
     }
 
     /** Needs you's rows Ask sends (all of them, up to the cap); Live's look-up reads the same lines ([ObiArea.NEEDS_YOU]). */

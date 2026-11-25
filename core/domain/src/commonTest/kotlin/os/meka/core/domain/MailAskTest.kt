@@ -177,4 +177,20 @@ class MailAskTest {
         // Nothing tidied: as before.
         assertEquals("Nothing from that among the emails that needed you in the last 14 days.", MailAskRules.localAnswer("any emails from the plumber?", items, now, cal, emptyList()))
     }
+
+    @Test
+    fun theSchoolsOwnEmailsAnswerWhatDidTheSchoolSayWithTheirSummary() {
+        // School emails first, slice 6: sent through a messaging service, no school word in the sender or subject.
+        val summary = listOf(SchoolSummaryLine("When", "Sat 28 Nov, 12:00–16:00"), SchoolSummaryLine("Cost", "£1 per adult"))
+        val fair = MailNeedsRules.read("s", MailNeedsRules.serverFields("Personal", "Parent Messenger", "noreply@example.com", "Christmas fair",
+            "Dear parents", now - hour, 1, school = true, schoolSummary = summary))!!
+        val other = item("p", 2 * hour, "Parent Messenger", "Book club")
+        assertEquals(
+            "Parent Messenger: “Christmas fair”, Personal, 07:30, When: Sat 28 Nov, 12:00–16:00. Cost: £1 per adult.",
+            MailAskRules.localAnswer("what did the school say?", listOf(fair, other), now, cal),
+        )
+        val lines = MailAskRules.askLines(listOf(other, fair), "What did the school say?", now, cal)
+        assertEquals("Parent Messenger · Personal · 07:30 · “Christmas fair” · When: Sat 28 Nov, 12:00–16:00. Cost: £1 per adult", lines[1])
+        assertNull(MailAskRules.schoolSaid(other))
+    }
 }

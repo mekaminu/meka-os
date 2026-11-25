@@ -503,4 +503,23 @@ class SchoolMailFacadeTest {
         assertEquals(1, fold.schoolView.value.dates.size)
         assertEquals(listOf(idb), fold.mailFinds.value!!.rows.map { it.id })
     }
+
+    @Test
+    fun obiAndTheBriefKnowWhatsOnAtSchoolOnBothApps() = runTest {
+        // School emails first, slice 6: the fair email's date, done for him, is in the brief's school line and in
+        // the device's own answer to "what's on at school this week?" (no AI here), the same on the Fold and the Mac.
+        now += 86_400_000L // Sun 18 Oct: the fair (Sat 24 Oct) is six days off
+        val body = "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall. Entry is £1 per adult."
+        val b = SchoolBodyRules.read("Christmas fair", body, received).finds.single()
+        val id = SchoolMailRules.findId("acc1", b.find)
+        serverWrite(id, SchoolMailRules.serverFields(b.find, "Oakfield Primary", "Personal", "Christmas fair", received) + SchoolBodyRules.findFields(b))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        for (c in listOf(fold, mac)) {
+            assertEquals("Coming up · School fair Sat 24 Oct", c.briefView.value.school?.text)
+            val said = c.askMeka("what's on at school this week?") as os.meka.core.domain.AskOutcome.Answered
+            assertEquals("At school this week: School fair on Sat 24 Oct.", said.answer.text)
+        }
+    }
 }

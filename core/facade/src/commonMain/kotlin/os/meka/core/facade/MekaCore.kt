@@ -12048,7 +12048,7 @@ class MekaCore(
         val barcaMarks = _eventMarks.value
         val barcaEvents = if (!os.meka.core.domain.BarcaAskRules.isAbout(q)) emptyList() else onCore { currentEvents() }
         val barcaAsked = os.meka.core.domain.BarcaBriefRules.shownMatches(barcaEvents, barcaMarks).isNotEmpty()
-        val helpMatch = if (notifyAsked || mailAsked || barcaAsked || os.meka.core.domain.CommuteAskRules.isAbout(q)) null else os.meka.core.domain.HelpRules.lookup(q)
+        val helpMatch = if (notifyAsked || mailAsked || barcaAsked || os.meka.core.domain.SchoolAskRules.isWeek(q) || os.meka.core.domain.CommuteAskRules.isAbout(q)) null else os.meka.core.domain.HelpRules.lookup(q)
         if (helpMatch?.strong == true && !beyondHelp) {
             return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.HelpRules.answer(helpMatch.entry, helpOnMac))
         }
@@ -12056,11 +12056,16 @@ class MekaCore(
         // Kids' admin, slice 4: "what size shoes is Alex?" / "what do the boys need this week?" carry the Kids pane.
         val kidsNow = _kids.value
         val kidsAsked = !kidsNow.isEmpty && os.meka.core.domain.KidAskRules.isAbout(q, kidsNow.kids.map { it.name })
+        // School emails first, slice 6: "what's on at school this week?" answered from the School lines without the AI.
+        val schoolLocal = if (!os.meka.core.domain.SchoolAskRules.isWeek(q)) null else onCore {
+            os.meka.core.domain.SchoolAskRules.localAnswer(q, school.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar())
+        }
         fun unavailable(line: String): os.meka.core.domain.AskOutcome {
             val local = (if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null)
                 ?: (if (mailAsked) os.meka.core.domain.MailAskRules.localAnswer(q, mailItems, nowMs(), cal, mailTidied) else null)
                 ?: commuteLocal
                 ?: (if (kidsAsked) os.meka.core.domain.KidAskRules.localAnswer(q, kidsNow) else null)
+                ?: schoolLocal
                 ?: (if (barcaAsked) os.meka.core.domain.BarcaAskRules.localAnswer(q, barcaEvents, barcaMarks, nowMs(), cal) else null)
             return if (local != null) os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(local, emptyList()))
             else os.meka.core.domain.AskOutcome.Unavailable(line)
@@ -12175,7 +12180,11 @@ class MekaCore(
                 // whether each is an office day and TfL's planned status for that morning when it's been read.
                 days = askDays, dayLines = askDays?.let { r -> os.meka.core.domain.DayAskRules.askLines(r, askDayEvents, askDayTasks, cal.epochDayOf(nowMs()), cal) +
                     (if (os.meka.core.domain.TrainDayAskRules.isAbout(q)) os.meka.core.domain.TrainDayAskRules.askLines(r, lineStatus.snapshot(), hoursOf(_workMode.value, cal.epochDayOf(nowMs())), nowMs(), cal) else emptyList()) }.orEmpty(),
-                dayEvents = askDayEvents, dayTasks = askDayTasks, trains = trainLines, trainsAsked = trainsAsked)
+                dayEvents = askDayEvents, dayTasks = askDayTasks, trains = trainLines, trainsAsked = trainsAsked,
+                // School emails first, slice 6: "what's on at school this week?" keeps the school's lines; the lines
+                // written from the school's emails are other people's words.
+                schoolFromOthers = os.meka.core.domain.SchoolAskRules.fromEmail(school.items()),
+                schoolAsked = os.meka.core.domain.SchoolAskRules.isAbout(q))
                 // The companion, slice 3: "sir" when he chose it in Settings → Voice.
                 // The companion, slice 5: the notes of earlier chats, only with an open question or one about an earlier chat.
                 // One name everywhere, slice 2: the companion calls him what Today and the orb do (About you → Your name).
@@ -13879,7 +13888,11 @@ class MekaCore(
             os.meka.core.domain.ObiArea.CAR -> os.meka.core.domain.CarAskRules.askLines(os.meka.core.domain.CarRules.views(car.cars(), renewals.items(), carCheck(), today, cal), today)
             os.meka.core.domain.ObiArea.GIFTS -> os.meka.core.domain.GiftAskRules.askLines(gifts.view())
             os.meka.core.domain.ObiArea.PEOPLE -> os.meka.core.domain.PeopleAskRules.askLines(_people.value)
-            os.meka.core.domain.ObiArea.SCHOOL -> os.meka.core.domain.SchoolRules.askLines(school.items(), today, bankHolidays.calendar())
+            os.meka.core.domain.ObiArea.SCHOOL -> school.items().let { items ->
+                // School emails first, slice 6: the week's school things first, then the school year.
+                os.meka.core.domain.SchoolAskRules.weekLines(items, today, bankHolidays.calendar()) +
+                    os.meka.core.domain.SchoolRules.askLines(items, today, bankHolidays.calendar())
+            }
             os.meka.core.domain.ObiArea.LEAVE -> os.meka.core.domain.LeaveAskRules.askLines(_leave.value, work.schedule().enabled, q)
             os.meka.core.domain.ObiArea.WINS -> os.meka.core.domain.WinAskRules.askLines(wins.all(), today)
             os.meka.core.domain.ObiArea.QUEUE -> os.meka.core.domain.QueueAskRules.askLines(trainQueue.items(), now, cal)
@@ -14963,6 +14976,8 @@ class MekaCore(
         // School rhythm, slice 2: what the school says about today (Today's header, the brief) and tomorrow (the shutdown).
         val schoolItems = school.items()
         val schoolToday = os.meka.core.domain.SchoolRules.todayLine(schoolItems, todayDay, holidays)
+        // School emails first, slice 6: the brief also names the school's next dates of the coming days.
+        val schoolBrief = os.meka.core.domain.SchoolAskRules.briefLine(schoolItems, todayDay, holidays)
         // Bin days, slice 1: the bins (each collection a day later in a bank-holiday week).
         val binItems = bins.items()
         // Gift planner, slice 1: the birthdays and anniversaries with their ideas.
@@ -15272,12 +15287,12 @@ class MekaCore(
             "Brief", replica,
             listOf(
                 all, dayEvents, allEvents, marks, workState, notifySettings, _lists.value, _goals.value, _fasting.value, today,
-                forecast, placesLine, schoolToday, holidays, workHolidays, leaveDays, leaveHours, office, briefToday, briefNeedsYou, briefMail,
+                forecast, placesLine, schoolBrief, holidays, workHolidays, leaveDays, leaveHours, office, briefToday, briefNeedsYou, briefMail,
                 carLapses, minuteNow(), timeZone(),
             ),
         ) {
             brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
-                news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday,
+                news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolBrief,
                 upNextId = briefToday.upNext?.id, work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
                 newsFollows = news.follows(), newsRead = news.readKeys().toHashSet()).let {
                     // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".

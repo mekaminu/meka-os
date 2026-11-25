@@ -22,3 +22,4 @@ tip: When the school writes that a date is cancelled or moved, what Navilife mad
 tip: In Family, under School emails, choose what each school event added for you gets: a task on the day (with a reminder 3 days before) and a task the day before (with its reminder); turn any off and the next school dates follow.
 tip: When the school says something is cancelled but gives no date, nothing is taken out on its own: its row in From the school names the date you have and asks you to check, with Take it out and Keep it.
 tip: The first time, Navilife reads the last 30 days of the school's emails and adds what's still to come; you get one notification saying what was added (each one is in Done for you with Undo), not one per date.
+tip: Ask Obi "what did the school say?" or "what's on at school this week?": he answers from the school's emails and your School dates, and the morning brief names the school's dates of the coming days ("Coming up · School fair Sat 28 Nov").

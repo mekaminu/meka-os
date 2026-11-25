@@ -24,7 +24,9 @@ enum class ObiArea(val key: String, val kind: AskItemKind, val label: String, va
     CAR("car", AskItemKind.CAR, "Car", "Car", CarAskRules.ASK_LINES_ALL),
     GIFTS("gifts", AskItemKind.GIFTS, "Birthdays and gifts", "Gifts", 1 + GiftAskRules.ASK_ITEMS),
     PEOPLE("people", AskItemKind.PEOPLE, "People and promises", "People", PeopleAskRules.ASK_LINES),
-    SCHOOL("school", AskItemKind.SCHOOL, "School dates", "Kids → School", SchoolRules.ASK_OFF + SchoolRules.ASK_DATES + SchoolRules.ASK_WEEKLY),
+    // School emails first, slice 6: the week's school things first ([SchoolAskRules.weekLines]); most are written from
+    // the school's emails, so other people's words.
+    SCHOOL("school", AskItemKind.SCHOOL, "School dates", "Kids → School", SchoolAskRules.ASK_WEEK + SchoolRules.ASK_OFF + SchoolRules.ASK_DATES + SchoolRules.ASK_WEEKLY, untrusted = true),
     LEAVE("leave", AskItemKind.LEAVE, "Annual leave", "Leave", LeaveAskRules.MAX_LINES),
     WINS("wins", AskItemKind.WINS, "Work wins", "Wins", WinAskRules.ASK_ITEMS + 1),
     QUEUE("queue", AskItemKind.QUEUE, "Train queue", "Train queue", QueueAskRules.ASK_ITEMS + QueueAskRules.ASK_DONE + 1, untrusted = true),
