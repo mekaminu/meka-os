@@ -4420,6 +4420,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(v.bars.count, 6)
         XCTAssertEqual(v.months.first(where: { $0.on })?.value, 6)
         XCTAssertFalse(v.obiLit)
+        // Found and fixing week 5, A15: what's spare is said once, in Obi's line; no interest leaves no split line.
+        XCTAssertEqual(v.split, "")
+        XCTAssertTrue(v.obi.contains("leaves about £650 spare"))
         XCTAssertEqual(MoneySave.shared.snap(pence: 31_000), 30_000)
         XCTAssertEqual(MoneyTabs.shared.tabOf(s: .save), MoneyTab.plan)
     }

@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -153,6 +154,10 @@ class MoneySaveScreensTest {
         val spare = MoneyRules.fmt(MoneySave.spareAfter(base.startPence, left))
         assertTrue(MoneySave.obi(base.startPence, left).first.contains("leaves about $spare spare"), "Obi's sum isn't the split line's")
         assertTrue(showsText("leaves about $spare spare"), "Obi's line isn't what's spare after the amount ($spare)")
+        // Found and fixing week 5, A15 (Plan open): the split line no longer says the same spare above Obi's line.
+        if (showsText("after saving this")) fail("What if I save says what's spare twice (the split line and Obi's)")
+        assertEquals(1, compose.onAllNodes(ScreenShots.plainText(spare, substring = true) and hasAnyAncestor(hasTestTag("money-save-card")), useUnmergedTree = true).fetchSemanticsNodes().size,
+            "$spare is said more than once on the save card")
         compose.onNodeWithTag("screen").captureRoboImage("build/outputs/roborazzi/money-plan-save-cover.png")
         tap("money-save-goal")
         // The goal is made on the core (off the main thread): give it a moment, then it's in Goals with a £ number.

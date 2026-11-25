@@ -22,10 +22,10 @@ class MoneySaveTest {
         assertTrue(v.bars.last().last && !v.bars.first().last)
         assertEquals(1.0, v.bars.last().share)
         assertEquals("Nov 2026: £300", v.bars.first().label)
-        // A16: with no interest "You put in £1,800" under "£1,800 by Apr 2027" said it twice; what's left is said instead.
-        assertFalse("You put in" in v.split, v.split)
-        assertTrue(v.split.startsWith("Left each month after saving this"), v.split)
-        assertFalse("interest" in v.split)
+        // A16: with no interest "You put in £1,800" under "£1,800 by Apr 2027" said it twice; week 5 A15: what's left is
+        // Obi's line alone, so with no interest there is no split line.
+        assertEquals("", v.split)
+        assertTrue("leaves about £650 spare" in v.obi, v.obi)
         assertEquals("", MoneySave.view(30_000, 6, 0, base(null)).split)
         assertFalse(". ." in MoneySave.view(30_000, 6, 0, base(null)).spoken)
         assertEquals("Save £1,800 by Apr 2027", v.goalTitle)
@@ -69,7 +69,6 @@ class MoneySaveTest {
         val fits = MoneySave.view(30_000, 6, 0, base(95_000))
         assertTrue(fits.obi.startsWith("£300 a month still leaves about £650 spare"), fits.obi)
         assertFalse(fits.obiLit)
-        assertTrue(fits.split.contains("left each month after saving this and your usual spending: about £650", ignoreCase = true), fits.split)
         val doable = MoneySave.view(70_000, 6, 0, base(95_000))
         assertTrue(doable.obi.startsWith("Doable"), doable.obi)
         val tight = MoneySave.view(90_000, 6, 0, base(95_000))
@@ -114,16 +113,16 @@ class MoneySaveTest {
             assertTrue(now <= last, "£${a / 100} a month leaves £$now, more than a smaller amount's £$last")
             last = now
         }
-        // The slider's split line names the same spare as Obi's line.
+        // Obi's line names the forecast's month less the saving.
         val v = MoneySave.view(110_000, 6, 0, base(left))
-        assertTrue("about £1,120" in v.split && "about £1,120" in v.obi, v.split + " / " + v.obi)
+        assertTrue("about £1,120" in v.obi, v.obi)
     }
 
     @Test
     fun whatIsLeftIsTheForecastsMonthLessTheSaving() {
         // Walk-through 2026-11-02 A2: the forecast says "About £2,220 a month left over"; saving £1,100 leaves £1,120.
         val v = MoneySave.view(110_000, 6, 0, base(221_730))
-        assertTrue(v.split.contains("left each month after saving this and your usual spending: about £1,120", ignoreCase = true), v.split)
+        assertTrue("leaves about £1,120 spare" in v.obi, v.obi)
     }
 
     /** Walk-through A21: "About £2,230 left over" less £1,125 is £1,105 in the split, in Obi's line and in Ask Obi's answer. */
@@ -131,14 +130,25 @@ class MoneySaveTest {
     fun obisSpareIsTheCardsSumNotARoundingOfIt() {
         val left = 223_450L // the forecast says about £2,230
         val v = MoneySave.view(112_500, 6, 0, base(left))
-        assertTrue("about £1,105" in v.split, v.split)
         assertTrue(v.obi.startsWith("£1,125 a month still leaves about £1,105 spare"), v.obi)
         assertEquals(110_500L, MoneySave.spareAfter(112_500, left))
         for (a in listOf(2_500L, 37_500L, 110_000L, 112_500L, 187_500L)) {
             val said = MoneySave.view(a, 6, 0, base(left))
-            val split = Regex("""usual spending: about (£[\d,]+)""").find(said.split)!!.groupValues[1]
             val obi = Regex("""about (£[\d,]+)""").find(said.obi)?.groupValues?.get(1)
-            if (obi != null) assertEquals(split, obi, "£${a / 100}: " + said.split + " / " + said.obi)
+            if (obi != null) assertEquals(MoneyRules.fmt(MoneySave.spareAfter(a, left)), obi, "£${a / 100}: " + said.obi)
+        }
+    }
+
+    /** Found and fixing week 5, A15 (Plan open): what's spare after the saving is said once, in Obi's line. */
+    @Test
+    fun whatIsSpareIsSaidOnce() {
+        for (rate in MoneySave.RATES_BP) for (a in listOf(2_500L, 30_000L, 112_500L, 200_000L)) {
+            val v = MoneySave.view(a, 12, rate, base(223_450))
+            assertFalse("after saving this" in v.split || "spare" in v.split, v.split)
+            val shown = listOf(v.total + " " + v.end, v.split, v.obi, v.basis)
+            for (m in Regex("""£[\d,]+""").findAll(v.obi).map { it.value }) {
+                assertEquals(1, shown.count { m in it }, "$m is said on more than one line: $shown")
+            }
         }
     }
 }

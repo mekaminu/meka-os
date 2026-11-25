@@ -43,11 +43,6 @@ object MoneySave {
     const val HEAD = "WHAT IF I SAVE…"
     const val EACH = "Each month"
 
-    /**
-     * The split's last part (walk-through 2026-11-02 A2): what's left once this saving *and* the usual spending are out,
-     * i.e. the forecast's "About £X a month left over" less the amount, so the two figures on the Plan page agree.
-     */
-    const val LEFT_AFTER = "left each month after saving this and your usual spending: about"
     /** The total's caption starts "saved by Apr 2027", so it can't be read as the forecast's left over by then. */
     const val SAVED = "saved"
     const val MIN_PENCE = 2_500L
@@ -138,13 +133,12 @@ object MoneySave {
         }
         // Found and fixing week 4, A16: with no interest "You put in £2,400" under "£2,400 by Oct 2027" said the figure
         // twice; what he puts in is said only when interest makes the total differ from it.
-        val split = buildList {
-            if (interest >= 50) {
-                add("You put in ${fmt(paidIn)}")
-                add("interest about ${fmt(MoneyForecast.roundTen(interest).coerceAtLeast(100))}")
-            }
-            base.leftPence?.takeIf { it >= 1_000 }?.let { add("$LEFT_AFTER ${fmt(spareAfter(amt, it))}") }
-        }.joinToString(" · ").replaceFirstChar { it.uppercaseChar() }
+        // Found and fixing week 5, A15 (Plan open): the split also said "Left each month after saving this and your usual
+        // spending: about £1,145" straight above Obi's "£1,125 a month still leaves about £1,145 spare in an average
+        // month"; what's spare is Obi's line alone (the same sum, [spareAfter]), so the split is only the interest's part.
+        val split = if (interest >= 50) {
+            "You put in ${fmt(paidIn)} · interest about ${fmt(MoneyForecast.roundTen(interest).coerceAtLeast(100))}"
+        } else ""
         val (obi, lit) = obi(amt, base.leftPence)
         val monthChips = MONTHS.map { m ->
             MoneySaveChip(m, "$m months", m == n, "$m months" + if (m == n) ", selected" else "")
