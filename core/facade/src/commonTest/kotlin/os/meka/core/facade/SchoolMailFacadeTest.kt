@@ -338,6 +338,43 @@ class SchoolMailFacadeTest {
     }
 
     @Test
+    fun theCatchUpAddsOlderEmailsDatesWithOneSummaryNotOneHeadsUpEach() = runTest {
+        // Slice 5: two emails from ten days ago (the 30-day read) and one from yesterday. The older ones' dates are
+        // added and shown, but said once together; yesterday's is its own heads-up and not in the summary.
+        val older = received - 9
+        val fair = schoolEmail(
+            "Christmas fair", "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall.\n\nThank you", older,
+        )
+        val disco = schoolEmail(
+            "Halloween disco", "Dear parents,\n\nThe Halloween disco is on Friday 30 October, 5pm-7pm in the school hall.\n\nThank you", older,
+        )
+        val choir = schoolEmail(
+            "Choir concert", "Dear parents,\n\nThe choir concert is on Thursday 29 October, 2pm-3pm in the school hall.\n\nThank you", received,
+        )
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(3, fold.schoolView.value.dates.size)
+        assertEquals(3, fold.doneForYou.value.count { it.id.startsWith(SchoolDoneRules.PREFIX) })
+        val today = CivilDate.toEpochDay(2026, 10, 17)
+        for (core in listOf(fold, mac)) {
+            val notices = core.noticesNow()
+            val summary = notices.single { it.key == "schoolcatchup:$today" }
+            assertEquals(SchoolDoneRules.CATCH_UP_TITLE, summary.title)
+            assertTrue(summary.text.startsWith("2 still to come added from the last 30 days: "), summary.text)
+            assertTrue(summary.text.indexOf("(Sat 24 Oct)") in 0 until summary.text.indexOf("(Fri 30 Oct)"), summary.text)
+            assertFalse(summary.text.contains("(Thu 29 Oct)"), summary.text)
+            assertTrue(notices.none { it.key == "handled:${SchoolDoneRules.rowId(fair)}" || it.key == "handled:${SchoolDoneRules.rowId(disco)}" })
+            assertTrue(notices.any { it.key == "handled:${SchoolDoneRules.rowId(choir)}" })
+        }
+        // Undo one of them on the Fold: the summary names only what still stands.
+        assertTrue(fold.undoDoneForYou(SchoolDoneRules.rowId(disco)))
+        val after = fold.noticesNow().single { it.key == "schoolcatchup:$today" }
+        assertTrue(after.text.startsWith("1 still to come added from the last 30 days: "), after.text)
+        assertFalse(after.text.contains("(Fri 30 Oct)"), after.text)
+    }
+
+    @Test
     fun aCancelledSchoolDateTakesOutWhatWasMadeOnBothAppsAndSaysSo() = runTest {
         // Slice 4c: the fair (Sat 24 Oct) was done for him; the school's next email calls it off.
         val ida = fairDoneForHim()

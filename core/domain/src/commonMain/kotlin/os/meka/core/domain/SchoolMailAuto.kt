@@ -483,6 +483,68 @@ object SchoolDoneRules {
     /** The heads-ups ([HandleForMeRules.notices]): "Done for you · from the school" · the line, once each, opening Needs you. */
     fun notices(rows: List<DoneForYou>, finds: List<MailFind>, nowMs: Long, cal: LocalCalendar): List<Notice> =
         HandleForMeRules.notices(notifiable(rows, finds, nowMs, cal))
+
+    /*
+     * School emails first, slice 5 (the board's "(5) Catch up once"): the dates added from the school's older emails (the
+     * 30-day read) never notify one by one; instead one heads-up says what the catch-up added, once a day at most.
+     */
+    const val CATCH_UP_TITLE = "Caught up on the school's emails"
+    /** How many of the added dates the summary names before "and N more". */
+    const val CATCH_UP_NAMED = 3
+
+    /**
+     * The catch-up's rows: those from an older email (not [notifiable]) done for him today, not a cancellation or a move
+     * (their own rows say those), soonest date first.
+     */
+    fun catchUp(rows: List<DoneForYou>, finds: List<MailFind>, nowMs: Long, cal: LocalCalendar): List<DoneForYou> {
+        val today = cal.epochDayOf(nowMs)
+        val byId = finds.associateBy { it.id }
+        val fresh = notifiable(rows, finds, nowMs, cal).map { it.id }.toSet()
+        return rows.mapNotNull { r ->
+            val f = findIdOf(r.id)?.let(byId::get) ?: return@mapNotNull null
+            if (r.id in fresh || f.schoolChange != null || cal.epochDayOf(r.atMs) != today) return@mapNotNull null
+            f to r
+        }.sortedWith(compareBy({ it.first.renewDay }, { it.second.atMs })).map { it.second }
+    }
+
+    /** "School fair (Sat 28 Nov)" from a row's line ("School fair · Sat 28 Nov, 12:00–16:00 · in School, …"). */
+    fun catchUpName(r: DoneForYou): String {
+        val parts = r.line.split(" · ")
+        val what = parts.first().trim()
+        val day = parts.getOrNull(1)?.substringBefore(",")?.trim()?.takeIf { it.isNotEmpty() } ?: return what
+        return "$what ($day)"
+    }
+
+    /**
+     * "3 still to come added from the last 30 days: School fair (Sat 28 Nov), Nativity (Wed 9 Dec) and Trip (Fri 11 Dec) ·
+     * each in Needs you with Undo"; null when the catch-up added nothing.
+     */
+    fun catchUpLine(rows: List<DoneForYou>): String? {
+        if (rows.isEmpty()) return null
+        val names = rows.map(::catchUpName)
+        val shown = names.take(CATCH_UP_NAMED)
+        val more = names.size - shown.size
+        val list = when {
+            more > 0 -> shown.joinToString(", ") + " and $more more"
+            shown.size == 1 -> shown.single()
+            else -> shown.dropLast(1).joinToString(", ") + " and " + shown.last()
+        }
+        return "${rows.size} still to come added from the last 30 days: $list · each in Needs you with Undo"
+    }
+
+    /** The one heads-up for today's catch-up (key per day, posted once), opening Needs you; none when nothing was added. */
+    fun catchUpNotices(rows: List<DoneForYou>, finds: List<MailFind>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val caught = catchUp(rows, finds, nowMs, cal)
+        val line = catchUpLine(caught) ?: return emptyList()
+        val atMs = caught.maxOf { it.atMs }
+        return listOf(
+            Notice(
+                key = "schoolcatchup:${cal.epochDayOf(nowMs)}", source = NoticeSource.REQUEST, tier = NoticeTier.HEADS_UP,
+                title = CATCH_UP_TITLE, text = line, atMs = atMs, target = NoticeTarget.NEEDS_YOU,
+                expiresAtMs = atMs + HandleForMeRules.NOTICE_STALE_MS,
+            ),
+        )
+    }
 }
 
 /*

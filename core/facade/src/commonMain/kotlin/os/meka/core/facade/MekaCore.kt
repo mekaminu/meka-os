@@ -15756,7 +15756,17 @@ class MekaCore(
             protectedTime = protectedTime.setting(), workSchedule = work.schedule(),
             // Routines, slice 3b: the quiet notice when a routine starts at its time.
             routines = routines.items(),
-        )
+        ) + schoolCatchUpNotices()
+
+    /**
+     * School emails first, slice 5: one heads-up for the dates added from the school's older emails today
+     * ([os.meka.core.domain.SchoolDoneRules.catchUpNotices]). Caller is on the core.
+     */
+    private fun schoolCatchUpNotices(): List<os.meka.core.domain.Notice> {
+        val rows = schoolDoneRows()
+        if (rows.isEmpty()) return emptyList()
+        return os.meka.core.domain.SchoolDoneRules.catchUpNotices(rows, activity.mailFinds(), nowMs(), ZoneCalendar(timeZone))
+    }
 
     /**
      * When today's protected time starts (local minutes; 0 for a wholly protected day), or null: the ten-minute inbox's

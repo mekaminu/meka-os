@@ -274,6 +274,51 @@ class SchoolMailAutoTest {
         assertEquals(1, shown.size)
         assertTrue(SchoolDoneRules.notices(shown, listOf(old), now, cal).isEmpty())
     }
+
+    @Test
+    fun theCatchUpIsSaidOnceTogetherSoonestFirst() {
+        // Slice 5: dates from older emails added today are one summary; a fresh email's, a change, or yesterday's aren't.
+        fun added(id: String, what: String, day: Long, received: Long, change: String? = null) =
+            find(id, what, day).copy(autoAtMs = now - 60_000, state = MailFindState.ADDED, receivedDay = received, schoolChange = change)
+        fun row(f: MailFind, line: String, atMs: Long = now - 60_000) = DoneForYou(
+            id = SchoolDoneRules.rowId(f.id), from = "From the school · 17:59", line = line, spoken = line, atMs = atMs,
+            taskIds = emptyList(), homeDay = null, person = SchoolDoneRules.PERSON,
+        )
+        val trip = added("a", "Year 5 trip", today + 10, today - 12)
+        val fairOld = added("b", "School fair", sat, today - 20)
+        val nativity = added("c", "Nativity", today + 15, today - 8)
+        val disco = added("d", "Disco", today + 20, today - 6)
+        val fresh = added("e", "Choir", today + 3, today)
+        val moved = added("f", "Cake sale", today + 5, today - 9, change = "moved")
+        val yesterdays = added("g", "Bingo", today + 7, today - 9)
+        val finds = listOf(trip, fairOld, nativity, disco, fresh, moved, yesterdays)
+        val rows = listOf(
+            row(trip, "Year 5 trip · Fri 4 Dec, 09:00 · in School"),
+            row(fairOld, "School fair · Sat 28 Nov, 12:00–16:00 · in School, reminders Wed and Fri"),
+            row(nativity, "Nativity · Wed 9 Dec · in School"),
+            row(disco, "Disco · Mon 14 Dec, 17:00–19:00 · in School"),
+            row(fresh, "Choir · Fri 27 Nov · in School"),
+            row(moved, "Cake sale moved to Sun 29 Nov · in School"),
+            row(yesterdays, "Bingo · Tue 1 Dec · in School", atMs = now - 20 * 60 * 60_000L),
+        )
+        assertEquals(listOf("b", "a", "c", "d"), SchoolDoneRules.catchUp(rows, finds, now, cal).mapNotNull { SchoolDoneRules.findIdOf(it.id) })
+        val n = SchoolDoneRules.catchUpNotices(rows, finds, now, cal).single()
+        assertEquals("schoolcatchup:$today", n.key)
+        assertEquals(SchoolDoneRules.CATCH_UP_TITLE, n.title)
+        assertEquals(
+            "4 still to come added from the last 30 days: School fair (Sat 28 Nov), Year 5 trip (Fri 4 Dec), Nativity (Wed 9 Dec) and 1 more · each in Needs you with Undo",
+            n.text,
+        )
+        assertEquals(NoticeTarget.NEEDS_YOU, n.target)
+        assertEquals(
+            "2 still to come added from the last 30 days: Year 5 trip (Fri 4 Dec) and Nativity (Wed 9 Dec) · each in Needs you with Undo",
+            SchoolDoneRules.catchUpLine(listOf(rows[0], rows[2])),
+        )
+        assertEquals("1 still to come added from the last 30 days: Nativity (Wed 9 Dec) · each in Needs you with Undo", SchoolDoneRules.catchUpLine(listOf(rows[2])))
+        // Only fresh mail, or nothing: no summary.
+        assertTrue(SchoolDoneRules.catchUpNotices(listOf(rows[4]), finds, now, cal).isEmpty())
+        assertNull(SchoolDoneRules.catchUpLine(emptyList()))
+    }
 }
 
 /** The whole path from a long email's words to what is made (the facade test sends the same email). */
