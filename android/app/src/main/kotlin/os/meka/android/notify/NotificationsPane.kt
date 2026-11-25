@@ -19,8 +19,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,7 +69,6 @@ import os.meka.core.domain.DeviceAlerts
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NoticeSource
-import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.NotificationSettings
 import os.meka.core.domain.NotifyRules
 import os.meka.core.domain.NotifyTestRules
@@ -85,7 +83,8 @@ private const val STEP_MINUTES = 15
  * Notification settings (governor v1): what this phone posts, quiet hours, the two digests, and which tier each kind
  * of notice uses. Quiet hours, digests and tiers sync with the Mac; "This phone" is this phone's own.
  *
- * Motion: sections stagger in; a chosen chip's colour blends across; the quiet-hour times unfold when turned on; the
+ * Motion: sections stagger in; "This phone" and each kind of notice are a row whose sheet rises over a scrim, its lit
+ * dot blending across (walk-through week 5, A17: they were open chip rows); the quiet-hour times unfold when turned on; the
  * "what happens next" lines cross-fade as settings change. Reduced motion: cross-fades only.
  *
  * Quality gate slice 57: the chips wrap onto new lines instead of scrolling off the cover screen's edge; every chip,
@@ -146,9 +145,9 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("This phone", 1)
-        ChipRow(DeviceAlerts.entries.map { it.label }, DeviceAlerts.entries.indexOf(device), Modifier.appear(rememberAppearance(1))) {
-            haptics.tick(); governor.setDevice(DeviceAlerts.entries[it])
-        }
+        // Walk-through week 5, A17: no open chip rows on a page; one row says what's chosen and opens the choices.
+        var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
+        NotifyChoiceRowView(NotifyRules.deviceRow(device, DEVICE_TITLE), Modifier.appear(rememberAppearance(1))) { sheetFor = DEVICE_SHEET }
         if (!allowed && device != DeviceAlerts.OFF) {
             PillButton("Allow notifications") {
                 if (Build.VERSION.SDK_INT >= 33) ask.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -218,20 +217,34 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("What goes where", 4)
-        NoticeSource.ADJUSTABLE.forEach { source -> // approvals always reach you (ADR-006), so they aren't listed
-            val choices = NoticeSource.CHOICES.filter { it.ordinal >= source.defaultTier.ordinal }
-            val current = settings.tierFor(source)
-            Column(Modifier.appear(rememberAppearance(4)).padding(vertical = MekaSpace.xxs)) {
-                Text(LoneWordGlue.kept(source.label), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-                ChipRow(choices.map { it.label }, choices.indexOf(current).coerceAtLeast(0), Modifier.padding(top = MekaSpace.xxs)) { i ->
-                    haptics.tick(); scope.launch { core.setNoticeTier(source, choices[i]) }
-                }
+        Column(Modifier.appear(rememberAppearance(4)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            NoticeSource.ADJUSTABLE.forEach { source -> // approvals always reach you (ADR-006), so they aren't listed
+                NotifyChoiceRowView(NotifyRules.tierRow(settings, source)) { sheetFor = source.name }
             }
         }
         Text(LoneWordGlue.kept(NotifyRules.TIER_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
         Spacer(Modifier.height(MekaSpace.xl))
+
+        when (val open = sheetFor) {
+            null -> Unit
+            DEVICE_SHEET -> NotifyChoiceSheetView(
+                NotifyRules.deviceSheet(device, DEVICE_TITLE),
+                onChoose = { name -> NotifyRules.deviceNamed(name)?.let { governor.setDevice(it) } },
+                onClose = { sheetFor = null },
+            )
+            else -> NoticeSource.entries.firstOrNull { it.name == open }?.let { source ->
+                NotifyChoiceSheetView(
+                    NotifyRules.tierSheet(settings, source),
+                    onChoose = { name -> NotifyRules.tierNamed(name)?.let { t -> scope.launch { core.setNoticeTier(source, t) } } },
+                    onClose = { sheetFor = null },
+                )
+            } ?: run { sheetFor = null }
+        }
     }
 }
+
+private const val DEVICE_TITLE = "This phone"
+private const val DEVICE_SHEET = "device"
 
 @Composable
 private fun testColor(ok: Boolean?) = when (ok) {
@@ -243,30 +256,6 @@ private fun testColor(ok: Boolean?) = when (ok) {
 @Composable
 private fun Label(text: String, index: Int) {
     Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(index)))
-}
-
-/**
- * Chips with one lit; the lit colour blends across as the choice changes. They wrap onto a new line rather than scroll
- * off the edge (quality gate slice 57), and each answers a 48 dp touch, the pill drawn the same size as before.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ChipRow(labels: List<String>, selectedIndex: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
-    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        labels.forEachIndexed { i, label ->
-            val on = i == selectedIndex
-            val reduced = Meka.reducedMotion
-            val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "chip-bg")
-            val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "chip-fg")
-            Text(
-                label, style = MekaType.caption, color = fg, maxLines = 1,
-                modifier = Modifier.semantics { selected = on }.clip(RoundedCornerShape(MekaRadius.pill))
-                    .clickable(role = Role.RadioButton) { if (!on) onSelect(i) }.minTouch()
-                    .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            )
-        }
-    }
 }
 
 @Composable

@@ -15,6 +15,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
@@ -31,6 +32,8 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.notify.NotificationsPane
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DeviceAlerts
@@ -50,7 +53,8 @@ import kotlin.test.fail
  * set-up one in Light). Saved under `notifications/` and read for nonsense, cut lines, broken words, split times and
  * numbers, the pane's lines leaving a word alone or starting a line with a dot, every chip whole on one line and inside
  * the pane (they used to scroll off the cover screen's edge), and every chip, switch and − / + answering a 48 dp touch.
- * By hand: quiet hours on, Until 15 minutes later, the midday digest off, a kind of notice moved to Digest.
+ * By hand: quiet hours on, Until 15 minutes later, the midday digest off, a kind of notice moved to Digest from its
+ * row's sheet, and This phone to Digests only and back (walk-through week 5, A17: rows opening sheets, no open chips).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -193,6 +197,16 @@ class NotificationsScreensTest {
         ScreenShots.assertEachOneLine(compose, name, chips)
         assertChipsInView(name, chips)
         assertTouchTargets(name)
+        // Walk-through week 5, A17: no open chip row on the page; This phone and every kind of notice are a row saying
+        // what's chosen.
+        val radios = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).fetchSemanticsNodes()
+        if (radios.isNotEmpty()) fail("$name: ${radios.size} open choice chips on the page; they belong in a sheet")
+        val rows = compose.onAllNodesWithTag(NOTIFY_CHOICE_ROW_TAG).fetchSemanticsNodes()
+        if (rows.size != 1 + NoticeSource.ADJUSTABLE.size) fail("$name: ${rows.size} choice rows, not This phone and ${NoticeSource.ADJUSTABLE.size} kinds")
+        (listOf(NotifyRules.deviceRow(DeviceAlerts.ALL, "This phone")) + NoticeSource.ADJUSTABLE.map { NotifyRules.tierRow(s, it) }).forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(r.spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+                fail("$name: no row reading \"${r.title} · ${r.value}\"")
+        }
         if (s.quiet.enabled) ScreenShots.assertSteppersEndOnTheEdge(compose, name, "notify", "Send a test")
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         when (fill) {
@@ -241,13 +255,33 @@ class NotificationsScreensTest {
         until { !core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY) && onScreen("No digests") }
         if (core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY)) fail("$name: the midday digest didn't go off")
 
-        // The first kind listed: its Digest chip.
+        // The first kind listed: its row opens the sheet, Digest saves it and closes the sheet (A17: no open chips).
         val first = NoticeSource.ADJUSTABLE.first()
-        val digest = compose.onAllNodes(hasText(NoticeTier.DIGEST.label) and hasClickAction())
-        if (digest.fetchSemanticsNodes().isEmpty()) fail("$name: no Digest chip")
-        digest[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { core.notificationSettings.value.tierFor(first) == NoticeTier.DIGEST }
+        tap(NotifyRules.tierRow(core.notificationSettings.value, first).spoken)
+        until { compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty()) fail("$name: ${first.label}'s row didn't open its sheet")
+        val digest = NotifyRules.tierSheet(core.notificationSettings.value, first).choices.first { it.name == NoticeTier.DIGEST.name }
+        tap(digest.spoken)
+        until {
+            core.notificationSettings.value.tierFor(first) == NoticeTier.DIGEST &&
+                compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty()
+        }
         if (core.notificationSettings.value.tierFor(first) != NoticeTier.DIGEST) fail("$name: Digest left ${first.label} at ${core.notificationSettings.value.tierFor(first)}")
+        if (compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()) fail("$name: the sheet stayed open after a choice")
+        if (!onScreen("Digest")) fail("$name: ${first.label}'s row doesn't say Digest")
+
+        // This phone: Digests only from its sheet, then back to Everything.
+        val governor = ApplicationProvider.getApplicationContext<ShotApplication>().governor
+        tap(NotifyRules.deviceRow(DeviceAlerts.ALL, "This phone").spoken)
+        until { compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty() }
+        tap(NotifyRules.deviceSheet(DeviceAlerts.ALL, "This phone").choices.first { it.name == DeviceAlerts.DIGESTS.name }.spoken)
+        until { governor.device.value == DeviceAlerts.DIGESTS && compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty() }
+        if (governor.device.value != DeviceAlerts.DIGESTS) fail("$name: This phone's sheet left it at ${governor.device.value}")
+        tap(NotifyRules.deviceRow(DeviceAlerts.DIGESTS, "This phone").spoken)
+        until { compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty() }
+        tap(NotifyRules.deviceSheet(DeviceAlerts.DIGESTS, "This phone").choices.first { it.name == DeviceAlerts.ALL.name }.spoken)
+        until { governor.device.value == DeviceAlerts.ALL && compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty() }
+        if (governor.device.value != DeviceAlerts.ALL) fail("$name: Everything didn't come back")
         // Walk-through 2026-11-08 A20: the shot shows what the hand set (quiet hours on till 07:15, the first kind in Digest).
         ScreenShots.reshootAfterHand(compose, "notifications", "cover-dark-by-hand")
     }

@@ -1203,7 +1203,65 @@ class NotificationPrefs(private val replica: Replica) {
 }
 
 /** Helpers for the Mac (Kotlin enum members and companions are awkward from Swift). */
+/**
+ * A choice row on Notifications (walk-through week 5, A17: no open chip rows on a page): one card row, [title] over
+ * what's chosen ("This phone" · "Everything", "Morning brief" · "Digest"), and ›; a tap opens [NotifyChoiceSheet].
+ */
+data class NotifyChoiceRow(val title: String, val value: String, val spoken: String)
+
+/** One choice in a Notifications sheet: [name] is the enum's name, [line] says what it does, lit when it's chosen. */
+data class NotifyChoice(val name: String, val label: String, val line: String, val lit: Boolean, val spoken: String)
+
+/** A Notifications choice sheet: its title, a note on what the choice touches, and the choices in order. */
+data class NotifyChoiceSheet(val title: String, val note: String, val choices: List<NotifyChoice>)
+
 object NotifyRules {
+    // ---- Walk-through week 5, A17: "This phone" and each kind of notice are a row opening a sheet, not a chip row ----
+
+    const val DEVICE_NOTE = "Only this device. Quiet hours, digests and what goes where sync with your other devices."
+    const val TIER_SHEET_NOTE = "Syncs with your other devices. Nothing here sends anything for you."
+
+    /** What each device choice does, said in the sheet. */
+    fun deviceLine(d: DeviceAlerts): String = when (d) {
+        DeviceAlerts.ALL -> "Heads-ups, decisions and digests as they come"
+        DeviceAlerts.DIGESTS -> "Only the round-ups and anything critical"
+        DeviceAlerts.OFF -> "Nothing posts on this device"
+    }
+
+    /** What each tier does, said in the sheet. */
+    fun tierLine(t: NoticeTier): String = when (t) {
+        NoticeTier.CRITICAL -> "Always at once, even in quiet hours"
+        NoticeTier.ACTION -> "At once, or when quiet hours end"
+        NoticeTier.HEADS_UP -> "A notification at the time"
+        NoticeTier.DIGEST -> "In the midday or evening round-up"
+        NoticeTier.SILENT -> "Never a notification, only in the app"
+    }
+
+    private fun row(title: String, value: String) = NotifyChoiceRow(title, value, "$title, $value. Opens the choices")
+    private fun choice(name: String, label: String, line: String, lit: Boolean) =
+        NotifyChoice(name, label, line, lit, "$label, $line" + if (lit) ", chosen" else "")
+
+    /** The device row: [title] is "This phone" on the Fold, "This Mac" on the Mac. */
+    fun deviceRow(device: DeviceAlerts, title: String): NotifyChoiceRow = row(title, device.label)
+
+    /** The device sheet: Everything · Digests only · Off, each with what it does, the chosen one lit. */
+    fun deviceSheet(device: DeviceAlerts, title: String): NotifyChoiceSheet = NotifyChoiceSheet(
+        title, DEVICE_NOTE, DeviceAlerts.entries.map { choice(it.name, it.label, deviceLine(it), it == device) },
+    )
+
+    /** A kind of notice's row: its name over the tier it uses ("Morning brief" · "Digest"). */
+    fun tierRow(settings: NotificationSettings, s: NoticeSource): NotifyChoiceRow = row(s.label, settings.tierFor(s).label)
+
+    /** A kind of notice's sheet: its default tier and anything lower ([tierChoices]), the one it uses lit. */
+    fun tierSheet(settings: NotificationSettings, s: NoticeSource): NotifyChoiceSheet {
+        val current = settings.tierFor(s)
+        return NotifyChoiceSheet(s.label, TIER_SHEET_NOTE, tierChoices(s).map { choice(it.name, it.label, tierLine(it), it == current) })
+    }
+
+    /** A sheet's choice back to its enum (null if unknown). */
+    fun deviceNamed(name: String): DeviceAlerts? = DeviceAlerts.entries.firstOrNull { it.name == name }
+    fun tierNamed(name: String): NoticeTier? = NoticeTier.entries.firstOrNull { it.name == name }
+
     /** The settings screens' notes (quality gate slice 57: shared by the Fold, the Mac and the shots). */
     /** Quiet hours' switch row when off (it read "Off" beside its own "Off" pill). */
     const val QUIET_OFF = "No quiet hours"

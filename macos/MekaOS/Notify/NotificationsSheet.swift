@@ -59,7 +59,9 @@ struct NotificationsSheet: View {
             Picker("This Mac", selection: Binding(get: { model.macAlerts }, set: { model.setMacAlerts($0) })) {
                 ForEach(Self.devices, id: \.self) { d in Text(NotifyRules.shared.deviceLabel(d: d)).tag(d) }
             }
-            .pickerStyle(.segmented).labelsHidden()
+            // Walk-through week 5, A17: one menu saying what's chosen ("This Mac: Everything"), as the Fold's row and
+            // sheet, not a row of three segments.
+            .pickerStyle(.menu).fixedSize()
             .staggeredAppear(1)
             HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                 Button("Send a test") { model.sendTestNotification() }

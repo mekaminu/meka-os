@@ -7597,3 +7597,16 @@ The walk-through (g2-needs-00 finding 11) found the task sheet's "Add notes…" 
 - Core: `TaskNotesRules` (LABEL, ADD, HINT, DONE, `shown`, `saved`), `ChecklistRules.ADD_ROW/ADD_ROW_LINE/ADD_DONE`; `TaskSheetInputsTest`.
 - Fold: `TaskDetailRows.NotesSection`, `ChecklistSection.AddItemField`; `TaskSheetInputsTest` (screens): no field before a tap, both rows tall targets, items added on Enter and Done, notes saved trimmed and shown, cleared notes bring the row back.
 - Mac: `NotesEditor` (TaskDetailRows.swift), new `ChecklistAddRow` (RepeatViews.swift). Mac checked nightly.
+
+### Found and fixing, week 5 — slice 85 (2026-11-25): A17 on Notifications
+
+The page had two kinds of open chip rows: "This phone" (Everything · Digests only · Off) and, under What goes where, a
+chip row under every kind of notice (Heads-up · Digest · App only), about twenty rows of chips. Now each is one card row
+(the kind's name on the left, what it uses on the right, ›) opening a sheet that rises over a scrim: the choices with a
+line on what each does, the chosen one lit, and a note on what the choice touches (this device only, or synced). A choice
+saves and closes the sheet. Core `NotifyChoiceRow` / `NotifyChoice` / `NotifyChoiceSheet` and `NotifyRules.deviceRow`,
+`deviceSheet`, `tierRow`, `tierSheet`, `deviceLine`, `tierLine` (test `NotifyChoiceSheetTest`); the Fold's
+`NotifyChoiceViews.kt` and `NotificationsPane` (the ChipRow is gone); `NotificationsScreensTest` checks no choice chip is
+on the page, one row per kind plus This phone each reading its choice, and by hand moves the first kind to Digest and
+This phone to Digests only and back through their sheets. The Mac's What goes where were already menus; This Mac's
+segmented control is now one menu. Motion catalogue's Notifications line updated.
