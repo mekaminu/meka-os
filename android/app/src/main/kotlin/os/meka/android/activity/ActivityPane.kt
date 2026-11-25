@@ -51,7 +51,6 @@ import os.meka.core.domain.ActivityRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.StoppedCallRules
 import os.meka.core.domain.StoppedCallerRow
-import os.meka.android.lists.Chip
 import os.meka.core.facade.MekaCore
 import os.meka.android.shell.SharedMotion
 import os.meka.android.shell.MoreItem
@@ -63,8 +62,8 @@ import os.meka.android.designsystem.sharedTitleInPane
  * what is still as MEKA left it). Opened from Today's header.
  *
  * Motion: the pane springs up (MekaPane); day sections stagger in 40 ms apart; Undo gives a light haptic and the
- * row's line cross-fades to "Undone at 09:12"; the filter chips (All · Reminders · Done for you · Calendar · Calls ·
- * Other, only the kinds there are) blend their colour with a tick haptic and the days cross-fade; Blocked calls (spam
+ * row's line cross-fades to "Undone at 09:12"; the Show row (All · Reminders · Done for you · Calendar · Calls ·
+ * Other, only the kinds there are) opens a sheet rising over a scrim, a choice ticks and the days cross-fade; Blocked calls (spam
  * calls still ring, slice 4: numbers whose calls the block list stopped, with Unblock / Block again) fades in under the
  * filter for All and Calls, and a row's line cross-fades between "Blocked …" and "Unblocked …" with a light haptic; Recent
  * calls (call notifications, slice 4) follows it, a tap unfolding a call's detail on the expand spring; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
@@ -168,7 +167,6 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         note?.let { Text(LoneWordGlue.measured(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         // Filter (slice 3): only shown when there's more than one kind of thing; this phone's choice, never synced.
         var filterName by rememberSaveable { mutableStateOf(ActivityRules.filterNamed(null).name) }
-        val chips = ActivityRules.filters(view)
         // Call notifications, slice 5: opened from a call's notification — Calls, with the call unfolded below.
         val callApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
         val callRequest by remember(callApp) { callApp?.openCall ?: kotlinx.coroutines.flow.MutableStateFlow<CallOpen?>(null) }.collectAsState()
@@ -179,19 +177,13 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
             callApp?.openCall?.value = null
         }
         val filter = ActivityRules.chosen(view, ActivityRules.filterNamed(filterName))
-        if (chips.isNotEmpty()) {
-            // The filters wrap onto a second line on the closed Fold rather than cutting the last chip (walk-through A10),
-            // shared out so none sits alone on the second row (walk-through 2026-11-15, g5b 9: "Calls · 2" alone).
-            os.meka.android.ask.EvenChipRows(
-                MekaSpace.xs,
-                Modifier.fillMaxWidth().padding(top = MekaSpace.xs).appear(rememberAppearance(1)),
-            ) {
-                chips.forEach { c ->
-                    Chip(c.label, c.filter == filter) {
-                        if (c.filter != filter) { haptics.tick(); filterName = c.filter.name }
-                    }
-                }
-            }
+        // Walk-through week 5, A17: no open chip rows on a page; one Show row ("Calls · 2 of 9") opens the choices.
+        var showOpen by rememberSaveable { mutableStateOf(false) }
+        ActivityRules.showRow(view, filter)?.let { row ->
+            ActivityShowRowView(row, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1))) { showOpen = true }
+        }
+        if (showOpen) ActivityRules.showSheet(view, filter)?.let { sheet ->
+            ActivityShowSheetView(sheet, onChoose = { f -> filterName = f.name }, onClose = { showOpen = false })
         }
         val blocked by core.blockedCallers.collectAsState()
         AnimatedContent(

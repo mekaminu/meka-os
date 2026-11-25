@@ -25,7 +25,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.activity.ACTIVITY_SHOW_ROW_TAG
+import os.meka.android.activity.ACTIVITY_SHOW_SHEET_TAG
 import os.meka.android.activity.ActivityPane
+import androidx.compose.ui.test.hasTestTag
 import os.meka.android.ask.TalkAutoListen
 import os.meka.android.ask.TalkPane
 import os.meka.android.designsystem.Meka
@@ -224,13 +227,17 @@ class TalkActivityScreensTest {
             }
         }
         ScreenShots.assertReadable(compose, name, rows.flatMap { listOfNotNull(it.summary, it.detail, it.why) }, mustShow = false)
-        ScreenShots.assertEachOneLine(compose, name, ActivityRules.filters(v).map { it.label } + rows.map { it.time })
-        // Walk-through 2026-11-15, g5b 9: on the cover "Calls · 2" wrapped alone onto a second row; the chips share out.
-        val chipTops = ActivityRules.filters(v).map { c ->
-            compose.onAllNodesWithText(c.label, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot.top.toInt()
-        }
-        if (chipTops.distinct().size > 1 && chipTops.count { it == chipTops.last() } == 1) {
-            fail("$name: the last filter chip sits alone on its row: ${ActivityRules.filters(v).map { it.label }} at $chipTops")
+        ScreenShots.assertEachOneLine(compose, name, rows.map { it.time })
+        // Walk-through week 5, A17: no open chip row on the page; with more than one kind, one Show row says what's shown.
+        val filterChips = ActivityRules.filters(v).filter { it.filter != ActivityFilter.ALL }
+        val chipOnPage = filterChips.filter { c -> compose.onAllNodes(hasText(c.label) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        if (chipOnPage.isNotEmpty()) fail("$name: open filter chips on the page: ${chipOnPage.map { it.label }}")
+        val show = ActivityRules.showRow(v, ActivityFilter.ALL)
+        val showRows = compose.onAllNodes(hasTestTag(ACTIVITY_SHOW_ROW_TAG)).fetchSemanticsNodes().size
+        if ((show != null) != (showRows == 1)) fail("$name: Show row $showRows on screen for $show")
+        if (show != null) {
+            ScreenShots.assertShows(compose, name, show.value)
+            ScreenShots.assertTallTarget(compose, name, hasTestTag(ACTIVITY_SHOW_ROW_TAG))
         }
         ScreenShots.assertNoLoneWords(compose, name, rows.flatMap { listOfNotNull(it.summary, it.why) })
         // Walk-through A28: the line under the title ("1 / reminder"), the stopped calls' line ("stopped.") and the kept
@@ -245,21 +252,31 @@ class TalkActivityScreensTest {
         return core
     }
 
-    /** Works by hand: a filter chip narrows the days to its kind, and Undo takes a change back. */
+    /** Works by hand: Show → Reminders narrows the days to its kind, and Undo takes a change back. */
     private fun activityByHand(core: MekaCore) {
         val v = core.activityView.value
         val chips = ActivityRules.filters(v)
         val reminders = chips.firstOrNull { it.filter == ActivityFilter.REMINDERS } ?: fail("Activity: no Reminders chip in $chips")
         val doneForYou = v.days.flatMap { it.rows }.filter { it.canUndo }
         if (doneForYou.isEmpty()) fail("Activity: nothing to undo")
-        compose.onAllNodes(hasText(reminders.label) and hasClickAction())[0].performClick()
+        // A17: the Show row opens its sheet; Reminders there shows it and closes the sheet.
+        compose.onNode(hasTestTag(ACTIVITY_SHOW_ROW_TAG)).performClick()
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
+        val sheet = ActivityRules.showSheet(v, ActivityFilter.ALL) ?: fail("Activity: no Show sheet for $chips")
+        if (compose.onAllNodes(hasTestTag(ACTIVITY_SHOW_SHEET_TAG)).fetchSemanticsNodes().isEmpty()) fail("Activity: Show didn't open its sheet")
+        sheet.choices.forEach { c -> ScreenShots.assertShows(compose, "cover-dark-by-hand", c.label) }
+        compose.onAllNodes(hasText(reminders.filter.label) and hasClickAction())[0].performClick()
+        repeat(10) { compose.mainClock.advanceTimeBy(SETTLE_MS); compose.waitForIdle() }
+        if (compose.onAllNodes(hasTestTag(ACTIVITY_SHOW_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()) fail("Activity: the Show sheet stayed open after a choice")
+        ScreenShots.assertShows(compose, "cover-dark-by-hand", ActivityRules.showRow(v, ActivityFilter.REMINDERS)!!.value)
         val still = doneForYou.filter { r -> compose.onAllNodes(hasText(LoneWordGlue.kept(r.summary)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         if (still.isNotEmpty()) fail("Activity: Reminders still shows ${still.map { it.summary }}")
-        compose.onAllNodes(hasText(ActivityFilter.ALL.label) and hasClickAction())[0].performClick()
+        compose.onNode(hasTestTag(ACTIVITY_SHOW_ROW_TAG)).performClick()
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
+        compose.onAllNodes(hasText(ActivityFilter.ALL.label) and hasClickAction())[0].performClick()
+        repeat(10) { compose.mainClock.advanceTimeBy(SETTLE_MS); compose.waitForIdle() }
         val undos = compose.onAllNodes(hasText("Undo") and hasClickAction()).fetchSemanticsNodes().size
         if (undos == 0) fail("Activity: no Undo on screen")
         // Walk-through 2026-11-15 A20: with Undo a whole 48 dp target, performScrollTo looped for ever trying to bring it

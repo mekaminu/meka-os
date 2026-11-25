@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 /// is still as MEKA left it). Synced with the Fold. Opened from Today's header or File → Activity… (⇧⌘A).
 /// Motion: the sheet scale-fades; day sections stagger in; Undo gives a light haptic and the row's line cross-fades
 /// to "Undone at 09:12"; the filter (All · Reminders · Done for you · Calendar · Calls · Other, only the kinds there are)
-/// is a segmented control (tick haptic) and the days cross-fade; Blocked calls (spam calls still ring, slice 4: numbers
+/// is one Show menu (tick haptic) and the days cross-fade; Blocked calls (spam calls still ring, slice 4: numbers
 /// the block list stopped lately, with Unblock / Block again) shows under it for All and Calls, its rows cross-fading,
 /// then Recent calls (call notifications, slice 4), a click unfolding a call's detail on the expand spring; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this Mac lately, the month's characters) fade in once known. Reduce Motion:
 /// cross-fades.
@@ -77,7 +77,9 @@ struct ActivitySheet: View {
                             Text(c.label).tag(c.filter.name).accessibilityLabel(c.spoken)
                         }
                     }
-                    .pickerStyle(.segmented).labelsHidden()
+                    // Walk-through week 5, A17: one Show menu ("Show: Calls · 2"), as the Fold's Show row, not a
+                    // row of six segments.
+                    .pickerStyle(.menu).fixedSize()
                     .staggeredAppear(1)
                 }
                 let shown = ActivityRules.shared.filtered(view: view, filter: filter)

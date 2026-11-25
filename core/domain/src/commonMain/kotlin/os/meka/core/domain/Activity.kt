@@ -185,6 +185,18 @@ enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>) {
 /** One filter chip: "Calls · 3" (All carries no count). */
 data class ActivityFilterChip(val filter: ActivityFilter, val label: String, val count: Int, val spoken: String)
 
+/**
+ * Activity's Show row (walk-through week 5, A17: no open chip rows on a page): one card row over the days, "Show" with
+ * what's shown ("All · 9 entries", "Calls · 2 of 9"), opening [ActivityShowSheet].
+ */
+data class ActivityShowRow(val title: String, val value: String, val spoken: String)
+
+/** One choice in Activity's Show sheet: the kind, how many ("2 entries"), lit when it's the one shown. */
+data class ActivityShowChoice(val filter: ActivityFilter, val label: String, val line: String, val lit: Boolean, val spoken: String)
+
+/** Activity's Show sheet: its title, what choosing does, and one choice per filter the days have. */
+data class ActivityShowSheet(val title: String, val note: String, val choices: List<ActivityShowChoice>)
+
 /** What an undo did. */
 enum class UndoOutcome(val line: String) {
     UNDONE("Undone"),
@@ -556,6 +568,38 @@ object ActivityRules {
     /** [chosen] while it still has a chip, else All (the last call of that kind aged out, or a filter no longer applies). */
     fun chosen(view: ActivityView, chosen: ActivityFilter): ActivityFilter =
         if (filters(view).any { it.filter == chosen }) chosen else ActivityFilter.ALL
+
+    const val SHOW_TITLE = "Show"
+    const val SHOW_NOTE = "Only how this device shows Activity. Nothing is changed or synced."
+
+    private fun entries(n: Int): String = if (n == 1) "1 entry" else "$n entries"
+
+    /**
+     * The Show row over Activity's days (A17): null when there's nothing to choose between (see [filters]); else what's
+     * shown, "All · 9 entries" or "Calls · 2 of 9".
+     */
+    fun showRow(view: ActivityView, chosen: ActivityFilter): ActivityShowRow? {
+        val chips = filters(view)
+        if (chips.isEmpty()) return null
+        val f = chosen(view, chosen)
+        val all = chips.first { it.filter == ActivityFilter.ALL }.count
+        val chip = chips.first { it.filter == f }
+        val value = if (f == ActivityFilter.ALL) "${f.label} · ${entries(all)}" else "${f.label} · ${chip.count} of $all"
+        return ActivityShowRow(SHOW_TITLE, value, "$SHOW_TITLE, ${value.replace(" · ", ", ")}. Opens the choices")
+    }
+
+    /** The Show sheet (A17): one choice per chip, in the chips' order, the shown one lit; null when [showRow] is. */
+    fun showSheet(view: ActivityView, chosen: ActivityFilter): ActivityShowSheet? {
+        val chips = filters(view)
+        if (chips.isEmpty()) return null
+        val f = chosen(view, chosen)
+        val choices = chips.map { c ->
+            val line = entries(c.count)
+            ActivityShowChoice(c.filter, c.filter.label, line, c.filter == f,
+                "${c.filter.label}, $line" + if (c.filter == f) ", shown" else "")
+        }
+        return ActivityShowSheet(SHOW_TITLE, SHOW_NOTE, choices)
+    }
 
     /** Looks up a filter by its name (as a device remembers it); All for anything unknown. */
     fun filterNamed(name: String?): ActivityFilter = ActivityFilter.entries.firstOrNull { it.name == name } ?: ActivityFilter.ALL

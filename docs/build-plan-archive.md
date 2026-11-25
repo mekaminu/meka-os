@@ -7582,3 +7582,11 @@ The walk-through (about-you finding 6) found About you a page of always-open tex
 - Core: `AboutYou.kt` (`AboutEditSheet`, `AboutYouRules.editSheet/childSheet/rowSpoken/hint/emptyLine/watchLine/handleTitle/handleLine`, `AboutRow.purpose`, `AboutYouView.handleTitle`); `AboutYouSheetTest`; `AboutYouTest` and `HandleForMeTest` expect the named lines.
 - Fold: `AboutEditSheetView.kt`; `AboutYouPane` rows and + Add a child; `SettingsScreensTest`: no open text box on the page, and by hand a row opens its sheet holding the value, Save keeps and closes, a refused email stays open with why, Clear then Undo, + Add a child adds one.
 - Mac: the switch's title by her name (`AboutYouSheet.swift`, `testAboutYouReachesSwift`); the Mac's About you stays a settings sheet of fields (the macOS form), so no row-and-sheet there. Mac checked nightly.
+
+### Found and fixing, week 5 — slice 83 (2026-11-25): A17 on Activity
+
+The walk-through (g5-ask-01 finding 8) found Activity's filter chips "All / Reminders · 1 / Done for you · 3 / Calls · 2" an open chip row wrapping onto two rows. On the Fold they are now one card row, Show over what's shown ("All · 9 entries", "Calls · 2 of 9") and ›, opening a sheet: one row per kind present with how many ("1 entry", "2 entries"), the shown one lit in the accent with a dot; a tap shows it and closes the sheet (tick haptic, the days cross-fade); Close, the scrim or Back leaves it as it was; the note says it's only how this device shows Activity. With one kind or nothing, no row, as before. On the Mac the segmented control of up to six segments is one Show menu.
+- Core: `ActivityShowRow`, `ActivityShowChoice`, `ActivityShowSheet`, `ActivityRules.showRow/showSheet`; `ActivityFilterTest` (the row's words, the sheet's choices, none when nothing to choose).
+- Fold: `ActivityShowSheetView.kt` (row and sheet); `ActivityPane`; `TalkActivityScreensTest`: no filter chip clickable on the page, one Show row with its value as a tall target, by hand Show → Reminders closes the sheet and narrows the days, Show → All brings them back before Undo.
+- Mac: `ActivitySheet.swift` picker style menu. Mac checked nightly.
+

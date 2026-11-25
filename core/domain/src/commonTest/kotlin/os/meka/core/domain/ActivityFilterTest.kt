@@ -68,4 +68,42 @@ class ActivityFilterTest {
         assertEquals(ActivityFilter.ALL, ActivityRules.filterNamed("NOPE"))
         assertEquals(ActivityFilter.ALL, ActivityRules.filterNamed(null))
     }
+
+    // ---- Walk-through week 5, A17: the filter is one Show row opening a sheet, never an open chip row ----
+
+    @Test
+    fun theShowRowSaysWhatIsShownAndOfHowMany() {
+        val v = view(
+            listOf(ActivityKind.SCREENED, ActivityKind.REMINDED, ActivityKind.CALL),
+            listOf(ActivityKind.DIGEST, ActivityKind.CHANGED),
+        )
+        val all = ActivityRules.showRow(v, ActivityFilter.ALL)!!
+        assertEquals("Show", all.title)
+        assertEquals("All · 5 entries", all.value)
+        assertEquals("Calls · 2 of 5", ActivityRules.showRow(v, ActivityFilter.CALLS)!!.value)
+        assertEquals("Done for you · 1 of 5", ActivityRules.showRow(v, ActivityFilter.DONE_FOR_YOU)!!.value)
+        // A filter the days no longer have reads as All, as the days do.
+        assertEquals("All · 5 entries", ActivityRules.showRow(v, ActivityFilter.CALENDAR)!!.value)
+        assertTrue(ActivityRules.showRow(v, ActivityFilter.CALLS)!!.spoken.startsWith("Show, Calls, 2 of 5"))
+    }
+
+    @Test
+    fun theShowSheetHasOneChoicePerChipWithTheShownOneLit() {
+        val v = view(listOf(ActivityKind.REMINDED, ActivityKind.CALL, ActivityKind.CALL))
+        val sheet = ActivityRules.showSheet(v, ActivityFilter.CALLS)!!
+        assertEquals(ActivityRules.filters(v).map { it.filter }, sheet.choices.map { it.filter })
+        assertEquals(listOf("All", "Reminders", "Calls"), sheet.choices.map { it.label })
+        assertEquals(listOf("3 entries", "1 entry", "2 entries"), sheet.choices.map { it.line })
+        assertEquals(listOf(ActivityFilter.CALLS), sheet.choices.filter { it.lit }.map { it.filter })
+        assertTrue(sheet.choices.single { it.lit }.spoken.endsWith(", shown"))
+        assertTrue(sheet.note.isNotBlank())
+    }
+
+    @Test
+    fun noShowRowOrSheetWhenThereIsNothingToChoose() {
+        val one = view(listOf(ActivityKind.REMINDED, ActivityKind.DIGEST))
+        assertEquals(null, ActivityRules.showRow(one, ActivityFilter.ALL))
+        assertEquals(null, ActivityRules.showSheet(one, ActivityFilter.ALL))
+        assertEquals(null, ActivityRules.showRow(ActivityView.EMPTY, ActivityFilter.ALL))
+    }
 }
