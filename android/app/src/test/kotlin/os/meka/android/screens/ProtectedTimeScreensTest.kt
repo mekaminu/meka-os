@@ -12,8 +12,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
@@ -28,10 +31,13 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.ProtectedTimePane
+import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.ProtectedChoiceRules
 import os.meka.core.domain.ProtectedMailRules
 import os.meka.core.domain.ProtectedRules
 import os.meka.core.facade.MekaCore
@@ -44,8 +50,9 @@ import kotlin.test.fail
  * Protected time off, with evenings from 19:00, and with evenings and weekends protected and tonight lifted just this
  * once, each on the Fold's cover and inner screens, Dark (and the full one in Light). Saved under `protected/` and read
  * for nonsense, cut lines, broken words, split dates, times and numbers, the pane's own lines leaving a word alone or
- * starting a line with a dot, every chip whole on one line and in view (they wrap, never scroll off the edge), and every
- * button answering a 48 dp touch. By hand: 19:30 moves the evening; Open tonight, just this once lifts tonight and says
+ * starting a line with a dot, each choice row's value on one line, and every
+ * button answering a 48 dp touch. Walk-through week 5, A17: no open chip rows; each choice is a row opening a sheet. By
+ * hand: Evenings from → 19:30 moves the evening and closes the sheet; Work mail → Shows as it comes and back; Open tonight, just this once lifts tonight and says
  * so, and Undo puts it back. Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -120,36 +127,6 @@ class ProtectedTimeScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
-    /** Every chip sits inside the pane's width (they wrap; on the cover screen they used to scroll off the edge). */
-    private fun assertChipsInView(name: String, labels: List<String>) {
-        val pane = compose.onNodeWithTag("protected-pane").fetchSemanticsNode().boundsInRoot
-        labels.forEach { label ->
-            val nodes = compose.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes()
-            // The evening's chips sit near the top and must be there; ones further down may be past the screen's foot.
-            if (nodes.isEmpty()) {
-                if (label == "Off" || label.contains(':')) fail("$name: no \"$label\" chip")
-                return@forEach
-            }
-            val n = nodes.first()
-            val right = n.positionInRoot.x + n.size.width
-            if (n.positionInRoot.x < pane.left - 1f || right > pane.right + 1f) {
-                fail("$name: \"$label\" sits outside the pane (${n.positionInRoot.x / compose.density.density}–${right / compose.density.density} dp)")
-            }
-        }
-    }
-
-    /**
-     * Slice 50: the evening's six chips read just the time under "EVENINGS FROM" and take at most two rows (on the cover
-     * screen they took three, "From" six times).
-     */
-    private fun assertEveningRows(name: String, labels: List<String>) {
-        val tops = labels.mapNotNull { label ->
-            compose.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes().firstOrNull()?.positionInRoot?.y
-        }
-        val rows = tops.map { (it / compose.density.density / 8f).toInt() }.distinct().size
-        if (rows > 2) fail("$name: the evening's chips take $rows rows (at most 2)")
-    }
-
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, shoot: Boolean = true): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
@@ -181,13 +158,22 @@ class ProtectedTimeScreensTest {
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
-        val evening = listOf("Off") + ProtectedRules.FROM_CHOICES.map(ProtectedRules::fromChip)
-        val chips = evening +
-            listOf("Open", "Protected") + (if (v.on) listOf(ProtectedMailRules.ON, ProtectedMailRules.OFF) else emptyList())
-        ScreenShots.assertEachOneLine(compose, name, chips)
-        assertChipsInView(name, chips)
-        assertEveningRows(name, evening)
-        ScreenShots.assertShows(compose, name, ProtectedRules.EVENINGS_FROM_LABEL.uppercase())
+        // Walk-through week 5, A17: no open chip row on the page; Evenings from, Weekends and (while on) Work mail are
+        // each one row saying what's chosen.
+        val radios = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).fetchSemanticsNodes()
+        if (radios.isNotEmpty()) fail("$name: ${radios.size} open choice chips on the page; they belong in a sheet")
+        val chips = listOf("Off") + ProtectedRules.FROM_CHOICES.map(ProtectedRules::fromChip) + listOf("Open", "Protected")
+        chips.forEach { label ->
+            if (compose.onAllNodes(hasText(label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG)).fetchSemanticsNodes().isNotEmpty()) fail("$name: a \"$label\" chip on the page")
+        }
+        val rows = listOfNotNull(ProtectedChoiceRules.eveningsRow(v), ProtectedChoiceRules.weekendsRow(v), if (v.on) ProtectedChoiceRules.mailRow(v) else null)
+        val drawn = compose.onAllNodesWithTag(NOTIFY_CHOICE_ROW_TAG).fetchSemanticsNodes().size
+        if (drawn != rows.size) fail("$name: $drawn choice rows, not ${rows.size}")
+        rows.forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(r.spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+                fail("$name: no row reading \"${r.title} · ${r.value}\"")
+        }
+        ScreenShots.assertEachOneLine(compose, name, rows.map { it.value })
         assertTouchTargets(name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         when (fill) {
@@ -201,6 +187,7 @@ class ProtectedTimeScreensTest {
                 ScreenShots.assertShows(compose, name, "Open tonight, just this once")
                 if (onScreen("Not protected tonight")) fail("$name: \"Not protected tonight\" sits under \"${v.todayLine}\"")
                 ScreenShots.assertShows(compose, name, ProtectedMailRules.ON)
+                ScreenShots.assertShows(compose, name, "19:00")
             }
             Fill.MANY -> {
                 if (!v.openToday) fail("$name: tonight isn't lifted ($v)")
@@ -217,12 +204,34 @@ class ProtectedTimeScreensTest {
      */
     private fun byHand(core: MekaCore) {
         val name = "protected-by-hand"
-        val later = compose.onAllNodes(hasText("19:30") and hasClickAction())
-        if (later.fetchSemanticsNodes().isEmpty()) fail("$name: no 19:30 chip")
-        later[0].performSemanticsAction(SemanticsActions.OnClick)
+        fun tap(desc: String) {
+            val n = compose.onAllNodes(hasContentDescription(desc) and hasClickAction())
+            if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$desc\" to tap")
+            n[0].performSemanticsAction(SemanticsActions.OnClick)
+        }
+        fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
+        // A17: Evenings from opens its sheet; 19:30 saves and closes it.
+        tap(ProtectedChoiceRules.eveningsRow(core.protectedView.value).spoken)
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: Evenings from didn't open its sheet")
+        tap(ProtectedChoiceRules.eveningsSheet(core.protectedView.value).choices.first { it.label == "19:30" }.spoken)
         val moved = LoneWordGlue.kept(ProtectedRules.summary(os.meka.core.domain.ProtectedSetting(true, 19 * 60 + 30, false)))
-        until { core.protectedView.value.fromMin == 19 * 60 + 30 && onScreen(moved) }
+        until { core.protectedView.value.fromMin == 19 * 60 + 30 && onScreen(moved) && !sheetOpen() }
         if (core.protectedView.value.fromMin != 19 * 60 + 30) fail("$name: 19:30 left the evening at ${core.protectedView.value.fromMin}")
+        if (sheetOpen()) fail("$name: the sheet stayed open after a choice")
+
+        // Work mail: Shows as it comes, then back to Waits till morning.
+        tap(ProtectedChoiceRules.mailRow(core.protectedView.value).spoken)
+        until { sheetOpen() }
+        tap(ProtectedChoiceRules.mailSheet(core.protectedView.value).choices.first { it.name == ProtectedChoiceRules.SHOW }.spoken)
+        until { !core.protectedView.value.holdMail && !sheetOpen() }
+        if (core.protectedView.value.holdMail) fail("$name: Shows as it comes left work mail held")
+        tap(ProtectedChoiceRules.mailRow(core.protectedView.value).spoken)
+        until { sheetOpen() }
+        tap(ProtectedChoiceRules.mailSheet(core.protectedView.value).choices.first { it.name == ProtectedChoiceRules.HOLD }.spoken)
+        until { core.protectedView.value.holdMail && !sheetOpen() }
+        if (!core.protectedView.value.holdMail) fail("$name: Waits till morning didn't come back")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(ProtectedRules.summary(os.meka.core.domain.ProtectedSetting(true, 19 * 60 + 30, false))))
 
         val lift = compose.onAllNodes(hasText("Open tonight, just this once") and hasClickAction())

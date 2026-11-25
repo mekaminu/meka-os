@@ -45,35 +45,27 @@ struct ProtectedTimeSheet: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: action)
                     .transition(.opacity)
             }
-            label(rules.EVENINGS_FROM_LABEL).staggeredAppear(2)
-            HStack(spacing: MekaSpace.xs) {
-                chip("Off", lit: !v.evenings) {
-                    model.setProtectedTime(evenings: false, fromMin: v.fromMin, weekends: v.weekends)
+            // Walk-through week 5, A17: each choice is one menu saying what's chosen ("Evenings from: 19:00"), as the
+            // Fold's row and sheet, not a row of chips.
+            let choices = ProtectedChoiceRules.shared
+            menu(choices.eveningsSheet(v: v)) { name in
+                if let pick = choices.eveningNamed(name: name, current: v.fromMin) {
+                    model.setProtectedTime(evenings: pick.on, fromMin: pick.fromMin, weekends: v.weekends)
                 }
-                ForEach(rules.FROM_CHOICES.map { $0.int32Value }, id: \.self) { m in
-                    chip(rules.fromChip(minute: m), lit: v.evenings && v.fromMin == m, spoken: rules.fromSpoken(minute: m)) {
-                        model.setProtectedTime(evenings: true, fromMin: m, weekends: v.weekends)
-                    }
+            }
+            .padding(.top, MekaSpace.xs)
+            .staggeredAppear(2)
+            menu(choices.weekendsSheet(v: v)) { name in
+                if let w = choices.weekendNamed(name: name) {
+                    model.setProtectedTime(evenings: v.evenings, fromMin: v.fromMin, weekends: w.boolValue)
                 }
             }
             .staggeredAppear(3)
-            label(rules.WEEKENDS_LABEL).staggeredAppear(4)
-            HStack(spacing: MekaSpace.xs) {
-                chip("Open", lit: !v.weekends) {
-                    model.setProtectedTime(evenings: v.evenings, fromMin: v.fromMin, weekends: false)
-                }
-                chip("Protected", lit: v.weekends) {
-                    model.setProtectedTime(evenings: v.evenings, fromMin: v.fromMin, weekends: true)
-                }
-            }
-            .staggeredAppear(5)
             if v.on {
                 // Slice 3: work mail waits until morning.
                 let mail = ProtectedMailRules.shared
-                label(mail.LABEL)
-                HStack(spacing: MekaSpace.xs) {
-                    chip(mail.ON, lit: v.holdMail) { model.setProtectedMail(hold: true) }
-                    chip(mail.OFF, lit: !v.holdMail) { model.setProtectedMail(hold: false) }
+                menu(choices.mailSheet(v: v)) { name in
+                    if let hold = choices.mailNamed(name: name) { model.setProtectedMail(hold: hold.boolValue) }
                 }
                 if let held = v.mailLine {
                     Text(LoneWordGlue.shared.kept(line: held)).font(MekaType.caption).foregroundStyle(palette.accent)
@@ -103,23 +95,13 @@ struct ProtectedTimeSheet: View {
         .background(palette.surface)
     }
 
-    private func label(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-            .foregroundStyle(palette.textTertiary)
-            .padding(.top, MekaSpace.xs)
-    }
-
-    private func chip(_ label: String, lit: Bool, spoken: String? = nil, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label).font(MekaType.caption).lineLimit(1)
-                .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
-                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+    /// A choice as one menu: the sheet's title, the lit choice shown, a pick passes its name back.
+    private func menu(_ sheet: NotifyChoiceSheet, choose: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { lit }, set: { if $0 != lit { choose($0) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
         }
-        .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(spoken ?? label)
-        .accessibilityAddTraits(lit ? .isSelected : [])
+        .pickerStyle(.menu).fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
     }
 }

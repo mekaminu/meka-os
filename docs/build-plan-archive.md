@@ -7610,3 +7610,18 @@ saves and closes the sheet. Core `NotifyChoiceRow` / `NotifyChoice` / `NotifyCho
 on the page, one row per kind plus This phone each reading its choice, and by hand moves the first kind to Digest and
 This phone to Digests only and back through their sheets. The Mac's What goes where were already menus; This Mac's
 segmented control is now one menu. Motion catalogue's Notifications line updated.
+
+### Found and fixing, week 5 — slice 86 (2026-11-25): A17 on Protected time
+
+The walk-through (protected finding 4) found Protected time three open chip rows: "Off 18:00 18:30 19:00 / 19:30
+20:00", "Open / Protected" and "Waits till morning / Shows as it comes". Each is now one card row ("Evenings from" ·
+"19:00", "Weekends and bank holidays" · "Open", "Work mail" · "Waits till morning", the last only while something is
+protected) opening Notifications' choice sheet: the choices with a line on what each does, the chosen one lit, a note
+that it syncs; a choice saves and closes it.
+- Core: `ProtectedChoices.kt` (`ProtectedChoiceRules` rows, sheets and `eveningNamed` / `weekendNamed` / `mailNamed`,
+  `EveningPick`), reusing `NotifyChoiceRow` / `NotifyChoice` / `NotifyChoiceSheet`; `ProtectedChoicesTest`.
+- Fold: `ProtectedTimePane` uses `NotifyChoiceRowView` / `NotifyChoiceSheetView`; `ProtectedTimeScreensTest` checks no
+  choice chip is on the page, two or three rows each reading its choice, and by hand Evenings from → 19:30 (sheet
+  closes, summary follows) and Work mail → Shows as it comes and back.
+- Mac: `ProtectedTimeSheet` shows the three as menus built from the same sheets; `testProtectedChoicesReachSwift`.
+  Mac checked nightly. Motion catalogue's Protected time line updated.
