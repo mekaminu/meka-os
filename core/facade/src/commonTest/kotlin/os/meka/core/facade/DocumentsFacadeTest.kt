@@ -45,7 +45,7 @@ class DocumentsFacadeTest {
         assertEquals("2 weeks left", row.status)
         // Week 5, A15: one document's card says it all, so the page's line is the count; Obi's summary keeps the name.
         assertEquals("1 document", mac.documentsView.value.pageLine)
-        assertEquals("Driving licence 12 Nov 2031", mac.documentsView.value.addHint)
+        assertEquals(DocumentRules.ADD_HINT, mac.documentsView.value.addHint, "a railcard on the list: the hint is the passport")
         assertFalse(row.statusLit)
 
         // Sunday 10:00: the window is open, lit, and a heads-up opens the Vault.
