@@ -33,6 +33,8 @@ data class SchoolBodyFind(
     val forWhom: String? = null,
     /** Slice 4b: its date can't be read for sure ([SchoolBodyRules.unclear]); kept as a card to confirm. */
     val unclear: Boolean = false,
+    /** Slice 4c: [SchoolChangeRules.CANCELLED] or [SchoolChangeRules.MOVED] when its sentence says so ([SchoolBodyRules.change]). */
+    val change: String? = null,
 )
 
 object SchoolBodyRules {
@@ -228,6 +230,38 @@ object SchoolBodyRules {
         return false
     }
 
+    private val CANCEL_RE = Regex(
+        """\b(?:cancel+ed|called off|postponed (?:until further notice|indefinitely)|(?:will|can|would) (?:no longer|not now|not) (?:be )?(?:take place|taking place|go ahead|going ahead|be held|run|running|happen|happening)|won'?t (?:now )?(?:be )?(?:take place|taking place|go ahead|going ahead|be held|happen|happening)|(?:is|are) no longer (?:taking place|going ahead|happening|on))\b""", I,
+    )
+    private val MOVE_RE = Regex(
+        """\b(?:(?:has|have|had|been|is|are) (?:now )?(?:been )?moved|moved (?:to|from)|re-?scheduled|re-?arranged|postponed (?:to|until|till)|new date|(?:has|have) changed to|date has changed|changed (?:the )?date|will now (?:be|take place|happen|run)|(?:is|are) now (?:on|taking place|happening)|now takes? place)\b""", I,
+    )
+
+    /**
+     * Slice 4c: whether sentence [s] says a school date was moved ([SchoolChangeRules.MOVED]: "has been moved to Sunday
+     * 29 November", "rescheduled", "will now be on") or called off ([SchoolChangeRules.CANCELLED]: "has been cancelled",
+     * "will no longer take place"); null when it says neither. A sentence that says both ("cancelled and rescheduled to")
+     * is a move.
+     */
+    fun change(s: String): String? = when {
+        MOVE_RE.containsMatchIn(s) -> SchoolChangeRules.MOVED
+        CANCEL_RE.containsMatchIn(s) -> SchoolChangeRules.CANCELLED
+        else -> null
+    }
+
+    /** Slice 4c: a move's new day: the first date after its moving words ("moved from Sat 28 Nov to Sun 29 Nov" → the 29th). */
+    private fun movedTo(s: String, receivedDay: Long): Long? {
+        val m = MOVE_RE.find(s) ?: return null
+        val after = s.substring(m.range.first)
+        val tail = Regex("""\b(?:to|until|till|on|now)\b""", I).findAll(after).map { after.substring(it.range.first) }
+        for (t in tail.toList().asReversed() + after) {
+            val f = SchoolRules.findSpan(t, receivedDay)
+            if (f is SpanFound.Days) return f.startDay
+            MailWeekRules.dayOf(t, receivedDay)?.let { return it }
+        }
+        return null
+    }
+
     // ---- The whole email ----
 
     /**
@@ -242,7 +276,7 @@ object SchoolBodyRules {
         val sents = sentences(body)
         val all = listOfNotNull(subject) + sents
         val finds = mutableListOf<SchoolBodyFind>()
-        fun keep(f: SchoolMailFind, sentence: String?, unclearIn: String? = sentence) {
+        fun keep(f: SchoolMailFind, sentence: String?, unclearIn: String? = sentence, change: String? = null) {
             if (f.ask && f.endDay > f.startDay) return
             if (finds.size >= MAX_FINDS) return
             if (finds.any { it.find.title.equals(f.title, true) && it.find.startDay == f.startDay && it.find.who == f.who }) return
@@ -255,20 +289,39 @@ object SchoolBodyRules {
                 notes = sentence?.let(::notes).orEmpty(),
                 forWhom = sentence?.let(::forWhom),
                 unclear = unclearIn?.let { unclear(it, receivedDay) } ?: false,
+                change = change,
             )
         }
         val dated = sents.filter { hasDate(it, receivedDay) }
+        val oldDays = mutableSetOf<Long>()
         val subjectTopic = subject?.takeIf { it.isNotBlank() }?.let { SchoolRules.findSpan(it, receivedDay).let { f -> if (f is SpanFound.Days) f.rest else it } }
         for (s in dated) {
-            val own = SchoolMailRules.readAll(null, s, receivedDay, children)
+            // Slice 4c: a called-off date is still read (for what it takes out): its cancelling words aside.
+            val r = if (change(s) != null) s.replace(CANCEL_RE, " ") else s
+            val own = SchoolMailRules.readAll(null, r, receivedDay, children)
             val list = own.ifEmpty {
-                subjectTopic?.let { t -> SchoolMailRules.readAll(null, "$s. $t", receivedDay, children) }.orEmpty()
+                subjectTopic?.let { t -> SchoolMailRules.readAll(null, "$r. ${t.replace(CANCEL_RE, " ")}", receivedDay, children) }.orEmpty()
             }
-            list.filter { !it.ask || it.endDay == it.startDay }.forEach { keep(it, s) }
+            val kept = list.filter { !it.ask || it.endDay == it.startDay }
+            // Slice 4c: a sentence that moves a date keeps only the new day's find (its old day is the earlier email's);
+            // one that calls a date off marks its finds cancelled, so they are never added and take out what was.
+            when (val c = change(s)) {
+                SchoolChangeRules.MOVED -> {
+                    val to = movedTo(s, receivedDay)
+                    val onNew = kept.filter { it.startDay == to }
+                    if (to != null) kept.filter { it.startDay != to }.forEach { oldDays += it.startDay }
+                    // "moved from Saturday 28 November to Sunday 29 November" reads as the 28th: it is the 29th now.
+                    val moved = onNew.ifEmpty { if (to == null) kept else kept.take(1).map { it.copy(startDay = to, endDay = to + (it.endDay - it.startDay)) } }
+                    moved.forEach { keep(it, s, change = c) }
+                }
+                SchoolChangeRules.CANCELLED -> kept.forEach { keep(it, s, change = c) }
+                else -> kept.forEach { keep(it, s) }
+            }
         }
         // The subject and the opening's own read, as slice 1 did, so nothing it found is lost.
         val opening = sents.take(3).joinToString(". ")
-        SchoolMailRules.readAll(subject, opening, receivedDay, children).forEach { keep(it, null, listOfNotNull(subject, opening).joinToString(". ")) }
+        SchoolMailRules.readAll(subject, opening, receivedDay, children).filter { it.startDay !in oldDays }
+            .forEach { keep(it, null, listOfNotNull(subject, opening).joinToString(". ")) }
         finds.sortBy { it.find.startDay }
 
         // The email's own time, place and notes fill its one event's gaps (one event per email is the usual case; its
@@ -305,7 +358,13 @@ object SchoolBodyRules {
             else SchoolRules.spanLabel(e.find.startDay, e.find.endDay)
             val time = e.startMinute?.let { ", " + timeLabel(it, e.endMinute) }.orEmpty()
             val more = if (events.size > 1) " (+${events.size - 1} more)" else ""
-            out += SchoolSummaryLine(WHEN, "$day$time$more")
+            // Slice 4c: the card says a date was called off or moved, not just the date.
+            val tag = when (e.change) {
+                SchoolChangeRules.CANCELLED -> "Cancelled · was "
+                SchoolChangeRules.MOVED -> "Moved to "
+                else -> ""
+            }
+            out += SchoolSummaryLine(WHEN, "$tag$day$time$more")
         }
         (events.firstOrNull()?.place ?: texts.firstNotNullOfOrNull(::place))?.let { out += SchoolSummaryLine(WHERE, cap(it)) }
         texts.firstNotNullOfOrNull(::cost)?.let { out += SchoolSummaryLine(COST, it) }
@@ -348,5 +407,6 @@ object SchoolBodyRules {
         if (b.notes.isNotEmpty()) put(MailFindFields.NOTES, b.notes.joinToString("\n").fv())
         b.forWhom?.let { put(MailFindFields.FOR_WHOM, it.fv()) }
         if (b.unclear) put(MailFindFields.UNCLEAR_DATE, true.fv())
+        b.change?.let { put(MailFindFields.SCHOOL_CHANGE, it.fv()) }
     }
 }

@@ -114,6 +114,8 @@ object SchoolAutoRules {
         if (SchoolYearRules.otherYear(f, childYears)) return false
         // Slice 4b: a date that can't be read for sure stays a card to confirm, never a guess.
         if (f.unclearDate) return false
+        // Slice 4c: a date the school called off is never added; it takes out what an earlier email made.
+        if (f.schoolChange == SchoolChangeRules.CANCELLED) return false
         if (SchoolMailRules.isWeekly(f)) return false
         if (SchoolMailRules.isAsk(f) && SchoolMailRules.undated(f)) return false
         if (f.renewDay < today) return false
@@ -130,6 +132,8 @@ object SchoolAutoRules {
         val out = mutableListOf<MailFind>()
         for (f in finds.filter { eligible(it, items, today, childYears) }.sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.receivedDay }.thenBy { it.id })) {
             if (done.any { sameThing(it, f) } || out.any { sameThing(it, f) }) continue
+            // Slice 4c: one a later email called off or moved (both read in the same check, the catch-up) isn't added.
+            if (SchoolChangeRules.supersededBy(f, finds) != null) continue
             out += f
             if (out.size >= room) break
         }
@@ -138,7 +142,7 @@ object SchoolAutoRules {
 
     private val NOISE = Regex("""\b(?:reminder|re|fwd?|update|updated|urgent|important|final|change|changed|school|the|our|a)\b""")
 
-    private fun normTitle(s: String?): String =
+    internal fun normTitle(s: String?): String =
         (s ?: "").lowercase().map { if (it.isLetterOrDigit()) it else ' ' }.joinToString("").replace(NOISE, " ").replace(Regex("""\s+"""), " ").trim()
 
     /** Slice 4a: whether [a] and [b] are the same school thing: the same day and kind, the same child (or either for all), the same name give or take "Reminder:". */
@@ -232,6 +236,12 @@ object SchoolAutoRules {
      * Fri and Sat" / "From the school: Trip payment · due Fri 20 Nov · in School, task Fri".
      */
     fun summary(f: MailFind, p: SchoolAutoPlan, nowMs: Long, cal: LocalCalendar): String {
+        val (what, whenText, made) = parts(f, p, nowMs, cal)
+        return "From the school: $what · $whenText" + if (made.isEmpty()) "" else " · $made"
+    }
+
+    /** The summary's three parts: what, when ("Sat 28 Nov, 12:00–16:00", "due Fri 20 Nov") and what was made. */
+    internal fun parts(f: MailFind, p: SchoolAutoPlan, nowMs: Long, cal: LocalCalendar): Triple<String, String, String> {
         val today = cal.epochDayOf(nowMs)
         val what = f.what ?: "School date"
         val whenText = when {
@@ -245,7 +255,7 @@ object SchoolAutoRules {
             reminders.takeIf { it.isNotEmpty() }?.let { (if (it.size == 1) "reminder " else "reminders ") + days(it, today) },
             p.tasks.takeIf { it.isNotEmpty() }?.let { t -> (if (t.size == 1) "task " else "tasks ") + days(t.map { it.day }, today) },
         ).joinToString(", ")
-        return "From the school: $what · $whenText" + if (made.isEmpty()) "" else " · $made"
+        return Triple(what, whenText, made)
     }
 
     /** Activity's detail: where it came from ("Personal mail · “Christmas fair this Saturday”"). */
@@ -422,12 +432,22 @@ object SchoolDoneRules {
         taskTitle: (String) -> String?,
         nowMs: Long,
         cal: LocalCalendar,
-    ): List<DoneForYou> = finds.mapNotNull { f ->
-        if (f.kind != SchoolMailRules.KIND_SCHOOL || f.autoAtMs == null) return@mapNotNull null
-        val e = entries[SchoolAutoRules.activityId(f.id)] ?: return@mapNotNull null
-        if (e.source != SchoolAutoRules.SOURCE || e.undoneAtMs != null || clearedAt(e.id) != null) return@mapNotNull null
-        if (e.atMs < nowMs - HandleForMeRules.SHOWN_MS) return@mapNotNull null
-        val line = line(e.summary).ifEmpty { return@mapNotNull null }
+    ): List<DoneForYou> {
+        // Slice 4c: a date a later email called off or moved shows as that change's row, not its own.
+        val replaced = SchoolChangeRules.replaced(finds, entries)
+        return finds.mapNotNull { f -> row(f, entries, clearedAt, taskTitle, nowMs, cal, replaced) }.sortedByDescending { it.atMs }
+    }
+
+    private fun row(
+        f: MailFind, entries: Map<String, ActivityItem>, clearedAt: (String) -> Long?, taskTitle: (String) -> String?,
+        nowMs: Long, cal: LocalCalendar, replaced: Set<String>,
+    ): DoneForYou? = run {
+        if (f.id in replaced) return@run null
+        if (f.kind != SchoolMailRules.KIND_SCHOOL || f.autoAtMs == null) return@run null
+        val e = entries[SchoolAutoRules.activityId(f.id)] ?: return@run null
+        if (e.source != SchoolAutoRules.SOURCE || e.undoneAtMs != null || clearedAt(e.id) != null) return@run null
+        if (e.atMs < nowMs - HandleForMeRules.SHOWN_MS) return@run null
+        val line = line(e.summary).ifEmpty { return@run null }
         DoneForYou(
             id = rowId(f.id),
             from = HandleForMeRules.from("the school", cal.minuteOfDay(e.atMs)),
@@ -439,7 +459,7 @@ object SchoolDoneRules {
             changeTitle = taskIds(f.id).firstNotNullOfOrNull(taskTitle),
             person = PERSON,
         )
-    }.sortedByDescending { it.atMs }
+    }
 
     /** The rows that notify: those whose email came in today or yesterday (the catch-up's older ones only show). */
     fun notifiable(rows: List<DoneForYou>, finds: List<MailFind>, nowMs: Long, cal: LocalCalendar): List<DoneForYou> {

@@ -425,6 +425,14 @@ object SchoolMailRules {
             "mf" + ActivityRules.fnv64("mailschool:$accountId:${s.kind.wire}:${s.title.lowercase()}:${s.who.lowercase()}:${s.startDay}")
         }
 
+    /**
+     * Slice 4c: a body find's id: [findId], except that a cancellation is a find of its own (the date it calls off is
+     * already a find under the plain id, and the server writes each find once).
+     */
+    fun bodyFindId(accountId: String, b: SchoolBodyFind): String =
+        if (b.change == SchoolChangeRules.CANCELLED) "mf" + ActivityRules.fnv64("mailschool:${findId(accountId, b.find)}:cancelled")
+        else findId(accountId, b.find)
+
     /** Slice 2: whether [f] is an ask (made a task on Add). */
     fun isAsk(f: MailFind): Boolean = f.kind == KIND_SCHOOL && f.schoolKind == ASK
 
@@ -551,6 +559,8 @@ object SchoolMailRules {
      */
     fun showable(f: MailFind, items: List<SchoolItem>, today: Long): Boolean {
         if (f.kind != KIND_SCHOOL || f.state != MailFindState.OPEN) return false
+        // Slice 4c: a date the school called off is never offered with Add (the email's card says it).
+        if (f.schoolChange == SchoolChangeRules.CANCELLED) return false
         // Slice 2: an ask stays until its day (an undated one for ASK_DAYS days); answered, it's gone.
         if (isAsk(f)) return (f.endDay ?: f.renewDay) >= today
         val e = entry(f)

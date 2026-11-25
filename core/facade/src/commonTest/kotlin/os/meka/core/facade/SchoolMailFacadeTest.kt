@@ -320,4 +320,81 @@ class SchoolMailFacadeTest {
         assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
         assertFalse(fold.undoDoneForYou(rowId))
     }
+
+    private fun fairDoneForHim(): String {
+        val fair = SchoolBodyRules.read(
+            "Christmas fair", "Dear parents,\n\nOur Christmas fair is on Saturday 24 October, 12pm-4pm in the school hall.\n\nThank you", received,
+        ).finds.single()
+        val id = SchoolMailRules.bodyFindId("acc1", fair)
+        serverWrite(id, SchoolMailRules.serverFields(fair.find, "Oakfield Primary", "Personal", "Christmas fair", received) + SchoolBodyRules.findFields(fair))
+        return id
+    }
+
+    private fun schoolEmail(subject: String, body: String, day: Long): String {
+        val b = SchoolBodyRules.read(subject, body, day).finds.single()
+        val id = SchoolMailRules.bodyFindId("acc1", b)
+        serverWrite(id, SchoolMailRules.serverFields(b.find, "Oakfield Primary", "Personal", subject, day) + SchoolBodyRules.findFields(b))
+        return id
+    }
+
+    @Test
+    fun aCancelledSchoolDateTakesOutWhatWasMadeOnBothAppsAndSaysSo() = runTest {
+        // Slice 4c: the fair (Sat 24 Oct) was done for him; the school's next email calls it off.
+        val ida = fairDoneForHim()
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(1, fold.schoolView.value.dates.size)
+
+        val idb = schoolEmail(
+            "Christmas fair",
+            "Dear parents,\n\nUnfortunately the Christmas fair on Saturday 24 October has been cancelled.\n\nThank you",
+            received + 1,
+        )
+        assertTrue(ida != idb)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        // Out of School and its tasks gone, on both; nothing offered with Add.
+        assertTrue(fold.schoolView.value.dates.isEmpty())
+        assertTrue(mac.schoolView.value.dates.isEmpty())
+        val deleted = os.meka.core.domain.ActionableFields.DELETED
+        assertEquals(FieldValue.Bool(true), serverTask(SchoolAutoRules.taskId(ida, "day"))[deleted])
+        assertEquals(FieldValue.Bool(true), serverTask(SchoolAutoRules.taskId(ida, "prep"))[deleted])
+        assertNull(fold.mailFinds.value)
+        // Said once: the change's row stands for the fair's, with a heads-up.
+        val row = fold.doneForYou.value.single()
+        assertEquals(SchoolDoneRules.rowId(idb), row.id)
+        assertEquals("School fair cancelled · was Sat 24 Oct · taken out of School and 2 tasks", row.line)
+        assertEquals(listOf(row.id), mac.doneForYou.value.map { it.id })
+        assertTrue(fold.noticesNow().any { it.key == "handled:${row.id}" })
+
+        // Undo: the fair is back in School with its own row.
+        assertTrue(fold.undoDoneForYou(row.id))
+        assertEquals(1, fold.schoolView.value.dates.size)
+        assertEquals(listOf(SchoolDoneRules.rowId(ida)), fold.doneForYou.value.map { it.id })
+    }
+
+    @Test
+    fun aMovedSchoolDateMovesWhatWasMadeAndSaysSo() = runTest {
+        // Slice 4c: the fair moves from Sat 24 Oct to Sun 25 Oct: the old date's line and tasks go, the new date's come.
+        val ida = fairDoneForHim()
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val idc = schoolEmail(
+            "Christmas fair update",
+            "Dear parents,\n\nThe Christmas fair has been moved to Sunday 25 October, 12pm-4pm.\n\nThank you",
+            received + 1,
+        )
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        val deleted = os.meka.core.domain.ActionableFields.DELETED
+        assertEquals(FieldValue.Bool(true), serverTask(SchoolAutoRules.taskId(ida, "day"))[deleted])
+        val moved = serverTask(SchoolAutoRules.taskId(idc, "day"))
+        assertEquals(FieldValue.Text("School fair"), moved[os.meka.core.domain.ActionableFields.TITLE])
+        assertTrue(moved[deleted] != FieldValue.Bool(true))
+        assertEquals(1, fold.schoolView.value.dates.size)
+        assertEquals(1, mac.schoolView.value.dates.size)
+        val row = mac.doneForYou.value.single()
+        assertEquals(SchoolDoneRules.rowId(idc), row.id)
+        assertTrue(row.line.startsWith("School fair moved to Sun 25 Oct, 12:00–16:00 (was Sat 24 Oct) · in School"), row.line)
+    }
 }

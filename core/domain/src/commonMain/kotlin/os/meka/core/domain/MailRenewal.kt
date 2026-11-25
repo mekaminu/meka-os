@@ -88,6 +88,10 @@ data class MailFind(
     val forWhom: String? = null,
     /** School emails first, slice 4b: its date can't be read for sure (the weekday and date disagree, "next Friday"); never added on its own. */
     val unclearDate: Boolean = false,
+    /** School emails first, slice 4c: [SchoolChangeRules.CANCELLED] or [SchoolChangeRules.MOVED] when its sentence says the date was called off or moved, else null. */
+    val schoolChange: String? = null,
+    /** School emails first, slice 4c (app-written with the auto mark): the earlier find this change took out or moved, else null. */
+    val replacesId: String? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -144,6 +148,10 @@ object MailFindFields {
     const val FOR_WHOM = "forWhom"
     /** School emails first, slice 4b (server-written, once; additive): true when a school find's date is unclear, else absent. */
     const val UNCLEAR_DATE = "unclearDate"
+    /** School emails first, slice 4c (server-written, once; additive): "cancelled" or "moved" when the find's sentence says so, else absent. */
+    const val SCHOOL_CHANGE = "schoolChange"
+    /** School emails first, slice 4c (app-written, once, beside [AUTO_AT]; additive): the find a change took out or moved. */
+    const val REPLACES = "replacesId"
 }
 
 data class MailFindRow(
@@ -420,6 +428,8 @@ object MailRenewalRules {
             notes = f[MailFindFields.NOTES]?.textOrNull?.takeIf { it.isNotBlank() },
             forWhom = f[MailFindFields.FOR_WHOM]?.textOrNull?.takeIf { it.isNotBlank() },
             unclearDate = f[MailFindFields.UNCLEAR_DATE]?.boolOrNull == true,
+            schoolChange = f[MailFindFields.SCHOOL_CHANGE]?.textOrNull?.takeIf { it == SchoolChangeRules.CANCELLED || it == SchoolChangeRules.MOVED },
+            replacesId = f[MailFindFields.REPLACES]?.textOrNull?.takeIf { it.isNotBlank() },
         )
     }
 

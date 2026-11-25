@@ -1096,7 +1096,8 @@ class Integrations(
         ) }
         for ((h, day, b) in all.sortedBy { it.first.receivedAtMs }) {
             val sf = b.find
-            val id = SchoolMailRules.findId(a.id, sf)
+            // Slice 4c: a cancellation is its own find, beside the date it calls off.
+            val id = SchoolMailRules.bodyFindId(a.id, b)
             if (id in written || mirror.containsKey(id)) continue
             val school = os.meka.core.domain.MailReceiptRules.merchant(h.fromName, h.fromAddress)
             writeMail(a, id, SchoolMailRules.serverFields(sf, school, account, h.subject, day) + SchoolBodyRules.findFields(b), EntityTypes.MAIL_FIND)

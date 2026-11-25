@@ -11027,25 +11027,107 @@ class MekaCore(
             val plan = A.plan(f, now, cal)
             runCatching {
                 activity.actRecorded(A.summary(f, plan, now, cal), A.WHY, A.SOURCE, AutonomyLevel.AUTO_UNDER_RULE.name, A.detail(f), entry) {
-                    if (plan.schoolLine) replica.commitLocal(os.meka.core.domain.EntityTypes.SCHOOL_ITEM, S.schoolItemId(f.id), S.schoolFields(f, now))
-                    plan.tasks.forEach { t ->
-                        val id = tasks.createWithId(
-                            t.id,
-                            os.meka.core.domain.NewTask(t.title, notes = t.notes, dueAtMs = if (t.due) cal.toEpochMs(t.day, A.REMIND_MINUTE) else null),
-                            mapOf(os.meka.core.domain.ActionableFields.PROVENANCE_SOURCE to A.SOURCE.fv()),
-                        )
-                        if (t.day > today || t.minute != null) runCatching { tasks.setWhen(id, t.day, t.minute) }
-                        t.remindAtMs?.let { at -> runCatching { tasks.setReminder(id, at) } }
-                    }
-                    replica.commitLocal(
-                        os.meka.core.domain.EntityTypes.MAIL_FIND, f.id,
-                        os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, now),
-                    )
+                    makeSchoolPlan(f, plan, now, cal)
                 }
                 added++
             }
         }
         if (added > 0) activityChanged()
+    }
+
+    /** What [autoAddSchoolFinds] writes for one find (inside its recorded change): School line, tasks, the find answered. */
+    private fun makeSchoolPlan(f: os.meka.core.domain.MailFind, plan: os.meka.core.domain.SchoolAutoPlan, now: Long, cal: ZoneCalendar) {
+        val A = os.meka.core.domain.SchoolAutoRules
+        val S = os.meka.core.domain.SchoolMailRules
+        val today = cal.epochDayOf(now)
+        if (plan.schoolLine) replica.commitLocal(os.meka.core.domain.EntityTypes.SCHOOL_ITEM, S.schoolItemId(f.id), S.schoolFields(f, now))
+        plan.tasks.forEach { t ->
+            val id = tasks.createWithId(
+                t.id,
+                os.meka.core.domain.NewTask(t.title, notes = t.notes, dueAtMs = if (t.due) cal.toEpochMs(t.day, A.REMIND_MINUTE) else null),
+                mapOf(os.meka.core.domain.ActionableFields.PROVENANCE_SOURCE to A.SOURCE.fv()),
+            )
+            if (t.day > today || t.minute != null) runCatching { tasks.setWhen(id, t.day, t.minute) }
+            t.remindAtMs?.let { at -> runCatching { tasks.setReminder(id, at) } }
+        }
+        replica.commitLocal(
+            os.meka.core.domain.EntityTypes.MAIL_FIND, f.id,
+            os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, now),
+        )
+    }
+
+    /** Slice 4c: what is still there of what was made for [a]: its School line (or not) and its open tasks' ids. */
+    private fun schoolMadeOf(a: os.meka.core.domain.MailFind): Pair<Boolean, List<String>> {
+        val S = os.meka.core.domain.SchoolMailRules
+        val line = school.items().any { it.id == S.schoolItemId(a.id) }
+        val ids = (os.meka.core.domain.SchoolDoneRules.taskIds(a.id) + S.taskId(a.id)).distinct().filter { id ->
+            val e = replica.entity(os.meka.core.domain.EntityTypes.TASK, id)
+            e != null && e[os.meka.core.domain.ActionableFields.DELETED] != FieldValue.Bool(true)
+        }
+        return line to ids
+    }
+
+    /** Slice 4c: takes out (inside a recorded change) what [schoolMadeOf] found for [a]. */
+    private fun takeOutSchoolMade(a: os.meka.core.domain.MailFind, made: Pair<Boolean, List<String>>) {
+        if (made.first) school.remove(os.meka.core.domain.SchoolMailRules.schoolItemId(a.id))
+        made.second.forEach { id -> runCatching { tasks.delete(id) } }
+    }
+
+    /**
+     * School emails first, slice 4c: a later school email that calls off or moves a date he already has
+     * ([os.meka.core.domain.SchoolChangeRules]) updates what was made: a cancellation takes out its School line and tasks
+     * (and [schoolEventsToCalendar] takes its calendar entry back); a move does the same and makes the new date as any
+     * school date is made. One Activity entry on the change's find (so its Done for you row and heads-up say it), whose
+     * Undo puts the earlier date's line and tasks back. Runs before [autoAddSchoolFinds], under the same rule and switch.
+     */
+    private fun applySchoolChanges() {
+        if (replica.isRecording || !schoolAutoOn()) return
+        val A = os.meka.core.domain.SchoolAutoRules
+        val X = os.meka.core.domain.SchoolChangeRules
+        val C = os.meka.core.domain.SchoolCalendarRules
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        val finds = activity.mailFinds()
+        if (finds.none { it.schoolChange != null && it.autoAtMs == null }) return
+        val replaced = X.replaced(finds, activity.items().associateBy { it.id })
+        val pending = X.pending(finds, today, replaced)
+        if (pending.isEmpty() || !schoolAutoAllowed()) return
+        val edits = calendarEdits.all().associateBy { it.id }
+        val used = mutableSetOf<String>()
+        var changed = false
+        for ((b, a) in pending) {
+            if (!used.add(a.id)) continue
+            val entry = A.activityId(b.id)
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.MAIL_FIND, b.id,
+                os.meka.core.domain.MailFindAutoRules.markFields(now) + X.replacesFields(a.id),
+            )
+            if (activity.has(entry)) continue
+            val edit = edits[C.editId(a.id)]
+            val inCalendar = edit != null && !edit.undone && edits[C.deleteId(a.id)] == null
+            val made = schoolMadeOf(a)
+            runCatching {
+                if (b.schoolChange == X.CANCELLED) {
+                    val removed = os.meka.core.domain.SchoolChangeRules.Removed(made.first, made.second.size, inCalendar)
+                    activity.actRecorded(X.cancelledSummary(b, a, removed, today), A.WHY, A.SOURCE, AutonomyLevel.AUTO_UNDER_RULE.name, A.detail(b), entry) {
+                        takeOutSchoolMade(a, made)
+                        replica.commitLocal(
+                            os.meka.core.domain.EntityTypes.MAIL_FIND, b.id,
+                            os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, now),
+                        )
+                    }
+                } else {
+                    val plan = A.plan(b, now, cal)
+                    activity.actRecorded(X.movedSummary(b, a, plan, now, cal), A.WHY, A.SOURCE, AutonomyLevel.AUTO_UNDER_RULE.name, A.detail(b), entry) {
+                        takeOutSchoolMade(a, made)
+                        makeSchoolPlan(b, plan, now, cal)
+                    }
+                }
+                changed = true
+            }
+        }
+        if (changed) activityChanged()
     }
 
     /** ADR-006: may a school event go into his calendar? Level 4 under the same rule his switch made; the kill switch holds it. */
@@ -11087,11 +11169,13 @@ class MekaCore(
         val mirror by lazy { events.all() }
         val shown by lazy { currentEvents() }
         var changed = false
+        // Slice 4c: a date a later email called off or moved is taken back from the calendar as an undone one is.
+        val replaced = os.meka.core.domain.SchoolChangeRules.replaced(finds, entries)
         for (f in finds) {
             val entry = entries[A.activityId(f.id)] ?: continue
             val editId = C.editId(f.id)
             val edit = edits[editId]
-            if (entry.undoneAtMs != null) {
+            if (entry.undoneAtMs != null || f.id in replaced) {
                 when (val t = C.takeBack(edit, edits[C.deleteId(f.id)] != null, mirror, now)) {
                     os.meka.core.domain.SchoolCalendarRules.TakeBack.UndoAdd -> changed = calendarEdits.undo(editId) || changed
                     is os.meka.core.domain.SchoolCalendarRules.TakeBack.Delete ->
@@ -14727,6 +14811,8 @@ class MekaCore(
         timed("Mail lists") {
             autoAddMailFinds()
             // School emails first, slice 3a: the school's dates go into School with their tasks and reminders, no tap.
+            // Slice 4c: first, a later email that calls off or moves a date he has updates what was made.
+            applySchoolChanges()
             autoAddSchoolFinds()
             // Slice 3b: and into his real calendar (or taken back from it after Undo).
             schoolEventsToCalendar()
