@@ -189,7 +189,7 @@ private fun AboutLine(row: AboutRow, said: AboutSaved?, onOpen: () -> Unit, onUn
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .clickable(role = Role.Button, onClick = onOpen)
             .semantics(mergeDescendants = true) { contentDescription = AboutYouRules.rowSpoken(row) }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {

@@ -510,9 +510,10 @@ class SettingsScreensTest {
         tap(t, name, "Partner's email", hasContentDescription(AboutYouRules.rowSpoken(row(AboutField.PARTNER_EMAIL))))
         until { sheetOpen() }
         type(t, name, AboutField.PARTNER_EMAIL.spokenHint, "not an email", replace = true)
-        turns()
+        fun saysWhy() = compose.onAllNodesWithText(AboutYouRules.NOT_EMAIL, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        until { saysWhy() || !sheetOpen() }
         if (!sheetOpen()) fail("$name: a refused email closed its sheet")
-        if (compose.onAllNodesWithText(AboutYouRules.NOT_EMAIL, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: the sheet doesn't say why")
+        if (!saysWhy()) fail("$name: the sheet doesn't say why")
         tap(t, name, "Close", hasText("Close") and hasAnyAncestor(hasTestTag(ABOUT_EDIT_SHEET_TAG)))
         until { !sheetOpen() }
         if (value(AboutField.PARTNER_EMAIL) == "not an email") fail("$name: the refused email was kept")
