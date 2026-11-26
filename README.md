@@ -441,7 +441,6 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/review/cover-dark-many-journal.png](docs/screens/fold/review/cover-dark-many-journal.png)
 - [fold/review/cover-dark-many-north.png](docs/screens/fold/review/cover-dark-many-north.png)
 - [fold/review/cover-dark-many-reflect-form.png](docs/screens/fold/review/cover-dark-many-reflect-form.png)
-- [fold/review/cover-dark-many-reflect.png](docs/screens/fold/review/cover-dark-many-reflect.png)
 - [fold/review/cover-dark-many-targets.png](docs/screens/fold/review/cover-dark-many-targets.png)
 - [fold/review/cover-dark-many.png](docs/screens/fold/review/cover-dark-many.png)
 - [fold/review/cover-dark-one-balance-foot.png](docs/screens/fold/review/cover-dark-one-balance-foot.png)
