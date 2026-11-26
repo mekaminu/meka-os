@@ -384,10 +384,12 @@ class CalendarsScreensTest {
         }
         open()
         if (field().fetchSemanticsNodes().isEmpty()) fail("Calendars: Home's sheet has no field")
-        ScreenShots.assertShows(compose, "calendars-weather-by-hand", WeatherPlaceChoiceRules.HOME_NOTE)
+        // The sheet is a dialog, a second root: look across both (ScreenShots.assertShows reads the one root).
+        fun shows(words: String) = compose.onAllNodes(hasText(words, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        if (!shows("The town for Today")) fail("Calendars: Home's sheet doesn't say what the town is for")
         type("<b>")
         turns(1_000)
-        ScreenShots.assertShows(compose, "calendars-weather-by-hand", WeatherPlaceChoiceRules.BAD)
+        if (!shows("look like a town")) fail("Calendars: \"<b>\" wasn't refused with why")
         if (field().fetchSemanticsNodes().isEmpty()) fail("Calendars: a refused name closed Home's sheet")
         type("Oakfield")
         repeat(40) {
