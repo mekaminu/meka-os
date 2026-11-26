@@ -3337,6 +3337,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.liveNamed(on: false, name: "maybe"))
     }
 
+    func testSchoolLeadChoicesReachSwift() {
+        // Walk-through week 5, A17: Family → School emails' toggles are On · Off menus built from the core's sheets.
+        let choices = SchoolLeadChoiceRules.shared
+        let rows = SchoolLeadRules.shared.view(s: SchoolLead(dayTask: false, early: true, prepTask: true, dayBefore: true), autoOn: true).rows
+        XCTAssertEqual(choices.row(r: rows[0]).value, "Off")
+        XCTAssertNotNil(choices.reason(r: rows[1]))
+        XCTAssertNil(choices.reason(r: rows[2]))
+        let sheet = choices.sheet(key: SchoolLeadRules.shared.PREP_TASK, on: true, mac: true)
+        XCTAssertEqual(sheet?.choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(sheet?.choices.first(where: { $0.lit })?.label, "On")
+        XCTAssertEqual(choices.named(on: true, name: choices.OFF)?.boolValue, false)
+        XCTAssertNil(choices.named(on: true, name: choices.ON))
+    }
+
     func testTalkChoicesReachSwift() {
         // Walk-through week 5, A17: Talk's Turn on / Turn off pills are On · Off menus built from the core's sheets.
         let talk = TalkChoiceRules.shared

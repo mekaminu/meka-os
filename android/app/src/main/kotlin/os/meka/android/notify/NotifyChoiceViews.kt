@@ -63,22 +63,26 @@ const val NOTIFY_CHOICE_SHEET_TAG = "notify-choice-sheet"
 /**
  * A Notifications choice row (walk-through week 5, A17: no open chip rows on a page): one card row, the title on the
  * left, what's chosen on the right ("Morning brief" · "Digest"), and ›; a tap opens [NotifyChoiceSheetView].
- * [raised] draws it on the raised surface, for a row inside a card (Habits' open habit).
+ * [raised] draws it on the raised surface, for a row inside a card (Habits' open habit). With [enabled] false it is
+ * dimmed, without ›, and opens nothing.
  */
 @Composable
-internal fun NotifyChoiceRowView(row: NotifyChoiceRow, modifier: Modifier = Modifier, raised: Boolean = false, onOpen: () -> Unit) {
+internal fun NotifyChoiceRowView(
+    row: NotifyChoiceRow, modifier: Modifier = Modifier, raised: Boolean = false, enabled: Boolean = true, onOpen: () -> Unit,
+) {
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(if (raised) Meka.colors.surfaceRaised else Meka.colors.surface)
-            .clickable(role = Role.Button, onClick = onOpen)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onOpen)
             .semantics(mergeDescendants = true) { contentDescription = row.spoken }
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .testTag(NOTIFY_CHOICE_ROW_TAG),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Text(LoneWordGlue.kept(row.title), style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-        Text(row.value, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1)
-        Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(row.title), style = MekaType.body, color = if (enabled) Meka.colors.textPrimary else Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+        Text(row.value, style = MekaType.itemMeta, color = if (enabled) Meka.colors.textSecondary else Meka.colors.textTertiary, maxLines = 1)
+        // A row that can't be chosen now (Family's reminder whose task is off) is dimmed, with no › and no sheet.
+        if (enabled) Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
     }
 }
 

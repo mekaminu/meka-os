@@ -32,6 +32,10 @@ import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.FamilyPane
+import os.meka.android.ask.schoolLeadRowTag
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isEnabled
 import os.meka.android.ask.RecoveryKeyPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -43,6 +47,8 @@ import os.meka.core.domain.Household
 import os.meka.core.domain.HouseholdNames
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.RecoveryKeyRules
+import os.meka.core.domain.SchoolLeadChoiceRules
+import os.meka.core.domain.SchoolLeadRules
 import os.meka.core.facade.FamilyApi
 import os.meka.core.facade.MekaCore
 import os.meka.core.facade.RecoveryApi
@@ -286,6 +292,38 @@ class FamilyRecoveryScreensTest {
         untilShows("family-by-hand", "Turned off")
     }
 
+    /**
+     * Walk-through week 5, A17: School emails' switches are card rows saying what's chosen, no open On/Off pill. Task on
+     * the day's row opens its On · Off sheet; Off there turns it off and closes it, and the reminder that rides on it is
+     * dimmed with its reason under it.
+     */
+    private fun schoolLeadByHand() {
+        val core = setUp(ThemeChoice.DARK, Server(), "Morgan")
+        show { FamilyPane(core, onClose = {}) }
+        turns()
+        val name = "family-school-lead-by-hand"
+        val lead = core.schoolLeadView.value
+        lead.rows.map(SchoolLeadChoiceRules::row).forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no \"${r.title}\" row saying ${r.value}")
+        }
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        val row = compose.onAllNodes(hasTestTag(schoolLeadRowTag(SchoolLeadRules.DAY_TASK)) and hasClickAction())
+        if (row.fetchSemanticsNodes().isEmpty()) fail("$name: no Task on the day row")
+        row[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        if (!sheetOpen()) fail("$name: Task on the day's row didn't open its sheet")
+        compose.onAllNodes(hasText(SchoolLeadChoiceRules.OFF_LABEL, substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until("$name: Off didn't turn Task on the day off") { core.schoolLeadView.value.rows.first { it.key == SchoolLeadRules.DAY_TASK }.on.not() }
+        if (sheetOpen()) fail("$name: choosing Off didn't close the sheet")
+        val early = core.schoolLeadView.value.rows.first { it.key == SchoolLeadRules.EARLY }
+        untilShows(name, LoneWordGlue.kept(SchoolLeadChoiceRules.reason(early) ?: fail("$name: the reminder can still be chosen with its task off")))
+        if (compose.onAllNodes(hasTestTag(schoolLeadRowTag(SchoolLeadRules.EARLY)) and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: the reminder whose task is off still opens a sheet")
+        }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("family", "inner-dark-school-lead-off"))
+    }
+
     // ---- Recovery key ----
 
     private fun recovery(name: String, fill: Fill, connected: Boolean = true, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
@@ -372,6 +410,7 @@ class FamilyRecoveryScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun familyCoverManyLight() { family("cover-light-many", Fill.MANY, theme = ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun familyInnerMany() { family("inner-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun familyByHandTest() { familyByHand() }
+    @Test @Config(qualifiers = ScreenShots.INNER) fun familySchoolLeadByHand() { schoolLeadByHand() }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverOff() { recovery("cover-dark-not-connected", Fill.EMPTY, connected = false) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun recoveryCoverEmpty() { recovery("cover-dark-empty", Fill.EMPTY) }

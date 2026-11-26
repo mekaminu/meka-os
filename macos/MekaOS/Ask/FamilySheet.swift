@@ -106,10 +106,10 @@ struct FamilySheet: View {
                     .fixedSize(horizontal: false, vertical: true).staggeredAppear(8)
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     ForEach(lead.rows, id: \.key) { row in
-                        SchoolLeadSwitch(row: row, palette: palette) {
-                            MekaHaptics.tick()
+                        SchoolLeadSwitch(row: row, palette: palette) { name in
                             let key = row.key
-                            let on = !row.on
+                            guard let on = SchoolLeadChoiceRules.shared.named(on: row.on, name: name)?.boolValue else { return }
+                            MekaHaptics.tick()
                             Task {
                                 let said = await model.setSchoolLead(key, on: on)
                                 withAnimation(MekaMotion.appear(reduced: reduceMotion)) { leadSaid = said }
@@ -185,32 +185,44 @@ private struct FamilyRowView: View {
     }
 }
 
-/// Slice 4d: one School emails switch: its title over its line, and a small switch; dimmed when it can't be switched
-/// (a reminder whose task is off, or school events off altogether).
+/// Slice 4d: one School emails switch; walk-through week 5, A17: an On · Off menu built from the core's sheet
+/// (`SchoolLeadChoiceRules`), as the Fold's row and sheet, not an open toggle. Dimmed with its reason under it when it
+/// can't be chosen (a reminder whose task is off, or school events off altogether).
 private struct SchoolLeadSwitch: View {
     let row: SchoolLeadRow
     let palette: MekaPalette
-    let onFlip: () -> Void
+    /// The picked choice's name; the core says what it sets.
+    let onPick: (String) -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: MekaSpace.m) {
+        let sheet = SchoolLeadChoiceRules.shared.sheet(key: row.key, on: row.on, mac: true)
+        let why = SchoolLeadChoiceRules.shared.reason(r: row)
+        let lit = sheet?.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack(spacing: MekaSpace.m) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(row.enabled ? palette.textPrimary : palette.textTertiary)
-                Text(LoneWordGlue.shared.kept(line: row.line)).font(MekaType.caption)
-                    .foregroundStyle(row.enabled ? palette.textSecondary : palette.textTertiary)
-                    .contentTransition(.opacity)
-                    .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)
+                if let why {
+                    Text(LoneWordGlue.shared.kept(line: why)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
+                }
             }
             Spacer()
-            Toggle("", isOn: Binding(get: { row.on }, set: { _ in onFlip() }))
+            if let sheet {
+                Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { onPick(name) } })) {
+                    ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+                }
+                .pickerStyle(.menu)
                 .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                .fixedSize()
                 .disabled(!row.enabled)
+                .help(LoneWordGlue.shared.kept(line: sheet.choices.first(where: { $0.lit })?.line ?? sheet.note))
+            }
         }
         .padding(.vertical, MekaSpace.xxs)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(row.title). \(row.line)")
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: why)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(SchoolLeadChoiceRules.shared.row(r: row).spoken)
     }
 }
