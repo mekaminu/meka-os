@@ -161,7 +161,7 @@ private fun GoalAddSheetFrame(
                     .verticalScroll(rememberScrollState())
                     .padding(MekaSpace.m)
                     .testTag(GOAL_ADD_SHEET_TAG),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 Text(sheet.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
                 SheetField(sheet.hint, sheet.spokenHint, title, { onTitle(it.take(GoalAddRules.MAX_TITLE)) }) { save() }

@@ -778,7 +778,7 @@ private struct GoalAddRowButton: View {
 
     var body: some View {
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.label).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                 Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
@@ -813,7 +813,7 @@ private struct HabitAddSheet: View {
 
     var body: some View {
         let sheet = GoalAddRules.shared.habitSheet
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
             TextField(sheet.hint, text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
                 .accessibilityLabel(sheet.spokenHint)
@@ -865,7 +865,7 @@ private struct GoalAddSheetView: View {
 
     var body: some View {
         let sheet = GoalAddRules.shared.goalSheet
-        VStack(alignment: .leading, spacing: MekaSpace.s) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
             TextField(sheet.hint, text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
                 .accessibilityLabel(sheet.spokenHint)
