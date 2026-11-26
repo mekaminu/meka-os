@@ -3295,6 +3295,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(r.USE_HOME, "Use About you's home")
     }
 
+    func testGoalAddSheetsReachSwift() {
+        // Walk-through week 5, A17: Goals' + New habit / + New goal rows open sheets; a blank name can't be added.
+        let r = GoalAddRules.shared
+        XCTAssertEqual(r.habitRow.label, "+ New habit")
+        XCTAssertEqual(r.goalRow.label, "+ New goal")
+        XCTAssertFalse(r.canAdd(title: "   "))
+        XCTAssertEqual(r.cleaned(title: "  Swim a mile "), "Swim a mile")
+        XCTAssertNil(r.cleanedTarget(target: " "))
+        XCTAssertEqual(r.DEFAULT_PER_WEEK, 7)
+        XCTAssertEqual(GoalRules.shared.HORIZONS.firstIndex(of: r.DEFAULT_HORIZON), 1)
+    }
+
     func testChaseWaitChoicesReachSwift() {
         // Walk-through week 5, A17: each Chase waits person is a menu built from the core's sheet; a pick's name reads back
         // to the days to set (0 = Back to usual).

@@ -770,68 +770,128 @@ private struct MetricChartView: View {
     }
 }
 
+/// Walk-through week 5, A17: "+ New habit" / "+ New goal" is one row opening a sheet, not an open box on the page.
+private struct GoalAddRowButton: View {
+    let row: GoalAddRow
+    let palette: MekaPalette
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.label).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.m)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(GoalAddRules.shared.rowSpoken(row: row))
+    }
+}
+
 private struct AddHabitRow: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
-    @State private var title = ""
-    @State private var perWeek = 7
-    @State private var timing: HabitTiming = .anytime
+    @State private var open = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            TextField("New habit…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
-            if !title.isEmpty {
-                HStack(spacing: MekaSpace.m) {
-                    Picker("How often", selection: $perWeek) {
-                        ForEach(GoalRules.shared.TARGET_CHOICES, id: \.perWeek) { c in Text(c.label).tag(Int(c.perWeek)) }
-                    }
-                    .fixedSize()
-                    Picker("When", selection: $timing) {
-                        ForEach(GoalsScreen.timings, id: \.self) { t in Text(GoalRules.shared.timingLabel(t: t)).tag(t) }
-                    }
-                    .fixedSize()
-                    Button("Add", action: add).keyboardShortcut(.defaultAction)
-                }
-                .transition(.opacity)
+        GoalAddRowButton(row: GoalAddRules.shared.habitRow, palette: palette) { open = true }
+            .sheet(isPresented: $open) { HabitAddSheet(palette: palette) { open = false } }
+    }
+}
+
+private struct HabitAddSheet: View {
+    @Environment(CoreModel.self) private var model
+    let palette: MekaPalette
+    let close: () -> Void
+    @State private var title = ""
+    @State private var perWeek = Int(GoalAddRules.shared.DEFAULT_PER_WEEK)
+    @State private var timing: HabitTiming = GoalAddRules.shared.DEFAULT_TIMING
+
+    var body: some View {
+        let sheet = GoalAddRules.shared.habitSheet
+        VStack(alignment: .leading, spacing: MekaSpace.s) {
+            Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            TextField(sheet.hint, text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
+                .accessibilityLabel(sheet.spokenHint)
+            Picker(GoalAddRules.shared.HOW_OFTEN, selection: $perWeek) {
+                ForEach(GoalRules.shared.TARGET_CHOICES, id: \.perWeek) { c in Text(c.label).tag(Int(c.perWeek)) }
+            }
+            .fixedSize()
+            Picker(GoalAddRules.shared.WHEN, selection: $timing) {
+                ForEach(GoalsScreen.timings, id: \.self) { t in Text(GoalRules.shared.timingLabel(t: t)).tag(t) }
+            }
+            .fixedSize()
+            Text(sheet.note).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(GoalAddRules.shared.CLOSE, action: close).keyboardShortcut(.cancelAction)
+                Button(sheet.addLabel, action: add).keyboardShortcut(.defaultAction)
+                    .disabled(!GoalAddRules.shared.canAdd(title: title))
             }
         }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
     }
 
     private func add() {
-        model.addHabit(title, perWeek: perWeek, timing: timing)
-        title = ""; perWeek = 7; timing = .anytime
+        guard let t = GoalAddRules.shared.cleaned(title: title) else { return }
+        model.addHabit(t, perWeek: perWeek, timing: timing)
+        close()
     }
 }
 
 private struct AddGoalRow: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
-    @State private var title = ""
-    @State private var target = ""
-    @State private var horizon = 1
+    @State private var open = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            TextField("New goal…", text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
-            if !title.isEmpty {
-                HStack(spacing: MekaSpace.m) {
-                    TextField("What does done look like? (optional)", text: $target).textFieldStyle(.roundedBorder).onSubmit(add)
-                    Picker("Horizon", selection: $horizon) {
-                        ForEach(0..<GoalRules.shared.HORIZONS.count, id: \.self) { i in
-                            Text(GoalRules.shared.horizonLabel(h: GoalRules.shared.horizonAt(index: Int32(i)))).tag(i)
-                        }
-                    }
-                    .fixedSize()
-                    Button("Add", action: add).keyboardShortcut(.defaultAction)
+        GoalAddRowButton(row: GoalAddRules.shared.goalRow, palette: palette) { open = true }
+            .sheet(isPresented: $open) { GoalAddSheetView(palette: palette) { open = false } }
+    }
+}
+
+private struct GoalAddSheetView: View {
+    @Environment(CoreModel.self) private var model
+    let palette: MekaPalette
+    let close: () -> Void
+    @State private var title = ""
+    @State private var target = ""
+    @State private var horizon = Int(GoalRules.shared.HORIZONS.firstIndex(of: GoalAddRules.shared.DEFAULT_HORIZON) ?? 1)
+
+    var body: some View {
+        let sheet = GoalAddRules.shared.goalSheet
+        VStack(alignment: .leading, spacing: MekaSpace.s) {
+            Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            TextField(sheet.hint, text: $title).textFieldStyle(.roundedBorder).onSubmit(add)
+                .accessibilityLabel(sheet.spokenHint)
+            TextField(GoalAddRules.shared.DONE_LOOKS_LIKE, text: $target).textFieldStyle(.roundedBorder).onSubmit(add)
+            Picker(GoalAddRules.shared.HORIZON, selection: $horizon) {
+                ForEach(0..<GoalRules.shared.HORIZONS.count, id: \.self) { i in
+                    Text(GoalRules.shared.horizonLabel(h: GoalRules.shared.horizonAt(index: Int32(i)))).tag(i)
                 }
-                .transition(.opacity)
+            }
+            .fixedSize()
+            Text(sheet.note).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(GoalAddRules.shared.CLOSE, action: close).keyboardShortcut(.cancelAction)
+                Button(sheet.addLabel, action: add).keyboardShortcut(.defaultAction)
+                    .disabled(!GoalAddRules.shared.canAdd(title: title))
             }
         }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
     }
 
     private func add() {
-        model.addGoal(title, target: target, horizonIndex: horizon)
-        title = ""; target = ""; horizon = 1
+        guard let t = GoalAddRules.shared.cleaned(title: title) else { return }
+        model.addGoal(t, target: GoalAddRules.shared.cleanedTarget(target: target), horizonIndex: horizon)
+        close()
     }
 }
 

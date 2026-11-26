@@ -10,6 +10,21 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
+import android.os.Looper
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToKey
+import androidx.compose.ui.test.performSemanticsAction
+import org.robolectric.Shadows
+import os.meka.android.goals.GOALS_ADD_GOAL_TAG
+import os.meka.android.goals.GOALS_ADD_HABIT_TAG
+import os.meka.android.goals.GOAL_ADD_SHEET_TAG
+import os.meka.core.domain.GoalAddRules
+import kotlin.test.fail
 import kotlin.math.abs
 import kotlin.test.assertTrue
 import androidx.compose.ui.test.performTouchInput
@@ -126,6 +141,11 @@ class GoalsScreensTest {
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Goals")
+        // Walk-through week 5, A17: no open "New habit…" / "New goal…" box on the page, only the rows that open a sheet.
+        listOf("New habit…", "New goal…", GoalAddRules.habitSheet.spokenHint, GoalAddRules.goalSheet.spokenHint).forEach { hint ->
+            if (compose.onAllNodes(hasContentDescription(hint) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()) fail("$name: an open \"$hint\" box on the page")
+        }
         // Walk-through 2026-11-15 A17: never wider than Study's, Habits' and Fasting's column; centred on the open Fold.
         val list = compose.onNodeWithTag(GOALS_LIST_TAG).getUnclippedBoundsInRoot()
         val screen = compose.onNodeWithTag("screen").getUnclippedBoundsInRoot()
@@ -182,4 +202,108 @@ class GoalsScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerManyLight() = shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT)
+
+    private fun turns(ms: Long = SETTLE_MS) {
+        repeat((ms / 100).toInt()) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
+    private fun sheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun waitFor(what: String, ok: () -> Boolean) {
+        repeat(40) {
+            if (ok()) return
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        if (!ok()) fail("Goals: $what")
+    }
+
+    /** The sheet is a dialog, a second root: tap across both by what a screen reader says. */
+    private fun tapSaid(said: String) {
+        val n = compose.onAllNodes(hasContentDescription(said) and hasClickAction(), useUnmergedTree = true)
+        if (n.fetchSemanticsNodes().isEmpty()) fail("Goals: nothing to tap says \"$said\"")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+    }
+
+    private fun tapText(text: String) {
+        val n = compose.onAllNodes(hasText(text) and hasClickAction(), useUnmergedTree = true)
+        if (n.fetchSemanticsNodes().isEmpty()) fail("Goals: no \"$text\" to tap")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(500)
+    }
+
+    private fun typeInto(spoken: String, text: String) {
+        val f = compose.onAllNodes(hasContentDescription(spoken) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+        if (f.fetchSemanticsNodes().isEmpty()) fail("Goals: the sheet has no \"$spoken\" field")
+        f[0].performSemanticsAction(SemanticsActions.SetText) { it(androidx.compose.ui.text.AnnotatedString(text)) }
+        turns(300)
+    }
+
+    private fun addEnabled(sheetTitle: String) = compose.onAllNodes(hasContentDescription("Add, $sheetTitle"), useUnmergedTree = true)
+        .fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == false
+
+    /**
+     * By hand (walk-through week 5, A17): + New habit opens its sheet; Add is dark with no name; a name, "3 a week" and
+     * Evening add the habit with those choices and the sheet goes. + New goal likewise with what done looks like and
+     * This year. Close leaves nothing added.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun addByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        runBlocking { core.tick() }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("add-habit")
+        turns()
+        // Close leaves nothing added.
+        compose.onNodeWithTag(GOALS_ADD_HABIT_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Goals: + New habit opened no sheet")
+        if (addEnabled(GoalAddRules.habitSheet.title)) fail("Goals: the habit sheet's Add is lit with no name")
+        tapText(GoalAddRules.CLOSE)
+        waitFor("Close left the habit sheet open") { !sheetOpen() }
+        if (core.goalsView.value.habits.isNotEmpty()) fail("Goals: Close added a habit")
+
+        compose.onNodeWithTag(GOALS_ADD_HABIT_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        typeInto(GoalAddRules.habitSheet.spokenHint, "  Stretch for ten minutes ")
+        if (!addEnabled(GoalAddRules.habitSheet.title)) fail("Goals: Add stayed dark with a name")
+        tapText("3 a week")
+        tapText("Evening")
+        tapSaid("Add, ${GoalAddRules.habitSheet.title}")
+        waitFor("the habit wasn't added") { core.goalsView.value.habits.any { it.title == "Stretch for ten minutes" } }
+        val h = core.goalsView.value.habits.first { it.title == "Stretch for ten minutes" }
+        if (h.targetPerWeek != 3 || h.timing != HabitTiming.EVENING) fail("Goals: the habit was added as ${h.targetPerWeek} a week, ${h.timing}")
+        waitFor("the habit sheet stayed open after Add") { !sheetOpen() }
+
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("add-goal")
+        turns()
+        compose.onNodeWithTag(GOALS_ADD_GOAL_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Goals: + New goal opened no sheet")
+        typeInto(GoalAddRules.goalSheet.spokenHint, "Swim a mile")
+        typeInto(GoalAddRules.DONE_LOOKS_LIKE, "1.6 km without stopping")
+        tapText(GoalRulesLabels.YEAR)
+        tapSaid("Add, ${GoalAddRules.goalSheet.title}")
+        waitFor("the goal wasn't added") { core.goalsView.value.goals.any { it.title == "Swim a mile" } }
+        val g = core.goalsView.value.goals.first { it.title == "Swim a mile" }
+        if (g.target != "1.6 km without stopping" || g.horizon != GoalHorizon.YEAR) fail("Goals: the goal was added as ${g.target}, ${g.horizon}")
+        waitFor("the goal sheet stayed open after Add") { !sheetOpen() }
+    }
+
+    private object GoalRulesLabels { val YEAR = os.meka.core.domain.GoalRules.horizonLabel(GoalHorizon.YEAR) }
 }

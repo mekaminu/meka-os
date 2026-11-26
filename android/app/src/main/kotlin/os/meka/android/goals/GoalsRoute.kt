@@ -137,6 +137,8 @@ fun GoalsRoute(core: MekaCore) {
     var fastingOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = fastingOpen) { fastingOpen = false }
     var habitsOpen by rememberSaveable { mutableStateOf(false) }
+    // Which add sheet is open over Goals (walk-through week 5, A17), if any.
+    var adding by rememberSaveable { mutableStateOf<Adding?>(null) }
     // Study plan, slice 1: a course opens as a pane like Fasting; a removed course offers Undo here.
     val study by core.studyView.collectAsState()
     var studyOpen by rememberSaveable { mutableStateOf<String?>(null) }
@@ -228,8 +230,9 @@ fun GoalsRoute(core: MekaCore) {
                 appLink = { link, done -> TypingSaves.launch { done(core.setHabitAppLink(h.id, link)) } },
             )
         }
+        // Walk-through week 5, A17: one card row opening its sheet, not an open "New habit…" box on the page.
         item(key = "add-habit") {
-            AddHabit { title, perWeek, timing -> act { core.addHabit(title, perWeek, timing, GoalRules.DEFAULT_MINUTES, null) } }
+            GoalAddRowView(os.meka.core.domain.GoalAddRules.habitRow, Modifier.animateItem().padding(top = MekaSpace.m).testTag(GOALS_ADD_HABIT_TAG)) { adding = Adding.HABIT }
         }
         // A habit Meka made by hand named gym/workout/training: book it in place, keeping its ticks (Fold review 13:45, item 2).
         view.bookOffer?.let { h ->
@@ -344,7 +347,9 @@ fun GoalsRoute(core: MekaCore) {
                 modifier = Modifier.animateItem().padding(vertical = MekaSpace.xs),
             )
         }
-        item(key = "add-goal") { AddGoal { title, target, hz -> act { core.addGoal(title, target, hz) } } }
+        item(key = "add-goal") {
+            GoalAddRowView(os.meka.core.domain.GoalAddRules.goalRow, Modifier.animateItem().padding(top = MekaSpace.m).testTag(GOALS_ADD_GOAL_TAG)) { adding = Adding.GOAL }
+        }
         // Study plan, slice 1: courses with their modules and lessons, under the goals.
         item(key = "study") {
             StudySection(
@@ -360,6 +365,17 @@ fun GoalsRoute(core: MekaCore) {
                 onOpen = openStudy,
             )
         }
+    }
+    when (adding) {
+        Adding.HABIT -> HabitAddSheetView(
+            onAdd = { title, perWeek, timing -> act { core.addHabit(title, perWeek, timing, GoalRules.DEFAULT_MINUTES, null) } },
+            onClose = { adding = null },
+        )
+        Adding.GOAL -> GoalAddSheetView(
+            onAdd = { title, target, hz -> act { core.addGoal(title, target, hz) } },
+            onClose = { adding = null },
+        )
+        null -> Unit
     }
     MekaPane(visible = fastingOpen) { FastingPane(core, onClose = { fastingOpen = false }) }
     MekaPane(visible = habitsOpen) { HabitsPage(core, onClose = { habitsOpen = false }) }
@@ -903,43 +919,12 @@ private fun Field(hint: String, value: String, onValue: (String) -> Unit, onDone
     }
 }
 
-/** Add a habit: name, then (once typing) how often and when. */
-@Composable
-private fun AddHabit(add: (String, Int, HabitTiming) -> Unit) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var perWeek by rememberSaveable { mutableStateOf(7) }
-    var timing by rememberSaveable { mutableStateOf(HabitTiming.ANYTIME) }
-    val submit = { if (title.isNotBlank()) { add(title, perWeek, timing); title = ""; perWeek = 7; timing = HabitTiming.ANYTIME } }
-    Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Field("New habit…", title, { title = it }) { submit() }
-        AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Chips(null, GoalRules.TARGET_CHOICES.map { it.label to (it.perWeek == perWeek) }) { i -> perWeek = GoalRules.TARGET_CHOICES[i].perWeek }
-                Chips(null, GoalRules.TIMINGS.map { GoalRules.timingLabel(it) to (it == timing) }) { i -> timing = GoalRules.TIMINGS[i] }
-                Action("Add") { submit() }
-            }
-        }
-    }
-}
+/** The add sheet open over Goals. */
+private enum class Adding { HABIT, GOAL }
 
-/** Add a goal: name, then (once typing) what done looks like and the horizon. */
-@Composable
-private fun AddGoal(add: (String, String?, GoalHorizon) -> Unit) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var target by rememberSaveable { mutableStateOf("") }
-    var horizon by rememberSaveable { mutableStateOf(GoalHorizon.MONTH) }
-    val submit = { if (title.isNotBlank()) { add(title, target.ifBlank { null }, horizon); title = ""; target = ""; horizon = GoalHorizon.MONTH } }
-    Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Field("New goal…", title, { title = it }) { submit() }
-        AnimatedVisibility(title.isNotBlank(), enter = unfold(), exit = fold()) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field("What does done look like? (optional)", target, { target = it }) { submit() }
-                Chips(null, GoalRules.HORIZONS.map { GoalRules.horizonLabel(it) to (it == horizon) }) { i -> horizon = GoalRules.HORIZONS[i] }
-                Action("Add") { submit() }
-            }
-        }
-    }
-}
+/** The tags the screen tests find Goals' add rows by. */
+const val GOALS_ADD_HABIT_TAG = "goals-add-habit"
+const val GOALS_ADD_GOAL_TAG = "goals-add-goal"
 
 /**
  * Goals' MONEY CHALLENGES (Money manager 15): each challenge he set in Money with its streak, brass while a run is going.

@@ -7704,3 +7704,11 @@ that only that person's replies change and that it syncs. A choice saves and clo
   reads its wait, and `waitsByHand` sets Sam Taylor to 2 weeks through his sheet (closes, row says so) then Back to usual.
 - Mac: `WaitsPanelView`'s chips are one `MailChoicePanelView` menu per person; `testChaseWaitChoicesReachSwift`. Mac
   checked nightly. Motion catalogue: new Chase waits line.
+
+### Found and fixing, week 5 — slice 92 (2026-11-26): A17 on Goals' add boxes
+
+The walk-through (g4b 12) found Goals' bare "New habit…" and "New goal…" fields open on the page in every Goals shot, each unfolding open chip rows once typed in. Each is now one card row ("+ New habit" · "Something to do, or stop doing, most weeks"; "+ New goal" · "Something you're working towards") opening a sheet over a fading scrim: the name with an example ("Read 20 pages", "Run a 10k"), How often and When chips (habit) or What does done look like and By when chips (goal), a note on what Navilife does with it, and Close · Add. Add stays dark until a name is typed; the name is trimmed and capped at 120; Add closes the sheet and the new habit or goal arrives in the list as before.
+- Core: `GoalAdd.kt` (`GoalAddRules` rows, sheets, defaults, `cleaned`, `canAdd`, `cleanedTarget`, `rowSpoken`); `GoalAddSheetTest`.
+- Fold: `GoalAddSheetView.kt` (`GoalAddRowView`, `HabitAddSheetView`, `GoalAddSheetView`); `GoalsRoute` (the old `AddHabit` / `AddGoal` are gone); `GoalsScreensTest`: no open "New habit…"/"New goal…" box in any shot, and `addByHand` (Close adds nothing, Add dark with no name, a habit at 3 a week in the evening, a goal with what done looks like for This year, each sheet gone after Add).
+- Mac: `GoalsScreen.swift`'s `AddHabitRow` / `AddGoalRow` are a row button opening a standard sheet (`HabitAddSheet`, `GoalAddSheetView`); `testGoalAddSheetsReachSwift`. Mac checked nightly.
+- Decided not to change: the Day list's New task bar and the Board's add bars, which are the approved Day list / folded-board mockups' fast-entry bars (Needs Meka #62).
