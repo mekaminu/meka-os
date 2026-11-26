@@ -14,8 +14,8 @@ private func balanceShown(_ line: String) -> String {
 /// cross-fade; Targets unfolds in place on the expand spring (the chevron turns); a chip blends to the accent.
 /// Reduce Motion: cross-fades, bars set.
 ///
-/// Slice 5: "Count as …": each event with no clear area is listed with chips (Family, Health, Self, Work, Don't count);
-/// a click counts every event with that title (synced with the Fold), the row folds away and the line says so with
+/// Slice 5: "Count as …": each event with no clear area is listed with a menu (Family, Health, Self, Work, Don't count;
+/// week 5 A17, they were chips); a click counts every event with that title (synced with the Fold), the row folds away and the line says so with
 /// Undo. His choices are listed under Targets, each with Forget.
 struct BalanceSection: View {
     @Environment(CoreModel.self) private var model
@@ -44,23 +44,39 @@ struct BalanceSection: View {
         .padding(.top, MekaSpace.l)
     }
 
-    /// Slice 5: the events with no clear area, each with a chip per area; the line after a click with Undo.
+    /// Slice 5: the events with no clear area; the line after a click with Undo. Walk-through week 5, A17: each event is
+    /// one row ("Swim club" · "Tue, Thu · 2 h") whose menu holds the core's five choices, each saying what it does to the
+    /// week, as the Fold's row and sheet, not a row of chips.
     @ViewBuilder
     private var countAs: some View {
+        if !balance.unclear.isEmpty {
+            Text(BalanceCountChoiceRules.shared.CAPTION).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+        }
         ForEach(Array(balance.unclear.enumerated()), id: \.element.key) { i, u in
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                HStack {
-                    Text(u.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Spacer()
-                    Text(balanceShown(u.line)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                }
-                HStack(spacing: MekaSpace.xs) {
-                    Text("Count as").font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    ForEach(countChoices, id: \.0) { choice in
-                        chip(choice.1, lit: false) { count(u.title, choice.0) }
+            let rules = BalanceCountChoiceRules.shared
+            let row = rules.row(u: u)
+            let sheet = rules.sheet(u: u, rows: balance.rows)
+            let title = u.title
+            HStack(spacing: MekaSpace.xs) {
+                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Spacer()
+                Text(balanceShown(row.value)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Menu("Count as") {
+                    Section(sheet.title) {
+                        ForEach(sheet.choices, id: \.name) { c in
+                            let name = c.name
+                            Button("\(c.label) · \(c.line)") {
+                                guard let code = rules.named(name: name) else { return }
+                                MekaHaptics.light()
+                                count(title, code)
+                            }
+                        }
                     }
                 }
+                .menuStyle(.borderlessButton).fixedSize()
+                .accessibilityLabel(row.spoken)
             }
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
             .staggeredAppear(i)
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
         }
@@ -76,10 +92,6 @@ struct BalanceSection: View {
             }
             .transition(.opacity)
         }
-    }
-
-    private var countChoices: [(String, String)] {
-        BalanceRules.shared.countAsCodes().map { ($0, BalanceRules.shared.countAsLabel(code: $0)) }
     }
 
     private func count(_ title: String, _ code: String) {

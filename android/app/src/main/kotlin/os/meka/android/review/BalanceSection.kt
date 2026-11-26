@@ -50,12 +50,18 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.goals.fold
 import os.meka.android.goals.unfold
 import os.meka.android.today.SectionLabel
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.BalanceArea
+import os.meka.core.domain.BalanceCountChoiceRules
 import os.meka.core.domain.BalanceRow
 import os.meka.core.domain.BalanceRules
 import os.meka.core.domain.BalanceView
 import os.meka.core.domain.DurationGlue
 import os.meka.core.domain.LoneWordGlue
+
+/** The tag the screen tests find a "Count as" row by. */
+const val BALANCE_COUNT_ROW_TAG = "balance-count-row"
 
 /** A grey line as drawn: durations and the last words kept together (quality gate slice 62). */
 private fun shown(line: String): String = LoneWordGlue.kept(DurationGlue.kept(line))
@@ -69,8 +75,8 @@ private fun shown(line: String): String = LoneWordGlue.kept(DurationGlue.kept(li
  * glides to a new target; statuses cross-fade and blend to the accent; Targets unfolds in place (expand spring, the
  * chevron turns, tick haptic); a chip blends to the accent with a light haptic. Reduced motion: cross-fades, bars set.
  *
- * Slice 5: "Count as …": each event with no clear area is listed under the balance with chips (Family, Health, Self,
- * Work, Don't count); a tap counts every event with that title (synced), the row folds away and the line says so with
+ * Slice 5: "Count as …": each event with no clear area is listed under the balance as a row opening a sheet (Family,
+ * Health, Self, Work, Don't count; week 5 A17, they were chips); a choice counts every event with that title (synced), the row folds away and the line says so with
  * Undo. His choices are listed under Targets, each with Forget.
  */
 internal fun LazyListScope.balanceItems(
@@ -181,29 +187,25 @@ private fun TrendBars(r: BalanceRow) {
 }
 
 /**
- * Slice 5: "Count as …" for each event with no clear area: its title, when ("Tue, Thu · 2 h") and a chip per area. A
- * row folds away once chosen (the chosen chip blends to the accent first); the line after a tap cross-fades in with Undo.
+ * Slice 5: "Count as …" for each event with no clear area. Walk-through week 5, A17: no open chip rows on a page, so
+ * each event is one card row ("Swim club" · "Tue, Thu · 2 h" ›) under a caption, opening Notifications' choice sheet of
+ * Family, Health, Self, Work and Don't count, each saying what it does to the week. A choice counts it and closes the
+ * sheet; the row folds away and the line after it cross-fades in with Undo.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, String) -> Unit, onUndo: () -> Unit) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+    var open by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        if (balance.unclear.isNotEmpty()) {
+            Text(BalanceCountChoiceRules.CAPTION, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
         balance.unclear.forEachIndexed { i, u ->
             androidx.compose.runtime.key(u.key) {
-                var picked by remember { mutableStateOf<String?>(null) }
-                Column(Modifier.appear(rememberAppearance(i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(u.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                        Text(shown(u.line), style = MekaType.caption, color = Meka.colors.textTertiary)
-                    }
-                    Text("Count as", style = MekaType.caption, color = Meka.colors.textTertiary)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        BalanceRules.COUNT_AS.forEach { (code, label) ->
-                            TargetChip(label, picked == code) { picked = code; onCountAs(u.title, code) }
-                        }
-                    }
-                }
+                NotifyChoiceRowView(
+                    BalanceCountChoiceRules.row(u),
+                    Modifier.appear(rememberAppearance(i)).testTag(BALANCE_COUNT_ROW_TAG),
+                ) { open = u.key }
             }
         }
         Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "balance-count-said") { l ->
@@ -218,6 +220,17 @@ private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, Str
                 }
             }
         }
+    }
+    val sheetFor = balance.unclear.firstOrNull { it.key == open }
+    if (sheetFor != null) {
+        NotifyChoiceSheetView(
+            BalanceCountChoiceRules.sheet(sheetFor, balance.rows),
+            onChoose = { name -> BalanceCountChoiceRules.named(name)?.let { onCountAs(sheetFor.title, it) } },
+            onClose = { open = null },
+        )
+    } else if (open != null) {
+        // Counted (the row folded away) or gone with the week: nothing left to choose for.
+        LaunchedEffect(open) { open = null }
     }
 }
 

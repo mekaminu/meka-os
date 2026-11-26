@@ -11,7 +11,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -36,7 +38,10 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.review.ReflectionActions
 import os.meka.android.review.Week
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.android.review.BALANCE_COUNT_ROW_TAG
 import os.meka.core.domain.BalanceArea
+import os.meka.core.domain.BalanceCountChoiceRules
 import os.meka.core.domain.BalanceChoices
 import os.meka.core.domain.BalanceRules
 import os.meka.core.domain.BalanceView
@@ -72,7 +77,7 @@ import kotlin.test.fail
  * the reflection asked for with suggestions, three earlier weeks in the journal), on the Fold's cover and inner screens,
  * Dark (and one in Light). Saved under `review/` and read for nonsense, cut lines, broken words, split numbers, dates
  * and durations, a grey line leaving a word alone or starting with a dot, and every button answering a 48 dp touch. By
- * hand: Targets opens and a chip sets a target, a "Count as" chip counts an event, Undo, Reflect now opens the
+ * hand: Targets opens and a chip sets a target, a "Count as" row opens its sheet and a choice counts an event, Undo, Reflect now opens the
  * questions, a suggestion fills its field, Save keeps the three, Skip this week, the journal opens and Remove, and
  * Change offers the times.
  */
@@ -209,6 +214,18 @@ class ReviewBalanceReflectScreensTest {
     private fun turns(ms: Long = SETTLE_MS) {
         repeat((ms / 100).toInt()) {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
+    private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
+    /** A sheet's window comes and goes through the main looper, so the clock alone doesn't raise or drop it. */
+    private fun until(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
             compose.mainClock.advanceTimeBy(100)
         }
     }
@@ -352,7 +369,11 @@ class ReviewBalanceReflectScreensTest {
         assertLines("$name-balance-foot", fill)
         if (fill == Fill.MANY) {
             if (b.unclear.size < 3) fail("$name: the fixture should have events to count (${b.unclear.map { it.title }})")
-            if (!onScreen("Count as")) fail("$name: no \"Count as\" under an event with no clear area")
+            if (!onScreen(BalanceCountChoiceRules.CAPTION)) fail("$name: no \"Count as\" rows under the events with no clear area")
+            // Walk-through week 5, A17: one row per event opening a sheet, no open chip row on the page.
+            val rows = compose.onAllNodesWithTag(BALANCE_COUNT_ROW_TAG).fetchSemanticsNodes().size
+            if (rows != b.unclear.size) fail("$name: ${b.unclear.size} events to count but $rows rows")
+            if (onScreen("Don't count")) fail("$name: Count as's chips are still open on the page")
         }
         scrollTo("REFLECT")
         ScreenShots.shootUnlessSame(compose, "review", "$name-reflect", last)
@@ -389,7 +410,7 @@ class ReviewBalanceReflectScreensTest {
         turns()
     }
 
-    /** Works by hand: Targets and a target chip, a "Count as" chip, Undo, the questions, Save, the journal, Change. */
+    /** Works by hand: Targets and a target chip, a "Count as" row and its sheet, Undo, the questions, Save, the journal, Change. */
     private fun byHand() {
         val name = "review-balance-by-hand"
         val taps = Taps()
@@ -409,10 +430,20 @@ class ReviewBalanceReflectScreensTest {
         clickNode(hasText("14 h"), "$name: Family's 14 h")
         if (taps.targets != listOf(BalanceArea.FAMILY to 14 * 60)) fail("$name: a target chip didn't set it (${taps.targets})")
         if (!onScreen("Quiz night · Self")) fail("$name: his choice isn't listed under Targets")
-        scrollTo("Count as")
-        val first = counted.unclear.first().title
-        clickNode(hasText("Health"), "$name: Count as Health")
-        if (taps.counted.firstOrNull() != (first to "HEALTH")) fail("$name: Count as didn't count \"$first\" (${taps.counted})")
+        scrollTo(BalanceCountChoiceRules.CAPTION)
+        val first = counted.unclear.first()
+        if (onScreen("Don't count")) fail("$name: Count as's chips are open on the page")
+        compose.onAllNodesWithTag(BALANCE_COUNT_ROW_TAG)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the Count as row didn't open its sheet")
+        val sheet = BalanceCountChoiceRules.sheet(first, counted.rows)
+        if (!onScreen(sheet.title)) fail("$name: the sheet isn't about \"${first.title}\"")
+        if (!onScreen(sheet.choices[1].line)) fail("$name: Health doesn't say what it does to the week (${sheet.choices[1].line})")
+        compose.onAllNodes(hasText("Health") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() }
+        if (taps.counted.firstOrNull() != (first.title to "HEALTH")) fail("$name: Count as didn't count \"${first.title}\" (${taps.counted})")
+        if (sheetOpen()) fail("$name: a choice didn't close the sheet")
         scrollTo("Undo")
         clickNode(hasText("Undo"), "$name: Undo")
         if (taps.undone != 1) fail("$name: Undo did nothing")

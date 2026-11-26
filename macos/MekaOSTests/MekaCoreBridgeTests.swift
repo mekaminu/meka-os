@@ -3257,6 +3257,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(choices.slotsSheet(i: i).choices.filter { $0.lit }.map { $0.name }, ["train"])
     }
 
+    func testBalanceCountAsMenuReachesSwift() {
+        // Walk-through week 5, A17: Balance's Count as is a menu per event built from the core's sheet; a pick sends back
+        // only the chip's code, as the chips did.
+        let rules = BalanceCountChoiceRules.shared
+        let u = BalanceUnclear(key: "swim club", title: "Swim club", line: "Tue, Thu · 2 h", minutes: 120)
+        XCTAssertEqual(rules.row(u: u).value, "Tue, Thu · 2 h")
+        let sheet = rules.sheet(u: u, rows: [])
+        XCTAssertEqual(sheet.title, "Count “Swim club” as")
+        XCTAssertEqual(sheet.choices.map { $0.name }, ["FAMILY", "HEALTH", "YOURSELF", "WORK", "NONE"])
+        XCTAssertEqual(sheet.choices.first?.line, "Adds 2 h · Family 0 h → 2 h")
+        XCTAssertEqual(rules.named(name: "HEALTH"), "HEALTH")
+        XCTAssertNil(rules.named(name: "CLEAR"))
+    }
+
     func testProtectedChoicesReachSwift() {
         // Walk-through week 5, A17: the sheet's three choices are menus built from the core's sheets; a pick sends only
         // its name back and the core reads it to the setting.
