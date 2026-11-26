@@ -3323,6 +3323,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.tickerNamed(mode: .moving, name: "moving"))
     }
 
+    func testVoiceChoicesReachSwift() {
+        // Walk-through week 5, A17: Obi's voice page's four on/off pairs are menus built from the core's sheets; a pick
+        // gives the Bool it sets, nil when already in force.
+        let choices = VoiceChoiceRules.shared
+        XCTAssertEqual(choices.callSheet(sir: false).choices.map { $0.label }, ["By name", "Sir"])
+        XCTAssertEqual(choices.callNamed(sir: false, name: choices.SIR)?.boolValue, true)
+        XCTAssertNil(choices.callNamed(sir: true, name: choices.SIR))
+        XCTAssertEqual(choices.faceSheet(on: true).choices.first(where: { $0.lit })?.label, "On")
+        XCTAssertEqual(choices.faceNamed(on: true, name: choices.OFF)?.boolValue, false)
+        XCTAssertEqual(choices.memorySheet(on: false).choices.first(where: { $0.lit })?.label, "Don't remember")
+        XCTAssertEqual(choices.liveNamed(on: false, name: choices.ON)?.boolValue, true)
+        XCTAssertNil(choices.liveNamed(on: false, name: "maybe"))
+    }
+
     func testWeekAheadChoicesReachSwift() {
         // Walk-through week 5, A17: the week ahead's Sunday heads-up is one menu built from the core's sheet; a pick sends
         // only its name back and the core reads it to the setting.

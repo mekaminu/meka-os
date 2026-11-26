@@ -55,14 +55,10 @@ struct VoiceSheet: View {
                 .foregroundStyle(palette.textSecondary)
             Text(lv.intro).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
-            Picker(lv.title, selection: Binding(get: { lv.on }, set: { model.setLiveOn($0) })) {
-                // On · Off, the same order as Face and Memory (walk-through A11).
-                Text(LiveTalkRules.shared.ON_LABEL).tag(true)
-                Text(LiveTalkRules.shared.OFF_LABEL).tag(false)
+            // On · Off, the same order as Face and Memory (walk-through A11), in a menu (week 5, A17).
+            choiceMenu(choices.liveSheet(on: lv.on)) { name in
+                if let on = choices.liveNamed(on: lv.on, name: name) { model.setLiveOn(on.boolValue) }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 220)
             .accessibilityLabel("Obi's Live mode")
             Text(lv.line).font(MekaType.caption).foregroundStyle(lv.on ? palette.accent : palette.textTertiary)
                 .id(lv.line)
@@ -121,18 +117,29 @@ struct VoiceSheet: View {
         }
     }
 
+    private var choices: VoiceChoiceRules { VoiceChoiceRules.shared }
+
+    /// Walk-through week 5, A17: each on/off pair is one menu saying what's chosen, as the Fold's row and sheet, not a
+    /// segmented row of both. A pick sends only the choice's name; the core says what it sets.
+    private func choiceMenu(_ sheet: NotifyChoiceSheet, pick: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { pick(name) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
+    }
+
     /// The companion, slice 3: how Navilife addresses him in Ask, Talk and Hello, by name or "sir", on every device.
     private var callMe: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(CompanionRules.shared.CALL_TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textSecondary)
-            Picker(CompanionRules.shared.CALL_TITLE, selection: Binding(get: { model.callsSir }, set: { model.setCallsSir($0) })) {
-                Text(CompanionRules.shared.CALL_BY_NAME).tag(false)
-                Text(CompanionRules.shared.CALL_SIR_LABEL).tag(true)
+            choiceMenu(choices.callSheet(sir: model.callsSir)) { name in
+                if let sir = choices.callNamed(sir: model.callsSir, name: name) { model.setCallsSir(sir.boolValue) }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 220)
             Text(CompanionRules.shared.callLine(sir: model.callsSir)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .id(model.callsSir)
                 .transition(.opacity)
@@ -147,13 +154,9 @@ struct VoiceSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(CompanionMemoryRules.shared.TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textSecondary)
-            Picker(CompanionMemoryRules.shared.TITLE, selection: Binding(get: { model.remembersChats }, set: { model.setRemembersChats($0) })) {
-                Text(CompanionMemoryRules.shared.ON_LABEL).tag(true)
-                Text(CompanionMemoryRules.shared.OFF_LABEL).tag(false)
+            choiceMenu(choices.memorySheet(on: model.remembersChats)) { name in
+                if let on = choices.memoryNamed(on: model.remembersChats, name: name) { model.setRemembersChats(on.boolValue) }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 260)
             Text(LoneWordGlue.shared.kept(line: model.remembersChats ? CompanionMemoryRules.shared.onLine(count: Int32(model.memoryRows.count)) : CompanionMemoryRules.shared.OFF_LINE))
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -183,16 +186,12 @@ struct VoiceSheet: View {
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(FaceLook.shared.SETTING_TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textSecondary)
-            Picker(FaceLook.shared.SETTING_TITLE, selection: Binding(get: { store.on }, set: { on in
-                MekaHaptics.tick()
-                store.setOn(on)
-            })) {
-                Text(FaceLook.shared.ON).tag(true).accessibilityLabel("Show the face when talking")
-                Text(FaceLook.shared.OFF).tag(false).accessibilityLabel("Show the orb when talking")
+            choiceMenu(choices.faceSheet(on: store.on)) { name in
+                if let on = choices.faceNamed(on: store.on, name: name) {
+                    MekaHaptics.tick()
+                    store.setOn(on.boolValue)
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 260)
             if !store.ready {
                 Text(FaceLook.shared.WAITING_LINE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

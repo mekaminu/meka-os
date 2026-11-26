@@ -8,7 +8,7 @@ mac: VOICE
 mac_where: Ask → Settings → Obi's voice
 ---
 what: how Obi, Navilife's assistant, sounds in Talk, the morning brief and the call assistant.
-how: Pick a voice there and play a sample.
+how: Pick a voice there and play a sample; tap Obi calls you, Face, What Obi remembers or Live to open its choices, each saying what it does.
 tip: On a slow connection the first words can take a moment; offline it says "Using the phone's voice while offline" once and carries on in the phone's own voice.
 tip: Obi talks a touch quicker than before, with a small natural pause after a quick reaction ("Oh nice."), and each sentence of his answer is made ready as he writes it, so there are no gaps between them (Amazon voices; Google's voices keep their own pace).
 tip: Ask → More → Activity shows how quickly the voice answered; clips heard over Bluetooth or car audio are marked "+ Bluetooth", about 0.2 s more.

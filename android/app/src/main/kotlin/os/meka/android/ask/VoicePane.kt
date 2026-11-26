@@ -67,7 +67,6 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
-import os.meka.android.work.SettingChip
 import os.meka.core.domain.CompanionMemoryRules
 import os.meka.core.domain.CompanionRules
 import os.meka.core.domain.DeviceVoice
@@ -78,6 +77,7 @@ import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.VoiceChoice
 import os.meka.core.domain.VoicePickerRules
 import os.meka.core.domain.VoicePickerView
+import os.meka.core.domain.VoiceChoiceRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -290,6 +290,12 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
 }
 
 /** What Obi's voice page shows (quality gate slice 59: [VoicePane] loads it, [VoiceList] draws it; null: still loading). */
+/** Obi's voice page's choice rows (walk-through week 5, A17), for the screen tests. */
+const val VOICE_CALL_ROW_TAG = "voice-call-row"
+const val VOICE_FACE_ROW_TAG = "voice-face-row"
+const val VOICE_MEMORY_ROW_TAG = "voice-memory-row"
+const val VOICE_LIVE_ROW_TAG = "voice-live-row"
+
 internal data class VoiceScreen(
     val sir: Boolean?,
     val faceOn: Boolean,
@@ -334,6 +340,25 @@ internal class VoiceActions(
 @Composable
 internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceActions) {
     val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    // Which choice sheet is open (walk-through week 5, A17), by its row's title.
+    var sheet by remember { mutableStateOf<String?>(null) }
+    when (sheet) {
+        CompanionRules.CALL_TITLE -> s.sir?.let { on ->
+            os.meka.android.notify.NotifyChoiceSheetView(VoiceChoiceRules.callSheet(on),
+                onChoose = { name -> VoiceChoiceRules.callNamed(on, name)?.let(a.callSir) }, onClose = { sheet = null })
+        }
+        os.meka.core.domain.FaceLook.SETTING_TITLE -> os.meka.android.notify.NotifyChoiceSheetView(VoiceChoiceRules.faceSheet(s.faceOn),
+            onChoose = { name -> VoiceChoiceRules.faceNamed(s.faceOn, name)?.let(a.setFace) }, onClose = { sheet = null })
+        CompanionMemoryRules.TITLE -> s.remembers?.let { on ->
+            os.meka.android.notify.NotifyChoiceSheetView(VoiceChoiceRules.memorySheet(on),
+                onChoose = { name -> VoiceChoiceRules.memoryNamed(on, name)?.let(a.remember) }, onClose = { sheet = null })
+        }
+        os.meka.core.domain.LiveTalkRules.TITLE -> s.live?.let { lv ->
+            os.meka.android.notify.NotifyChoiceSheetView(VoiceChoiceRules.liveSheet(lv.on),
+                onChoose = { name -> VoiceChoiceRules.liveNamed(lv.on, name)?.let(a.setLive) }, onClose = { sheet = null })
+        }
+    }
     Column(
         Modifier.fillMaxSize().testTag("voice-pane").verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -347,10 +372,10 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
             // The companion, slice 3: how Navilife addresses him in Ask, Talk and Hello.
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionRules.CALL_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Obi calls you by name") { a.callSir(false) }
-                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Obi calls you sir") { a.callSir(true) }
-                }
+                // Walk-through week 5, A17: a row saying what's chosen, opening a sheet of the choices, not a chip row.
+                os.meka.android.notify.NotifyChoiceRowView(
+                    VoiceChoiceRules.callRow(on), Modifier.testTag(VOICE_CALL_ROW_TAG), raised = true,
+                ) { haptics.tick(); sheet = CompanionRules.CALL_TITLE }
                 Crossfade(on, animationSpec = MekaMotion.appear(reduced), label = "call-line") { now ->
                     Text(LoneWordGlue.kept(CompanionRules.callLine(now)), style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
@@ -359,20 +384,18 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
         // Obi's face, slice 3: Face On · Off (on by default); until the face's files are kept, a line says the orb stays.
         Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Text(os.meka.core.domain.FaceLook.SETTING_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
-            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                SettingChip(os.meka.core.domain.FaceLook.ON, on = s.faceOn, spoken = "Show the face when talking") { a.setFace(true) }
-                SettingChip(os.meka.core.domain.FaceLook.OFF, on = !s.faceOn, spoken = "Show the orb when talking") { a.setFace(false) }
-            }
+            os.meka.android.notify.NotifyChoiceRowView(
+                VoiceChoiceRules.faceRow(s.faceOn), Modifier.testTag(VOICE_FACE_ROW_TAG), raised = true,
+            ) { haptics.tick(); sheet = os.meka.core.domain.FaceLook.SETTING_TITLE }
             if (!s.faceReady) Text(LoneWordGlue.kept(os.meka.core.domain.FaceLook.WAITING_LINE), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         s.remembers?.let { on ->
             // The companion, slice 5: what Navilife remembers of earlier chats, viewable and clearable.
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionMemoryRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionMemoryRules.ON_LABEL, on = on, spoken = "Obi remembers your chats") { a.remember(true) }
-                    SettingChip(CompanionMemoryRules.OFF_LABEL, on = !on, spoken = "Obi doesn't remember your chats") { a.remember(false) }
-                }
+                os.meka.android.notify.NotifyChoiceRowView(
+                    VoiceChoiceRules.memoryRow(on), Modifier.testTag(VOICE_MEMORY_ROW_TAG), raised = true,
+                ) { haptics.tick(); sheet = CompanionMemoryRules.TITLE }
                 Crossfade(on to s.memoryRows, animationSpec = MekaMotion.appear(reduced), label = "memory") { (now, rows) ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text(
@@ -394,11 +417,10 @@ internal fun VoiceList(s: VoiceScreen, playing: (String) -> Boolean, a: VoiceAct
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(lv.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Text(LoneWordGlue.kept(lv.intro), style = MekaType.caption, color = Meka.colors.textTertiary)
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    // On · Off, the same order as Face and Memory (walk-through A11).
-                    SettingChip(os.meka.core.domain.LiveTalkRules.ON_LABEL, on = lv.on, spoken = "Live on") { a.setLive(true) }
-                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off") { a.setLive(false) }
-                }
+                // On · Off in its sheet, the same order as Face and Memory (walk-through A11).
+                os.meka.android.notify.NotifyChoiceRowView(
+                    VoiceChoiceRules.liveRow(lv.on), Modifier.testTag(VOICE_LIVE_ROW_TAG), raised = true,
+                ) { haptics.tick(); sheet = os.meka.core.domain.LiveTalkRules.TITLE }
                 Crossfade(lv.line to lv.meterLine, animationSpec = MekaMotion.appear(reduced), label = "live-line") { (line, meter) ->
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         Text(LoneWordGlue.kept(line), style = MekaType.caption, color = if (lv.on) Meka.colors.accent else Meka.colors.textTertiary)

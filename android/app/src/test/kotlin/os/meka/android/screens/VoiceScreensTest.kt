@@ -39,7 +39,15 @@ import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DeviceVoice
 import os.meka.core.domain.DeviceVoiceRules
 import os.meka.core.domain.DeviceVoiceSettings
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.onAllNodesWithTag
 import os.meka.core.domain.LiveTalkRules
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.android.ask.VOICE_CALL_ROW_TAG
+import os.meka.android.ask.VOICE_FACE_ROW_TAG
+import os.meka.android.ask.VOICE_LIVE_ROW_TAG
+import os.meka.android.ask.VOICE_MEMORY_ROW_TAG
+import os.meka.core.domain.VoiceChoiceRules
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.ServerSpeedRules
 import os.meka.core.domain.ServerTurnTiming
@@ -211,9 +219,16 @@ class VoiceScreensTest {
         )
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
-        val chips = listOf(CompanionRules.CALL_BY_NAME, CompanionRules.CALL_SIR_LABEL, CompanionMemoryRules.ON_LABEL, CompanionMemoryRules.OFF_LABEL,
-            LiveTalkRules.ON_LABEL, LiveTalkRules.OFF_LABEL)
-        ScreenShots.assertEachOneLine(compose, name, chips + listOf("▶  Sample"))
+        // Walk-through week 5, A17: each on/off pair is one row saying what's chosen; the other choice is only in its sheet.
+        val rows = listOfNotNull(
+            s.sir?.let { VoiceChoiceRules.callRow(it) }, VoiceChoiceRules.faceRow(s.faceOn),
+            s.remembers?.let { VoiceChoiceRules.memoryRow(it) }, s.live?.let { VoiceChoiceRules.liveRow(it.on) },
+        )
+        rows.forEach { r -> if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no \"${r.title}\" row saying ${r.value}") }
+        listOf(CompanionRules.CALL_BY_NAME, CompanionRules.CALL_SIR_LABEL, CompanionMemoryRules.ON_LABEL, CompanionMemoryRules.OFF_LABEL)
+            .filter { label -> rows.none { it.value == label } }
+            .forEach { if (compose.onAllNodes(hasText(it, substring = false)).fetchSemanticsNodes().isNotEmpty()) fail("$name: \"$it\" is still an open chip on the page") }
+        ScreenShots.assertEachOneLine(compose, name, rows.map { it.value } + listOf("▶  Sample"))
         assertSamplePills(name)
         assertTouchTargets(name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
@@ -240,6 +255,17 @@ class VoiceScreensTest {
         return s
     }
 
+    private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
+    private fun sheetUntil(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
     /** Works by hand: Sir, Orus, Charon's Sample, "+2 more" and Live's On each reach their action. */
     private fun byHand() {
         val name = "voice-by-hand"
@@ -252,13 +278,27 @@ class VoiceScreensTest {
             turns(500)
             if (log.lastOrNull() != expect) fail("$name: $what did ${log.lastOrNull()} (wanted $expect)")
         }
-        tap("Sir", hasContentDescription("Obi calls you sir"), "sir:true")
+        // A choice row opens its sheet; a choice there saves it and closes the sheet (walk-through week 5, A17).
+        fun choose(what: String, row: String, label: String, expect: String) {
+            val r = compose.onAllNodes(hasTestTag(row) and hasClickAction())
+            if (r.fetchSemanticsNodes().isEmpty()) fail("$name: no $what row to tap")
+            r[0].performSemanticsAction(SemanticsActions.OnClick)
+            sheetUntil { sheetOpen() }
+            if (!sheetOpen()) fail("$name: the $what row didn't open its sheet")
+            compose.onAllNodes(hasText(label, substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            sheetUntil { !sheetOpen() }
+            if (sheetOpen()) fail("$name: choosing $label didn't close the $what sheet")
+            if (log.lastOrNull() != expect) fail("$name: $what → $label did ${log.lastOrNull()} (wanted $expect)")
+        }
+        choose("Obi calls you", VOICE_CALL_ROW_TAG, CompanionRules.CALL_SIR_LABEL, "sir:true")
         tap("Orus", hasText("Orus"), "choose:Orus")
         tap("Charon's Sample", hasContentDescription("Sample · Charon"), "sample:Charon")
-        tap("Live's On", hasContentDescription("Live on"), "live:true")
-        tap("Remember off", hasContentDescription("Obi doesn't remember your chats"), "remember:false")
+        choose("Live", VOICE_LIVE_ROW_TAG, LiveTalkRules.ON_LABEL, "live:true")
+        choose("What Obi remembers", VOICE_MEMORY_ROW_TAG, CompanionMemoryRules.OFF_LABEL, "remember:false")
+        choose("Face", VOICE_FACE_ROW_TAG, os.meka.core.domain.FaceLook.OFF, "face:false")
         tap("Close", hasText("Close"), "close")
-        if (log.size != 6) fail("$name: ${log.size} actions for six taps ($log)")
+        if (log.size != 7) fail("$name: ${log.size} actions for seven choices ($log)")
     }
 
     private fun byHandMore() {
