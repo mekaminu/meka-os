@@ -6,7 +6,8 @@ import SwiftUI
 /// say both, and the Day ring's rain follows where he'll be. Return saves a field (a name that can't be a town says
 /// so); a changed name also saves when the sheet closes (typing is never lost). The line under each cross-fades as the
 /// server follows ("Finding “Bedford”…" → "Forecast for Bedford · from Open-Meteo"), in the accent colour when the name
-/// couldn't be found. Synced.
+/// couldn't be found. Synced. The Mac keeps its fields (a simpler layout, as About you's); the Fold's Home and Work
+/// are rows opening a sheet (walk-through week 5, A17), and both read the core's lines and labels.
 struct WeatherPlaceSection: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
@@ -18,15 +19,15 @@ struct WeatherPlaceSection: View {
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
             PlaceField(
                 label: "Home", choice: model.weather?.placeChoice, fallback: WeatherPlaceRules.shared.defaultName,
-                fallbackLine: WeatherPlaceView.companion.NO_HOME.line,
-                isDefault: { WeatherPlaceRules.shared.isHome(name: $0) }, resetLabel: "Use home",
+                fallbackLine: WeatherPlaceChoiceRules.shared.NO_HOME_LINE, home: true,
+                isDefault: { WeatherPlaceRules.shared.isHome(name: $0) }, resetLabel: WeatherPlaceChoiceRules.shared.USE_HOME,
                 spokenLabel: "Weather for which town", palette: palette,
                 save: { name in await model.setWeatherPlace(name) }
             )
             PlaceField(
                 label: "Work", choice: model.weather?.workChoice, fallback: PlacesRules.shared.defaultWork,
-                fallbackLine: WeatherPlaceView.companion.NO_WORK.line,
-                isDefault: { PlacesRules.shared.isDefaultWork(name: $0) }, resetLabel: "Use About you's",
+                fallbackLine: WeatherPlaceChoiceRules.shared.NO_WORK_LINE, home: false,
+                isDefault: { PlacesRules.shared.isDefaultWork(name: $0) }, resetLabel: WeatherPlaceChoiceRules.shared.USE_WORK,
                 spokenLabel: "Where work is", palette: palette,
                 save: { name in await model.setWorkPlace(name) }
             )
@@ -42,6 +43,7 @@ private struct PlaceField: View {
     let choice: WeatherPlaceView?
     let fallback: String
     let fallbackLine: String
+    let home: Bool
     let isDefault: (String) -> Bool
     let resetLabel: String
     let spokenLabel: String
@@ -52,8 +54,11 @@ private struct PlaceField: View {
 
     private var savedName: String { choice?.name ?? fallback }
     private var line: String {
-        if bad { return "That doesn't look like a town · try Bedford" }
-        return choice?.line ?? fallbackLine
+        if bad { return WeatherPlaceChoiceRules.shared.BAD }
+        // Walk-through week 5 (g4a 9): with no place the line says what's shown, never "add it in About you" under the
+        // field that sets it (the core's words, as the Fold's rows).
+        guard let choice else { return fallbackLine }
+        return WeatherPlaceChoiceRules.shared.line(v: choice, home: home)
     }
 
     var body: some View {

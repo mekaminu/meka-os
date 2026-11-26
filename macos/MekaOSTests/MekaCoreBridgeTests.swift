@@ -3286,6 +3286,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(r.prep(name: "soon"))
     }
 
+    func testWeatherPlaceLinesReachSwift() {
+        // Walk-through week 5 (g4a 9): with no place the Mac's weather lines say what's shown, never "add it in About you".
+        let r = WeatherPlaceChoiceRules.shared
+        XCTAssertEqual(r.line(v: WeatherPlaceView.companion.NO_HOME, home: true), r.NO_HOME_LINE)
+        XCTAssertFalse(r.line(v: WeatherPlaceView.companion.NO_WORK, home: false).contains("About you"))
+        XCTAssertEqual(r.homeRow(v: WeatherPlaceView.companion.NO_HOME).value, r.NOT_SET)
+        XCTAssertEqual(r.USE_HOME, "Use About you's home")
+    }
+
     func testChaseWaitChoicesReachSwift() {
         // Walk-through week 5, A17: each Chase waits person is a menu built from the core's sheet; a pick's name reads back
         // to the days to set (0 = Back to usual).

@@ -156,3 +156,67 @@ class WorkPlaceStore(private val replica: Replica) {
         const val ENTITY_ID = "work_place"
     }
 }
+
+/**
+ * Calendars → Weather as rows (walk-through week 5, A17: no open input boxes on a page; finding g4a 9: the Home field
+ * read "Your town" over a line sending him to About you to set the same thing). Home and Work are each one card row
+ * ("Home" · "Bedford", "Work" · "Not set") with what the forecast is doing under it, and a tap opens a sheet holding the
+ * town, a note on what it's for and what's sent, Close · Use About you's · Save. The row's line never points elsewhere:
+ * the row itself is where to type it. Non-AI, pure.
+ */
+object WeatherPlaceChoiceRules {
+    const val HOME = "Home"
+    const val WORK = "Work"
+    const val NOT_SET = "Not set"
+    const val HINT = "Your town"
+    const val BAD = "That doesn't look like a town · try Bedford"
+    const val USE_HOME = "Use About you's home"
+    const val USE_WORK = "Use About you's work"
+    const val CLEAR = "Clear"
+    const val HOME_SPOKEN = "Weather for which town"
+    const val WORK_SPOKEN = "Where work is"
+    const val HOME_NOTE = "The town for Today's weather line, the brief and Ask. Only the name is sent to Open-Meteo."
+    const val WORK_NOTE = "Where work is, for office-day weather on Today and in the brief. Only the name is sent to Open-Meteo."
+    const val NO_HOME_LINE = "Showing ${WeatherPlaceRules.FALLBACK}'s weather until you add your town"
+    const val NO_WORK_LINE = "No office-day weather until you add where work is"
+
+    /** The line under a row: the forecast's own line, except that with no place it says what's shown, not where to go. */
+    fun line(v: WeatherPlaceView, home: Boolean): String = when {
+        v.name.isNotEmpty() -> v.line
+        v.pending -> v.line.substringBefore("…") + "…"
+        home -> NO_HOME_LINE
+        else -> NO_WORK_LINE
+    }
+
+    /** "Home" · "Bedford" (or "Not set"), read whole: "Home weather, Bedford". */
+    fun homeRow(v: WeatherPlaceView): NotifyChoiceRow =
+        NotifyChoiceRow(HOME, v.name.ifEmpty { NOT_SET }, "$HOME weather, ${v.name.ifEmpty { NOT_SET }}")
+
+    fun workRow(v: WeatherPlaceView): NotifyChoiceRow =
+        NotifyChoiceRow(WORK, v.name.ifEmpty { NOT_SET }, "$WORK weather, ${v.name.ifEmpty { NOT_SET }}")
+
+    /**
+     * Home's sheet: the field holds the town (About you's while it follows it), its example About you's home or "Your
+     * town"; the way back is "Use About you's home" when About you has one and another town is set, "Clear" when only
+     * this town is set, none while it follows About you. A blank Save follows About you again.
+     */
+    fun homeSheet(v: WeatherPlaceView, aboutHome: String? = WeatherPlaceRules.aboutHome): AboutEditSheet =
+        sheet(HOME, v, aboutHome, HOME_SPOKEN, HOME_NOTE, USE_HOME, WeatherPlaceRules.isHome(v.name) || v.name.equals(aboutHome, true))
+
+    fun workSheet(v: WeatherPlaceView, aboutWork: String? = PlacesRules.aboutWork): AboutEditSheet =
+        sheet(WORK, v, aboutWork, WORK_SPOKEN, WORK_NOTE, USE_WORK, v.name.isBlank() || v.name.equals(aboutWork, true))
+
+    private fun sheet(title: String, v: WeatherPlaceView, about: String?, spoken: String, note: String, use: String, following: Boolean) =
+        AboutEditSheet(
+            field = null, title = title, value = v.name, hint = about?.takeIf { it.isNotBlank() } ?: HINT, spokenHint = spoken,
+            note = note, clearLabel = when {
+                following -> null
+                about.isNullOrBlank() -> CLEAR
+                else -> use
+            },
+            blankSaves = true, maxLength = WeatherPlaceRules.MAX_NAME,
+        )
+
+    /** Why [input] can't be saved ([BAD]); null for a town or a blank (follow About you). */
+    fun refusal(input: String): String? = if (input.isNotBlank() && !WeatherPlaceRules.accepts(input)) BAD else null
+}

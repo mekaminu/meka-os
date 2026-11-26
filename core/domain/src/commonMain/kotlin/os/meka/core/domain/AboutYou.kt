@@ -286,6 +286,13 @@ data class AboutEditSheet(
     val note: String,
     val saveLabel: String = AboutYouRules.SAVE,
     val clearLabel: String? = null,
+    /**
+     * Whether Save takes a blank field (a line's sheet: a blank clears it; Calendars' weather places: a blank follows
+     * About you again). The add-a-child sheet needs words.
+     */
+    val blankSaves: Boolean = field != null,
+    /** The most the field takes (a weather place: [WeatherPlaceRules.MAX_NAME]). */
+    val maxLength: Int = Int.MAX_VALUE,
 )
 
 /** Non-AI, pure. */

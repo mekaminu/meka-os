@@ -18,34 +18,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.launch
@@ -57,9 +44,10 @@ import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.core.domain.PlacesRules
-import os.meka.core.domain.WeatherPlaceRules
-import os.meka.core.domain.WeatherPlaceView
+import os.meka.android.ask.AboutEditSheetView
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.core.domain.NotifyChoiceRow
+import os.meka.core.domain.WeatherPlaceChoiceRules
 import os.meka.core.facade.MekaCore
 
 /** The line under WEATHER (in Calendars' shots, quality gate slice 33). */
@@ -68,30 +56,72 @@ internal const val WEATHER_HINT = "Home and work for Today's weather line, the b
 /**
  * Weather places (Calendars → Weather): **Home**, the town the forecast is for, About you's home unless Meka types
  * another, and **Work** (Places item 2), About you's work unless he types another (rule 13: no place in the code); on office days Today's weather line and the brief
- * say both, and the Day ring's rain follows where he'll be. Done saves a field (a name that can't be a town says so
- * with a tick haptic); a changed name also saves when the pane closes (typing is never lost). The line under each
- * cross-fades as the server follows ("Finding “Bedford”…" → "Forecast for Bedford · from Open-Meteo"), lit in the
- * accent colour when the name couldn't be found. Synced.
+ * say both, and the Day ring's rain follows where he'll be.
+ *
+ * Walk-through week 5, A17 (and g4a 9): no open "Your town" boxes on the page. Home and Work are each one card row
+ * ("Home" · "Bedford", "Work" · "Not set") with the forecast's line under it, cross-fading as the server follows
+ * ("Finding “Bedford”…" → "Forecast for Bedford · from Open-Meteo"), lit in the accent colour when the name couldn't be
+ * found; with no place the line says what's shown, never "add it in About you" under the row that sets it. A tap opens
+ * About you's edit sheet ([AboutEditSheetView]: rises over a fading scrim, reduced motion a cross-fade) holding the
+ * town, what it's for and what's sent, and Close · Use About you's · Save; a name that can't be a town keeps the sheet
+ * open with why (a tick haptic), a blank Save follows About you again. Synced.
  */
 @Composable
 internal fun WeatherPlaceSection(core: MekaCore, modifier: Modifier = Modifier) {
     val view by core.weatherView.collectAsState()
+    var open by remember { mutableStateOf<PlaceSheet?>(null) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text("WEATHER", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
         Text(os.meka.core.domain.LoneWordGlue.kept(WEATHER_HINT),
             style = MekaType.caption, color = Meka.colors.textTertiary)
-        PlaceField(
-            label = "Home", choice = view.placeChoice, fallback = WeatherPlaceRules.defaultName,
-            isDefault = WeatherPlaceRules::isHome, resetLabel = "Use home", spokenLabel = "Weather for which town",
-            save = { core.setWeatherPlace(it) },
-        )
-        PlaceField(
-            label = "Work", choice = view.workChoice, fallback = PlacesRules.defaultWork,
-            isDefault = PlacesRules::isDefaultWork, resetLabel = "Use About you's", spokenLabel = "Where work is",
-            save = { core.setWorkPlace(it) },
-            modifier = Modifier.padding(top = MekaSpace.xs),
-        )
+        PlaceRow(WeatherPlaceChoiceRules.homeRow(view.placeChoice), WeatherPlaceChoiceRules.line(view.placeChoice, home = true),
+            view.placeChoice.lit, "home") { open = PlaceSheet.HOME }
+        PlaceRow(WeatherPlaceChoiceRules.workRow(view.workChoice), WeatherPlaceChoiceRules.line(view.workChoice, home = false),
+            view.workChoice.lit, "work") { open = PlaceSheet.WORK }
         HereSwitch(core, Modifier.padding(top = MekaSpace.xs))
+    }
+    open?.let { which ->
+        val haptics = rememberMekaHaptics()
+        var refusal by remember(which) { mutableStateOf<String?>(null) }
+        val sheet = when (which) {
+            PlaceSheet.HOME -> WeatherPlaceChoiceRules.homeSheet(view.placeChoice)
+            PlaceSheet.WORK -> WeatherPlaceChoiceRules.workSheet(view.workChoice)
+        }
+        AboutEditSheetView(sheet, refusal, onSave = { typed ->
+            val t = typed.trim()
+            val why = WeatherPlaceChoiceRules.refusal(t)
+            if (why != null) {
+                refusal = why; haptics.tick()
+            } else {
+                TypingSaves.launch {
+                    val ok = when (which) {
+                        PlaceSheet.HOME -> core.setWeatherPlace(t)
+                        PlaceSheet.WORK -> core.setWorkPlace(t)
+                    }
+                    if (ok) open = null else { refusal = WeatherPlaceChoiceRules.BAD; haptics.tick() }
+                }
+            }
+        }, onClose = { open = null })
+    }
+}
+
+private enum class PlaceSheet { HOME, WORK }
+
+/** One place: its card row and the forecast's line under it. */
+@Composable
+private fun PlaceRow(row: NotifyChoiceRow, line: String, lit: Boolean, key: String, onOpen: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        NotifyChoiceRowView(row, onOpen = onOpen)
+        AnimatedContent(
+            targetState = line,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "place-line-$key",
+            modifier = Modifier.padding(horizontal = MekaSpace.m),
+        ) { l ->
+            Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption,
+                color = if (lit) Meka.colors.accent else Meka.colors.textTertiary)
+        }
     }
 }
 
@@ -167,85 +197,5 @@ private fun openAppSettings(context: Context) {
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
-    }
-}
-
-/** One place: its label, the field, and the line under it (with a way back to the default). */
-@Composable
-private fun PlaceField(
-    label: String,
-    choice: WeatherPlaceView,
-    fallback: String,
-    isDefault: (String?) -> Boolean,
-    resetLabel: String,
-    spokenLabel: String,
-    save: suspend (String) -> Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val haptics = rememberMekaHaptics()
-    val reduced = Meka.reducedMotion
-    val focus = LocalFocusManager.current
-    var text by rememberSaveable(choice.name) { mutableStateOf(choice.name) }
-    var bad by remember(choice.name) { mutableStateOf(false) }
-    val saver by rememberUpdatedState(save)
-
-    fun store(name: String, done: (Boolean) -> Unit = {}) = TypingSaves.launch { done(saver(name)) }
-
-    val typed by rememberUpdatedState(text)
-    val saved by rememberUpdatedState(choice.name)
-    DisposableEffect(Unit) {
-        onDispose {
-            val t = typed.trim()
-            if (t != saved && WeatherPlaceRules.accepts(t)) store(t)
-        }
-    }
-
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text(label, style = MekaType.caption, color = Meka.colors.textSecondary)
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
-        ) {
-            if (text.isEmpty()) Text(fallback.ifEmpty { "Your town" }, style = MekaType.body, color = Meka.colors.textTertiary)
-            BasicTextField(
-                value = text,
-                onValueChange = { text = it.take(WeatherPlaceRules.MAX_NAME); bad = false },
-                singleLine = true,
-                textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-                cursorBrush = SolidColor(Meka.colors.accent),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    val t = text.trim()
-                    if (t.isNotEmpty() && !WeatherPlaceRules.accepts(t)) {
-                        bad = true; haptics.tick()
-                    } else {
-                        focus.clearFocus()
-                        store(t) { ok -> bad = !ok; if (ok) haptics.light() else haptics.tick() }
-                    }
-                }),
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = spokenLabel },
-            )
-        }
-        val line = if (bad) "That doesn't look like a town · try Bedford" else choice.line
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AnimatedContent(
-                targetState = line,
-                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
-                label = "place-line-$label",
-                modifier = Modifier.weight(1f),
-            ) { l ->
-                Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption, color = when {
-                    bad -> Meka.colors.critical
-                    choice.lit -> Meka.colors.accent
-                    else -> Meka.colors.textTertiary
-                })
-            }
-            if (!isDefault(choice.name)) {
-                Text(resetLabel, style = MekaType.caption, color = Meka.colors.accent,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) {
-                        haptics.tick(); text = fallback; bad = false; store("")
-                    }.minTouch().padding(start = MekaSpace.m))
-            }
-        }
     }
 }

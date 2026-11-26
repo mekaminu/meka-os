@@ -7672,6 +7672,24 @@ callers may know is a switch row per thing, each saying what Obi may tell a call
   `testCallsChoicesReachSwift`. Mac checked nightly. Motion catalogue's Obi on calls line updated.
 - Left: Chase waits' per-person chips; Calendar's and other pages' open inputs.
 
+### Found and fixing, week 5 — slice 91 (2026-11-26): A17 on Calendars' weather places
+
+Calendars → Weather had two open "Your town" boxes (Home, Work) on the page, and with no place set the line under Home
+read "Showing London's weather · add your home in Ask → Settings → About you" right under the box that sets it (g4a 9).
+Home and Work are now each one card row ("Home" · "Bedford" ›, "Work" · "Not set" ›) with the forecast's line under
+it; with no place it says what's shown ("Showing London's weather until you add your town", "No office-day weather until
+you add where work is"). A tap opens About you's edit sheet: the town (About you's while it follows it), the example,
+what it's for and that only the name goes to Open-Meteo, Close · Use About you's home (or Clear) · Save. A name that
+can't be a town keeps the sheet open with why; a blank Save follows About you again.
+- Core: `WeatherPlaceChoiceRules` (rows, `line`, `homeSheet` / `workSheet`, `refusal`); `AboutEditSheet.blankSaves` and
+  `maxLength`; `WeatherPlaceChoicesTest`.
+- Fold: `WeatherPlaceSection` uses `NotifyChoiceRowView` and `AboutEditSheetView` (now Words capitalisation for a
+  sheet with no About you field, and the field's length cap); `CalendarsScreensTest` checks every shot has no open input
+  box, a Home and a Work row and no line sending him to About you, and `weatherByHand` refuses "<b>" with the sheet kept
+  open, then saves Oakfield (sheet closes, row reads it), through the semantics only.
+- Mac: keeps its fields (simpler layout) but reads the core's lines and labels; `testWeatherPlaceLinesReachSwift`. Mac
+  checked nightly. Motion catalogue: new Weather places line.
+
 ### Found and fixing, week 5 — slice 90 (2026-11-26): A17 on Mail's Chase waits
 
 Mail → Chase waits had, under each person he set his own wait for, an open chip row "1 day 2 days 3 days 5 days 1 week

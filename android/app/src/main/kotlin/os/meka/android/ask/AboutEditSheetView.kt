@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -87,8 +88,8 @@ internal fun AboutEditSheetView(
     var text by rememberSaveable(sheet.title) { mutableStateOf(sheet.value) }
     LaunchedEffect(Unit) { rise.animateTo(1f, MekaMotion.appear(reduced)) }
     val close: () -> Unit = { scope.launch { rise.animateTo(0f, MekaMotion.expand(reduced)); onClose() } }
-    // The add-a-child sheet needs words; a line's sheet saves a blank as a clear.
-    val canSave = sheet.field != null || text.isNotBlank()
+    // The add-a-child sheet needs words; a line's sheet saves a blank as a clear (Calendars' places: follow About you).
+    val canSave = sheet.blankSaves || text.isNotBlank()
     val save: () -> Unit = { if (canSave) { haptics.light(); onSave(text) } }
 
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -125,11 +126,13 @@ internal fun AboutEditSheetView(
                     if (text.isEmpty()) Text(sheet.hint, style = MekaType.body, color = Meka.colors.textTertiary)
                     BasicTextField(
                         value = text,
-                        onValueChange = { text = it },
+                        onValueChange = { text = it.take(sheet.maxLength) },
                         singleLine = true,
                         textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
                         cursorBrush = SolidColor(Meka.colors.accent),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = when (sheet.field) {
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done,
+                            capitalization = if (sheet.field == null) KeyboardCapitalization.Words else KeyboardCapitalization.None,
+                            keyboardType = when (sheet.field) {
                             AboutField.PARTNER_EMAIL -> KeyboardType.Email
                             AboutField.SCHOOL_WEBSITE -> KeyboardType.Uri
                             AboutField.PARTNER_PHONE, AboutField.MOBILE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> KeyboardType.Phone

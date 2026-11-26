@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -38,6 +39,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.CalendarsPane
 import os.meka.android.today.WEATHER_HINT
 import os.meka.core.domain.PhoneCalendarRules
+import os.meka.core.domain.WeatherPlaceChoiceRules
 import os.meka.core.domain.CalendarAccessAction
 import os.meka.core.domain.CalendarAccessRules
 import os.meka.core.domain.CalendarRules
@@ -189,9 +191,21 @@ class CalendarsScreensTest {
         // that wraps on the pane holds its last words and its dots and arrows too (an arrow counts as a dot here).
         val here = core.hereSetting(on = false, permitted = false)
         val more = listOf(here.statusLine, here.privacy, PhoneCalendarRules.ASK_LINE, PhoneCalendarRules.DENIED_LINE,
-            PhoneCalendarRules.ONLY_HERE, "No calendars connected yet.", core.weatherView.value.placeChoice.line, core.weatherView.value.workChoice.line)
+            PhoneCalendarRules.ONLY_HERE, "No calendars connected yet.", WeatherPlaceChoiceRules.line(core.weatherView.value.placeChoice, home = true),
+            WeatherPlaceChoiceRules.line(core.weatherView.value.workChoice, home = false))
         ScreenShots.assertNoLoneWords(compose, name, more)
         ScreenShots.assertNoDotStartingALine(compose, name, more)
+        // Walk-through week 5, A17: no open input box on the page (Home and Work are rows opening a sheet), and the
+        // weather lines never send him to About you for what the row itself sets (g4a 9).
+        val fields = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true).fetchSemanticsNodes()
+        if (fields.isNotEmpty()) fail("$name: ${fields.size} open input boxes on Calendars")
+        listOf(WeatherPlaceChoiceRules.HOME, WeatherPlaceChoiceRules.WORK).forEach { label ->
+            if (compose.onAllNodes(hasContentDescription("$label weather, ", substring = true) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
+                fail("$name: no $label weather row")
+            }
+        }
+        if (compose.onAllNodes(hasText("About you for office-day weather", substring = true) or hasText("add your home in", substring = true),
+                useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: a weather line sends him to About you")
         ScreenShots.assertEachOneLine(compose, name, list.map { it.title } + CalendarAccessAction.entries.map { it.label } + "Reconnect")
         ScreenShots.assertReadable(compose, name, list.map { it.title }, mustShow = false)
         providerNeverAlone(name, core)
@@ -349,6 +363,47 @@ class CalendarsScreensTest {
         ScreenShots.assertShows(compose, "calendars-by-hand", "Cancel")
     }
 
+    /**
+     * Walk-through week 5, A17 by hand: Home's row opens its sheet; a name that can't be a town keeps it open with why;
+     * Oakfield saves, closes the sheet, and the row then reads it. Through the semantics only (no shot, no scrolling).
+     */
+    private fun weatherByHand(core: MekaCore) {
+        fun open() {
+            val row = compose.onAllNodes(hasContentDescription("Home weather, ", substring = true) and hasClickAction())
+            if (row.fetchSemanticsNodes().isEmpty()) fail("Calendars: no Home weather row")
+            row[0].performSemanticsAction(SemanticsActions.OnClick)
+            turns(1_000)
+        }
+        fun field() = compose.onAllNodes(hasContentDescription(WeatherPlaceChoiceRules.HOME_SPOKEN) and
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+        fun type(text: String) {
+            field()[0].performSemanticsAction(SemanticsActions.SetText) { it(androidx.compose.ui.text.AnnotatedString(text)) }
+            turns(300)
+            compose.onAllNodes(hasContentDescription("Save, Home") and hasClickAction(), useUnmergedTree = true)[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+        }
+        open()
+        if (field().fetchSemanticsNodes().isEmpty()) fail("Calendars: Home's sheet has no field")
+        ScreenShots.assertShows(compose, "calendars-weather-by-hand", WeatherPlaceChoiceRules.HOME_NOTE)
+        type("<b>")
+        turns(1_000)
+        ScreenShots.assertShows(compose, "calendars-weather-by-hand", WeatherPlaceChoiceRules.BAD)
+        if (field().fetchSemanticsNodes().isEmpty()) fail("Calendars: a refused name closed Home's sheet")
+        type("Oakfield")
+        repeat(40) {
+            if (core.weatherView.value.placeChoice.name == "Oakfield") return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns(1_500)
+        if (core.weatherView.value.placeChoice.name != "Oakfield") fail("Calendars: Home saved as \"${core.weatherView.value.placeChoice.name}\"")
+        if (field().fetchSemanticsNodes().isNotEmpty()) fail("Calendars: Home's sheet stayed open after Save")
+        if (compose.onAllNodes(hasContentDescription("Home weather, Oakfield") and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
+            fail("Calendars: the Home row doesn't read Oakfield")
+        }
+    }
+
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverEmpty() { calendars("cover-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverOne() { calendars("cover-dark-one", Fill.ONE) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverMany() { calendars("cover-dark-many", Fill.MANY) }
@@ -358,4 +413,5 @@ class CalendarsScreensTest {
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyOnToday() { onTodayShot("cover-dark-many-on-today") }
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverManyOnTodayLight() { onTodayShot("cover-light-many-on-today", ThemeChoice.LIGHT) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun byHand() { byHand(calendars("inner-dark-by-hand", Fill.ONE)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun weatherByHand() { weatherByHand(calendars("cover-dark-weather-by-hand", Fill.EMPTY, shot = false)) }
 }
