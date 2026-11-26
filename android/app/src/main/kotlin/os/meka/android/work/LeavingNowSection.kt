@@ -8,8 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -19,6 +17,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.core.domain.LeavingChoiceRules
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +41,14 @@ import os.meka.core.domain.LeavingView
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.WorkAreaLine
 
+/** Work mode → Leaving now's rows (walk-through week 5, A17), for the screen tests. */
+const val LEAVING_SWITCH_TAG = "leaving-row:switch"
+const val LEAVING_TO_TAG = "leaving-row:to"
+const val LEAVING_WHEN_TAG = "leaving-row:when"
+
+/** Which of Leaving now's sheets is open. */
+private enum class LeavingSheet { SWITCH, TO, WHEN }
+
 /**
  * "Leaving now" (V1), under Work → Leaving now: on or off, who the draft goes to (from the Family and always-notify
  * lists) and, since the commute slice 4, the journey home read from
@@ -44,8 +58,12 @@ import os.meka.core.domain.WorkAreaLine
  * "When I leave work" (Needs Meka #24): When work ends · When I leave work, then, with the second, [area]'s line
  * (what location this phone still needs, or that the work area is watched) and its one button ([onAreaAction]:
  * Allow, I'm at work, Forget work area), cross-fading and unfolding like the rest.
+ *
+ * Walk-through week 5, A17: the On/Off pill, the To chips and the When chips are each one card row saying what's chosen
+ * ("Leaving now" · "On" ›, "To" · "Sam" ›, "When" · "When work ends" ›) opening a sheet of the choices, the one in use
+ * lit, each saying what it does ([LeavingChoiceRules]). Motion: the sheet rises (reduced motion: a cross-fade), a choice
+ * gives a tick haptic, the line cross-fades and the rows fold away when off.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LeavingNowSection(
     view: LeavingView, lists: PeopleLists, modifier: Modifier = Modifier,
@@ -54,45 +72,28 @@ fun LeavingNowSection(
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
+    var sheet by remember { mutableStateOf<LeavingSheet?>(null) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Crossfade(view.summary, animationSpec = MekaMotion.appear(reduced), label = "leaving-line") { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
-        SettingChip(if (view.on) "On" else "Off", view.on, spoken = "${LeavingRules.TITLE}, ${if (view.on) "on" else "off"}") {
-            haptics.tick(); onSet(!view.on, view.to, view.journeyMin)
-        }
+        NotifyChoiceRowView(LeavingChoiceRules.switchRow(view), Modifier.testTag(LEAVING_SWITCH_TAG)) { sheet = LeavingSheet.SWITCH }
         AnimatedVisibility(
             view.on,
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                Text("To", style = MekaType.caption, color = Meka.colors.textTertiary)
-                val names = (lists.family + lists.alwaysNotify).toList().let { n ->
-                    if (view.to.isBlank() || n.any { LeavingRules.samePerson(view.to, it) }) n else listOf(view.to) + n
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    names.forEach { name ->
-                        val chosen = LeavingRules.samePerson(view.to, name) && (name == view.to || names.none { it == view.to })
-                        SettingChip(name, chosen, spoken = "Send to $name") {
-                            if (!chosen) { haptics.tick(); onSet(true, name, view.journeyMin) }
-                        }
-                    }
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                val canChoose = LeavingChoiceRules.names(view, lists).isNotEmpty()
+                NotifyChoiceRowView(LeavingChoiceRules.toRow(view, lists), Modifier.testTag(LEAVING_TO_TAG), enabled = canChoose) {
+                    sheet = LeavingSheet.TO
                 }
                 // The commute counts everywhere, slice 4: the journey home is the commute home, set under Commute above.
                 Crossfade(LeavingRules.journeyNote(view.journeyMin), animationSpec = MekaMotion.appear(reduced), label = "leaving-journey") { line ->
                     Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
                 if (area != null) {
-                    Text("When", style = MekaType.caption, color = Meka.colors.textTertiary)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        SettingChip("When work ends", !view.byArea, spoken = "Draft when work ends") {
-                            if (view.byArea) { haptics.tick(); onByArea(false) }
-                        }
-                        SettingChip("When I leave work", view.byArea, spoken = "Draft when I leave the work area") {
-                            if (!view.byArea) { haptics.tick(); onByArea(true) }
-                        }
-                    }
+                    NotifyChoiceRowView(LeavingChoiceRules.whenRow(view), Modifier.testTag(LEAVING_WHEN_TAG)) { sheet = LeavingSheet.WHEN }
                     AnimatedVisibility(
                         view.byArea,
                         enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
@@ -122,5 +123,17 @@ fun LeavingNowSection(
             }
         }
         Text(LeavingRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+    when (sheet) {
+        LeavingSheet.SWITCH -> NotifyChoiceSheetView(LeavingChoiceRules.switchSheet(view),
+            onChoose = { name -> LeavingChoiceRules.switchNamed(view, name)?.let { on -> onSet(on, view.to, view.journeyMin) } },
+            onClose = { sheet = null })
+        LeavingSheet.TO -> NotifyChoiceSheetView(LeavingChoiceRules.toSheet(view, lists),
+            onChoose = { name -> LeavingChoiceRules.toNamed(view, lists, name)?.let { to -> onSet(true, to, view.journeyMin) } },
+            onClose = { sheet = null })
+        LeavingSheet.WHEN -> NotifyChoiceSheetView(LeavingChoiceRules.whenSheet(view),
+            onChoose = { name -> LeavingChoiceRules.whenNamed(view, name)?.let(onByArea) },
+            onClose = { sheet = null })
+        null -> {}
     }
 }

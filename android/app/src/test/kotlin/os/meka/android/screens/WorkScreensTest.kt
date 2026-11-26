@@ -29,6 +29,7 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.AT_WORK_NOTE
 import os.meka.android.work.COMMUTE_TO_WORK_TAG
+import os.meka.android.work.LEAVING_TO_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -39,6 +40,7 @@ import os.meka.android.work.WorkPane
 import os.meka.android.work.callAssistantNote
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CommuteChoiceRules
+import os.meka.core.domain.LeavingChoiceRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.ScreenUnknownRules
@@ -178,6 +180,16 @@ class WorkScreensTest {
         if (compose.onAllNodes(hasContentDescription("Commute to work:", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
             fail("$name: the commute still has a chip row")
         }
+        // Walk-through week 5, A17: Leaving now's On/Off pill, To chips and When chips are card rows saying what's chosen.
+        val lv = core.leavingView.value
+        val leavingRows = listOf(LeavingChoiceRules.switchRow(lv)) +
+            if (lv.on) listOf(LeavingChoiceRules.toRow(lv, lists), LeavingChoiceRules.whenRow(lv)) else emptyList()
+        for (r in leavingRows) {
+            if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no Leaving now \"${r.title}\" row saying ${r.value}")
+        }
+        if (compose.onAllNodes(hasContentDescription("Send to ", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: Leaving now still has a row of name chips")
+        }
         when (fill) {
             Fill.EMPTY -> {
                 ScreenShots.assertShows(compose, name, "Add from contacts")
@@ -247,6 +259,23 @@ class WorkScreensTest {
         if (core.workMode.value.commute.toWorkMin != 90) fail("Work: 1 h 30 in the To work sheet didn't set the commute (${core.workMode.value.commute})")
         if (sheetOpen()) fail("Work: choosing 1 h 30 didn't close the commute's sheet")
         ScreenShots.awaitShows(compose, "work-by-hand", "1 h 30 there · 1 h home")
+        // Walk-through week 5, A17: Leaving now's To row opens the names; Morgan there sends the draft to Morgan.
+        val leavingTo = compose.onAllNodes(hasTestTag(LEAVING_TO_TAG) and hasClickAction())
+        if (leavingTo.fetchSemanticsNodes().isEmpty()) fail("Work: no Leaving now To row")
+        leavingTo[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Work: Leaving now's To row didn't open its sheet")
+        compose.onAllNodes(hasText("Morgan", substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        repeat(40) {
+            if (core.leavingView.value.to == "Morgan") return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns(1_000)
+        if (core.leavingView.value.to != "Morgan") fail("Work: Morgan in Leaving now's To sheet didn't set who it goes to (${core.leavingView.value})")
+        if (sheetOpen()) fail("Work: choosing Morgan didn't close Leaving now's sheet")
         // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on
         // Navilife's hours like the empty page; it is taken again after the hand: work stopped (Start work now, Back to
         // my hours) and Saturday lit.
