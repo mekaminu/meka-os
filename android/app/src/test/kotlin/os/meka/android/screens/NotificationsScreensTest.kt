@@ -244,13 +244,15 @@ class NotificationsScreensTest {
             if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$desc\" to tap")
             n[0].performSemanticsAction(SemanticsActions.OnClick)
         }
+        // The page's text is read only once a sheet has closed (an open sheet is a second root).
+        fun sheetClosed() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty()
         // Walk-through week 5, A17: quiet hours' row opens On · Off; On saves it and closes the sheet.
         val q = core.notificationSettings.value.quiet
         tap(NotifyQuietChoiceRules.quietRow(q.enabled, q.summary).spoken)
         until { compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty() }
         if (compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty()) fail("$name: quiet hours' row didn't open its sheet")
         tap(NotifyQuietChoiceRules.quietSheet(q.enabled, core.notificationSettings.value.digestsOn).choices.first { it.name == CallChoiceRules.ON }.spoken)
-        until { core.notificationSettings.value.quiet.enabled && onScreen("22:00–07:00") && compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty() }
+        until { sheetClosed() && core.notificationSettings.value.quiet.enabled && onScreen("22:00–07:00") }
         if (!core.notificationSettings.value.quiet.enabled) fail("$name: On left quiet hours off")
         if (!onScreen(NotifyRules.quietNote(core.notificationSettings.value.digestsOn))) fail("$name: quiet hours on didn't unfold the times")
 
@@ -269,10 +271,10 @@ class NotificationsScreensTest {
             tap(NotifyQuietChoiceRules.digestSheet(NotificationSettings.MIDDAY, now).choices.first { it.name == pick }.spoken)
         }
         midday(on = true)
-        until { core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY) && onScreen("Next digest") }
+        until { sheetClosed() && core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY) && onScreen("Next digest") }
         if (!core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY)) fail("$name: the midday digest didn't come on")
         midday(on = false)
-        until { !core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY) && onScreen("No digests") }
+        until { sheetClosed() && !core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY) && onScreen("No digests") }
         if (core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY)) fail("$name: the midday digest didn't go off")
 
         // The first kind listed: its row opens the sheet, Digest saves it and closes the sheet (A17: no open chips).
