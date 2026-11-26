@@ -7671,3 +7671,18 @@ callers may know is a switch row per thing, each saying what Obi may tell a call
 - Mac: `ObiCallsSheet`'s chips are two menu rows built from the same sheets and a `Toggle` per thing callers may know;
   `testCallsChoicesReachSwift`. Mac checked nightly. Motion catalogue's Obi on calls line updated.
 - Left: Chase waits' per-person chips; Calendar's and other pages' open inputs.
+
+### Found and fixing, week 5 — slice 90 (2026-11-26): A17 on Mail's Chase waits
+
+Mail → Chase waits had, under each person he set his own wait for, an open chip row "1 day 2 days 3 days 5 days 1 week
+2 weeks · Back to usual" with a bare line over it. Each person is now one card row ("Sam Taylor" · "1 week" ›) opening
+Notifications' choice sheet, "Wait for Sam Taylor": the six waits, each saying "A chase is offered after 1 week without a
+reply", the one in use lit, then Back to usual ("Like everyone else: a chase after 3 days"); the note says when it was set,
+that only that person's replies change and that it syncs. A choice saves and closes it; Undo under the page as before.
+- Core: `FollowUpWaitRow.choiceRow` / `sheet`, `FollowUpWaitsRules.choiceRow`, `sheet`, `sheetNote`, `choiceLine`,
+  `daysNamed`, `RESET_NAME`; `MailFollowUpTest.eachChaseWaitIsOneRowOpeningASheetOfItsChoices`.
+- Fold: `MailPane`'s `WaitRow` uses `NotifyChoiceRowView` / `NotifyChoiceSheetView`; `MailScreensTest`'s stand-in server
+  holds two invented people's waits with three accounts, `noChoiceChips` checks no wait chip is on the page and each row
+  reads its wait, and `waitsByHand` sets Sam Taylor to 2 weeks through his sheet (closes, row says so) then Back to usual.
+- Mac: `WaitsPanelView`'s chips are one `MailChoicePanelView` menu per person; `testChaseWaitChoicesReachSwift`. Mac
+  checked nightly. Motion catalogue: new Chase waits line.

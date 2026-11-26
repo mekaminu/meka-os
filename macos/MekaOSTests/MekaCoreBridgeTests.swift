@@ -3286,6 +3286,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(r.prep(name: "soon"))
     }
 
+    func testChaseWaitChoicesReachSwift() {
+        // Walk-through week 5, A17: each Chase waits person is a menu built from the core's sheet; a pick's name reads back
+        // to the days to set (0 = Back to usual).
+        let r = FollowUpWaitsRules.shared
+        XCTAssertEqual(r.choiceRow(who: "Sam Taylor", days: 7).value, "1 week")
+        let sheet = r.sheet(who: "Sam Taylor", days: 7, setDay: nil)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["1 day", "2 days", "3 days", "5 days", "1 week", "2 weeks", "Back to usual"])
+        XCTAssertEqual(sheet.choices.first(where: { $0.lit })?.label, "1 week")
+        XCTAssertEqual(r.daysNamed(name: "14")?.int32Value, 14)
+        XCTAssertEqual(r.daysNamed(name: r.RESET_NAME)?.int32Value, 0)
+        XCTAssertNil(r.daysNamed(name: "4"))
+    }
+
     func testDateNightNudgeReachesSwift() {
         // Date night, slice 2: Needs you's week-before card and its heads-up's row in Notifications reach the Mac; the
         // card's buttons send only an Int64 and a Bool (the undo bar gets a String back).

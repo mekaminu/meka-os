@@ -328,9 +328,10 @@ private struct MailChoicePanelView: View {
     }
 }
 
-/// Follow-up radar, slice 4: Chase waits — the usual wait, then one row per person he set his own for, with the
-/// 1 day … 2 weeks chips (the lit one in the accent, tick haptic) and Back to usual. Rows enter and leave on the expand
-/// spring; lines cross-fade. Only the id (a String) and the number go back to the model.
+/// Follow-up radar, slice 4: Chase waits — the usual wait, then one card row per person he set his own for. Walk-through
+/// week 5, A17 (no open chip rows): each row is "Sam Taylor" · a menu of 1 day … 2 weeks and Back to usual built from
+/// the core's sheet (the one in use ticked). Rows enter and leave on the expand spring; lines cross-fade. Only the id (a
+/// String) and the number go back to the model.
 private struct WaitsPanelView: View {
     let panel: FollowUpWaitsPanel
     let palette: MekaPalette
@@ -341,49 +342,24 @@ private struct WaitsPanelView: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(panel.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(panel.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: panel.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
             .accessibilityElement(children: .combine)
             ForEach(panel.rows, id: \.id) { r in
-                VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(r.who).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
-                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                            .contentTransition(.opacity)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(r.spoken)
-                    HStack(spacing: MekaSpace.xs) {
-                        ForEach(r.choices, id: \.days) { c in
-                            let id = r.id, days = c.days
-                            Button(c.label) { if !c.chosen { onPick(id, days) } }
-                                .buttonStyle(MekaPressStyle())
-                                .font(MekaType.itemMeta)
-                                .foregroundStyle(c.chosen ? palette.onAccent : palette.textPrimary)
-                                .padding(.horizontal, MekaSpace.xs)
-                                .padding(.vertical, MekaSpace.xxs)
-                                .background(Capsule().fill(c.chosen ? palette.accent : palette.hairline))
-                                .accessibilityLabel(c.spoken)
-                                .accessibilityAddTraits(c.chosen ? .isSelected : [])
-                        }
-                        let id = r.id
-                        Button(r.resetLabel) { onPick(id, 0) }
-                            .buttonStyle(MekaPressStyle())
-                            .font(MekaType.itemMeta)
-                            .foregroundStyle(palette.accent)
-                            .accessibilityLabel(r.resetSpoken)
-                    }
+                let id = r.id, current = r.days
+                MailChoicePanelView(row: r.choiceRow, sheet: r.sheet, palette: palette) { name in
+                    guard let days = FollowUpWaitsRules.shared.daysNamed(name: name)?.int32Value, days != current else { return }
+                    onPick(id, days)
                 }
-                .padding(.top, MekaSpace.xs)
                 .transition(.opacity)
             }
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.rows.map { $0.line })
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.rows.map { $0.choiceRow.value })
     }
 }
 

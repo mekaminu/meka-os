@@ -36,7 +36,9 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.mail.MailPane
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.core.domain.FollowUpWaitsRules
 import os.meka.core.domain.MailChoiceRules
+import os.meka.core.domain.MailFollowUpRules
 import os.meka.core.domain.MailMomentTime
 import os.meka.core.domain.MailWarrantyLevel
 import os.meka.core.domain.MeetingPrepLead
@@ -70,7 +72,8 @@ import kotlin.test.fail
  * sign-in ended, one whose last check failed), each on the Fold's cover and inner screens, Dark (and the full one in
  * Light). Saved under `mail/` and read for nonsense, cut lines, broken words, split dates, times and numbers, a word left
  * alone and a line starting with a dot. Mail by hand: tap Autopilot's Turn off and Autopilot is off, its line saying so;
- * Meeting prep's row opens its sheet and 30 min, then Off, save and close it (walk-through week 5, A17).
+ * Meeting prep's row opens its sheet and 30 min, then Off, save and close it; a Chase waits row opens its sheet and 2
+ * weeks, then Back to usual, save and close it (walk-through week 5, A17).
  * Talks to a stand-in server held in the test. Invented data only (rule 13): example.com addresses.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -92,6 +95,9 @@ class MailScreensTest {
 
     private enum class Fill { OFFLINE, EMPTY, ONE, MANY }
 
+    /** Invented people with their own chase waits (rule 13). */
+    private val waits = listOf("Sam Taylor" to 7, "Alex Brown" to 1)
+
     /** Navilife's server, as far as Mail asks it: sync and the mail accounts (never a token). */
     private inner class Server(val mail: List<MailAccountFacts>) : SyncTransport, AccountsApi {
         val ops = InMemoryServerOpStore()
@@ -105,6 +111,13 @@ class MailScreensTest {
                 var k = 0
                 ShotMailToAnswer.serverItems(now).forEach { (id, fields) ->
                     fields.forEach { (f, v) -> ops.append(Op("srv${k++}", "hh", EntityTypes.MAIL_ITEM, id, f, v, clock.now(), emptyList(), "server")) }
+                }
+                // Walk-through week 5, A17: with three accounts, two people he set his own chase wait for, so Chase waits
+                // has rows (each one card row opening its sheet, not a chip row).
+                if (mail.size > 1) waits.forEach { (who, days) ->
+                    MailFollowUpRules.waitFields(who, days, now - 3 * day).forEach { (f, v) ->
+                        ops.append(Op("srv${k++}", "hh", EntityTypes.FOLLOW_UP_WAIT, MailFollowUpRules.waitId(who), f, v, clock.now(), emptyList(), "server"))
+                    }
                 }
             }
         }
@@ -326,6 +339,44 @@ class MailScreensTest {
         val prep = runBlocking { core.meetingPrepLeadSetting() }
         if (compose.onAllNodes(hasContentDescription(MailChoiceRules.prepRow(prep).spoken)).fetchSemanticsNodes().isEmpty())
             fail("$name: no Meeting prep row reading \"${prep.label}\"")
+        // Chase waits: each person is one row reading their wait; no "1 day … 2 weeks" or Back to usual chip on the page.
+        val panel = runBlocking { core.followUpWaitsPanel() }
+        val waitLabels = MailFollowUpRules.WAIT_CHOICES.map { MailFollowUpRules.waitLabel(it) } + FollowUpWaitsRules.RESET
+        if (panel.rows.isNotEmpty()) waitLabels.forEach { label ->
+            if (compose.onAllNodes(hasText(label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG)).fetchSemanticsNodes().isNotEmpty())
+                fail("$name: a \"$label\" chase-wait chip on the page; it belongs in the person's sheet")
+        }
+        panel.rows.forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(r.choiceRow.spoken)).fetchSemanticsNodes().isEmpty())
+                fail("$name: no Chase waits row reading \"${r.who} · ${r.choiceRow.value}\"")
+        }
+    }
+
+    /** Works by hand (A17): Sam Taylor's Chase waits row opens its sheet; 2 weeks saves, closes it and the row says so; Back to usual takes him off. */
+    private fun waitsByHand(core: MekaCore) {
+        val name = "mail-waits-by-hand"
+        val sam = runBlocking { core.followUpWaitsPanel() }.rows.firstOrNull { it.who == "Sam Taylor" } ?: fail("$name: no Sam Taylor in Chase waits")
+        if (sam.days != 7) fail("$name: Sam Taylor starts on ${sam.choiceRow.value}")
+        compose.onAllNodes(hasContentDescription(sam.choiceRow.spoken))[0].performScrollTo()
+        turns(1_000)
+        tapSaid(name, sam.choiceRow.spoken)
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: Sam Taylor's row didn't open its sheet")
+        fun samDays() = runBlocking { core.followUpWaitsPanel() }.rows.firstOrNull { it.who == "Sam Taylor" }?.days
+        tapSaid(name, sam.sheet.choices.first { it.name == "14" }.spoken)
+        until { samDays() == 14 && !sheetOpen() }
+        if (samDays() != 14) fail("$name: 2 weeks didn't save")
+        if (sheetOpen()) fail("$name: the sheet stayed open after a choice")
+        val row = FollowUpWaitsRules.choiceRow("Sam Taylor", 14).spoken
+        until { compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say 2 weeks")
+        ScreenShots.reshootAfterHand(compose, "mail", "cover-dark-waits-by-hand")
+        tapSaid(name, row)
+        until { sheetOpen() }
+        val reset = runBlocking { core.followUpWaitsPanel() }.rows.first { it.who == "Sam Taylor" }.sheet.choices.first { it.name == FollowUpWaitsRules.RESET_NAME }
+        tapSaid(name, reset.spoken)
+        until { samDays() == null && !sheetOpen() }
+        if (samDays() != null) fail("$name: Back to usual left Sam Taylor on his own wait")
     }
 
     private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
@@ -415,6 +466,7 @@ class MailScreensTest {
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerEmpty() { mail("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { mail("inner-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun prepByHand() { prepByHand(mail("cover-dark-prep-by-hand", Fill.EMPTY, below = false)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun waitsByHand() { waitsByHand(mail("cover-dark-waits-by-hand", Fill.MANY, below = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun autopilotByHand() {
         autopilotByHand(mail("cover-dark-by-hand", Fill.ONE, below = false))
         ScreenShots.reshootAfterHand(compose, "mail", "cover-dark-by-hand") // walk-through A15

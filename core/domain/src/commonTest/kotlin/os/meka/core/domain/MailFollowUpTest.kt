@@ -192,6 +192,29 @@ class MailFollowUpTest {
     }
 
     @Test
+    fun eachChaseWaitIsOneRowOpeningASheetOfItsChoices() {
+        // Walk-through week 5, A17: no open "1 day … 2 weeks · Back to usual" chip row per person on Mail's page.
+        val setAt = cal.toEpochMs(sentDay, 600)
+        val sam = FollowUpWaitsRules.panel(listOf(FollowUpWait(MailFollowUpRules.waitId("Sam Taylor"), "Sam Taylor", 7, setAt)), cal).rows.single()
+        assertEquals("Sam Taylor", sam.choiceRow.title)
+        assertEquals("1 week", sam.choiceRow.value)
+        assertEquals("Sam Taylor, waits 1 week before a chase is offered. Opens the choices", sam.choiceRow.spoken)
+        assertEquals("Wait for Sam Taylor", sam.sheet.title)
+        assertEquals("Set Mon 12 Oct. Only Sam Taylor's replies; everyone else waits the usual 3 days. Syncs with your other devices.", sam.sheet.note)
+        assertEquals(listOf("1 day", "2 days", "3 days", "5 days", "1 week", "2 weeks", "Back to usual"), sam.sheet.choices.map { it.label })
+        assertEquals(listOf("1 week"), sam.sheet.choices.filter { it.lit }.map { it.label })
+        assertEquals("A chase is offered after 2 weeks without a reply", sam.sheet.choices.first { it.name == "14" }.line)
+        assertEquals("Back to usual, Like everyone else: a chase after 3 days", sam.sheet.choices.last().spoken)
+        assertEquals("1 week, A chase is offered after 1 week without a reply, chosen", sam.sheet.choices.first { it.lit }.spoken)
+        // Every choice's name reads back to the days to set; Back to usual is 0; nothing else is.
+        assertEquals(listOf(1, 2, 3, 5, 7, 14, 0), sam.sheet.choices.map { FollowUpWaitsRules.daysNamed(it.name) })
+        assertNull(FollowUpWaitsRules.daysNamed("4"))
+        assertNull(FollowUpWaitsRules.daysNamed("soon"))
+        // Without a day it was set, the note leaves it out.
+        assertEquals("Only Alex's replies; everyone else waits the usual 3 days. Syncs with your other devices.", FollowUpWaitsRules.sheetNote("Alex", null))
+    }
+
+    @Test
     fun theAiChaseNeverWritesOverHisOwnWords() {
         val D = MailChaseDraftRules
         val plain = MailChaseRules.followUpDraft("Sam Taylor", "Alex")

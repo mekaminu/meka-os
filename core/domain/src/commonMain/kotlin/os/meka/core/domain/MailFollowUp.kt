@@ -297,6 +297,10 @@ data class FollowUpWaitRow(
     val choices: List<WaitChoice>,
     val resetLabel: String,
     val resetSpoken: String,
+    /** Walk-through week 5, A17: the person's one card row ("Sam Taylor" · "1 week") that opens [sheet]. */
+    val choiceRow: NotifyChoiceRow,
+    /** The choices for that person (1 day … 2 weeks, then Back to usual) with what each does; the one in use lit. */
+    val sheet: NotifyChoiceSheet,
 )
 
 /** Mail → Chase waits: the people he set his own wait for (the default for everyone else), on both apps. */
@@ -338,7 +342,8 @@ object FollowUpWaitsRules {
 
     fun row(w: FollowUpWait, zone: LocalCalendar): FollowUpWaitRow {
         val label = MailFollowUpRules.waitLabel(w.days)
-        val set = if (w.atMs > 0) " · set ${CivilDate.shortLabel(zone.epochDayOf(w.atMs))}" else ""
+        val setDay = if (w.atMs > 0) CivilDate.shortLabel(zone.epochDayOf(w.atMs)) else null
+        val set = setDay?.let { " · set $it" } ?: ""
         return FollowUpWaitRow(
             id = w.id, who = w.who, days = w.days,
             line = "Waits $label before a chase is offered$set",
@@ -346,8 +351,43 @@ object FollowUpWaitsRules {
             choices = MailFollowUpRules.waitChoices(w.who, w.days),
             resetLabel = RESET,
             resetSpoken = "Put ${w.who} back on the usual $usual",
+            choiceRow = choiceRow(w.who, w.days),
+            sheet = sheet(w.who, w.days, setDay),
         )
     }
+
+    // ---- Walk-through week 5, A17: each person is one card row opening a sheet, not an open chip row ----
+
+    /** The name [RESET_NAME] picks Back to usual in [sheet]; the others are the days ("7"). */
+    const val RESET_NAME = "0"
+
+    /** "Sam Taylor" · "1 week" ›. */
+    fun choiceRow(who: String, days: Int): NotifyChoiceRow {
+        val label = MailFollowUpRules.waitLabel(days)
+        return NotifyChoiceRow(who, label, "$who, waits $label before a chase is offered. Opens the choices")
+    }
+
+    /** What a wait does, said in the sheet: "A chase is offered after 1 week without a reply". */
+    fun choiceLine(days: Int): String = "A chase is offered after ${MailFollowUpRules.waitLabel(days)} without a reply"
+
+    /** The sheet's note: whose replies it touches, since when, and that it syncs. Nothing is sent. */
+    fun sheetNote(who: String, setDay: String?): String =
+        (setDay?.let { "Set $it. " } ?: "") + "Only $who's replies; everyone else waits the usual $usual. Syncs with your other devices."
+
+    fun sheet(who: String, days: Int, setDay: String?): NotifyChoiceSheet {
+        val waits = MailFollowUpRules.WAIT_CHOICES.map { d ->
+            val label = MailFollowUpRules.waitLabel(d)
+            val line = choiceLine(d)
+            NotifyChoice(d.toString(), label, line, d == days, "$label, $line" + if (d == days) ", chosen" else "")
+        }
+        val resetLine = "Like everyone else: a chase after $usual"
+        val reset = NotifyChoice(RESET_NAME, RESET, resetLine, false, "$RESET, $resetLine")
+        return NotifyChoiceSheet("Wait for $who", sheetNote(who, setDay), waits + reset)
+    }
+
+    /** A sheet choice's name back to the days to set (0 = Back to usual), or null when it isn't one. */
+    fun daysNamed(name: String): Int? =
+        name.toIntOrNull()?.takeIf { it == 0 || it in MailFollowUpRules.WAIT_CHOICES }
 
     /** After a chip: "Waiting 1 week for Sam Taylor's replies from now on". */
     fun changedLine(who: String, days: Int): String = "Waiting ${MailFollowUpRules.waitLabel(days)} for $who's replies from now on"

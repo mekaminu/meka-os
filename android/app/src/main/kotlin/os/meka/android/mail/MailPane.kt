@@ -69,6 +69,7 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.FollowUpWaitRow
 import os.meka.core.domain.FollowUpWaitsPanel
+import os.meka.core.domain.FollowUpWaitsRules
 import os.meka.core.domain.LifeAuditReview
 import os.meka.core.domain.LifeAuditReviewLine
 import os.meka.core.domain.LifeAuditReviewRules
@@ -522,11 +523,12 @@ private fun MailChoiceSetting(row: NotifyChoiceRow, sheet: NotifyChoiceSheet, mo
 }
 
 /**
- * Follow-up radar, slice 4: **Chase waits** — the usual wait, then one row per person he set his own for: who, "Waits 1
- * week before a chase is offered · set Mon 12 Oct", the 1 day … 2 weeks chips (the lit one blends to the accent, tick
- * haptic) and Back to usual. Rows enter and leave with the expand spring; the line cross-fades. Reduced motion: fades.
+ * Follow-up radar, slice 4: **Chase waits** — the usual wait, then one card row per person he set his own for (walk-through
+ * week 5, A17: no open chip rows on a page): who on the left, the wait on the right ("Sam Taylor" · "1 week") and ›,
+ * opening Notifications' choice sheet (1 day … 2 weeks, then Back to usual, each saying what it does, the one in use lit;
+ * a choice ticks, saves and closes it). Rows enter and leave with the expand spring; the line cross-fades. Reduced
+ * motion: fades.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WaitsCard(panel: FollowUpWaitsPanel, modifier: Modifier, onPick: (String, Int) -> Unit) {
     val reduced = Meka.reducedMotion
@@ -538,44 +540,22 @@ private fun WaitsCard(panel: FollowUpWaitsPanel, modifier: Modifier, onPick: (St
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = panel.title + ". " + panel.line }) {
             Text(panel.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(panel.line, animationSpec = MekaMotion.appear(reduced), label = "waits-line") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         panel.rows.forEach { r -> key(r.id) { WaitRow(r, onPick) } }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WaitRow(r: FollowUpWaitRow, onPick: (String, Int) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
-            Text(r.who, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "wait-line") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
-            }
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            r.choices.forEach { c ->
-                val fill by animateColorAsState(if (c.chosen) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "wait-chip")
-                val ink by animateColorAsState(if (c.chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "wait-ink")
-                Text(
-                    c.label, style = MekaType.itemMeta, color = ink,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-                        .clickable(role = Role.Button) { if (!c.chosen) onPick(r.id, c.days) }
-                        .semantics { selected = c.chosen; contentDescription = c.spoken }
-                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                )
-            }
-            Text(
-                r.resetLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onPick(r.id, 0) }
-                    .semantics { contentDescription = r.resetSpoken }
-                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            )
-        }
-    }
+    var open by remember { mutableStateOf(false) }
+    NotifyChoiceRowView(r.choiceRow) { open = true }
+    if (open) NotifyChoiceSheetView(
+        r.sheet,
+        onChoose = { n -> FollowUpWaitsRules.daysNamed(n)?.takeIf { it != r.days }?.let { onPick(r.id, it) } },
+        onClose = { open = false },
+    )
 }
 
 /**
