@@ -3271,6 +3271,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.named(name: "CLEAR"))
     }
 
+    func testBalanceTargetMenuReachesSwift() {
+        // Walk-through week 5, A17: Balance's targets are a menu per area built from the core's sheet; a pick sends back
+        // only its minutes, as the chips did.
+        let rules = BalanceTargetChoiceRules.shared
+        let r = BalanceRow(
+            area: .family, label: "Family", minutes: 390, targetMin: 480, pct: 0, line: "", status: nil, lit: false,
+            items: [], moreItems: 0, choices: [240, 360, 480, 600, 840].map { KotlinInt(int: $0) }, defaultTarget: true,
+            spoken: "Family", trend: [], trendTargetPct: 0, trendLine: nil
+        )
+        XCTAssertEqual(rules.row(r: r).value, "8 h a week")
+        let sheet = rules.sheet(r: r)
+        XCTAssertEqual(sheet.title, "Family target a week")
+        XCTAssertEqual(sheet.choices.filter { $0.lit }.map { $0.label }, ["8 h"])
+        XCTAssertEqual(rules.named(r: r, name: "840")?.intValue, 840)
+        XCTAssertNil(rules.named(r: r, name: "480"))
+    }
+
     func testProtectedChoicesReachSwift() {
         // Walk-through week 5, A17: the sheet's three choices are menus built from the core's sheets; a pick sends only
         // its name back and the core reads it to the setting.

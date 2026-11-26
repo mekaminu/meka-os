@@ -40,10 +40,12 @@ import os.meka.android.review.ReflectionActions
 import os.meka.android.review.Week
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.review.BALANCE_COUNT_ROW_TAG
+import os.meka.android.review.BALANCE_TARGET_ROW_TAG
 import os.meka.core.domain.BalanceArea
 import os.meka.core.domain.BalanceCountChoiceRules
 import os.meka.core.domain.BalanceChoices
 import os.meka.core.domain.BalanceRules
+import os.meka.core.domain.BalanceTargetChoiceRules
 import os.meka.core.domain.BalanceView
 import os.meka.core.domain.CalendarEvent
 import os.meka.android.screens.ShotReviewWeek.Fill
@@ -77,7 +79,7 @@ import kotlin.test.fail
  * the reflection asked for with suggestions, three earlier weeks in the journal), on the Fold's cover and inner screens,
  * Dark (and one in Light). Saved under `review/` and read for nonsense, cut lines, broken words, split numbers, dates
  * and durations, a grey line leaving a word alone or starting with a dot, and every button answering a 48 dp touch. By
- * hand: Targets opens and a chip sets a target, a "Count as" row opens its sheet and a choice counts an event, Undo, Reflect now opens the
+ * hand: Targets opens and a target's row opens its sheet and a choice sets it, a "Count as" row opens its sheet and a choice counts an event, Undo, Reflect now opens the
  * questions, a suggestion fills its field, Save keeps the three, Skip this week, the journal opens and Remove, and
  * Change offers the times.
  */
@@ -419,7 +421,7 @@ class ReviewBalanceReflectScreensTest {
         turns()
     }
 
-    /** Works by hand: Targets and a target chip, a "Count as" row and its sheet, Undo, the questions, Save, the journal, Change. */
+    /** Works by hand: Targets and a target's row and sheet, a "Count as" row and its sheet, Undo, the questions, Save, the journal, Change. */
     private fun byHand() {
         val name = "review-balance-by-hand"
         val taps = Taps()
@@ -430,14 +432,29 @@ class ReviewBalanceReflectScreensTest {
         if (counted.unclear.any { it.title == choir.first }) fail("$name: Choir is counted as Self but still listed under not counted")
         if ((counted.uncounted ?: "") == (balance(Fill.MANY).uncounted ?: "")) fail("$name: the not-counted line didn't drop Choir (${counted.uncounted})")
         scrollTo("Targets")
-        if (onScreen("Family · a week")) fail("$name: the targets show before a tap")
+        if (onScreen("8 h a week")) fail("$name: the targets show before a tap")
         clickNode(hasText("Targets"), "$name: Targets")
-        if (taps.toggled != 1 || !onScreen("Family · a week")) fail("$name: Targets didn't open the targets")
+        if (taps.toggled != 1 || !onScreen("8 h a week")) fail("$name: Targets didn't open the targets")
         shoot("cover-dark-many-targets")
         assertLines("$name-targets", Fill.MANY)
-        scrollTo("Family · a week")
-        clickNode(hasText("14 h"), "$name: Family's 14 h")
-        if (taps.targets != listOf(BalanceArea.FAMILY to 14 * 60)) fail("$name: a target chip didn't set it (${taps.targets})")
+        // Walk-through week 5, A17: one card row per area opening its sheet, no open chip row on the page.
+        val targetRows = compose.onAllNodesWithTag(BALANCE_TARGET_ROW_TAG).fetchSemanticsNodes().size
+        if (targetRows != counted.rows.size) fail("$name: ${counted.rows.size} areas but $targetRows target rows")
+        if (onScreen("14 h") || onScreen("Family · a week")) fail("$name: the targets' chips are still open on the page")
+        val family = counted.rows.first { it.area == BalanceArea.FAMILY }
+        scrollTo("8 h a week")
+        compose.onAllNodes(hasTestTag(BALANCE_TARGET_ROW_TAG) and hasContentDescription(BalanceTargetChoiceRules.row(family).spoken))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: Family's target row didn't open its sheet")
+        val targetSheet = BalanceTargetChoiceRules.sheet(family)
+        if (!inSheet(targetSheet.title)) fail("$name: the sheet isn't Family's target")
+        if (!inSheet(targetSheet.choices.last().line)) fail("$name: 14 h doesn't say what it means (${targetSheet.choices.last().line})")
+        compose.onAllNodes(hasText("14 h") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() }
+        if (taps.targets != listOf(BalanceArea.FAMILY to 14 * 60)) fail("$name: Family's sheet didn't set the target (${taps.targets})")
+        if (sheetOpen()) fail("$name: a target choice didn't close the sheet")
         if (!onScreen("Quiz night · Self")) fail("$name: his choice isn't listed under Targets")
         scrollTo(BalanceCountChoiceRules.CAPTION)
         val first = counted.unclear.first()

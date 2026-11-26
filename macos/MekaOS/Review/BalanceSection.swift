@@ -8,10 +8,11 @@ private func balanceShown(_ line: String) -> String {
 
 /// Balance view in Review on the Mac (V2, slice 1), like the Fold's: the reviewed week's time across Work, Family,
 /// Health and Self, each with its bar against his target, a status ("Met" or work's "3 h over" in the accent) and what
-/// counted; "Targets ›" unfolds a row of chips per area (synced with the Fold). Only Strings and Ints cross to the core.
+/// counted; "Targets ›" unfolds a row per area with a menu of its choices (synced with the Fold;
+/// week 5 A17, they were chips). Only Strings and Ints cross to the core.
 ///
 /// Motion: the section staggers in with the review's others; bars fill on appear and glide to a new target; statuses
-/// cross-fade; Targets unfolds in place on the expand spring (the chevron turns); a chip blends to the accent.
+/// cross-fade; Targets unfolds in place on the expand spring (the chevron turns); a target's menu marks the chosen one.
 /// Reduce Motion: cross-fades, bars set.
 ///
 /// Slice 5: "Count as …": each event with no clear area is listed with a menu (Family, Health, Self, Work, Don't count;
@@ -140,16 +141,9 @@ struct BalanceSection: View {
         .accessibilityLabel(open ? "Hide the targets" : "Show the targets")
         if open {
             VStack(alignment: .leading, spacing: MekaSpace.m) {
+                // Walk-through week 5, A17: no open chip rows on a page; each area is one row with a menu of its choices.
                 ForEach(Array(balance.rows.enumerated()), id: \.element.area.name) { i, r in
-                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                        Text("\(r.label) · a week").font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                        HStack(spacing: MekaSpace.xs) {
-                            ForEach(r.choices.map { Int($0.intValue) }, id: \.self) { c in
-                                chip(label(c), lit: chosen(r, c)) { set(r, c) }
-                            }
-                        }
-                    }
-                    .staggeredAppear(i)
+                    targetRow(r).staggeredAppear(i)
                 }
                 choices
                 if let s = said {
@@ -162,36 +156,38 @@ struct BalanceSection: View {
         }
     }
 
-    private var yourHours: Int { Int(BalanceRules.shared.YOUR_HOURS) }
-
-    private func label(_ c: Int) -> String {
-        c == yourHours ? "Your hours" : BalanceRules.shared.hours(min: Int32(c))
-    }
-
-    private func chosen(_ r: BalanceRow, _ c: Int) -> Bool {
-        if c == yourHours { return r.defaultTarget }
-        if r.area.name == "WORK" { return !r.defaultTarget && c == Int(r.targetMin) }
-        return c == Int(r.targetMin)
-    }
-
-    private func set(_ r: BalanceRow, _ c: Int) {
-        guard !chosen(r, c) else { return }
+    private func targetRow(_ r: BalanceRow) -> some View {
+        let rules = BalanceTargetChoiceRules.shared
+        let row = rules.row(r: r)
+        let sheet = rules.sheet(r: r)
         let area = r.area.name
-        Task {
-            if let line = await model.setBalanceTarget(area, minutes: c) { said = line }
+        return HStack(spacing: MekaSpace.xs) {
+            Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Menu(row.value) {
+                Section(sheet.title) {
+                    ForEach(sheet.choices, id: \.name) { c in
+                        let name = c.name
+                        Button {
+                            guard let m = rules.named(r: r, name: name) else { return }
+                            MekaHaptics.light()
+                            set(area, m.intValue)
+                        } label: {
+                            if c.lit { Label("\(c.label) · \(c.line)", systemImage: "checkmark") } else { Text("\(c.label) · \(c.line)") }
+                        }
+                    }
+                }
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .accessibilityLabel(row.spoken)
         }
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
     }
 
-    private func chip(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label).font(MekaType.caption).lineLimit(1)
-                .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
-                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+    private func set(_ area: String, _ minutes: Int) {
+        Task {
+            if let line = await model.setBalanceTarget(area, minutes: minutes) { said = line }
         }
-        .buttonStyle(MekaPressStyle())
-        .accessibilityAddTraits(lit ? .isSelected : [])
     }
 }
 

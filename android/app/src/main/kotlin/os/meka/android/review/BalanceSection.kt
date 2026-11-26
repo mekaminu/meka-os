@@ -11,8 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,7 +34,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
@@ -56,12 +53,14 @@ import os.meka.core.domain.BalanceArea
 import os.meka.core.domain.BalanceCountChoiceRules
 import os.meka.core.domain.BalanceRow
 import os.meka.core.domain.BalanceRules
+import os.meka.core.domain.BalanceTargetChoiceRules
 import os.meka.core.domain.BalanceView
 import os.meka.core.domain.DurationGlue
 import os.meka.core.domain.LoneWordGlue
 
 /** The tag the screen tests find a "Count as" row by. */
 const val BALANCE_COUNT_ROW_TAG = "balance-count-row"
+const val BALANCE_TARGET_ROW_TAG = "balance-target-row"
 
 /** A grey line as drawn: durations and the last words kept together (quality gate slice 62). */
 private fun shown(line: String): String = LoneWordGlue.kept(DurationGlue.kept(line))
@@ -69,11 +68,12 @@ private fun shown(line: String): String = LoneWordGlue.kept(DurationGlue.kept(li
 /**
  * Balance view in the weekly review (V2, slice 1): the reviewed week's time across Work, Family, Health and Self, each
  * with its bar against his target, a status ("Met" in the accent, "2 h short", "3 h over" for work in the accent) and
- * what counted; "Targets ›" unfolds a row of chips per area (synced). The sources line says what is counted.
+ * what counted; "Targets ›" unfolds a card row per area ("Family" · "8 h a week") opening a sheet of its choices
+ * (synced; week 5 A17, they were chips). The sources line says what is counted.
  *
  * Motion (catalogue "Weekly review"): the section staggers in with the review's others; each bar fills on appear and
  * glides to a new target; statuses cross-fade and blend to the accent; Targets unfolds in place (expand spring, the
- * chevron turns, tick haptic); a chip blends to the accent with a light haptic. Reduced motion: cross-fades, bars set.
+ * chevron turns, tick haptic); a target's sheet rises over a fading scrim, its lit dot blends, a choice ticks. Reduced motion: cross-fades, bars set.
  *
  * Slice 5: "Count as …": each event with no clear area is listed under the balance as a row opening a sheet (Family,
  * Health, Self, Work, Don't count; week 5 A17, they were chips); a choice counts every event with that title (synced), the row folds away and the line says so with
@@ -234,8 +234,7 @@ private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, Str
     }
 }
 
-/** "Targets ›": a row of chips per area, unfolding in place; the line the last tap said under them. */
-@OptIn(ExperimentalLayoutApi::class)
+/** "Targets ›": a card row per area opening its sheet (A17), unfolding in place; the line the last tap said under them. */
 @Composable
 private fun Targets(
     balance: BalanceView,
@@ -245,6 +244,7 @@ private fun Targets(
     onCountAs: (String, String) -> Unit,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
+    var sheetArea by remember { mutableStateOf<BalanceArea?>(null) }
     val reduced = Meka.reducedMotion
     val turn by animateFloatAsState(if (open) 90f else 0f, if (reduced) MekaMotion.appear<Float>(true) else MekaMotion.expand<Float>(false), label = "balance-chevron")
     Column(Modifier.fillMaxWidth()) {
@@ -259,18 +259,14 @@ private fun Targets(
         }
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-                balance.rows.forEachIndexed { i, r ->
-                    Column(Modifier.appear(rememberAppearance(i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        Text("${r.label} · a week", style = MekaType.caption, color = Meka.colors.textTertiary)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            r.choices.forEach { c ->
-                                val chosen = when {
-                                    c == BalanceRules.YOUR_HOURS -> r.defaultTarget
-                                    r.area == BalanceArea.WORK -> !r.defaultTarget && c == r.targetMin
-                                    else -> c == r.targetMin
-                                }
-                                TargetChip(if (c == BalanceRules.YOUR_HOURS) "Your hours" else BalanceRules.hours(c), chosen) { onTarget(r.area, c) }
-                            }
+                // Walk-through week 5, A17: no open chip rows on a page; each area is one card row opening its sheet.
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    balance.rows.forEachIndexed { i, r ->
+                        androidx.compose.runtime.key(r.area) {
+                            NotifyChoiceRowView(
+                                BalanceTargetChoiceRules.row(r),
+                                Modifier.appear(rememberAppearance(i)).testTag(BALANCE_TARGET_ROW_TAG),
+                            ) { sheetArea = r.area }
                         }
                     }
                 }
@@ -297,19 +293,13 @@ private fun Targets(
             }
         }
     }
+    val sheetFor = balance.rows.firstOrNull { it.area == sheetArea }
+    if (sheetFor != null) {
+        NotifyChoiceSheetView(
+            BalanceTargetChoiceRules.sheet(sheetFor),
+            onChoose = { name -> BalanceTargetChoiceRules.named(sheetFor, name)?.let { onTarget(sheetFor.area, it) } },
+            onClose = { sheetArea = null },
+        )
+    }
 }
 
-@Composable
-private fun TargetChip(label: String, chosen: Boolean, choose: () -> Unit) {
-    val bg by animateColorAsState(if (chosen) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(Meka.reducedMotion), label = "target-bg")
-    val fg by animateColorAsState(if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.themeBlend(Meka.reducedMotion), label = "target-fg")
-    Text(
-        label, style = MekaType.caption, color = fg,
-        // Quality gate slice 62: the pill drawn slim (it was the whole 48 dp tall), the 48 dp touch outside it.
-        modifier = Modifier.semantics { selected = chosen }.clip(RoundedCornerShape(MekaRadius.pill))
-            .clickable(role = Role.RadioButton) { if (!chosen) choose() }
-            .minTouch()
-            .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-    )
-}
