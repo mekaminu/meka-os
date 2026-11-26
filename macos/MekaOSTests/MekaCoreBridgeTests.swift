@@ -3391,6 +3391,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.named(onToday: true, name: CallChoiceRules.shared.ON))
     }
 
+    func testAutonomyChoicesReachSwift() {
+        // Walk-through week 5, A17: What Navilife may do's pause switch and rows are menus of two choices.
+        let choices = AutonomyChoiceRules.shared
+        XCTAssertEqual(choices.pauseRow(paused: false).value, "Off")
+        XCTAssertEqual(choices.pauseSheet(paused: true).choices.first(where: { $0.lit })?.label, "On")
+        XCTAssertEqual(choices.pauseNamed(paused: false, name: CallChoiceRules.shared.ON)?.boolValue, true)
+        XCTAssertNil(choices.pauseNamed(paused: true, name: CallChoiceRules.shared.ON))
+        let trusted = AutonomyRules.shared.trustRow(k: TrustKind.addTask, s: TrustState(streak: 0, trusted: true, declined: false), paused: false)
+        let sheet = choices.sheet(row: trusted, paused: false)
+        XCTAssertEqual(sheet?.choices.map { $0.label }, [AutonomyChoiceRules.shared.DOES_IT, AutonomyRules.shared.ASK_FIRST])
+        let other = sheet?.choices.first(where: { !$0.lit })?.name ?? ""
+        XCTAssertTrue(choices.changes(name: other))
+        XCTAssertFalse(choices.opens(row: AutonomyRules.shared.LOCKED[0]))
+    }
+
     func testAboutYouChoicesReachSwift() {
         // Walk-through week 5, A17: About you's Watch for requests and Handle her requests are On · Off menus.
         let choices = AboutYouChoiceRules.shared

@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,7 +43,6 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
-import os.meka.android.designsystem.TouchPill
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
@@ -53,21 +51,25 @@ import os.meka.android.lists.unfold
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.core.domain.AutonomyChoiceRules
 import os.meka.core.domain.AutonomyRow
 import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 
 /**
- * Ask → More → What MEKA may do (policy engine UI, slice 1): the kill switch on top ("Pause everything MEKA does on its
- * own" · Pause / Resume), then each earned-trust kind under Your lists ("Does it for you" with Ask first, "Asks first ·
- * 3 of 5 yeses in a row", "Asks first · you said keep asking" with Let MEKA offer again), then the locked rows no
- * setting changes (messages, email, money, trading, documents, other people's words, everything else). Synced.
+ * Ask → More → What MEKA may do (policy engine UI, slice 1): the kill switch on top ("Pause everything Navilife does
+ * on its own" · "Off" ›), then each earned-trust kind under Your lists ("Does it for you", "Asks first · 3 of 5 yeses in
+ * a row", "Asks first · you said keep asking"), Your mail's switches, then the locked rows no setting changes (messages,
+ * email, money, trading, documents, other people's words, everything else). Synced. Walk-through week 5, A17: no pills
+ * on the page; the kill switch and each row that can change open a sheet of their two choices ([AutonomyChoiceRules]).
  *
- * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, each row's line and the pause
- * button cross-fade; the sections stagger in 40 ms apart; a row's dot blends to the accent while MEKA does it on its own;
- * Pause / Resume gives a light haptic, Ask first a tick; the answer's line unfolds on the expand spring. Reduced motion:
- * cross-fades.
+ * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and each row's line
+ * cross-fade; the sections stagger in 40 ms apart; a row's dot blends to the accent while MEKA does it on its own; a
+ * choice sheet rises over a fading scrim, its lit dot blending, with a tick haptic (pausing or resuming a light one);
+ * the answer's line unfolds on the expand spring. Reduced motion: cross-fades.
  */
 @Composable
 fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
@@ -76,6 +78,31 @@ fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
     val reduced = Meka.reducedMotion
     val v by core.autonomyView.collectAsState()
     var said by remember { mutableStateOf<String?>(null) }
+    // Walk-through week 5, A17: the sheet open, the kill switch's or a row's (by its key).
+    var pauseOpen by remember { mutableStateOf(false) }
+    var openKey by remember { mutableStateOf<String?>(null) }
+    if (pauseOpen) NotifyChoiceSheetView(
+        AutonomyChoiceRules.pauseSheet(v.paused),
+        onChoose = { name ->
+            AutonomyChoiceRules.pauseNamed(v.paused, name)?.let { on ->
+                haptics.light()
+                scope.launch { runCatching { core.setAutonomyPaused(on) }.getOrNull()?.let { said = it } }
+            }
+        },
+        onClose = { pauseOpen = false },
+    )
+    val openRow = openKey?.let { k -> v.sections.flatMap { it.rows }.firstOrNull { it.key == k } }
+    val openSheet = openRow?.let { AutonomyChoiceRules.sheet(it, v.paused) }
+    if (openRow != null && openSheet != null) NotifyChoiceSheetView(
+        openSheet,
+        onChoose = { name ->
+            if (AutonomyChoiceRules.changes(name)) {
+                val key = openRow.key
+                scope.launch { runCatching { core.resetTrust(key) }.getOrNull()?.let { said = it } }
+            }
+        },
+        onClose = { openKey = null },
+    )
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter).testTag("autonomy-pane"),
@@ -97,49 +124,16 @@ fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
 
-        // The kill switch. Quality gate slice 54: on the cover screen (below 420 dp) Pause sits under its words.
-        BoxWithConstraints(
-            Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                .testTag("autonomy-pause").appear(rememberAppearance(2)),
-        ) {
-            val under = AutonomyRules.actionUnder((maxWidth - MekaSpace.m * 2).value)
-            val words: @Composable (Modifier) -> Unit = { m ->
-                Column(m) {
-                    Text(LoneWordGlue.kept(AutonomyRules.PAUSE_TITLE), style = MekaType.body, color = Meka.colors.textPrimary)
-                    Text(LoneWordGlue.kept(AutonomyRules.PAUSE_LINE), style = MekaType.caption, color = Meka.colors.textSecondary)
-                }
-            }
-            val pill: @Composable () -> Unit = {
-                Pill(v.pauseButton, lit = v.paused) {
-                    haptics.light()
-                    scope.launch { runCatching { core.setAutonomyPaused(!v.paused) }.getOrNull()?.let { said = it } }
-                }
-            }
-            if (under) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)) {
-                    words(Modifier.fillMaxWidth())
-                    pill()
-                }
-            } else {
-                Row(
-                    Modifier.fillMaxWidth().minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                ) {
-                    words(Modifier.weight(1f))
-                    pill()
-                }
-            }
-        }
+        // Walk-through week 5, A17: the kill switch is a card row ("Pause everything Navilife does on its own" · "Off" ›)
+        // opening Off · On, each saying what it does; a choice pauses or resumes and closes the sheet.
+        NotifyChoiceRowView(AutonomyChoiceRules.pauseRow(v.paused),
+            Modifier.padding(top = MekaSpace.xs).testTag("autonomy-pause").appear(rememberAppearance(2))) { pauseOpen = true }
 
         var step = 3
         v.sections.forEach { section ->
             SectionLabel(section.label.uppercase(), Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(step++)))
             section.rows.forEach { row ->
-                AutonomyRowView(row, Modifier.appear(rememberAppearance(step))) {
-                    haptics.tick()
-                    scope.launch { runCatching { core.resetTrust(row.key) }.getOrNull()?.let { said = it } }
-                }
+                AutonomyRowView(row, Modifier.appear(rememberAppearance(step))) { openKey = row.key }
             }
             step++
         }
@@ -161,64 +155,36 @@ private fun AutonomyRowView(row: AutonomyRow, modifier: Modifier, onAction: () -
         },
         MekaMotion.appear(reduced), label = "autonomy-dot",
     )
-    // Quality gate slice 54: on the cover screen (below 420 dp) Ask first / Turn off / Let Navilife offer again sits
-    // under the row's words, lined up with them past the dot, instead of squeezing them beside it.
-    BoxWithConstraints(
+    // Walk-through week 5, A17: a row that can change is one card opening its sheet of two choices (the pill it had
+    // is gone), its dot, title and line kept, › at its end; a locked row says Locked and opens nothing.
+    val opens = AutonomyChoiceRules.opens(row)
+    Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m))
-            .background(Meka.colors.surface).testTag("autonomy-row"),
+            .background(Meka.colors.surface)
+            .clickable(enabled = opens, role = Role.Button, onClick = onAction)
+            .semantics(mergeDescendants = true) { contentDescription = AutonomyChoiceRules.spoken(row) }
+            .testTag("autonomy-row")
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        val under = AutonomyRules.actionUnder((maxWidth - MekaSpace.m * 2).value)
-        val action = row.action
-        val words: @Composable (Modifier) -> Unit = { m ->
-            Row(
-                m.semantics(mergeDescendants = true) {
-                    contentDescription = row.title + ". " + row.line + if (row.locked) ". Locked" else ""
-                },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                Box(
-                    Modifier.size(DOT).testTag("autonomy-dot").clip(CircleShape).background(dot)
-                        .then(if (!row.onItsOwn && !row.locked) Modifier.border(1.5.dp, Meka.colors.textTertiary, CircleShape) else Modifier),
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(LoneWordGlue.kept(row.title), style = MekaType.body, color = Meka.colors.textPrimary)
-                    Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "autonomy-line") { l ->
-                        Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
-                    }
-                }
-                if (row.locked) Text("Locked", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Box(
+            Modifier.size(DOT).testTag("autonomy-dot").clip(CircleShape).background(dot)
+                .then(if (!row.onItsOwn && !row.locked) Modifier.border(1.5.dp, Meka.colors.textTertiary, CircleShape) else Modifier),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(LoneWordGlue.kept(row.title), style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "autonomy-line") { l ->
+                Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
-        if (under && action != null && !row.locked) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)) {
-                words(Modifier.fillMaxWidth().minTouch())
-                Box(Modifier.padding(start = DOT + MekaSpace.xs)) { Pill(action, lit = false, onClick = onAction) }
-            }
-        } else {
-            Row(
-                Modifier.fillMaxWidth().minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                words(Modifier.weight(1f))
-                if (!row.locked && action != null) Pill(action, lit = false, onClick = onAction)
-            }
-        }
+        if (row.locked) Text("Locked", style = MekaType.caption, color = Meka.colors.textTertiary)
+        else if (opens) Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
     }
 }
 
 /** A row's mark (lit while Navilife does it on its own). */
 private val DOT = 10.dp
-
-/** Quality gate slice 55: the pill drawn 32 dp high, its 48 dp touch outside it ([TouchPill]). */
-@Composable
-private fun Pill(label: String, lit: Boolean, onClick: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "autonomy-pill")
-    val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.accent, MekaMotion.appear(reduced), label = "autonomy-pill-ink")
-    TouchPill(label, fill, ink, onClick = onClick)
-}
 
 /**
  * "What Navilife may do" completeness: while Navilife is paused, Today says so under the header — "Paused since 21:40 ·

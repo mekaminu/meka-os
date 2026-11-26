@@ -34,6 +34,8 @@ import os.meka.android.ask.SpeakUpPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.core.domain.AutonomyChoiceRules
+import os.meka.core.domain.CallChoiceRules
 import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.DonePillSpec
@@ -327,15 +329,6 @@ class SpeakUpAutonomyScreensTest {
         }
     }
 
-    /** On the cover screen a row's button sits under its words (below them), never beside them. */
-    private fun assertButtonUnder(name: String, button: String, words: String) {
-        val b = compose.onAllNodes(hasText(button) and hasClickAction()).fetchSemanticsNodes().firstOrNull()
-            ?: fail("$name: no \"$button\"")
-        val w = compose.onAllNodes(hasText(words), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
-            ?: fail("$name: \"$words\" isn't on screen")
-        if (b.boundsInRoot.top < w.boundsInRoot.bottom - 1f) fail("$name: \"$button\" sits beside \"$words\", not under it")
-    }
-
     private fun autonomy(name: String, fill: Fill, cover: Boolean, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val core = setUp(theme) { fillAutonomy(it, fill) }
         compose.setContent {
@@ -350,15 +343,15 @@ class SpeakUpAutonomyScreensTest {
         val lines = listOf(v.summary, AutonomyRules.PAUSE_TITLE, AutonomyRules.PAUSE_LINE, AutonomyRules.NOTE) +
             rows.map { it.line } + rows.map { it.title }
         checks(name, "autonomy", "What Navilife may do", lines)
-        assertSlimPills(name)
+        // Walk-through week 5, A17: no pill on the page; the kill switch and each row that can change are rows opening sheets.
+        if (compose.onAllNodes(hasTestTag("touch-pill"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: a pill is still on the page")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
-        if (cover) {
-            assertButtonUnder(name, AutonomyRules.PAUSE, LoneWordGlue.kept(AutonomyRules.PAUSE_LINE))
-            rows.filter { it.action != null && !it.locked }.forEach { r ->
-                val b = compose.onAllNodes(hasText(r.action!!) and hasClickAction()).fetchSemanticsNodes()
-                val w = compose.onAllNodes(hasText(LoneWordGlue.kept(r.line)), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
-                    ?: return@forEach // below the fold
-                if (b.none { it.boundsInRoot.top >= w.boundsInRoot.bottom - 1f }) fail("$name: \"${r.action}\" sits beside \"${r.title}\"'s words")
+        if (compose.onAllNodes(hasContentDescription(AutonomyChoiceRules.pauseRow(v.paused).spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: the kill switch isn't a row saying ${AutonomyChoiceRules.pauseRow(v.paused).value}")
+        }
+        rows.filter { AutonomyChoiceRules.opens(it) }.forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(AutonomyChoiceRules.spoken(r)) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
+                fail("$name: \"${r.title}\" doesn't open its choices")
             }
         }
         // A9: the header counts the lit dots, never "asks before everything" over Add what you ask for's lit row.
@@ -371,7 +364,7 @@ class SpeakUpAutonomyScreensTest {
             }
             Fill.ONE -> {
                 if (!v.summary.startsWith("Navilife does 4 things")) fail("$name: the summary reads \"${v.summary}\"")
-                ScreenShots.assertShows(compose, name, AutonomyRules.ASK_FIRST)
+                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(AutonomyRules.TRUSTED_LINE))
             }
             Fill.MANY -> {
                 if (!v.summary.startsWith("Navilife does 6 things")) fail("$name: the summary reads \"${v.summary}\"")
@@ -381,19 +374,27 @@ class SpeakUpAutonomyScreensTest {
         return core
     }
 
-    /** Works by hand: Pause pauses (Resume resumes); a trusted kind's Ask first sends it back to asking. */
+    /**
+     * Works by hand (walk-through week 5, A17): the kill switch's row → On pauses (→ Off resumes); Add a task's row →
+     * Ask first sends it back to asking, each through its sheet, which closes on the choice.
+     */
     private fun autonomyByHand(core: MekaCore) {
         val name = "autonomy-by-hand"
-        /** Taps the [label] button; [last] for the last of several (Add what you ask for's Ask first comes first). */
-        fun tap(label: String, last: Boolean = false) {
-            val n = compose.onAllNodes(hasText(label) and hasClickAction())
-            val count = n.fetchSemanticsNodes().size
-            if (count == 0) fail("$name: no \"$label\"")
-            n[if (last) count - 1 else 0].performSemanticsAction(SemanticsActions.OnClick)
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        fun choose(row: String, choice: String) {
+            val n = compose.onAllNodes(hasContentDescription(row) and hasClickAction())
+            if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no row \"$row\"")
+            n[0].performSemanticsAction(SemanticsActions.OnClick)
+            until { sheetOpen() }
+            if (!sheetOpen()) fail("$name: \"$row\" didn't open its sheet")
+            compose.onAllNodes(hasText(choice, substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            until { !sheetOpen() }
+            if (sheetOpen()) fail("$name: choosing $choice didn't close the sheet")
         }
-        tap(AutonomyRules.PAUSE)
-        until { core.autonomyView.value.paused && onScreen(AutonomyRules.RESUME) }
-        if (!core.autonomyView.value.paused) fail("$name: Pause left Navilife running")
+        choose(AutonomyChoiceRules.pauseRow(false).spoken, CallChoiceRules.ON_LABEL)
+        until { core.autonomyView.value.paused && onScreen("Paused since 17:15") }
+        if (!core.autonomyView.value.paused) fail("$name: On left Navilife running")
         if (!onScreen("Paused since 17:15")) fail("$name: the summary doesn't say paused since 17:15")
         // Found and fixing, week 5, A15: the header is said once, never "Paused · Navilife asks before everything" again under it.
         val asks = ScreenShots.texts(compose).count { DateGlue.plain(it).contains("asks before everything") }
@@ -401,12 +402,13 @@ class SpeakUpAutonomyScreensTest {
         // Walk-through 2026-11-15 A12 ("autonomy by-hand = one"): the shot was One's opening screen; it is taken again
         // while paused, the one state no other shot shows (Ask first at the end returns it to a fresh install's page).
         ScreenShots.reshootAfterHand(compose, "autonomy", "cover-dark-by-hand")
-        tap(AutonomyRules.RESUME)
+        choose(AutonomyChoiceRules.pauseRow(true).spoken, CallChoiceRules.OFF_LABEL)
         until { !core.autonomyView.value.paused }
-        if (core.autonomyView.value.paused) fail("$name: Resume left it paused")
+        if (core.autonomyView.value.paused) fail("$name: Off left it paused")
 
-        // Add a task's Ask first (the last one: Add what you ask for's leads Your lists).
-        tap(AutonomyRules.ASK_FIRST, last = true)
+        // Add a task's row → Ask first.
+        val addTask = core.autonomyView.value.sections.flatMap { it.rows }.first { it.key == TrustKind.ADD_TASK.key }
+        choose(AutonomyChoiceRules.spoken(addTask), AutonomyRules.ASK_FIRST)
         until { core.autonomyView.value.summary == AutonomyRules.onItsOwnLine(3) }
         if (core.autonomyView.value.summary != AutonomyRules.onItsOwnLine(3)) fail("$name: Ask first left a kind trusted (${core.autonomyView.value.summary})")
     }

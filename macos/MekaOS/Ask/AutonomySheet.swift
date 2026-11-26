@@ -2,13 +2,14 @@
 import SwiftUI
 
 /// Ask → More → What MEKA may do on the Mac (policy engine UI, slice 1), like the Fold's AutonomyPane: the pause switch
-/// on top, each earned-trust kind under Your lists ("Does it for you" with Ask first, "Asks first · 3 of 5 yeses in a
-/// row", "Asks first · you said keep asking" with Let MEKA offer again), then the locked rows no setting changes. Only a
-/// Bool or a kind's key (a String) crosses to the core.
+/// on top, each earned-trust kind under Your lists ("Does it for you", "Asks first · 3 of 5 yeses in a row", "Asks first
+/// · you said keep asking"), Your mail's switches, then the locked rows no setting changes. Walk-through week 5, A17:
+/// no pills; the pause switch and each row that can change are menus of the core's two choices (AutonomyChoiceRules).
+/// Only a Bool or a kind's key (a String) crosses to the core.
 ///
-/// Motion: the sheet scale-fades (system); the summary, each row's line and the pause button cross-fade; the sections
-/// stagger in; a row's dot blends to the accent while MEKA does it on its own; Pause / Resume a light haptic, Ask first
-/// a tick; the answer's line arrives on the expand spring. Reduce Motion: cross-fades.
+/// Motion: the sheet scale-fades (system); the summary, each row's line and the words under the pause menu cross-fade;
+/// the sections stagger in; a row's dot blends to the accent while MEKA does it on its own; the answer's line arrives
+/// on the expand spring. Reduce Motion: cross-fades.
 struct AutonomySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -34,25 +35,17 @@ struct AutonomySheet: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
                         .transition(.opacity)
                 }
-                HStack(spacing: MekaSpace.xs) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(LoneWordGlue.shared.kept(line: rules.PAUSE_TITLE)).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        Text(LoneWordGlue.shared.kept(line: rules.PAUSE_LINE)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: MekaSpace.xs)
-                    pill(v.pauseButton, lit: paused) {
-                        Task { await model.setAutonomyPaused(!paused) }
-                    }
-                }
-                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-                .padding(.top, MekaSpace.xs)
-                .staggeredAppear(2)
+                // Walk-through week 5, A17: the kill switch is an Off · On menu from the core's sheet, as the Fold's row and
+                // sheet, the lit choice's words under it; only a Bool crosses to the core.
+                pauseRow(paused)
+                    .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                    .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                    .padding(.top, MekaSpace.xs)
+                    .staggeredAppear(2)
                 ForEach(Array(v.sections.enumerated()), id: \.offset) { i, section in
                     label(section.label).staggeredAppear(3 + 2 * i)
                     ForEach(section.rows, id: \.key) { row in
-                        rowView(row)
+                        rowView(row, paused: paused)
                     }
                     .staggeredAppear(4 + 2 * i)
                 }
@@ -73,7 +66,7 @@ struct AutonomySheet: View {
         .background(palette.surface)
     }
 
-    private func rowView(_ row: AutonomyRow) -> some View {
+    private func rowView(_ row: AutonomyRow, paused: Bool) -> some View {
         // Walk-through 2026-11-15, A21: off was surfaceRaised on the sheet (near-invisible); now an empty dot in a
         // tertiary ring, as on the Fold.
         let off = !row.onItsOwn && !row.locked
@@ -93,10 +86,12 @@ struct AutonomySheet: View {
             if row.locked {
                 Image(systemName: "lock.fill").font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .accessibilityLabel("Locked")
-            } else if let action = row.action {
+            } else if let sheet = choices.sheet(row: row, paused: paused) {
+                // Walk-through week 5, A17: the row's two choices are a menu (the pill it had is gone); choosing the
+                // other sends only the row's key (a String) to the core, as the pill did.
                 let key = row.key
-                pill(action, lit: false) {
-                    Task { await model.resetTrust(key) }
+                menu(sheet, spoken: choices.spoken(row: row)) { name in
+                    if choices.changes(name: name) { Task { await model.resetTrust(key) } }
                 }
             }
         }
@@ -111,16 +106,40 @@ struct AutonomySheet: View {
             .padding(.top, MekaSpace.xs)
     }
 
-    private func pill(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label).font(MekaType.caption).lineLimit(1)
-                .foregroundStyle(lit ? palette.onAccent : palette.accent)
+    private var choices: AutonomyChoiceRules { AutonomyChoiceRules.shared }
+
+    /// The kill switch: its title, an Off · On menu saying what's in force, and the lit choice's words under it.
+    private func pauseRow(_ paused: Bool) -> some View {
+        let row = choices.pauseRow(paused: paused)
+        let sheet = choices.pauseSheet(paused: paused)
+        let lit = sheet.choices.first(where: { $0.lit })
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            HStack(spacing: MekaSpace.xs) {
+                Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Spacer(minLength: MekaSpace.xs)
+                menu(sheet, spoken: row.spoken) { name in
+                    if let on = choices.pauseNamed(paused: paused, name: name)?.boolValue {
+                        Task { await model.setAutonomyPaused(on) }
+                    }
+                }
+            }
+            Text(LoneWordGlue.shared.kept(line: lit?.line ?? "")).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
-                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                .background(Capsule().fill(lit ? palette.accent : palette.surfaceRaised))
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: label)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: paused)
         }
-        .buttonStyle(MekaPressStyle())
+    }
+
+    /// A menu of a sheet's choices, the lit one shown; a pick of another sends only its name to [pick].
+    private func menu(_ sheet: NotifyChoiceSheet, spoken: String, pick: @escaping (String) -> Void) -> some View {
+        let litName = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { litName }, set: { name in if name != litName { pick(name) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
+        .accessibilityLabel(spoken)
     }
 }
