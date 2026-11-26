@@ -432,18 +432,21 @@ class ReviewBalanceReflectScreensTest {
         if (counted.unclear.any { it.title == choir.first }) fail("$name: Choir is counted as Self but still listed under not counted")
         if ((counted.uncounted ?: "") == (balance(Fill.MANY).uncounted ?: "")) fail("$name: the not-counted line didn't drop Choir (${counted.uncounted})")
         scrollTo("Targets")
-        if (onScreen("8 h a week")) fail("$name: the targets show before a tap")
+        // The fixture's Family target is set (10 h), so its row reads "10 h a week".
+        val family = counted.rows.first { it.area == BalanceArea.FAMILY }
+        val familyValue = BalanceTargetChoiceRules.value(family)
+        fun targetRows() = compose.onAllNodesWithTag(BALANCE_TARGET_ROW_TAG).fetchSemanticsNodes().size
+        if (targetRows() != 0) fail("$name: the targets show before a tap")
         clickNode(hasText("Targets"), "$name: Targets")
-        if (taps.toggled != 1 || !onScreen("8 h a week")) fail("$name: Targets didn't open the targets")
+        if (taps.toggled != 1 || targetRows() == 0) fail("$name: Targets didn't open the targets")
         shoot("cover-dark-many-targets")
         assertLines("$name-targets", Fill.MANY)
         // Walk-through week 5, A17: one card row per area opening its sheet, no open chip row on the page.
-        val targetRows = compose.onAllNodesWithTag(BALANCE_TARGET_ROW_TAG).fetchSemanticsNodes().size
-        if (targetRows != counted.rows.size) fail("$name: ${counted.rows.size} areas but $targetRows target rows")
-        if (onScreen("14 h") || onScreen("Family · a week")) fail("$name: the targets' chips are still open on the page")
-        val family = counted.rows.first { it.area == BalanceArea.FAMILY }
-        scrollTo("8 h a week")
-        compose.onAllNodes(hasTestTag(BALANCE_TARGET_ROW_TAG) and hasContentDescription(BalanceTargetChoiceRules.row(family).spoken))[0]
+        if (targetRows() != counted.rows.size) fail("$name: ${counted.rows.size} areas but ${targetRows()} target rows")
+        if (onScreen("Family · a week")) fail("$name: the targets' chips are still open on the page")
+        val familyRow = hasTestTag(BALANCE_TARGET_ROW_TAG) and hasContentDescription(BalanceTargetChoiceRules.row(family).spoken)
+        if (compose.onAllNodes(familyRow).fetchSemanticsNodes().isEmpty()) fail("$name: no Family row reading \"$familyValue\"")
+        compose.onAllNodes(familyRow)[0]
             .performSemanticsAction(SemanticsActions.OnClick)
         until { sheetOpen() }
         if (!sheetOpen()) fail("$name: Family's target row didn't open its sheet")
