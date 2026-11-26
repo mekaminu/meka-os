@@ -218,6 +218,15 @@ class ReviewBalanceReflectScreensTest {
         }
     }
 
+    /** The sheet is its own window (a second root), so its words are read from its nodes, not the screen's root. */
+    private fun inSheet(text: String): Boolean {
+        val shows = SemanticsMatcher("shows \"$text\"") { node ->
+            node.config.getOrNull(SemanticsProperties.Text)?.any { DateGlue.plain(it.text).contains(text) } == true
+        }
+        return compose.onAllNodes(shows and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+    }
+
     private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
 
     /** A sheet's window comes and goes through the main looper, so the clock alone doesn't raise or drop it. */
@@ -437,8 +446,8 @@ class ReviewBalanceReflectScreensTest {
         until { sheetOpen() }
         if (!sheetOpen()) fail("$name: the Count as row didn't open its sheet")
         val sheet = BalanceCountChoiceRules.sheet(first, counted.rows)
-        if (!onScreen(sheet.title)) fail("$name: the sheet isn't about \"${first.title}\"")
-        if (!onScreen(sheet.choices[1].line)) fail("$name: Health doesn't say what it does to the week (${sheet.choices[1].line})")
+        if (!inSheet(sheet.title)) fail("$name: the sheet isn't about \"${first.title}\"")
+        if (!inSheet(sheet.choices[1].line)) fail("$name: Health doesn't say what it does to the week (${sheet.choices[1].line})")
         compose.onAllNodes(hasText("Health") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
             .performSemanticsAction(SemanticsActions.OnClick)
         until { !sheetOpen() }
