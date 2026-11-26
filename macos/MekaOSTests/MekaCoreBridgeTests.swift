@@ -3258,6 +3258,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.named(name: "soon", current: v.minute))
     }
 
+    func testCallsChoicesReachSwift() {
+        // Walk-through week 5, A17: Obi on calls' cap and recordings are menus built from the core's sheets; what callers
+        // may know is a switch per thing with its line.
+        let r = CallsChoiceRules.shared
+        XCTAssertEqual(r.capNamed(name: "30")?.int32Value, 30)
+        XCTAssertNil(r.capNamed(name: "25"))
+        XCTAssertEqual(r.keepNamed(name: "0")?.int32Value, 0)
+        XCTAssertNil(r.keepNamed(name: "30"))
+        XCTAssertEqual(r.capLine(gbp: 20), "Live conversation for up to £20 a month")
+        XCTAssertEqual(r.knowsLine(key: "name"), "Obi may call you by your first name")
+        XCTAssertEqual(r.knowsSpoken(c: CallsChip(key: "busy", label: "You're busy", on: true)), "You're busy, on. Obi may say you can't take the call right now")
+    }
+
     func testMailChoicesReachSwift() {
         // Walk-through week 5, A17: Mail's ten-minute inbox, meeting prep and warranty reminders are menus built from the
         // core's sheets; a pick's name reads back to the setting's key.

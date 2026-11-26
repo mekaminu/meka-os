@@ -2,13 +2,14 @@
 import SwiftUI
 
 /// Work mode → Obi on calls on the Mac (Obi on calls, slice 4; mockup `docs/design/calls/settings.dc.html`), like the
-/// Fold's ObiCallsPane: THIS MONTH (spent, calls, booked, a bar against the cap and the £10 · £20 · £30 · £50 chips),
-/// WHEN SOMEONE CALLS YOU's three switches, WHAT CALLERS MAY KNOW's chips, the fixed BOOKING CALLS limits, RECORDINGS
-/// and "Obi always says he's an AI assistant when asked". The words are the core's `CallsSettingsRules.view`; everything is
-/// synced with the Fold. Only Bools, Int32s and Strings cross to the core.
+/// Fold's ObiCallsPane: THIS MONTH (spent, calls, booked, a bar against the cap), WHEN SOMEONE CALLS YOU's three
+/// switches, WHAT CALLERS MAY KNOW, the fixed BOOKING CALLS limits, RECORDINGS and "Obi always says he's an AI assistant
+/// when asked". Walk-through week 5, A17 (no open chip rows): the monthly cap and keep recordings are each one card row
+/// with a menu built from the core's choice sheet (`CallsChoiceRules`); what callers may know is a switch per thing. The
+/// words are the core's; everything is synced with the Fold. Only Bools, Int32s and Strings cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); sections stagger in; the bar grows from the left to its share on the expand
-/// spring; chips and switches blend with a tick haptic; lines cross-fade. Reduce Motion: cross-fades, the bar at once.
+/// spring; switches slide; a menu's value cross-fades as it changes; lines cross-fade. Reduce Motion: cross-fades, the bar at once.
 struct ObiCallsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -49,6 +50,10 @@ struct ObiCallsSheet: View {
     private func content(_ v: CallsSettingsView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             month(v).staggeredAppear(1)
+            choice(CallsChoiceRules.shared.capRow(v: v), CallsChoiceRules.shared.capSheet(v: v)) { name in
+                if let g = CallsChoiceRules.shared.capNamed(name: name)?.int32Value, g != v.capGbp { model.setCallLiveCap(Int(g)) }
+            }
+            .staggeredAppear(1)
 
             label(CallsSettingsRules.shared.WHEN_CALLS).staggeredAppear(2)
             // The design check (2026-11-07): each switch is its own card, as on the mockup.
@@ -59,7 +64,7 @@ struct ObiCallsSheet: View {
 
             label(CallsSettingsRules.shared.KNOWS_TITLE).staggeredAppear(3)
             card {
-                chips(v.knows) { c in model.toggleCallKnows(c.key) }
+                ForEach(v.knows, id: \.key) { c in knows(c) }
                 caption(CallsSettingsRules.shared.NEVER)
             }
             .staggeredAppear(3)
@@ -71,11 +76,12 @@ struct ObiCallsSheet: View {
             .staggeredAppear(4)
 
             label(CallsSettingsRules.shared.RECORDINGS_TITLE).staggeredAppear(5)
-            card {
-                chips(v.keeps) { c in if !c.on, let d = Int(c.key) { model.setRecordingDays(d) } }
-                caption(CallsSettingsRules.shared.RECORDINGS_NOTE)
+            choice(CallsChoiceRules.shared.keepRow(v: v), CallsChoiceRules.shared.keepSheet(v: v)) { name in
+                let now = v.keeps.first(where: { $0.on })?.key
+                if let d = CallsChoiceRules.shared.keepNamed(name: name)?.int32Value, String(d) != now { model.setRecordingDays(Int(d)) }
             }
             .staggeredAppear(5)
+            caption(CallsSettingsRules.shared.RECORDINGS_NOTE).padding(.horizontal, MekaSpace.m).staggeredAppear(5)
 
             Text(CallsSettingsRules.shared.FOOTER).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -106,7 +112,6 @@ struct ObiCallsSheet: View {
             }
             .frame(height: 8)
             .accessibilityLabel("\(v.tiles.first?.value ?? "") of £\(v.capGbp)")
-            chips(v.caps, fill: true) { c in if !c.on, let g = Int(c.key) { model.setCallLiveCap(g) } }
             caption(CallsSettingsRules.shared.CAP_NOTE)
         }
         .padding(MekaSpace.m)
@@ -136,26 +141,39 @@ struct ObiCallsSheet: View {
         .toggleStyle(.switch)
     }
 
-    private func chips(_ list: [CallsChip], fill: Bool = false, onTap: @escaping (CallsChip) -> Void) -> some View {
-        // A wrapping row would need a custom layout; five short chips fit two rows of a 460-wide sheet.
-        let rows = fill ? [list] : stride(from: 0, to: list.count, by: 3).map { Array(list[$0..<min($0 + 3, list.count)]) }
-        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack(spacing: MekaSpace.xs) {
-                    ForEach(row, id: \.key) { c in
-                        Button { onTap(c) } label: {
-                            Text(c.label).font(MekaType.caption)
-                                .foregroundStyle(c.on ? palette.onAccent : palette.textSecondary)
-                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                                .frame(maxWidth: fill ? .infinity : nil)
-                                .background(c.on ? palette.accent : palette.surface, in: Capsule())
-                        }
-                        .buttonStyle(MekaPressStyle())
-                        .accessibilityValue(c.on ? "On" : "Off")
-                    }
-                }
+    /// One thing callers may know: its name and what Obi may say, with a switch.
+    private func knows(_ c: CallsChip) -> some View {
+        Toggle(isOn: Binding(get: { c.on }, set: { on in if on != c.on { model.toggleCallKnows(c.key) } })) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(c.label).font(MekaType.body)
+                Text(LoneWordGlue.shared.kept(line: CallsChoiceRules.shared.knowsLine(key: c.key))).font(MekaType.caption)
+                    .foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
             }
         }
+        .toggleStyle(.switch)
+        .accessibilityLabel(CallsChoiceRules.shared.knowsSpoken(c: c))
+    }
+
+    /// A choice as one card row ("Monthly cap" · a menu showing "£20"), the menu built from the core's sheet. A pick sends
+    /// only the choice's name (a String) back.
+    private func choice(_ row: NotifyChoiceRow, _ sheet: NotifyChoiceSheet, onPick: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack(spacing: MekaSpace.xs) {
+            Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Spacer(minLength: MekaSpace.xs)
+            Picker(row.title, selection: Binding(get: { lit }, set: { name in if name != lit { onPick(name) } })) {
+                ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+            }
+            .labelsHidden().pickerStyle(.menu).fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
+        }
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .lightCardEdge(palette)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.spoken)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: row.value)
     }
 
     private func tile(_ label: String, _ value: String, raised: Bool = false) -> some View {

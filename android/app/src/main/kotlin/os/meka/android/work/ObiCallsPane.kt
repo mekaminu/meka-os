@@ -9,8 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,6 +49,10 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.core.domain.CallsChip
+import os.meka.core.domain.CallsChoiceRules
 import os.meka.core.domain.CallsSettingsRules
 import os.meka.core.domain.CallsSettingsView
 import os.meka.core.domain.CallsSwitch
@@ -88,12 +90,14 @@ internal fun ObiCallsEntry(line: String, modifier: Modifier = Modifier, onOpen: 
 
 /**
  * Obi on calls, slice 4 (mockup `docs/design/calls/settings.dc.html`): THIS MONTH with spent, calls and booked against
- * the cap and the £10 · £20 · £30 · £50 chips; WHEN SOMEONE CALLS YOU's three switches; WHAT CALLERS MAY KNOW's chips;
- * the fixed BOOKING CALLS limits; RECORDINGS; "Obi always says he's an AI assistant when asked". Everything is synced with the
- * Mac. Motion: sections stagger in 40 ms apart; the spend bar grows from the left to its share; chips and switches
- * blend on the appear spring with a tick haptic; lines cross-fade. Reduced motion: cross-fades, the bar drawn at once.
+ * the cap; WHEN SOMEONE CALLS YOU's three switches; WHAT CALLERS MAY KNOW; the fixed BOOKING CALLS limits; RECORDINGS;
+ * "Obi always says he's an AI assistant when asked". Everything is synced with the Mac. Walk-through week 5, A17 (no open
+ * chip rows): the cap and the recordings are each one card row ("Monthly cap" · "£20") opening Notifications' choice
+ * sheet; what callers may know is a switch row per thing ([CallsChoiceRules]).
+ * Motion: sections stagger in 40 ms apart; the spend bar grows from the left to its share; switches slide with a tick
+ * haptic; a choice row's sheet rises over a fading scrim (a choice ticks, saves and closes it); lines cross-fade.
+ * Reduced motion: cross-fades, the bar drawn at once.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ObiCallsPane(core: MekaCore, onClose: () -> Unit) {
     val work by core.workMode.collectAsState()
@@ -113,7 +117,15 @@ fun ObiCallsPane(core: MekaCore, onClose: () -> Unit) {
                 modifier = Modifier.semantics { heading() }.appear(rememberAppearance(0)))
             Text(CallsSettingsRules.SUB, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
             if (v != null) {
-            MonthCard(v, Modifier.appear(rememberAppearance(1))) { gbp -> scope.launch { core.setCallLiveCap(gbp) } }
+            MonthCard(v, Modifier.appear(rememberAppearance(1)))
+            var capOpen by remember { mutableStateOf(false) }
+            NotifyChoiceRowView(CallsChoiceRules.capRow(v), Modifier.lightCardEdge(RoundedCornerShape(MekaRadius.m)).appear(rememberAppearance(1))) { capOpen = true }
+            if (capOpen) {
+                NotifyChoiceSheetView(CallsChoiceRules.capSheet(v), onChoose = { name ->
+                    // The sheet gives its own tick haptic on a choice.
+                    CallsChoiceRules.capNamed(name)?.takeIf { it != v.capGbp }?.let { gbp -> scope.launch { core.setCallLiveCap(gbp) } }
+                }, onClose = { capOpen = false })
+            }
 
             Section(CallsSettingsRules.WHEN_CALLS, 2)
             Column(Modifier.appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -132,14 +144,7 @@ fun ObiCallsPane(core: MekaCore, onClose: () -> Unit) {
 
             Section(CallsSettingsRules.KNOWS_TITLE, 3)
             Card(Modifier.appear(rememberAppearance(3))) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    val haptics = rememberMekaHaptics()
-                    v.knows.forEach { c ->
-                        SettingChip(c.label, c.on, spoken = "${CallsSettingsRules.KNOWS_TITLE}: ${c.label}") {
-                            haptics.tick(); scope.launch { core.toggleCallKnows(c.key) }
-                        }
-                    }
-                }
+                v.knows.forEach { c -> KnowsRow(c) { scope.launch { core.toggleCallKnows(c.key) } } }
                 Text(LoneWordGlue.kept(CallsSettingsRules.NEVER), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
 
@@ -153,16 +158,15 @@ fun ObiCallsPane(core: MekaCore, onClose: () -> Unit) {
             }
 
             Section(CallsSettingsRules.RECORDINGS_TITLE, 5)
-            Card(Modifier.appear(rememberAppearance(5))) {
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    val haptics = rememberMekaHaptics()
-                    v.keeps.forEach { c ->
-                        SettingChip(c.label, c.on, spoken = "${CallsSettingsRules.RECORDINGS_TITLE}: ${c.label}") {
-                            if (!c.on) { haptics.tick(); scope.launch { core.setRecordingDays(c.key.toInt()) } }
-                        }
-                    }
-                }
-                Text(LoneWordGlue.kept(CallsSettingsRules.RECORDINGS_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
+            var keepOpen by remember { mutableStateOf(false) }
+            NotifyChoiceRowView(CallsChoiceRules.keepRow(v), Modifier.lightCardEdge(RoundedCornerShape(MekaRadius.m)).appear(rememberAppearance(5))) { keepOpen = true }
+            Text(LoneWordGlue.kept(CallsSettingsRules.RECORDINGS_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.padding(horizontal = MekaSpace.m).appear(rememberAppearance(5)))
+            if (keepOpen) {
+                NotifyChoiceSheetView(CallsChoiceRules.keepSheet(v), onChoose = { name ->
+                    val now = v.keeps.firstOrNull { it.on }?.key?.toIntOrNull()
+                    CallsChoiceRules.keepNamed(name)?.takeIf { it != now }?.let { d -> scope.launch { core.setRecordingDays(d) } }
+                }, onClose = { keepOpen = false })
             }
 
             Text(CallsSettingsRules.FOOTER, style = MekaType.caption, color = Meka.colors.textSecondary,
@@ -180,9 +184,8 @@ private fun Section(text: String, index: Int) {
 }
 
 @Composable
-private fun MonthCard(v: CallsSettingsView, modifier: Modifier, onCap: (Int) -> Unit) {
+private fun MonthCard(v: CallsSettingsView, modifier: Modifier) {
     val reduced = Meka.reducedMotion
-    val haptics = rememberMekaHaptics()
     var shown by remember { mutableStateOf(reduced) }
     LaunchedEffect(Unit) { shown = true }
     val share by animateFloatAsState(if (shown) v.fraction else 0f, MekaMotion.expand(reduced), label = "obi-calls-bar")
@@ -203,15 +206,6 @@ private fun MonthCard(v: CallsSettingsView, modifier: Modifier, onCap: (Int) -> 
             .semantics { contentDescription = "${v.tiles.first().value} of £${v.capGbp}" }) {
             Box(Modifier.fillMaxWidth(share).fillMaxHeight().clip(RoundedCornerShape(4.dp))
                 .background(if (v.atCap) Meka.colors.critical else Meka.colors.accent))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            v.caps.forEach { c ->
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    SettingChip(c.label, c.on, spoken = "Monthly cap ${c.label}") {
-                        if (!c.on) { haptics.tick(); onCap(c.key.toInt()) }
-                    }
-                }
-            }
         }
         Text(LoneWordGlue.kept(CallsSettingsRules.CAP_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
@@ -237,6 +231,26 @@ private fun Card(modifier: Modifier, content: @Composable () -> Unit) {
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) { content() }
+}
+
+/** One thing callers may know: its name and what Obi may say, with a switch; the whole row toggles it. */
+@Composable
+private fun KnowsRow(c: CallsChip, onToggle: () -> Unit) {
+    val haptics = rememberMekaHaptics()
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
+            .clickable(role = Role.Switch) { haptics.tick(); onToggle() }
+            .semantics { contentDescription = CallsChoiceRules.knowsSpoken(c); selected = c.on }
+            .minTouch().padding(vertical = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.m),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Text(c.label, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(LoneWordGlue.kept(CallsChoiceRules.knowsLine(c.key)), style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        SlideSwitch(c.on)
+    }
 }
 
 @Composable

@@ -7655,3 +7655,19 @@ choice saves and closes it.
 - Mac: `MailSheet`'s three chip panels are one `MailChoicePanelView` each, a menu built from the same sheet;
   `testMailChoicesReachSwift`. Mac checked nightly. Motion catalogue's Ten-minute inbox and Meeting prep lines updated.
 - Left: Chase waits' per-person chips and Obi on calls' cap row.
+
+### Found and fixing, week 5 — slice 89 (2026-11-26): A17 on Obi on calls
+
+The walk-through's A17 list had Obi on calls' cap row ("£10 £20 £30 £50" inside THIS MONTH) open on the page, with
+WHAT CALLERS MAY KNOW's five wrapping chips and RECORDINGS' "7 days" · "Don't keep" the same shape. The cap and the
+recordings are now each one card row ("Monthly cap" · "£20", "Keep recordings" · "7 days") opening Notifications'
+choice sheet (each choice with a line on what it does, the one in use lit, the page's cap or recordings note); what
+callers may know is a switch row per thing, each saying what Obi may tell a caller.
+- Core: `CallsChoices.kt` (`CallsChoiceRules` rows, sheets, `capNamed` / `keepNamed`, `knowsLine` / `knowsSpoken`),
+  reusing `NotifyChoiceRow` / `NotifyChoice` / `NotifyChoiceSheet`; `CallsChoicesTest`.
+- Fold: `ObiCallsPane` (no `SettingChip` left; `KnowsRow`); `ObiCallsScreensTest` checks no cap or keep chip is on the
+  page and the rows read their choice, and by hand the cap's sheet sets £30 and closes, Where you work's switch turns
+  on and Keep recordings' sheet sets Don't keep.
+- Mac: `ObiCallsSheet`'s chips are two menu rows built from the same sheets and a `Toggle` per thing callers may know;
+  `testCallsChoicesReachSwift`. Mac checked nightly. Motion catalogue's Obi on calls line updated.
+- Left: Chase waits' per-person chips; Calendar's and other pages' open inputs.
