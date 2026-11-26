@@ -30,6 +30,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.AT_WORK_NOTE
 import os.meka.android.work.COMMUTE_TO_WORK_TAG
 import os.meka.android.work.LEAVING_TO_TAG
+import os.meka.android.work.MESSAGES_MARK_READ_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -41,6 +42,9 @@ import os.meka.android.work.callAssistantNote
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CommuteChoiceRules
 import os.meka.core.domain.LeavingChoiceRules
+import os.meka.core.domain.MessagesChoiceRules
+import os.meka.core.domain.MessagesSetupRules
+import os.meka.core.domain.GroupMode
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.ScreenUnknownRules
@@ -122,6 +126,12 @@ class WorkScreensTest {
         // The lists stay on the phone, sealed with the device's keystore, which Robolectric hasn't got: the list is
         // set before the save that can't seal it.
         runCatching { context.captures.setLists(lists) }
+        // Messages' people and groups (walk-through week 5, A17): a group switched to Ignore and a person kept from the
+        // AI show whether or not they wrote lately (the save can't seal here, the choice still stands).
+        if (fill == Fill.MANY) {
+            runCatching { context.captures.setGroupMode("Football parents", GroupMode.IGNORE) }
+            runCatching { context.captures.setNeverToAi("Riley", true) }
+        }
         compose.mainClock.autoAdvance = false
         compose.setContent {
             MekaTheme {
@@ -189,6 +199,23 @@ class WorkScreensTest {
         }
         if (compose.onAllNodes(hasContentDescription("Send to ", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
             fail("$name: Leaving now still has a row of name chips")
+        }
+        // Walk-through week 5, A17: Messages' Mark read pill, people's and groups' pills and mode chips are card rows.
+        val captures = ApplicationProvider.getApplicationContext<ShotApplication>().captures
+        val ts = captures.triageSettings.value
+        val ml = MessagesSetupRules.rows(captures.items.value + captures.digest.value, ts, System.currentTimeMillis())
+        val messageRows = listOf(MessagesChoiceRules.markReadRow(ts.markReadOnDone)) + ml.people.map(MessagesChoiceRules::personRow) +
+            ml.groups.flatMap { listOf(MessagesChoiceRules.groupRow(it), MessagesChoiceRules.groupAiRow(it)) }
+        for (r in messageRows) {
+            if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no Messages \"${r.title}\" row saying ${r.value}")
+        }
+        if (fill == Fill.MANY && (ml.people.none { it.name == "Riley" && it.private } || ml.groups.none { it.mode == GroupMode.IGNORE })) {
+            fail("$name: Messages doesn't list Riley kept from the AI and the ignored group (${ml})")
+        }
+        if (compose.onAllNodes(hasContentDescription(" · kept from Navilife's AI", substring = true) or hasContentDescription(" · back to Navilife's AI", substring = true))
+                .fetchSemanticsNodes().isNotEmpty()) fail("$name: Messages still has a Keep from AI pill")
+        if (compose.onAllNodes(hasContentDescription(": Digest", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: Messages still has a group's chip row")
         }
         when (fill) {
             Fill.EMPTY -> {
@@ -276,6 +303,27 @@ class WorkScreensTest {
         turns(1_000)
         if (core.leavingView.value.to != "Morgan") fail("Work: Morgan in Leaving now's To sheet didn't set who it goes to (${core.leavingView.value})")
         if (sheetOpen()) fail("Work: choosing Morgan didn't close Leaving now's sheet")
+        // Walk-through week 5, A17: Messages' Mark read row opens On · Off; On there marks chats read on Done.
+        val captures = ApplicationProvider.getApplicationContext<ShotApplication>().captures
+        val markRead = compose.onAllNodes(hasTestTag(MESSAGES_MARK_READ_TAG) and hasClickAction())
+        if (markRead.fetchSemanticsNodes().isEmpty()) fail("Work: no Messages Mark read row")
+        markRead[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Work: Messages' Mark read row didn't open its sheet")
+        compose.onAllNodes(hasText("On", substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        repeat(40) {
+            if (captures.triageSettings.value.markReadOnDone) return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns(1_000)
+        if (!captures.triageSettings.value.markReadOnDone) fail("Work: On in Mark read's sheet didn't switch it on")
+        if (sheetOpen()) fail("Work: choosing On didn't close Mark read's sheet")
+        if (compose.onAllNodes(hasContentDescription(MessagesChoiceRules.markReadRow(true).spoken)).fetchSemanticsNodes().isEmpty()) {
+            fail("Work: Mark read's row doesn't say On after choosing it")
+        }
         // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on
         // Navilife's hours like the empty page; it is taken again after the hand: work stopped (Start work now, Back to
         // my hours) and Saturday lit.

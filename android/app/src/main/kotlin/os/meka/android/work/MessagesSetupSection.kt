@@ -55,8 +55,10 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.ChatShadeRules
-import os.meka.core.domain.GroupMode
+import os.meka.core.domain.MessagesChoiceRules
 import os.meka.core.domain.MessagesSetupRow
 import os.meka.core.domain.MessagesSetupRules
 import os.meka.core.facade.MekaCore
@@ -65,6 +67,12 @@ import os.meka.core.facade.MekaCore
  * Work mode → Messages (V1, messages assistant slice 5): whether MEKA can read messages and use its AI, the WhatsApp
  * settings that keep groups quiet, the people and groups kept from MEKA's AI (and each group's Digest · Normal ·
  * Ignore), what goes to the AI and what it costs, and the limits. Everything here stays on this phone ([CaptureStore]).
+ *
+ * Walk-through week 5, A17: each person's Keep from AI pill, each group's Digest · Normal · Ignore chips and its pill,
+ * and Mark read's On/Off pill are card rows saying what's chosen ("Alex" · "Sent to AI" ›, "Football parents" ·
+ * "Digest" ›, "Navilife's AI" · "Reads it" ›) opening a sheet of the choices, the one in use lit, each saying what it
+ * does ([MessagesChoiceRules]). Motion: the sheet rises (reduced motion: a cross-fade), a choice gives a tick haptic and
+ * the row's line cross-fades. A chat's Stop under Cleared from the shade stays a button (an action, not a choice).
  */
 @Composable
 internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening: Boolean, index: Int) {
@@ -87,6 +95,7 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
         }
         if (!name.isNullOrBlank()) { haptics.light(); store.setNeverToAi(name, true) }
     }
+    var sheet by remember { mutableStateOf<MessagesSheet?>(null) }
     val unfold = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false))
     val fold = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false))
 
@@ -126,32 +135,22 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
         if (list.isEmpty) Text(MessagesSetupRules.EMPTY, style = MekaType.caption, color = Meka.colors.textTertiary)
-        list.people.forEach { row ->
-            SetupRow(row, onPrivate = { on -> haptics.tick(); store.setNeverToAi(row.name, on) })
-        }
-        list.groups.forEach { row ->
-            SetupRow(
-                row,
-                onPrivate = { on -> haptics.tick(); store.setNeverToAi(row.name, on) },
-                onMode = { m -> haptics.tick(); store.setGroupMode(row.name, m) },
-            )
-        }
+        list.people.forEach { row -> SetupRow(row, onOpen = { sheet = it }) }
+        list.groups.forEach { row -> SetupRow(row, onOpen = { sheet = it }) }
         Text("Keep someone else from the AI", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) {
                 runCatching { pick.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
             }.minTouch())
 
         // Messages grouped per chat, slice 2: Done on a chat's card also marks it read (off: blue ticks).
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(ChatShadeRules.SETTING_TITLE, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
-                Crossfade(if (settings.markReadOnDone) ChatShadeRules.SETTING_ON else ChatShadeRules.SETTING_OFF,
-                    animationSpec = MekaMotion.appear(reduced), label = "mark-read-line") { line ->
-                    Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
-                }
+        Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            NotifyChoiceRowView(MessagesChoiceRules.markReadRow(settings.markReadOnDone), Modifier.testTag(MESSAGES_MARK_READ_TAG)) {
+                sheet = MessagesSheet.MarkRead
             }
-            SettingChip(if (settings.markReadOnDone) "On" else "Off", settings.markReadOnDone,
-                spoken = ChatShadeRules.SETTING_TITLE) { haptics.tick(); store.setMarkReadOnDone(!settings.markReadOnDone) }
+            Crossfade(if (settings.markReadOnDone) ChatShadeRules.SETTING_ON else ChatShadeRules.SETTING_OFF,
+                animationSpec = MekaMotion.appear(reduced), label = "mark-read-line") { line ->
+                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
         }
 
         // Slice 2b: chats cleared from the shade as they come (switched on a chat's card under Show all).
@@ -174,30 +173,56 @@ internal fun MessagesSetupSection(core: MekaCore, store: CaptureStore, listening
         Text("What Navilife can't see", style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.padding(top = MekaSpace.m))
         MessagesSetupRules.LIMITS.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
     }
+    // The open sheet reads the row as it is now, so a choice made elsewhere (a digest card's mode) is the one lit.
+    fun current(r: MessagesSetupRow) = (list.people + list.groups).firstOrNull { it.name == r.name } ?: r
+    // The lists are sealed with the phone's keystore; a save that can't seal still leaves the choice in force.
+    when (val s = sheet) {
+        is MessagesSheet.Ai -> {
+            val r = current(s.row)
+            NotifyChoiceSheetView(if (r.group) MessagesChoiceRules.groupAiSheet(r) else MessagesChoiceRules.personSheet(r),
+                onChoose = { name -> MessagesChoiceRules.privateNamed(r, name)?.let { on -> runCatching { store.setNeverToAi(r.name, on) } } },
+                onClose = { sheet = null })
+        }
+        is MessagesSheet.Mode -> {
+            val r = current(s.row)
+            NotifyChoiceSheetView(MessagesChoiceRules.groupSheet(r),
+                onChoose = { name -> MessagesChoiceRules.modeNamed(r, name)?.let { m -> runCatching { store.setGroupMode(r.name, m) } } },
+                onClose = { sheet = null })
+        }
+        MessagesSheet.MarkRead -> NotifyChoiceSheetView(MessagesChoiceRules.markReadSheet(settings.markReadOnDone),
+            onChoose = { name -> MessagesChoiceRules.markReadNamed(settings.markReadOnDone, name)?.let { on -> runCatching { store.setMarkReadOnDone(on) } } },
+            onClose = { sheet = null })
+        null -> {}
+    }
 }
 
+/** Work mode → Messages' rows (walk-through week 5, A17), for the screen tests. */
+const val MESSAGES_MARK_READ_TAG = "messages-row:mark-read"
+const val MESSAGES_ROW_TAG = "messages-row"
+
+/** Which of Messages' sheets is open. */
+private sealed interface MessagesSheet {
+    data class Ai(val row: MessagesSetupRow) : MessagesSheet
+    data class Mode(val row: MessagesSetupRow) : MessagesSheet
+    data object MarkRead : MessagesSheet
+}
+
+/**
+ * A person's or group's rows: a person is one row ("Alex" · "Sent to AI"); a group is its mode row ("Football parents" ·
+ * "Digest") with its AI row under it ("Navilife's AI" · "Reads it"); the row's line under them, cross-fading.
+ */
 @Composable
-private fun SetupRow(row: MessagesSetupRow, onPrivate: (Boolean) -> Unit, onMode: ((GroupMode) -> Unit)? = null) {
+private fun SetupRow(row: MessagesSetupRow, onOpen: (MessagesSheet) -> Unit) {
     val reduced = Meka.reducedMotion
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(row.name, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
-                Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "setup-row-line") { line ->
-                    Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
-                }
-            }
-            SettingChip(
-                if (row.private) "Kept from AI" else "Keep from AI", row.private,
-                spoken = MessagesSetupRules.privateLine(row.name, row.private),
-            ) { onPrivate(!row.private) }
+        if (row.group) {
+            NotifyChoiceRowView(MessagesChoiceRules.groupRow(row), Modifier.testTag(MESSAGES_ROW_TAG)) { onOpen(MessagesSheet.Mode(row)) }
+            NotifyChoiceRowView(MessagesChoiceRules.groupAiRow(row), Modifier.testTag(MESSAGES_ROW_TAG)) { onOpen(MessagesSheet.Ai(row)) }
+        } else {
+            NotifyChoiceRowView(MessagesChoiceRules.personRow(row), Modifier.testTag(MESSAGES_ROW_TAG)) { onOpen(MessagesSheet.Ai(row)) }
         }
-        if (onMode != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                GroupMode.entries.forEach { m ->
-                    SettingChip(m.label, row.mode == m, spoken = "${row.name}: ${m.label}") { if (row.mode != m) onMode(m) }
-                }
-            }
+        Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "setup-row-line") { line ->
+            Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
     }
 }
