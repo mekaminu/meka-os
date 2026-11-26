@@ -31,6 +31,8 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import org.junit.Rule
+import org.robolectric.Shadows
+import android.os.Looper
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -219,6 +221,16 @@ class StudyScreensTest {
 
     private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
 
+    /** A sheet's window comes and goes through the main looper, so the clock alone doesn't raise or drop it. */
+    private fun until(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
     @Test
     @Config(qualifiers = ScreenShots.COVER)
     fun aPlanChoiceAnswersInTheNextFrame() {
@@ -227,27 +239,29 @@ class StudyScreensTest {
         // Finish by opens its sheet; four weeks saves, and the card answers in the next frame.
         var input = core.studyView.value.course(id)!!.planInput
         tapSpoken(StudyPlanChoiceRules.finishRow(input).spoken)
-        compose.mainClock.advanceTimeBy(1_000L)
+        until { sheetOpen() }
         assertTrue(sheetOpen(), "Finish by didn't open its sheet")
         tapSpoken(StudyPlanChoiceRules.finishSheet(input).choices.single { it.name == fourWeeks.toString() }.spoken)
         compose.mainClock.advanceTimeBy(16L)
         compose.onNode(ScreenShots.plainText("2 sessions a week")).assertExists()
-        compose.mainClock.advanceTimeBy(1_000L)
+        until { !sheetOpen() }
         assertTrue(!sheetOpen(), "the finish sheet stayed open after a choice")
         input = input.withFinish(fourWeeks)
         compose.onNode(hasContentDescription(StudyPlanChoiceRules.finishRow(input).spoken)).assertExists()
         // When you can study picks several: Sat morning lights in the next frame and the sheet stays open until Done.
         tapSpoken(StudyPlanChoiceRules.slotsRow(input).spoken)
-        compose.mainClock.advanceTimeBy(1_000L)
+        until { sheetOpen() }
         assertTrue(sheetOpen(), "When you can study didn't open its sheet")
         tapSpoken(StudyPlanChoiceRules.slotsSheet(input).choices.single { it.name == "sat" }.spoken)
         compose.mainClock.advanceTimeBy(16L)
         assertTrue(sheetOpen(), "the times sheet closed after one pick")
         compose.onNode(ScreenShots.plainText("Doesn’t fit", substring = true)).assertExists()
         input = input.withSlot("sat", true)
-        compose.onNode(hasContentDescription(StudyPlanChoiceRules.slotsSheet(input).choices.single { it.name == "sat" }.spoken)).assertIsSelected()
+        val satLit = hasContentDescription(StudyPlanChoiceRules.slotsSheet(input).choices.single { it.name == "sat" }.spoken)
+        until { compose.onAllNodes(satLit).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(satLit).assertIsSelected()
         compose.onNode(hasText("Done") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG))).performSemanticsAction(SemanticsActions.OnClick)
-        compose.mainClock.advanceTimeBy(1_000L)
+        until { !sheetOpen() }
         assertTrue(!sheetOpen(), "Done left the times sheet open")
         compose.onNode(hasContentDescription(StudyPlanChoiceRules.slotsRow(input).spoken)).assertExists()
         // The core's writes land after: the view then says the same.
