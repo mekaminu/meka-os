@@ -16,7 +16,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import os.meka.android.goals.fold
 import os.meka.android.goals.unfold
 import os.meka.core.domain.CalendarRules
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -47,7 +46,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -60,6 +58,8 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.CalendarAccessAction
 import os.meka.core.domain.CalendarAccessRules
 import os.meka.core.domain.CalendarChoice
+import os.meka.core.domain.CalendarOnTodayChoiceRules
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
@@ -109,6 +109,19 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
 
     val onToday by core.calendarsOnToday.collectAsState()
     val haptics = rememberMekaHaptics()
+    // Walk-through week 5, A17: the calendar whose On · Off sheet is open (its key), not a switch on the page.
+    var choiceFor by remember { mutableStateOf<String?>(null) }
+    onToday.firstOrNull { it.key == choiceFor }?.let { c ->
+        NotifyChoiceSheetView(
+            CalendarOnTodayChoiceRules.sheet(c),
+            onChoose = { name ->
+                CalendarOnTodayChoiceRules.named(c.onToday, name)?.let { show ->
+                    scope.launch { runCatching { if (show) core.showCalendarOnToday(c.key) else core.hideCalendarFromToday(c.key, c.label) } }
+                }
+            },
+            onClose = { choiceFor = null },
+        )
+    }
 
     fun stopEditing(a: ConnectedAccount) = scope.launch {
         haptics.tick()
@@ -155,12 +168,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
                     c, Modifier.appear(rememberAppearance(i)),
                     // Rename (Fold review 2026-10-09 07:26, item 9): MEKA's name only; blank goes back to the default.
                     onRename = { typed -> TypingSaves.launch { runCatching { core.renameCalendar(c.key, typed) } } },
-                ) {
-                    haptics.tick()
-                    scope.launch {
-                        runCatching { if (c.onToday) core.hideCalendarFromToday(c.key, c.label) else core.showCalendarOnToday(c.key) }
-                    }
-                }
+                ) { choiceFor = c.key }
             }
         }
         // Weather place setting: the town the forecast is for (home unless Meka types another). Synced.
@@ -236,20 +244,22 @@ private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onRec
 }
 
 /**
- * One calendar with its On/Off pill; the pill's colour blends as it changes. "Rename" (a calendar with events, not the
+ * One calendar as a card row: its name and line, then whether it's on Today ("On" ›), which opens its On · Off sheet
+ * (walk-through week 5, A17: no switches on a page); the value cross-fades as it changes. "Rename" (a calendar with events, not the
  * fixtures) unfolds a field under the row in place; Done saves MEKA's own name (blank: back to the default, which the
  * field shows as its hint), the label cross-fades to it and the field folds away.
  */
 @Composable
-internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier, onRename: (String) -> Unit = {}, onToggle: () -> Unit) {
-    val pill by animateColorAsState(if (c.onToday) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "on-today")
+internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier, onRename: (String) -> Unit = {}, onOpen: () -> Unit) {
+    val row = CalendarOnTodayChoiceRules.row(c)
     var renaming by rememberSaveable(c.key) { mutableStateOf(false) }
     val haptics = rememberMekaHaptics()
     Column(modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
-                .semantics { contentDescription = "${c.label} on Today"; selected = c.onToday }
-                .minTouch().padding(vertical = MekaSpace.xs),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                .clickable(role = Role.Button) { onOpen() }
+                .semantics { contentDescription = row.spoken }
+                .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -265,7 +275,11 @@ internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier,
                         .semantics { contentDescription = if (renaming) "Cancel renaming ${c.label}" else "Rename ${c.label}" }
                         .minTouchSquare().padding(horizontal = MekaSpace.xs))
             }
-            os.meka.android.designsystem.SwitchPill(c.onToday, pill)
+            Crossfade(row.value, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "on-today-value") {
+                Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1,
+                    modifier = Modifier.padding(start = MekaSpace.xs))
+            }
+            Text("›", style = MekaType.body, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
         }
         AnimatedVisibility(renaming, enter = unfold(), exit = fold()) {
             CalendarNameField(c) { typed ->

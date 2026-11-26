@@ -42,7 +42,7 @@ class CalendarRenameRowTest {
         compose.onNodeWithContentDescription("Name for Personal").performImeAction()
         compose.waitUntil(2_000) { saved != null }
         assertEquals("Home", saved)
-        assertFalse("Rename doesn't flip the switch", toggled)
+        assertFalse("Rename doesn't open the On Today sheet", toggled)
     }
 
     @Test

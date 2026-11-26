@@ -1669,7 +1669,8 @@ private struct PlanCalendarToggle: View {
     }
 }
 
-/// One calendar in Calendars' On Today list: its switch, and Rename (Fold review 2026-10-09 07:26, item 9), which
+/// One calendar in Calendars' On Today list: an On · Off menu from the core's sheet (walk-through week 5, A17, as the
+/// Fold's row and sheet), the lit choice's words under it, and Rename (Fold review 2026-10-09 07:26, item 9), which
 /// unfolds a field under the row in place; Return saves MEKA's own name (empty: back to the default, the field's
 /// placeholder), the name cross-fades and the field folds away. The real calendar keeps its name.
 private struct CalendarOnTodayRow: View {
@@ -1681,29 +1682,43 @@ private struct CalendarOnTodayRow: View {
     @State private var text = ""
 
     var body: some View {
-        let key = choice.key, label = choice.label
+        let key = choice.key, label = choice.label, onToday = choice.onToday
+        let rules = CalendarOnTodayChoiceRules.shared
+        let row = rules.row(c: choice), sheet = rules.sheet(c: choice)
+        let lit = sheet.choices.first(where: { $0.lit })
+        let litName = lit?.name ?? ""
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(spacing: MekaSpace.xs) {
-                Toggle(isOn: Binding(
-                    get: { choice.onToday },
-                    set: { model.setCalendarOnToday(key: key, label: label, on: $0) }
-                )) {
-                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(label).font(MekaType.itemMeta).id(label).transition(.opacity)
-                        if let detail = choice.detail {
-                            // Quality gate slice 35: whole when it fits on one line, else without its provider so the
-                            // address starts the line (core detailShort), never "Outlook ·" alone above it.
-                            ViewThatFits(in: .horizontal) {
-                                Text(detail).lineLimit(1)
-                                Text(choice.detailShort ?? detail)
-                            }
-                            .font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                            .accessibilityLabel(detail)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(label).font(MekaType.itemMeta).id(label).transition(.opacity)
+                    if let detail = choice.detail {
+                        // Quality gate slice 35: whole when it fits on one line, else without its provider so the
+                        // address starts the line (core detailShort), never "Outlook ·" alone above it.
+                        ViewThatFits(in: .horizontal) {
+                            Text(detail).lineLimit(1)
+                            Text(choice.detailShort ?? detail)
                         }
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .accessibilityLabel(detail)
                     }
+                    Text(LoneWordGlue.shared.kept(line: lit?.line ?? "")).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: litName)
                 }
-                .toggleStyle(.switch)
-                .tint(palette.accent)
+                Spacer()
+                // Only the choice's name and a Bool cross to the core (the key and label are plain Strings).
+                Picker(sheet.title, selection: Binding(get: { litName }, set: { name in
+                    if name != litName, let show = CalendarOnTodayChoiceRules.shared.named(onToday: onToday, name: name)?.boolValue {
+                        model.setCalendarOnToday(key: key, label: label, on: show)
+                    }
+                })) {
+                    ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+                .help(LoneWordGlue.shared.kept(line: sheet.note))
+                .accessibilityLabel(row.spoken)
                 if choice.canRename {
                     Button(renaming ? "Cancel" : "Rename") {
                         MekaHaptics.tick()

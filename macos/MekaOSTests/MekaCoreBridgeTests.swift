@@ -3377,6 +3377,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.named(on: true, name: choices.ON))
     }
 
+    func testCalendarOnTodayChoicesReachSwift() {
+        // Walk-through week 5, A17: Calendars' On Today switches are On · Off menus from the core's sheets.
+        let rules = CalendarOnTodayChoiceRules.shared
+        let kids = CalendarChoice(key: "google|alex@example.com|Kids", label: "Kids", detail: "Google · Personal", onToday: true, defaultLabel: "Kids", canRename: true)
+        XCTAssertEqual(rules.row(c: kids).value, "On")
+        XCTAssertEqual(rules.row(c: kids).spoken, "Kids on Today, On. Opens the choices")
+        let sheet = rules.sheet(c: kids)
+        XCTAssertEqual(sheet.title, "Kids on Today")
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(sheet.choices.first(where: { $0.lit })?.label, "On")
+        XCTAssertEqual(rules.named(onToday: true, name: CallChoiceRules.shared.OFF)?.boolValue, false)
+        XCTAssertNil(rules.named(onToday: true, name: CallChoiceRules.shared.ON))
+    }
+
     func testAboutYouChoicesReachSwift() {
         // Walk-through week 5, A17: About you's Watch for requests and Handle her requests are On · Off menus.
         let choices = AboutYouChoiceRules.shared

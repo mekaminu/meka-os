@@ -43,6 +43,12 @@ import os.meka.core.domain.WeatherPlaceChoiceRules
 import os.meka.core.domain.CalendarAccessAction
 import os.meka.core.domain.CalendarAccessRules
 import os.meka.core.domain.CalendarRules
+import os.meka.core.domain.CalendarOnTodayChoiceRules
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
@@ -279,7 +285,7 @@ class CalendarsScreensTest {
         ScreenShots.shootIfScrolled(compose, "calendars", name, header, before)
         ScreenShots.assertSensible(compose, name)
         core.calendarsOnToday.value.forEach { c ->
-            if (compose.onAllNodes(hasContentDescription("${c.label} on Today")).fetchSemanticsNodes().isEmpty()) {
+            if (compose.onAllNodes(hasContentDescription(CalendarOnTodayChoiceRules.row(c).spoken)).fetchSemanticsNodes().isEmpty()) {
                 fail("$name: no ON TODAY row for ${c.label}")
             }
         }
@@ -337,23 +343,54 @@ class CalendarsScreensTest {
         if (bad.isNotEmpty()) fail("$name leaves a provider alone on a line:\n" + bad.joinToString("\n") { "- $it" })
     }
 
-    /** Works by hand: a calendar's On takes it off Today (and its pill says Off); Rename opens its name field. */
+    /**
+     * Works by hand: a calendar's row opens its On · Off sheet (walk-through week 5, A17: no switch on the page); Off
+     * takes it off Today and the row says Off; On puts it back; Rename opens its name field.
+     */
     private fun byHand(core: MekaCore) {
         val first = core.calendarsOnToday.value.firstOrNull { it.canRename } ?: fail("Calendars: nothing on Today (${core.calendarsOnToday.value})")
         if (!first.onToday) fail("Calendars: ${first.label} starts off Today")
-        val row = compose.onAllNodes(hasContentDescription("${first.label} on Today") and hasClickAction())
-        if (row.fetchSemanticsNodes().isEmpty()) fail("Calendars: no switch for ${first.label}")
-        row[0].performSemanticsAction(SemanticsActions.OnClick)
-        repeat(40) {
-            if (core.calendarsOnToday.value.firstOrNull { it.key == first.key }?.onToday == false) return@repeat
-            Shadows.shadowOf(Looper.getMainLooper()).idle()
-            Thread.sleep(50)
-            compose.mainClock.advanceTimeBy(100)
+        if (compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)).fetchSemanticsNodes().isNotEmpty()) {
+            fail("Calendars: a switch is still open on the page")
         }
+        fun now() = core.calendarsOnToday.value.firstOrNull { it.key == first.key } ?: fail("Calendars: ${first.label} went away")
+        fun waitFor(done: () -> Boolean) {
+            repeat(40) {
+                if (done()) return
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(50)
+                compose.mainClock.advanceTimeBy(100)
+            }
+        }
+        fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+        fun choose(label: String, says: String) {
+            val r = CalendarOnTodayChoiceRules.row(now())
+            val row = compose.onAllNodes(hasContentDescription(r.spoken) and hasClickAction())
+            if (row.fetchSemanticsNodes().isEmpty()) fail("Calendars: no \"${r.spoken}\" row for ${first.label}")
+            row[0].performSemanticsAction(SemanticsActions.OnClick)
+            waitFor { sheetOpen() }
+            if (!sheetOpen()) fail("Calendars: ${first.label}'s row opened no sheet")
+            val said = SemanticsMatcher("says \"$says\"") { n ->
+                n.config.getOrNull(SemanticsProperties.Text)?.any { DateGlue.plain(it.text).contains(says) } == true
+            }
+            if (compose.onAllNodes(said and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+                fail("Calendars: ${first.label}'s sheet doesn't say \"$says\"")
+            }
+            compose.onAllNodes(hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            waitFor { !sheetOpen() }
+            if (sheetOpen()) fail("Calendars: choosing $label didn't close ${first.label}'s sheet")
+        }
+        choose("Off", "off Today and your day")
+        waitFor { !now().onToday }
         turns()
-        val after = core.calendarsOnToday.value.firstOrNull { it.key == first.key } ?: fail("Calendars: ${first.label} went away")
-        if (after.onToday) fail("Calendars: tapping ${first.label} left it on Today")
+        if (now().onToday) fail("Calendars: Off in ${first.label}'s sheet left it on Today")
         ScreenShots.assertShows(compose, "calendars-by-hand", "Off")
+        choose("On", "Its events show on Today")
+        waitFor { now().onToday }
+        turns()
+        if (!now().onToday) fail("Calendars: On in ${first.label}'s sheet left it off Today")
+        val after = now()
         // Rename unfolds the field under the row.
         val rename = compose.onAllNodes(hasContentDescription("Rename ${after.label}") and hasClickAction(), useUnmergedTree = true)
         if (rename.fetchSemanticsNodes().isEmpty()) fail("Calendars: no Rename for ${after.label}")
