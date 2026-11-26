@@ -91,13 +91,16 @@ internal fun NotifyChoiceRowView(
  * what the choice touches. A tap on a choice saves it and closes the sheet; Close, the scrim or Back closes it as it was.
  *
  * With [several] (Study's When you can study, walk-through week 5 A17) a tap lights or dims its choice and the sheet
- * stays open; its button reads Done.
+ * stays open; its button reads Done. With [chooseLit] (the commute's lit guess, which a pick keeps as his own) a tap on
+ * the lit choice is passed on too; the caller's rules decide whether it changes anything.
  *
  * Motion: rises over a fading scrim (reduced motion: a cross-fade); the lit dot blends its colour; a choice gives a
  * tick haptic.
  */
 @Composable
-internal fun NotifyChoiceSheetView(sheet: NotifyChoiceSheet, onChoose: (String) -> Unit, onClose: () -> Unit, several: Boolean = false) {
+internal fun NotifyChoiceSheetView(
+    sheet: NotifyChoiceSheet, onChoose: (String) -> Unit, onClose: () -> Unit, several: Boolean = false, chooseLit: Boolean = false,
+) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -135,7 +138,7 @@ internal fun NotifyChoiceSheetView(sheet: NotifyChoiceSheet, onChoose: (String) 
                     ChoiceRow(c, several) {
                         if (several) { haptics.tick(); onChoose(c.name) }
                         else {
-                            if (!c.lit) { haptics.tick(); onChoose(c.name) }
+                            if (!c.lit || chooseLit) { haptics.tick(); onChoose(c.name) }
                             close()
                         }
                     }

@@ -1,6 +1,5 @@
 package os.meka.android.screens
 
-import androidx.compose.ui.semantics.getOrNull
 import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -29,12 +28,17 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.AT_WORK_NOTE
+import os.meka.android.work.COMMUTE_TO_WORK_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import os.meka.android.work.HOURS_OFF_LINE
 import os.meka.android.work.HOURS_ON_LINE
 import os.meka.android.work.WORK_COLUMN_MAX
 import os.meka.android.work.WorkPane
 import os.meka.android.work.callAssistantNote
 import os.meka.core.domain.CallScreeningRules
+import os.meka.core.domain.CommuteChoiceRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PeopleLists
 import os.meka.core.domain.ScreenUnknownRules
@@ -51,7 +55,8 @@ import kotlin.test.fail
  * two family members (one without a number) and one always-notify), each on the Fold's cover and inner screens, Dark
  * (and the full one in Light). Saved under `work/` and read for nonsense, cut lines, broken words, split dates, times
  * and numbers, and Work mode's own lines leaving a word alone or starting a line with a dot. By hand: Stop work now
- * stops work and offers Back to my hours; a day's chip adds that day to the hours.
+ * stops work and offers Back to my hours; a day's chip adds that day to the hours; the commute's To work row opens its
+ * sheet and a time there sets it.
  * Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -163,20 +168,15 @@ class WorkScreensTest {
         val leftGap = pane.left - screen.left
         val rightGap = screen.right - pane.right
         if (kotlin.math.abs(leftGap - rightGap) > density * 2) fail("$name: Work mode's column isn't centred (${leftGap / density} dp left, ${rightGap / density} dp right)")
-        // The commute's "Home" label sits clear of the To work chips above it (at least 8 dp of air), as its own heading.
-        val toWorkChips = compose.onAllNodes(hasContentDescription("Commute to work:", substring = true)).fetchSemanticsNodes()
-        val homeLabel = compose.onAllNodes(hasText("Home", substring = false)).fetchSemanticsNodes()
-        if (toWorkChips.isNotEmpty() && homeLabel.isNotEmpty()) {
-            // Unclipped positions: on the inner screen the commute sits below the fold, where boundsInRoot is clipped to 0.
-            val air = (homeLabel.first().positionInRoot.y - toWorkChips.maxOf { it.positionInRoot.y + it.size.height }) / density
-            if (air < 8f) fail("$name: the commute's Home label sits ${air.toInt()} dp under the To work chips (want ≥ 8)")
+        // Walk-through week 5, A17: the commute's directions are card rows saying the time in use ("To work" · "1 h 20",
+        // "About 1 h 20" while it's the guess), not chip rows (A32's "one lit" now lives in the sheet, CommuteChoicesTest).
+        val c = w.commute
+        for (toWork in listOf(true, false)) {
+            val r = CommuteChoiceRules.row(c, toWork)
+            if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no commute \"${r.title}\" row saying ${r.value}")
         }
-        // Walk-through A32: one chip is lit in each commute row, Navilife's guess included ("About 1 h 20" had none lit).
-        for (row in listOf("Commute to work:", "Commute home:")) {
-            val chips = compose.onAllNodes(hasContentDescription(row, substring = true)).fetchSemanticsNodes()
-            if (chips.isEmpty()) continue
-            val lit = chips.count { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "On" }
-            if (lit != 1) fail("$name: $lit chips lit in the commute's \"$row\" row (want 1)")
+        if (compose.onAllNodes(hasContentDescription("Commute to work:", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: the commute still has a chip row")
         }
         when (fill) {
             Fill.EMPTY -> {
@@ -228,6 +228,25 @@ class WorkScreensTest {
             compose.mainClock.advanceTimeBy(100)
         }
         if (6 !in core.workMode.value.schedule.days) fail("Work: Saturday's chip didn't add Saturday (${core.workMode.value.schedule.days})")
+        // Walk-through week 5, A17: the commute's To work row opens its sheet; 1 h 30 there sets it and closes the sheet.
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        val toWork = compose.onAllNodes(hasTestTag(COMMUTE_TO_WORK_TAG) and hasClickAction())
+        if (toWork.fetchSemanticsNodes().isEmpty()) fail("Work: no commute To work row")
+        toWork[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Work: the commute's To work row didn't open its sheet")
+        compose.onAllNodes(hasText("1 h 30", substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        repeat(40) {
+            if (core.workMode.value.commute.toWorkMin == 90) return@repeat
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns(1_000)
+        if (core.workMode.value.commute.toWorkMin != 90) fail("Work: 1 h 30 in the To work sheet didn't set the commute (${core.workMode.value.commute})")
+        if (sheetOpen()) fail("Work: choosing 1 h 30 didn't close the commute's sheet")
+        ScreenShots.awaitShows(compose, "work-by-hand", "1 h 30 there · 1 h home")
         // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on
         // Navilife's hours like the empty page; it is taken again after the hand: work stopped (Start work now, Back to
         // my hours) and Saturday lit.

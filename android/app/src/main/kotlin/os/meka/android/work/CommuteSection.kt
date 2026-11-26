@@ -8,8 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,22 +17,40 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.android.designsystem.LightInk
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.CommuteChoiceRules
 import os.meka.core.domain.CommuteDayRow
 import os.meka.core.domain.CommuteRules
 import os.meka.core.domain.CommuteSetting
 
+/** Work mode → Commute's rows (walk-through week 5, A17), for the screen tests. */
+const val COMMUTE_TO_WORK_TAG = "commute-row:to-work"
+const val COMMUTE_HOME_TAG = "commute-row:home"
+const val COMMUTE_DAY_TAG = "commute-row:day"
+const val COMMUTE_DAY_TO_WORK_TAG = "commute-row:day-to-work"
+const val COMMUTE_DAY_HOME_TAG = "commute-row:day-home"
+
+/** Which of the commute's sheets is open. */
+private enum class CommuteSheet { TO_WORK, HOME, DAY, DAY_TO_WORK, DAY_HOME }
+
 /**
  * The commute counts everywhere, slice 1: Work → Commute, the door-to-door time each way (home → office, office →
  * home), default about 1 h 20 until set. Synced, so the Mac shows the same. Counted on office days only; the wake
- * alarm uses it. Motion catalogue "Leaving now"/settings chips: a chip blends with a tick haptic, the line cross-fades.
+ * alarm uses it.
+ *
+ * Walk-through week 5, A17: each direction is one card row saying the time in use ("To work" · "1 h 20" ›, "About 1 h 20"
+ * while it's Navilife's guess) opening a sheet of the times, the one in use lit, each saying what it does
+ * ([CommuteChoiceRules]); picking the lit guess keeps it as his own. Motion: the sheet rises (reduced motion: a
+ * cross-fade), a choice gives a tick haptic, the line cross-fades.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CommuteSection(
     commute: CommuteSetting,
@@ -44,96 +60,59 @@ fun CommuteSection(
     onClearDay: (epochDay: Long) -> Unit,
     onSet: (toWork: Int, home: Int) -> Unit,
 ) {
-    val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+    var sheet by remember { mutableStateOf<CommuteSheet?>(null) }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Crossfade(CommuteRules.summary(commute), animationSpec = MekaMotion.appear(reduced), label = "commute-line") { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
-        ChipRowLabel("To work")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            CommuteRules.choices(commute.toWorkMin).forEach { m ->
-                val label = CommuteRules.label(m)
-                // A32: the time in use is lit, Navilife's guess too; tapping the lit guess keeps it as his own.
-                val lit = CommuteRules.lit(commute, true, m)
-                val spoken = if (lit && !commute.chosen) "Commute to work: $label, ${CommuteRules.GUESS_SPOKEN}" else "Commute to work: $label"
-                SettingChip(label, lit, spoken = spoken) {
-                    CommuteRules.tap(commute, true, m)?.let { (to, home) -> haptics.tick(); onSet(to, home) }
-                }
-            }
-        }
-        ChipRowLabel("Home")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            CommuteRules.choices(commute.homeMin).forEach { m ->
-                val label = CommuteRules.label(m)
-                // A32: the time in use is lit, Navilife's guess too; tapping the lit guess keeps it as his own.
-                val lit = CommuteRules.lit(commute, false, m)
-                val spoken = if (lit && !commute.chosen) "Commute home: $label, ${CommuteRules.GUESS_SPOKEN}" else "Commute home: $label"
-                SettingChip(label, lit, spoken = spoken) {
-                    CommuteRules.tap(commute, false, m)?.let { (to, home) -> haptics.tick(); onSet(to, home) }
-                }
-            }
-        }
-        Text(CommuteRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+        NotifyChoiceRowView(CommuteChoiceRules.row(commute, true), Modifier.testTag(COMMUTE_TO_WORK_TAG)) { sheet = CommuteSheet.TO_WORK }
+        NotifyChoiceRowView(CommuteChoiceRules.row(commute, false), Modifier.testTag(COMMUTE_HOME_TAG)) { sheet = CommuteSheet.HOME }
+        Text(CommuteRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
         if (days.isNotEmpty()) OneDay(days, onSetDay, onClearDay)
+    }
+    when (sheet) {
+        CommuteSheet.TO_WORK, CommuteSheet.HOME -> {
+            val toWork = sheet == CommuteSheet.TO_WORK
+            NotifyChoiceSheetView(CommuteChoiceRules.sheet(commute, toWork), chooseLit = !commute.chosen,
+                onChoose = { name -> CommuteChoiceRules.named(commute, toWork, name)?.let { (to, home) -> onSet(to, home) } },
+                onClose = { sheet = null })
+        }
+        else -> {}
     }
 }
 
 /**
- * Slice 6, "Just one day": the coming week's office days as chips (a one-off day lit with a dot); the chosen day's two
- * chip rows set its own times, "Use the usual" puts it back. Motion: the day's chips appear/disappear with the
- * standard appear (reduced motion: instant), the line cross-fades, a chip blends with a tick haptic.
+ * Slice 6, "Just one day": the coming week's office days; the chosen day's two rows set its own times, "Use the usual"
+ * puts it back. Walk-through week 5, A17: the day chips are one row ("Just one day" · "Choose a day" ›) opening a sheet
+ * of the days (a day of its own marked •), and the day's times are rows opening their own sheets, lit only when the day
+ * has its own times. Motion: the day's rows appear/disappear with the standard appear (reduced motion: a cross-fade),
+ * the line cross-fades, a choice gives a tick haptic.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OneDay(days: List<CommuteDayRow>, onSetDay: (Long, Int, Int) -> Unit, onClearDay: (Long) -> Unit) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     var picked by rememberSaveable { mutableStateOf<Long?>(null) }
+    var sheet by remember { mutableStateOf<CommuteSheet?>(null) }
     val row = days.firstOrNull { it.epochDay == picked }
-    // Keeps the last day's chips on screen while they fold away.
+    // Keeps the last day's rows on screen while they fold away.
     var shown by remember { mutableStateOf<CommuteDayRow?>(null) }
     if (row != null) shown = row
     ChipRowLabel(CommuteRules.ONE_DAY_TITLE)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        days.forEach { d ->
-            val label = if (d.changed) "${d.label} •" else d.label
-            SettingChip(label, d.epochDay == picked, spoken = d.line) {
-                haptics.tick()
-                picked = if (picked == d.epochDay) null else d.epochDay
-            }
-        }
-    }
+    NotifyChoiceRowView(CommuteChoiceRules.dayRow(days, picked), Modifier.testTag(COMMUTE_DAY_TAG)) { sheet = CommuteSheet.DAY }
     AnimatedVisibility(
         row != null,
         enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
         exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
     ) {
         val r = row ?: shown ?: return@AnimatedVisibility
-        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "commute-day-line") { line ->
                 Text(line, style = MekaType.itemMeta, color = if (r.changed) Meka.colors.accent else Meka.colors.textSecondary)
             }
-            ChipRowLabel("To work")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                CommuteRules.choices(r.toWorkMin).forEach { m ->
-                    val label = CommuteRules.label(m)
-                    val on = r.changed && m == r.toWorkMin
-                    SettingChip(label, on, spoken = "${r.label}, commute to work: $label") {
-                        if (!on) { haptics.tick(); onSetDay(r.epochDay, m, r.homeMin) }
-                    }
-                }
-            }
-            ChipRowLabel("Home")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                CommuteRules.choices(r.homeMin).forEach { m ->
-                    val label = CommuteRules.label(m)
-                    val on = r.changed && m == r.homeMin
-                    SettingChip(label, on, spoken = "${r.label}, commute home: $label") {
-                        if (!on) { haptics.tick(); onSetDay(r.epochDay, r.toWorkMin, m) }
-                    }
-                }
-            }
+            NotifyChoiceRowView(CommuteChoiceRules.oneDayRow(r, true), Modifier.testTag(COMMUTE_DAY_TO_WORK_TAG)) { sheet = CommuteSheet.DAY_TO_WORK }
+            NotifyChoiceRowView(CommuteChoiceRules.oneDayRow(r, false), Modifier.testTag(COMMUTE_DAY_HOME_TAG)) { sheet = CommuteSheet.DAY_HOME }
             if (r.changed) {
                 SettingChip("Use the usual", false, spoken = "${r.label}: use the usual commute") {
                     haptics.tick(); onClearDay(r.epochDay)
@@ -141,7 +120,19 @@ private fun OneDay(days: List<CommuteDayRow>, onSetDay: (Long, Int, Int) -> Unit
             }
         }
     }
-    Text(CommuteRules.ONE_DAY_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+    Text(CommuteRules.ONE_DAY_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+    when (sheet) {
+        CommuteSheet.DAY -> NotifyChoiceSheetView(CommuteChoiceRules.daySheet(days, picked),
+            onChoose = { name -> picked = CommuteChoiceRules.pickedDay(days, name) },
+            onClose = { sheet = null })
+        CommuteSheet.DAY_TO_WORK, CommuteSheet.DAY_HOME -> row?.let { r ->
+            val toWork = sheet == CommuteSheet.DAY_TO_WORK
+            NotifyChoiceSheetView(CommuteChoiceRules.oneDaySheet(r, toWork),
+                onChoose = { name -> CommuteChoiceRules.oneDayNamed(r, toWork, name)?.let { (to, home) -> onSetDay(r.epochDay, to, home) } },
+                onClose = { sheet = null })
+        }
+        else -> {}
+    }
 }
 
 /**
