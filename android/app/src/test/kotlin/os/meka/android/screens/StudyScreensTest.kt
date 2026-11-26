@@ -14,6 +14,11 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.core.domain.StudyPlanChoiceRules
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -49,7 +54,8 @@ import kotlin.test.assertTrue
 /**
  * Study plan, slice 1: a course's page on the Fold's cover and inner screens (Dark, and Light on the cover), read for
  * nonsense and words broken in two, saved under `study/`; and a lesson's tick shows in the next frame. Slice 2a: the
- * plan card with a date and slots picked (cover Dark and Light), and a chip answering in the next frame. Study fixes: a
+ * plan card with a date and slots picked (cover Dark and Light), and a choice answering in the next frame (week 5 A17:
+ * through the plan rows' sheets, never open chips). Study fixes: a
  * long press opens the lesson's sheet and never deletes; Delete asks first; Recently deleted restores. Invented course
  * (rule 13).
  */
@@ -182,17 +188,19 @@ class StudyScreensTest {
 
     @Test
     @Config(qualifiers = ScreenShots.COVER)
-    fun besideItsMockupTheDatesSitTwoToARowAndTheFieldWaitsBehindTheDashedRow() {
-        // Study beside its mockup (2026-10-30): on the closed Fold the finish dates drop their weekday so two share a row,
-        // and a course with lessons shows "+ Add lessons" at the foot instead of an open field; a tap opens it there.
+    fun besideItsMockupThePlanIsRowsAndTheFieldWaitsBehindTheDashedRow() {
+        // Walk-through week 5, A17: the plan's choices are card rows saying what's chosen, never open chip rows (the finish
+        // dates sat two to a row as chips); and a course with lessons shows "+ Add lessons" at the foot instead of an open
+        // field (Study beside its mockup, 2026-10-30); a tap opens it there.
         val (core, id) = filled(ThemeChoice.DARK)
         show(core, id)
-        val ends = core.studyView.value.course(id)!!.plan.ends
-        compose.onNode(ScreenShots.plainText("18 Nov · 4 wks")).assertExists()
-        compose.onAllNodes(ScreenShots.plainText("Wed 18 Nov · 4 wks")).assertCountEquals(0)
-        val first = compose.onNodeWithTag("study-end-${ends[0].key}").getUnclippedBoundsInRoot()
-        val second = compose.onNodeWithTag("study-end-${ends[1].key}").getUnclippedBoundsInRoot()
-        assertEquals(first.top, second.top, "the first two finish dates share a row")
+        val input = core.studyView.value.course(id)!!.planInput
+        for (row in listOf(StudyPlanChoiceRules.finishRow(input), StudyPlanChoiceRules.sessionRow(input), StudyPlanChoiceRules.slotsRow(input))) {
+            compose.onNode(hasContentDescription(row.spoken) and hasClickAction()).assertExists()
+        }
+        compose.onNode(ScreenShots.plainText("Pick a date")).assertExists()
+        compose.onAllNodes(ScreenShots.plainText("18 Nov · 4 wks", substring = true)).assertCountEquals(0)
+        compose.onAllNodes(ScreenShots.plainText("Train mornings")).assertCountEquals(0)
         compose.onAllNodesWithTag("study-outline").assertCountEquals(0)
         scrollTo(hasTestTag("study-add-lessons"))
         compose.onNodeWithText(os.meka.core.domain.StudyBesideRules.ADD_ROW).assertExists()
@@ -203,20 +211,45 @@ class StudyScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("study", "cover-dark-add-lessons"))
     }
 
+    private fun tapSpoken(desc: String) {
+        val n = compose.onAllNodes(hasContentDescription(desc) and hasClickAction())
+        assertTrue(n.fetchSemanticsNodes().isNotEmpty(), "no \"$desc\" to tap")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
     @Test
     @Config(qualifiers = ScreenShots.COVER)
-    fun aPlanChipAnswersInTheNextFrame() {
+    fun aPlanChoiceAnswersInTheNextFrame() {
         val (core, id) = filled(ThemeChoice.DARK)
         show(core, id)
-        scrollTo(hasTestTag("study-end-$fourWeeks"))
-        compose.onNodeWithTag("study-end-$fourWeeks").performClick()
+        // Finish by opens its sheet; four weeks saves, and the card answers in the next frame.
+        var input = core.studyView.value.course(id)!!.planInput
+        tapSpoken(StudyPlanChoiceRules.finishRow(input).spoken)
+        compose.mainClock.advanceTimeBy(1_000L)
+        assertTrue(sheetOpen(), "Finish by didn't open its sheet")
+        tapSpoken(StudyPlanChoiceRules.finishSheet(input).choices.single { it.name == fourWeeks.toString() }.spoken)
         compose.mainClock.advanceTimeBy(16L)
-        compose.onNodeWithTag("study-end-$fourWeeks").assertIsSelected()
         compose.onNode(ScreenShots.plainText("2 sessions a week")).assertExists()
-        scrollTo(hasTestTag("study-slot-sat"))
-        compose.onNodeWithTag("study-slot-sat").performClick()
+        compose.mainClock.advanceTimeBy(1_000L)
+        assertTrue(!sheetOpen(), "the finish sheet stayed open after a choice")
+        input = input.withFinish(fourWeeks)
+        compose.onNode(hasContentDescription(StudyPlanChoiceRules.finishRow(input).spoken)).assertExists()
+        // When you can study picks several: Sat morning lights in the next frame and the sheet stays open until Done.
+        tapSpoken(StudyPlanChoiceRules.slotsRow(input).spoken)
+        compose.mainClock.advanceTimeBy(1_000L)
+        assertTrue(sheetOpen(), "When you can study didn't open its sheet")
+        tapSpoken(StudyPlanChoiceRules.slotsSheet(input).choices.single { it.name == "sat" }.spoken)
         compose.mainClock.advanceTimeBy(16L)
+        assertTrue(sheetOpen(), "the times sheet closed after one pick")
         compose.onNode(ScreenShots.plainText("Doesn’t fit", substring = true)).assertExists()
+        input = input.withSlot("sat", true)
+        compose.onNode(hasContentDescription(StudyPlanChoiceRules.slotsSheet(input).choices.single { it.name == "sat" }.spoken)).assertIsSelected()
+        compose.onNode(hasText("Done") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG))).performSemanticsAction(SemanticsActions.OnClick)
+        compose.mainClock.advanceTimeBy(1_000L)
+        assertTrue(!sheetOpen(), "Done left the times sheet open")
+        compose.onNode(hasContentDescription(StudyPlanChoiceRules.slotsRow(input).spoken)).assertExists()
         // The core's writes land after: the view then says the same.
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.studyView.value.course(id)!!.plan.obi != null }

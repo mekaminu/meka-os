@@ -324,11 +324,16 @@ struct StudySheet: View {
     /// The plan card for [c], with any choice clicked here applied (the same rules the core runs).
     private func plan(_ c: StudyCourseView) -> StudyPlanView {
         if tapFinish == nil && tapSession == nil && tapSlots.isEmpty { return c.plan }
+        return StudyRules.shared.plan(i: input(c))
+    }
+
+    /// The plan's input with any choice clicked here applied (week 5 A17: the plan's menus read it for what's chosen).
+    private func input(_ c: StudyCourseView) -> StudyPlanInput {
         var i = c.planInput
         if let f = tapFinish, i.finishByDay?.int64Value != f { i = i.withFinish(day: f) }
         if let m = tapSession { i = i.withSession(mins: m) }
         for (key, on) in tapSlots { i = i.withSlot(key: key, on: on) }
-        return StudyRules.shared.plan(i: i)
+        return i
     }
 
     private func isDone(_ l: StudyLessonRow) -> Bool { pending[l.id] ?? l.done }
@@ -605,28 +610,30 @@ struct StudySheet: View {
         }
     }
 
-    /// YOUR PLAN (slice 2a), like the Fold's: FINISH BY, EACH SESSION and WHEN YOU CAN STUDY as chips, then sessions a
-    /// week, whether it fits and Obi's line. A chip lights at once (its fill glides); the lines cross-fade.
+    /// YOUR PLAN (slice 2a), like the Fold's: Finish by, Each session and When you can study as menus (week 5 A17: they
+    /// were chip rows), then sessions a week, whether it fits and Obi's line. A choice shows at once; the lines cross-fade.
     @ViewBuilder
     private func planCard(_ c: StudyCourseView, _ p: StudyPlanView) -> some View {
         let id = c.id
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             SectionLabel(StudyRules.shared.PLAN, palette)
-            chipRow(StudyRules.shared.FINISH_LABEL, p.ends) { chip in
-                guard !chip.on, let day = Int64(chip.key) else { return }
+            // Walk-through week 5, A17: each choice is one menu saying what's chosen ("Finish by: Mon 7 Dec"), as the
+            // Fold's rows and sheets, not a row of chips; When you can study is a menu of ticks (several may be picked).
+            let choices = StudyPlanChoiceRules.shared
+            let i = input(c)
+            menu(choices.finishSheet(i: i)) { name in
+                guard let day = choices.finishNamed(name: name)?.int64Value, day != i.finishByDay?.int64Value else { return }
                 let before = tapFinish
                 tapFinish = day
                 Task { if !(await model.setStudyFinish(id, day: day)) { tapFinish = before } }
             }
-            chipRow(StudyRules.shared.SESSION_LABEL, p.lens) { chip in
-                guard !chip.on, let mins = Int32(chip.key) else { return }
+            menu(choices.sessionSheet(i: i)) { name in
+                guard let mins = choices.sessionNamed(name: name)?.int32Value, mins != i.sessionMins else { return }
                 let before = tapSession
                 tapSession = mins
                 Task { if !(await model.setStudySession(id, mins: mins)) { tapSession = before } }
             }
-            chipRow(StudyRules.shared.SLOTS_LABEL, p.slots) { chip in
-                let key = chip.key
-                let on = !chip.on
+            slotsMenu(choices.slotsSheet(i: i), row: choices.slotsRow(i: i)) { key, on in
                 tapSlots[key] = on
                 Task { if !(await model.setStudySlot(id, key: key, on: on)) { tapSlots[key] = nil } }
             }
@@ -898,28 +905,34 @@ struct StudySheet: View {
         }
     }
 
-    private func chipRow(_ label: String, _ chips: [StudyChip], _ tap: @escaping (StudyChip) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(chips, id: \.key) { chip in
-                    Button {
-                        MekaHaptics.light()
-                        tap(chip)
-                    } label: {
-                        Text(chip.label).font(MekaType.caption).lineLimit(1)
-                            .foregroundStyle(chip.on ? palette.onAccent : palette.textPrimary)
-                            .padding(.horizontal, MekaSpace.xs)
-                            .padding(.vertical, MekaSpace.xxs)
-                            .background(chip.on ? palette.accent : palette.surfaceRaised, in: Capsule())
-                            .animation(MekaMotion.appear(reduced: reduceMotion), value: chip.on)
+    /// A plan choice as one menu: the sheet's title, the lit choice shown, a pick passes its name back.
+    private func menu(_ sheet: NotifyChoiceSheet, choose: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { lit }, set: { if $0 != lit { MekaHaptics.light(); choose($0) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+        }
+        .pickerStyle(.menu).fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
+    }
+
+    /// When you can study as one menu of ticks: its title and what's chosen ("2 times · 4 sessions"); each time is a toggle
+    /// with the sessions a week it gives.
+    private func slotsMenu(_ sheet: NotifyChoiceSheet, row: NotifyChoiceRow, toggle: @escaping (String, Bool) -> Void) -> some View {
+        HStack(spacing: MekaSpace.xs) {
+            Text(sheet.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Menu(row.value) {
+                ForEach(sheet.choices, id: \.name) { c in
+                    let key = c.name
+                    let lit = c.lit
+                    Toggle(isOn: Binding(get: { lit }, set: { on in MekaHaptics.light(); toggle(key, on) })) {
+                        Text("\(c.label) · \(c.line)")
                     }
-                    .buttonStyle(MekaPressStyle())
-                    .accessibilityLabel(chip.spoken)
-                    .accessibilityAddTraits(chip.on ? .isSelected : [])
                 }
             }
+            .menuStyle(.borderlessButton).fixedSize()
+            .accessibilityLabel(row.spoken)
         }
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
     }
 
     private func add() {

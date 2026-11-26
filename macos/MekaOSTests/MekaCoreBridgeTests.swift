@@ -3237,6 +3237,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(WeekAheadView.companion.EMPTY.protectedLine)
     }
 
+    func testStudyPlanChoicesReachSwift() {
+        // Walk-through week 5, A17: Study's plan choices are menus built from the core's sheets; a pick sends back only its
+        // chip's key, read by the core to a day or minutes, and When you can study's times toggle one by one.
+        let choices = StudyPlanChoiceRules.shared
+        let today: Int64 = 20_000
+        let i = StudyPlanInput(
+            today: today, finishByDay: KotlinLong(value: today + 42), sessionMins: 45, slots: ["train"],
+            leftLessons: 18, leftKnownMins: 810, leftUnknown: 0, avgKnownMins: KotlinInt(value: 45), planFromDay: nil, planLeft: nil
+        )
+        let finish = choices.finishSheet(i: i)
+        XCTAssertEqual(finish.choices.first(where: { $0.lit })?.name, String(today + 42))
+        XCTAssertEqual(finish.choices.first(where: { $0.lit })?.line, "3 sessions a week of 45 min")
+        XCTAssertEqual(choices.finishNamed(name: String(today + 28))?.int64Value, today + 28)
+        XCTAssertEqual(choices.sessionSheet(i: i).choices.map { $0.label }, ["30 min", "45 min", "1 h"])
+        XCTAssertEqual(choices.sessionNamed(name: "60")?.int32Value, 60)
+        XCTAssertNil(choices.sessionNamed(name: "x"))
+        XCTAssertEqual(choices.slotsRow(i: i).value, "Train mornings")
+        XCTAssertEqual(choices.slotsSheet(i: i).choices.filter { $0.lit }.map { $0.name }, ["train"])
+    }
+
     func testProtectedChoicesReachSwift() {
         // Walk-through week 5, A17: the sheet's three choices are menus built from the core's sheets; a pick sends only
         // its name back and the core reads it to the setting.

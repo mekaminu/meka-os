@@ -85,11 +85,14 @@ internal fun NotifyChoiceRowView(row: NotifyChoiceRow, modifier: Modifier = Modi
  * A Notifications choice sheet: its title, one row per choice with what it does, the chosen one lit, and a note on
  * what the choice touches. A tap on a choice saves it and closes the sheet; Close, the scrim or Back closes it as it was.
  *
+ * With [several] (Study's When you can study, walk-through week 5 A17) a tap lights or dims its choice and the sheet
+ * stays open; its button reads Done.
+ *
  * Motion: rises over a fading scrim (reduced motion: a cross-fade); the lit dot blends its colour; a choice gives a
  * tick haptic.
  */
 @Composable
-internal fun NotifyChoiceSheetView(sheet: NotifyChoiceSheet, onChoose: (String) -> Unit, onClose: () -> Unit) {
+internal fun NotifyChoiceSheetView(sheet: NotifyChoiceSheet, onChoose: (String) -> Unit, onClose: () -> Unit, several: Boolean = false) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -124,15 +127,18 @@ internal fun NotifyChoiceSheetView(sheet: NotifyChoiceSheet, onChoose: (String) 
             ) {
                 Text(LoneWordGlue.kept(sheet.title), style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
                 sheet.choices.forEach { c ->
-                    ChoiceRow(c) {
-                        if (!c.lit) { haptics.tick(); onChoose(c.name) }
-                        close()
+                    ChoiceRow(c, several) {
+                        if (several) { haptics.tick(); onChoose(c.name) }
+                        else {
+                            if (!c.lit) { haptics.tick(); onChoose(c.name) }
+                            close()
+                        }
                     }
                 }
                 Text(LoneWordGlue.kept(sheet.note), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.weight(1f))
-                    Text("Close", style = MekaType.metaStrong, color = Meka.colors.accent,
+                    Text(if (several) "Done" else "Close", style = MekaType.metaStrong, color = Meka.colors.accent,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = close)
                             .minTouch().padding(horizontal = MekaSpace.m))
                 }
@@ -142,11 +148,11 @@ internal fun NotifyChoiceSheetView(sheet: NotifyChoiceSheet, onChoose: (String) 
 }
 
 @Composable
-private fun ChoiceRow(c: NotifyChoice, onTap: () -> Unit) {
+private fun ChoiceRow(c: NotifyChoice, several: Boolean, onTap: () -> Unit) {
     val dot by animateColorAsState(if (c.lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "notify-choice-dot")
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-            .clickable(role = Role.RadioButton, onClick = onTap)
+            .clickable(role = if (several) Role.Checkbox else Role.RadioButton, onClick = onTap)
             .semantics(mergeDescendants = true) { contentDescription = c.spoken; selected = c.lit }
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,

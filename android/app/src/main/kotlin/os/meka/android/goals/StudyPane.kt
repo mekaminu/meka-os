@@ -25,7 +25,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -114,6 +113,9 @@ import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.StudyAdded
 import os.meka.core.domain.StudyChip
 import os.meka.core.domain.StudyPlanInput
+import os.meka.core.domain.StudyPlanChoiceRules
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.StudyPlanView
 import os.meka.core.domain.StudyCourseView
 import os.meka.core.domain.GoalAddRules
@@ -424,6 +426,21 @@ internal fun StudyPane(
         planTap = next
         scope.launch { if (runCatching { write() }.isFailure) planTap = before }
     }
+    var planSheet by remember(courseId) { mutableStateOf<PlanSheet?>(null) }
+    // A choice in a plan sheet is its chip's key; it is shown at once ([PlanTap]) and written after, as the chips were.
+    val choosePlan: (PlanSheet, StudyPlanInput, String) -> Unit = { open, input, name ->
+        when (open) {
+            PlanSheet.FINISH -> StudyPlanChoiceRules.finishNamed(name)?.let { day ->
+                if (day != input.finishByDay) choose(planTap.copy(finish = day)) { core.setStudyFinish(courseId, day) }
+            }
+            PlanSheet.SESSION -> StudyPlanChoiceRules.sessionNamed(name)?.let { mins ->
+                if (mins != input.sessionMins) choose(planTap.copy(session = mins)) { core.setStudySession(courseId, mins) }
+            }
+            PlanSheet.SLOTS -> StudyPlanChoiceRules.slotTapped(input, name)?.let { (key, on) ->
+                choose(planTap.copy(slots = if (on) input.slots + key else input.slots - key)) { core.setStudySlot(courseId, key, on) }
+            }
+        }
+    }
     // Plan a lesson (or several) for a day: shown at once, the core's line on the bar after; a failed write puts it back.
     val planDay: (List<String>, Long?) -> Unit = { ids, day ->
         if (day != null && !StudyRules.plannable(day, today)) {
@@ -486,20 +503,11 @@ internal fun StudyPane(
             }
         }
         if (total > 0 && !c.allDone) item(key = "plan") {
+            // Walk-through week 5, A17: the plan's choices are rows opening sheets, not open chip rows.
             PlanCard(
-                plan, c.suggested, Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1)),
-                onFinish = { chip ->
-                    val day = chip.key.toLong()
-                    if (!chip.on) choose(planTap.copy(finish = day)) { core.setStudyFinish(courseId, day) }
-                },
-                onSession = { chip ->
-                    val mins = chip.key.toInt()
-                    if (!chip.on) choose(planTap.copy(session = mins)) { core.setStudySession(courseId, mins) }
-                },
-                onSlot = { chip ->
-                    val slots = (planTap.slots ?: c.planInput.slots).let { if (chip.on) it - chip.key else it + chip.key }
-                    choose(planTap.copy(slots = slots)) { core.setStudySlot(courseId, chip.key, !chip.on) }
-                },
+                plan, if (planTap.isEmpty) c.planInput else planTap.applyTo(c.planInput), c.suggested,
+                Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(1)),
+                onOpen = { planSheet = it },
             )
         }
         if (c.week.isNotEmpty()) item(key = "week") {
@@ -747,7 +755,22 @@ internal fun StudyPane(
             onDismiss = { pickFor = null },
         )
     }
+    // Walk-through week 5, A17: a plan row's sheet. Finish by and Each session save a choice and close; When you can
+    // study lights or dims each time and stays open until Done (the sheet gives its own tick haptic).
+    val open = planSheet
+    if (open != null && c != null) {
+        val input = if (planTap.isEmpty) c.planInput else planTap.applyTo(c.planInput)
+        val choices = when (open) {
+            PlanSheet.FINISH -> StudyPlanChoiceRules.finishSheet(input)
+            PlanSheet.SESSION -> StudyPlanChoiceRules.sessionSheet(input)
+            PlanSheet.SLOTS -> StudyPlanChoiceRules.slotsSheet(input)
+        }
+        NotifyChoiceSheetView(choices, onChoose = { name -> choosePlan(open, input, name) }, onClose = { planSheet = null }, several = open == PlanSheet.SLOTS)
+    }
 }
+
+/** The plan row whose sheet is open (walk-through week 5, A17). */
+internal enum class PlanSheet { FINISH, SESSION, SLOTS }
 
 /**
  * Study fixes (3) slice 3: the bar under the lessons while several are picked: "3 lessons selected" and Cancel, then
@@ -917,16 +940,14 @@ internal data class PlanTap(val finish: Long? = null, val session: Int? = null, 
 }
 
 /**
- * YOUR PLAN (slice 2a, mockup): FINISH BY, EACH SESSION and WHEN YOU CAN STUDY as chips; then "4 sessions a week" in
+ * YOUR PLAN (slice 2a, mockup): Finish by, Each session and When you can study, each one card row saying what's chosen
+ * that opens its sheet (walk-through week 5, A17: they were open chip rows); then "4 sessions a week" in
  * the accent with "about 2 h 24 · 19 lessons left", whether it fits (green, or amber with what to change) and Obi's
- * line under it. A chip lights in the same frame (its fill glides); the lines cross-fade.
+ * line under it. A choice shows in the same frame (the row's value and the lines cross-fade).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PlanCard(
-    plan: StudyPlanView, suggested: String?, modifier: Modifier,
-    onFinish: (StudyChip) -> Unit, onSession: (StudyChip) -> Unit, onSlot: (StudyChip) -> Unit,
-) {
+private fun PlanCard(plan: StudyPlanView, input: StudyPlanInput, suggested: String?, modifier: Modifier, onOpen: (PlanSheet) -> Unit) {
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth().testTag("study-plan"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Column(
@@ -935,12 +956,11 @@ private fun PlanCard(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
         ) {
             SectionLabel(StudyRules.PLAN)
-            BoxWithConstraints {
-                val narrow = StudyBesideRules.narrow(maxWidth.value)
-                ChipGroup(StudyRules.FINISH_LABEL, plan.ends.map { it.copy(label = StudyBesideRules.endChipLabel(it.label, narrow)) }, "study-end", onFinish)
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                NotifyChoiceRowView(StudyPlanChoiceRules.finishRow(input), Modifier.testTag("study-end")) { onOpen(PlanSheet.FINISH) }
+                NotifyChoiceRowView(StudyPlanChoiceRules.sessionRow(input), Modifier.testTag("study-len")) { onOpen(PlanSheet.SESSION) }
+                NotifyChoiceRowView(StudyPlanChoiceRules.slotsRow(input), Modifier.testTag("study-slot")) { onOpen(PlanSheet.SLOTS) }
             }
-            ChipGroup(StudyRules.SESSION_LABEL, plan.lens, "study-len", onSession)
-            ChipGroup(StudyRules.SLOTS_LABEL, plan.slots, "study-slot", onSlot)
             Crossfade(plan.perWeek to plan.perWeekSub, animationSpec = MekaMotion.appear(reduced), label = "study-per-week") { (big, sub) ->
                 // Walk-through 2026-11-22 A12: beside "2 sessions a week" on the closed Fold the side line had ~100 dp, so its
                 // held "5 lessons left" broke mid-word ("5 lesso / ns left"); in a flow row it goes under, whole, when it doesn't fit.
@@ -973,34 +993,6 @@ private fun PlanCard(
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ChipGroup(label: String, chips: List<StudyChip>, tag: String, onTap: (StudyChip) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Text(label, style = MekaType.caption, color = Meka.colors.textSecondary)
-        // FINISH BY's dates sit two to a row as in the approved mockup (StudyBesideRules), so these stay a plain flow.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            chips.forEach { chip -> PlanChip(chip, Modifier.testTag("$tag-${chip.key}")) { onTap(chip) } }
-        }
-    }
-}
-
-/** A plan chip: 48 dp to touch, drawn as a pill; lit in the accent when picked (the fill glides). */
-@Composable
-private fun PlanChip(chip: StudyChip, modifier: Modifier, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (chip.on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "study-chip")
-    Box(
-        modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = chip.spoken; selected = chip.on }.minTouch(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            chip.label, style = MekaType.caption, color = if (chip.on) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        )
     }
 }
 
