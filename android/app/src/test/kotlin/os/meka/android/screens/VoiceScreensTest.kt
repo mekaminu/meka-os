@@ -296,7 +296,9 @@ class VoiceScreensTest {
         tap("Charon's Sample", hasContentDescription("Sample · Charon"), "sample:Charon")
         choose("Live", VOICE_LIVE_ROW_TAG, LiveTalkRules.ON_LABEL, "live:true")
         choose("What Obi remembers", VOICE_MEMORY_ROW_TAG, CompanionMemoryRules.OFF_LABEL, "remember:false")
-        choose("Face", VOICE_FACE_ROW_TAG, os.meka.core.domain.FaceLook.OFF, "face:false")
+        // The face not in force, whichever the shots' fixture holds (ShotLife.FACE_ON).
+        val face = !ShotLife.FACE_ON
+        choose("Face", VOICE_FACE_ROW_TAG, if (face) os.meka.core.domain.FaceLook.ON else os.meka.core.domain.FaceLook.OFF, "face:$face")
         tap("Close", hasText("Close"), "close")
         if (log.size != 7) fail("$name: ${log.size} actions for seven choices ($log)")
     }
