@@ -394,7 +394,8 @@ class SettingsScreensTest {
 
     private fun inSheet(text: String): Boolean {
         val m = SemanticsMatcher("shows \"$text\"") { node ->
-            node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.contains(text) } == true
+            // The sheet keeps its words together with no-break spaces: read each line plain.
+            node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.replace('\u00A0', ' ').contains(text) } == true
         }
         return compose.onAllNodes(m and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
