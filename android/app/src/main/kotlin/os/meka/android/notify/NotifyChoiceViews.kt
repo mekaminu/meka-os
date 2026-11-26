@@ -63,11 +63,12 @@ const val NOTIFY_CHOICE_SHEET_TAG = "notify-choice-sheet"
 /**
  * A Notifications choice row (walk-through week 5, A17: no open chip rows on a page): one card row, the title on the
  * left, what's chosen on the right ("Morning brief" · "Digest"), and ›; a tap opens [NotifyChoiceSheetView].
+ * [raised] draws it on the raised surface, for a row inside a card (Habits' open habit).
  */
 @Composable
-internal fun NotifyChoiceRowView(row: NotifyChoiceRow, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+internal fun NotifyChoiceRowView(row: NotifyChoiceRow, modifier: Modifier = Modifier, raised: Boolean = false, onOpen: () -> Unit) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(if (raised) Meka.colors.surfaceRaised else Meka.colors.surface)
             .clickable(role = Role.Button, onClick = onOpen)
             .semantics(mergeDescendants = true) { contentDescription = row.spoken }
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)

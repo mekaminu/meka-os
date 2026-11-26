@@ -1,5 +1,17 @@
 package os.meka.android.screens
 
+import android.os.Looper
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performSemanticsAction
+import org.robolectric.Shadows
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -230,22 +242,68 @@ class HabitsScreensTest {
         ScreenShots.assertShows(compose, "history", "Best run 7 days")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("habits", "cover-dark-open"))
         ScreenShots.assertNoBrokenWords(compose, "history")
-        // Walk-through 2026-11-15 A19: the Do · Avoid and list chip rows each have a heading above them, and the done
-        // line reads on one line (Best run drops under it rather than squeezing it to "since you / added it").
-        val kindHead = compose.onNodeWithTag("habits-row-kind-head-$teeth").assertExists().fetchSemanticsNode().boundsInRoot
-        val listHead = compose.onNodeWithTag("habits-row-list-head-$teeth").assertExists().fetchSemanticsNode().boundsInRoot
-        val doChip = compose.onNodeWithTag("habits-row-do-$teeth").fetchSemanticsNode().boundsInRoot
-        val listChip = compose.onNodeWithTag("habits-row-list-$teeth-Morning").fetchSemanticsNode().boundsInRoot
-        assertTrue(kindHead.bottom <= doChip.top + 1f, "Do or avoid sits above its chips")
-        assertTrue(listHead.bottom <= listChip.top + 1f && listHead.top >= doChip.bottom - 1f, "List sits above its chips")
-        ScreenShots.assertShows(compose, "history", os.meka.core.domain.HabitBoardRules.KIND_HEAD)
         ScreenShots.assertOneLine(compose, "history", "Done 7 of 7 days since you added it")
-        compose.onNodeWithTag("habits-row-remind-on-$teeth").performClick(); settle()
+        // Walk-through week 5, A17: Reminder, Do or avoid and List are card rows opening sheets; no chips on the page.
+        listOf("remind", "kind", "list").forEach { compose.onNodeWithTag("habits-row-$it-$teeth").assertExists() }
+        listOf("Every day", "Avoid").forEach {
+            if (compose.onAllNodes(hasText(it)).fetchSemanticsNodes().isNotEmpty()) fail("\"$it\" is still an open chip on the page")
+        }
+        ScreenShots.assertShows(compose, "history", HabitBoardRules.KIND_HEAD)
+        // By hand: Reminder → Every day sets the list's time (07:30) and the stepper shows under the row; Off clears it.
+        openSheet("habits-row-remind-$teeth")
+        if (!inSheet("07:30")) fail("the reminder's sheet doesn't say when Every day nudges")
+        chooseInSheet("Every day")
         awaitCore("the reminder on") { core.goalsView.value.habits.first { it.id == teeth }.remindAt == 7 * 60 + 30 }
         // The core holds the time before the row has recomposed with it (ci run 43521258380): settle first.
         settle()
         ScreenShots.assertShows(compose, "history", "07:30")
-        compose.onNodeWithTag("habits-row-remind-off-$teeth").performClick(); settle()
+        compose.onNodeWithTag("habits-row-remind-time-$teeth").assertExists()
+        openSheet("habits-row-remind-$teeth")
+        chooseInSheet("Off")
         awaitCore("the reminder off") { core.goalsView.value.habits.first { it.id == teeth }.remindAt == null }
+        // Do or avoid → Avoid, then List → Night time, each through its sheet.
+        openSheet("habits-row-kind-$teeth")
+        chooseInSheet("Avoid")
+        awaitCore("teeth is an avoid") { core.goalsView.value.habits.first { it.id == teeth }.avoid }
+        settle()
+        openSheet("habits-row-list-$teeth")
+        if (!inSheet("Before bed")) fail("the list's sheet doesn't say when Night time is for")
+        chooseInSheet("Night time")
+        awaitCore("teeth moved to Night time") {
+            HabitBoardRules.listName(core.goalsView.value.habits.first { it.id == teeth }) == HabitBoardRules.NIGHT
+        }
+    }
+
+    /** A setting's sheet is its own window (a second root): open it and wait for it through the main looper. */
+    private fun openSheet(rowTag: String) {
+        compose.onNodeWithTag(rowTag).performSemanticsAction(SemanticsActions.OnClick)
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$rowTag didn't open its sheet")
+    }
+
+    private fun chooseInSheet(label: String) {
+        compose.onAllNodes(hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() }
+        if (sheetOpen()) fail("choosing $label didn't close the sheet")
+    }
+
+    private fun inSheet(text: String): Boolean {
+        val shows = SemanticsMatcher("shows \"$text\"") { node ->
+            node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.contains(text) } == true
+        }
+        return compose.onAllNodes(shows and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+    }
+
+    private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
+    private fun until(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
     }
 }

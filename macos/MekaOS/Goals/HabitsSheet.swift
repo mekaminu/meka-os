@@ -5,8 +5,8 @@ import SwiftUI
 /// like the Fold's HabitsPage): seven days ending today (click one to mark an earlier day), the day's "3 of 8 done"
 /// with a bar and the best streak, list chips (All · Morning · All day · Night time · his own · + New list), the
 /// habits boxed by list, each Do (plus) or Avoid (barred circle) with its streak and the strip's seven dots, and one
-/// 44 pt circle cycling done (green tick) → missed (red cross) → clear. Clicking a habit unfolds Do or Avoid, its list
-/// and Remove (click twice). + Add unfolds a form: name, Do or Avoid, list, days a week. Every word comes from core
+/// 44 pt circle cycling done (green tick) → missed (red cross) → clear. Clicking a habit unfolds its four weeks, Reminder, Do or avoid
+/// and List (a row each with a menu of its choices; week 5 A17, they were chips) and Remove (click twice). + Add unfolds a form: name, Do or Avoid, list, days a week. Every word comes from core
 /// HabitBoardRules, so both apps say the same.
 ///
 /// Motion: the sheet scale-fades (system); the parts appear in the stagger; the day pill blends to brass; the bars
@@ -217,20 +217,17 @@ struct HabitsSheet: View {
     /// A habit's settings: its four weeks, the reminder, Do or Avoid, its list, and Remove (a second click removes it
     /// and its days).
     private func settings(_ r: HabitBoardRow, lists: [String]) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+        let rules = HabitSettingChoiceRules.shared
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HabitHistoryGrid(history: r.history, palette: palette)
-            Text(HabitBoardRules.shared.REMINDER_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-            HStack(spacing: MekaSpace.xxs) {
-                HabitChip(label: "Off", lit: r.remindAt == nil, palette: palette) {
-                    if r.remindAt != nil { model.setHabitReminder(r.id, nil); show(HabitBoardRules.shared.NO_REMINDER) }
-                }
-                HabitChip(label: "Every day", lit: r.remindAt != nil, palette: palette) {
-                    if r.remindAt == nil {
-                        let m = Int(HabitBoardRules.shared.defaultReminder(list: r.list))
-                        model.setHabitReminder(r.id, m)
-                        show(HabitTime.line(m))
-                    }
-                }
+            // Walk-through week 5, A17: no open chip rows; Reminder, Do or avoid and List are rows with a menu of
+            // their choices (built from the core's sheets), the reminder's time stepper beside its menu while it's on.
+            settingRow(rules.reminderRow(r: r), sheet: rules.reminderSheet(r: r)) { name in
+                guard let pick = rules.reminderNamed(r: r, name: name) else { return }
+                let m = pick.minute.map { Int($0.int32Value) }
+                model.setHabitReminder(r.id, m)
+                show(m.map { HabitTime.line($0) } ?? HabitBoardRules.shared.NO_REMINDER)
+            } trailing: {
                 if let at = r.remindAt?.intValue {
                     HabitTimeStepper(minute: at, palette: palette) { m in
                         model.setHabitReminder(r.id, m)
@@ -238,19 +235,14 @@ struct HabitsSheet: View {
                     }
                 }
             }
-            Text(HabitBoardRules.shared.KIND_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-            HStack(spacing: MekaSpace.xxs) {
-                HabitChip(label: "Do", lit: !r.avoid, palette: palette) { if r.avoid { model.setHabitAvoid(r.id, false) } }
-                HabitChip(label: "Avoid", lit: r.avoid, palette: palette) { if !r.avoid { model.setHabitAvoid(r.id, true) } }
-            }
-            Text(HabitBoardRules.shared.LIST_HEAD).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: MekaSpace.xxs) {
-                    ForEach(lists, id: \.self) { l in
-                        HabitChip(label: l, lit: l == r.list, palette: palette) { if l != r.list { model.setHabitList(r.id, l) } }
-                    }
-                }
-            }
+            settingRow(rules.kindRow(r: r), sheet: rules.kindSheet(r: r)) { name in
+                guard let avoid = rules.kindNamed(r: r, name: name) else { return }
+                model.setHabitAvoid(r.id, avoid.boolValue)
+            } trailing: { EmptyView() }
+            settingRow(rules.listRow(r: r), sheet: rules.listSheet(r: r, lists: lists)) { name in
+                guard let l = rules.listNamed(r: r, lists: lists, name: name) else { return }
+                model.setHabitList(r.id, l)
+            } trailing: { EmptyView() }
             let asking = removing == r.id
             Button(asking ? "Click again to remove \(r.name) and its days" : "Remove habit") {
                 MekaHaptics.tick()
@@ -268,6 +260,37 @@ struct HabitsSheet: View {
             .contentTransition(.opacity)
         }
         .padding(.bottom, MekaSpace.xs)
+    }
+
+    /// One setting of an open habit: its title, then a menu of the sheet's choices showing what's chosen (A17).
+    private func settingRow<Trailing: View>(
+        _ row: NotifyChoiceRow, sheet: NotifyChoiceSheet, choose: @escaping (String) -> Void,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: MekaSpace.xs) {
+            Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Spacer()
+            trailing()
+            Menu(row.value) {
+                Section(sheet.title) {
+                    ForEach(sheet.choices, id: \.name) { c in
+                        let name = c.name
+                        Button {
+                            guard !c.lit else { return }
+                            MekaHaptics.tick()
+                            choose(name)
+                        } label: {
+                            if c.lit { Label("\(c.label) · \(c.line)", systemImage: "checkmark") } else { Text("\(c.label) · \(c.line)") }
+                        }
+                    }
+                }
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .accessibilityLabel(row.spoken)
+        }
+        .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.surfaceRaised))
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
     }
 
     // MARK: The toast

@@ -4951,6 +4951,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(row.history.weeks.count, 4)
         XCTAssertEqual(row.history.weeks.first?.count, 7)
         XCTAssertEqual(row.history.doneLine, "Added today · its days build up here")
+        // Walk-through week 5, A17: the open habit's settings are menus built from the core's sheets; a pick sends
+        // back only what changes.
+        let settings = HabitSettingChoiceRules.shared
+        XCTAssertEqual(settings.reminderRow(r: walk).value, "Every day · 09:00")
+        XCTAssertEqual(settings.kindRow(r: row).value, "Avoid")
+        XCTAssertEqual(settings.kindNamed(r: row, name: HabitBoardRules.shared.DO)?.boolValue, false)
+        XCTAssertNil(settings.kindNamed(r: row, name: HabitBoardRules.shared.AVOID))
+        XCTAssertEqual(settings.listSheet(r: walk, lists: b.lists).choices.filter { $0.lit }.map(\.label), ["Weekend"])
+        XCTAssertEqual(settings.listNamed(r: walk, lists: b.lists, name: "Morning"), "Morning")
+        XCTAssertNil(settings.reminderNamed(r: walk, name: settings.REMIND_ON))
+        XCTAssertNil(settings.reminderNamed(r: walk, name: settings.REMIND_OFF)?.minute)
+        XCTAssertNotNil(settings.reminderNamed(r: walk, name: settings.REMIND_OFF))
         _ = try await core.setHabitReminder(id: walk.id, minute: nil)
         let off = core.habitBoard(view: core.goalsView.value, selected: 6, list: "Weekend")
         XCTAssertNil(off.groups.first?.rows.first?.remindAt)

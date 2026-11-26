@@ -67,6 +67,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.ask.LifeEmptyCard
 import os.meka.android.ask.MoneyChip
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.android.ask.MoneyDetailSheet
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -85,6 +87,7 @@ import os.meka.core.domain.HabitBoardRow
 import os.meka.core.domain.HabitBoardRules
 import os.meka.core.domain.HabitHistory
 import os.meka.core.domain.HabitMark
+import os.meka.core.domain.HabitSettingChoiceRules
 import os.meka.core.facade.MekaCore
 
 const val HABITS_LIST_TAG = "habits-list"
@@ -97,12 +100,12 @@ private data class HabitAdd(val newList: Boolean, val list: String)
  * ending today (tap one to mark an earlier day), the day's "3 of 8 done" with a bar and the best streak, list chips
  * (All · Morning · All day · Night time · his own · + New list), the habits boxed by list, each Do (plus) or Avoid
  * (barred circle) with its streak and the strip's seven dots, and one 44 dp circle cycling done (green tick) → missed
- * (red cross) → clear. A habit's tap unfolds Do or Avoid, its list and Remove. + Add opens a sheet: name, Do or Avoid,
+ * (red cross) → clear. A habit's tap unfolds its four weeks, then Reminder, Do or avoid and List as rows each opening a sheet of its choices (week 5 A17, they were chips), and Remove. + Add opens a sheet: name, Do or Avoid,
  * list, days a week. Built from [HabitBoardRules] (core), so the Mac draws the same.
  *
  * Motion: the pane springs up from Goals; the parts stagger in; the day pill blends to brass; the bar grows on the
  * replan spring; the circle pops (spring) as its tick or cross cross-fades in, light haptic for done, tick for missed
- * and clear; a row's settings unfold in place; sheets rise as Money's. Taps show at once (drawn over the core's view
+ * and clear; a row's settings unfold in place; sheets rise as Money's (a setting's sheet over a fading scrim, its lit dot blending, a tick haptic). Taps show at once (drawn over the core's view
  * until the call returns). Reduced motion: cross-fades, no pop.
  */
 @Composable
@@ -118,6 +121,7 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
     var adding by remember { mutableStateOf<HabitAdd?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<Map<String, HabitMark>>(emptyMap()) }
+    var sheet by remember { mutableStateOf<Pair<String, HabitSheet>?>(null) }
     LaunchedEffect(toast) { if (toast != null) { delay(2_200); toast = null } }
     BackHandler(enabled = adding == null) { onClose() }
     val shownView = remember(goals, pending) { HabitBoardRules.shown(goals, pending) }
@@ -218,11 +222,10 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
             }
             items(b.groups, key = { "g-${it.title}" }) { g ->
                 GroupCard(
-                    g, open, removing, b.lists, Modifier.animateItem().appear(rememberAppearance(4)),
+                    g, open, removing, Modifier.animateItem().appear(rememberAppearance(4)),
                     onOpen = { id -> haptics.tick(); removing = null; open = if (open == id) null else id },
                     onMark = mark,
-                    onAvoid = { r, avoid -> haptics.tick(); scope.launch { runCatching { core.setHabitAvoid(r.id, avoid) } } },
-                    onList = { r, l -> haptics.tick(); scope.launch { runCatching { core.setHabitList(r.id, l) } } },
+                    onSheet = { id, kind -> haptics.tick(); sheet = id to kind },
                     onRemind = { r, minute ->
                         haptics.tick()
                         toast = HabitBoardRules.reminderLine(minute)
@@ -247,6 +250,35 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
             Text(toast.orEmpty(), style = MekaType.caption, color = Meka.colors.textPrimary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("habits-toast"))
+        }
+
+        // A17: the open habit's Reminder, Do or avoid or List sheet; a choice saves as the chip did and closes it.
+        val sheetRow = sheet?.let { (id, _) -> b.groups.flatMap { it.rows }.firstOrNull { it.id == id } }
+        val sheetKind = sheet?.second
+        if (sheetRow != null && sheetKind != null) {
+            val r = sheetRow
+            NotifyChoiceSheetView(
+                when (sheetKind) {
+                    HabitSheet.REMINDER -> HabitSettingChoiceRules.reminderSheet(r)
+                    HabitSheet.KIND -> HabitSettingChoiceRules.kindSheet(r)
+                    HabitSheet.LIST -> HabitSettingChoiceRules.listSheet(r, b.lists)
+                },
+                onChoose = { name ->
+                    when (sheetKind) {
+                        HabitSheet.REMINDER -> HabitSettingChoiceRules.reminderNamed(r, name)?.let { pick ->
+                            toast = HabitBoardRules.reminderLine(pick.minute)
+                            scope.launch { runCatching { core.setHabitReminder(r.id, pick.minute) } }
+                        }
+                        HabitSheet.KIND -> HabitSettingChoiceRules.kindNamed(r, name)?.let { avoid ->
+                            scope.launch { runCatching { core.setHabitAvoid(r.id, avoid) } }
+                        }
+                        HabitSheet.LIST -> HabitSettingChoiceRules.listNamed(r, b.lists, name)?.let { l ->
+                            scope.launch { runCatching { core.setHabitList(r.id, l) } }
+                        }
+                    }
+                },
+                onClose = { sheet = null },
+            )
         }
 
         MoneyDetailSheet(adding, title = { if (it.newList) "New list" else "New habit" }, tag = "habits-add-sheet", done = "Close",
@@ -305,14 +337,17 @@ internal fun HabitsPage(core: MekaCore, onClose: () -> Unit, backLabel: String =
     }
 }
 
+/** Which of an open habit's settings has its sheet up (walk-through week 5, A17). */
+internal enum class HabitSheet { REMINDER, KIND, LIST }
+
 /** The list a new habit goes in: the chip he's on, else All day. */
 private fun defaultList(list: String): String = if (list == HabitBoardRules.ALL) HabitBoardRules.ALL_DAY else list
 
 @Composable
 private fun GroupCard(
-    g: HabitBoardGroup, open: String?, removing: String?, lists: List<String>, modifier: Modifier,
-    onOpen: (String) -> Unit, onMark: (HabitBoardRow) -> Unit, onAvoid: (HabitBoardRow, Boolean) -> Unit,
-    onList: (HabitBoardRow, String) -> Unit, onRemind: (HabitBoardRow, Int?) -> Unit, onRemove: (HabitBoardRow) -> Unit,
+    g: HabitBoardGroup, open: String?, removing: String?, modifier: Modifier,
+    onOpen: (String) -> Unit, onMark: (HabitBoardRow) -> Unit,
+    onRemind: (HabitBoardRow, Int?) -> Unit, onRemove: (HabitBoardRow) -> Unit, onSheet: (String, HabitSheet) -> Unit,
 ) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
@@ -333,25 +368,12 @@ private fun GroupCard(
             AnimatedVisibility(open == r.id, enter = unfold(), exit = fold()) {
                 Column(Modifier.padding(bottom = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     HistoryGrid(r.history, r.avoid, Modifier.testTag("habits-row-history-${r.id}"))
-                    Text(HabitBoardRules.REMINDER_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                        MoneyChip("Off", on = r.remindAt == null, tag = "habits-row-remind-off-${r.id}") { if (r.remindAt != null) onRemind(r, null) }
-                        MoneyChip("Every day", on = r.remindAt != null, tag = "habits-row-remind-on-${r.id}") {
-                            if (r.remindAt == null) onRemind(r, HabitBoardRules.defaultReminder(r.list))
-                        }
-                    }
+                    // Walk-through week 5, A17: no open chip rows on a page; Reminder, Do or avoid and List are card
+                    // rows opening a sheet of their choices; the reminder's time stays under its row while it's on.
+                    NotifyChoiceRowView(HabitSettingChoiceRules.reminderRow(r), Modifier.testTag("habits-row-remind-${r.id}"), raised = true) { onSheet(r.id, HabitSheet.REMINDER) }
                     r.remindAt?.let { m -> TimeStepper("Remind me at", m, Modifier.testTag("habits-row-remind-time-${r.id}")) { onRemind(r, it) } }
-                    Text(HabitBoardRules.KIND_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary,
-                        modifier = Modifier.padding(top = MekaSpace.xxs).testTag("habits-row-kind-head-${r.id}"))
-                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                        MoneyChip("Do", on = !r.avoid, tag = "habits-row-do-${r.id}") { onAvoid(r, false) }
-                        MoneyChip("Avoid", on = r.avoid, tag = "habits-row-avoid-${r.id}") { onAvoid(r, true) }
-                    }
-                    Text(HabitBoardRules.LIST_HEAD, style = MekaType.caption, color = Meka.colors.textSecondary,
-                        modifier = Modifier.padding(top = MekaSpace.xxs).testTag("habits-row-list-head-${r.id}"))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                        lists.forEach { l -> MoneyChip(l, on = l == r.list, tag = "habits-row-list-${r.id}-$l") { if (l != r.list) onList(r, l) } }
-                    }
+                    NotifyChoiceRowView(HabitSettingChoiceRules.kindRow(r), Modifier.testTag("habits-row-kind-${r.id}"), raised = true) { onSheet(r.id, HabitSheet.KIND) }
+                    NotifyChoiceRowView(HabitSettingChoiceRules.listRow(r), Modifier.testTag("habits-row-list-${r.id}"), raised = true) { onSheet(r.id, HabitSheet.LIST) }
                     val asking = removing == r.id
                     Text(if (asking) "Tap again to remove ${r.name} and its days" else "Remove habit",
                         style = MekaType.itemMeta, color = if (asking) Meka.colors.accent else Meka.colors.textSecondary,
