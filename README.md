@@ -165,6 +165,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/family/cover-light-many.png](docs/screens/fold/family/cover-light-many.png)
 - [fold/family/inner-dark-made.png](docs/screens/fold/family/inner-dark-made.png)
 - [fold/family/inner-dark-many.png](docs/screens/fold/family/inner-dark-many.png)
+- [fold/family/inner-dark-school-lead-off.png](docs/screens/fold/family/inner-dark-school-lead-off.png)
 - [fold/fasting/cover-dark-empty-below.png](docs/screens/fold/fasting/cover-dark-empty-below.png)
 - [fold/fasting/cover-dark-empty.png](docs/screens/fold/fasting/cover-dark-empty.png)
 - [fold/fasting/cover-dark-many-below.png](docs/screens/fold/fasting/cover-dark-many-below.png)
