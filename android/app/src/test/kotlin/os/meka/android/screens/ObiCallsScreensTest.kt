@@ -169,7 +169,10 @@ class ObiCallsScreensTest {
         waitFor("Don't keep didn't save and close the sheet") { core.workMode.value.recordingDays == 0 && !sheetOpen() }
         turns()
         ScreenShots.awaitShows(compose, "obi-calls-by-hand", "cap £30")
-        compose.onAllNodes(hasContentDescription("${CallsChoiceRules.KEEP_TITLE}, Don't keep. Opens the choices"))[0].performScrollTo()
+        // The page reads the core again on its own thread: wait until the row says Don't keep, then show it.
+        val kept = "${CallsChoiceRules.KEEP_TITLE}, Don't keep. Opens the choices"
+        waitFor("the Keep recordings row doesn't say Don't keep") { compose.onAllNodes(hasContentDescription(kept)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodes(hasContentDescription(kept))[0].performScrollTo()
         turns()
         ScreenShots.reshootAfterHand(compose, "obi-calls", "cover-dark-by-hand")
     }
