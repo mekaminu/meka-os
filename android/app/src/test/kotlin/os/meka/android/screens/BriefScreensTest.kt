@@ -389,6 +389,11 @@ class BriefScreensTest {
         tap(name, "Got it", hasText("Got it"))
         until { core.briefView.value.seenToday }
         if (!core.briefView.value.seenToday) fail("$name: Got it didn't mark the brief read")
+        // The shot waits for the page to show it read (Done in place of Got it, the check over it) and brings that into
+        // view: once it was taken first and was byte for byte the unread cover-dark-one (ci run 45898873718).
+        until { compose.onAllNodes(hasText("Done") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        scrollTo(hasText("Done"))
+        turns()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("brief", name))
         ScreenShots.assertShows(compose, name, "Done")
     }
