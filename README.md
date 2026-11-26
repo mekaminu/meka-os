@@ -524,7 +524,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/study/cover-light-import.png](docs/screens/fold/study/cover-light-import.png)
 - [fold/study/cover-light-plan.png](docs/screens/fold/study/cover-light-plan.png)
 - [fold/study/inner-dark-course.png](docs/screens/fold/study/inner-dark-course.png)
-- [fold/talk/cover-dark-by-hand.png](docs/screens/fold/talk/cover-dark-by-hand.png)
+- [fold/talk/cover-dark-by-hand-below.png](docs/screens/fold/talk/cover-dark-by-hand-below.png)
 - [fold/talk/cover-dark-changed.png](docs/screens/fold/talk/cover-dark-changed.png)
 - [fold/talk/cover-dark.png](docs/screens/fold/talk/cover-dark.png)
 - [fold/talk/cover-light.png](docs/screens/fold/talk/cover-light.png)
