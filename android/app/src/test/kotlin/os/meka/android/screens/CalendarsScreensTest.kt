@@ -385,7 +385,10 @@ class CalendarsScreensTest {
         open()
         if (field().fetchSemanticsNodes().isEmpty()) fail("Calendars: Home's sheet has no field")
         // The sheet is a dialog, a second root: look across both (ScreenShots.assertShows reads the one root).
-        fun shows(words: String) = compose.onAllNodes(hasText(words, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        // Its lines keep their words together with no-break spaces (LoneWordGlue), so they're read plain.
+        fun shows(words: String) = compose.onAllNodes(SemanticsMatcher("shows \"$words\"") { n ->
+            n.config.getOrNull(SemanticsProperties.Text)?.any { words in DateGlue.plain(it.text) } == true
+        }, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         if (!shows("The town for Today")) fail("Calendars: Home's sheet doesn't say what the town is for")
         type("<b>")
         turns(1_000)
