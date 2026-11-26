@@ -29,7 +29,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -42,6 +41,8 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
@@ -49,6 +50,7 @@ import os.meka.core.domain.AboutEditSheet
 import os.meka.core.domain.AboutField
 import os.meka.core.domain.AboutRow
 import os.meka.core.domain.AboutSaved
+import os.meka.core.domain.AboutYouChoiceRules
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.facade.MekaCore
 
@@ -59,14 +61,14 @@ const val ABOUT_YOU_LIST_TAG = "about-you-list"
  * Ask → Settings → About you (rule 13, slice 1): who's who, home and work, typed once and kept in Meka's own synced data
  * rather than MEKA's code. Each line is a card row showing what's held (or what the line is for) that opens its own
  * sheet to change it (walk-through week 5, A17: no open input boxes on a page); Save keeps it, Clear or a blank clears
- * it, with Undo under the row. The partner's "Watch for requests" switch, then the children (one row each with Remove,
+ * it, with Undo under the row. The partner's "Watch for requests" and "Handle her requests" rows (each opening On · Off), then the children (one row each with Remove,
  * and + Add a child, which opens its sheet: "Alex, U7, Oakfield School"). The Mac's About you sheet edits the same
  * profile.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; a row's sheet rises over a fading scrim;
  * the summary, each row's value and the line under it cross-fade (a refusal blends to the accent in the sheet with a
  * tick haptic; a save gives a light haptic); sections and rows stagger in 40 ms apart; children arrive and leave with
- * the list's item motion; the switch's pill blends its colour with a tick haptic. Reduced motion: cross-fades.
+ * the list's item motion; a choice sheet rises like a row's, its lit dot blending, with a tick haptic. Reduced motion: cross-fades.
  */
 @Composable
 fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
@@ -78,6 +80,8 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
     // The sheet open (a line's, or + Add a child's) and what its last save refused.
     var open by remember { mutableStateOf<AboutEditSheet?>(null) }
     var refusal by remember { mutableStateOf<String?>(null) }
+    // The partner's choice sheet open (walk-through week 5, A17): WATCH_SHEET or HANDLE_SHEET.
+    var choiceFor by remember { mutableStateOf<String?>(null) }
 
     fun react(key: String, r: AboutSaved) {
         said[key] = r
@@ -95,6 +99,19 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
                 }
             },
             onClose = { open = null; refusal = null })
+    }
+    when (choiceFor) {
+        WATCH_SHEET -> NotifyChoiceSheetView(
+            AboutYouChoiceRules.watchSheet(v.partnerName, v.partnerWatch),
+            onChoose = { name -> AboutYouChoiceRules.named(v.partnerWatch, name)?.let { on -> scope.launch { runCatching { core.setAboutYouPartnerWatch(on) } } } },
+            onClose = { choiceFor = null },
+        )
+        HANDLE_SHEET -> NotifyChoiceSheetView(
+            AboutYouChoiceRules.handleSheet(v.partnerName, v.partnerHandle),
+            onChoose = { name -> AboutYouChoiceRules.named(v.partnerHandle, name)?.let { on -> scope.launch { runCatching { core.setAboutYouPartnerHandle(on) } } } },
+            onClose = { choiceFor = null },
+        )
+        else -> Unit
     }
 
     LazyColumn(
@@ -123,18 +140,14 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
                 AboutLine(row, said[row.field.key],
                     onOpen = { refusal = null; open = AboutYouRules.editSheet(row) },
                     onUndo = { back -> scope.launch { runCatching { core.setAboutYou(row.field, back) }.getOrNull()?.let { react(row.field.key, it) } } })
-                if (row.field == AboutField.PARTNER_EMAIL) v.watchLine?.let { line ->
-                    WatchRow(v.partnerWatch, line) {
-                        haptics.tick()
-                        scope.launch { runCatching { core.setAboutYouPartnerWatch(!v.partnerWatch) } }
-                    }
+                // Walk-through week 5, A17: the partner's switches are card rows ("Watch for requests" · "On" ›)
+                // opening On · Off sheets that say what each does by her name.
+                if (row.field == AboutField.PARTNER_EMAIL && v.watchLine != null) {
+                    NotifyChoiceRowView(AboutYouChoiceRules.watchRow(v.partnerWatch)) { choiceFor = WATCH_SHEET }
                 }
                 // "Handle her requests for me" (2026-11-11): on by default, shown while her messages are watched.
-                if (row.field == AboutField.PARTNER_EMAIL) v.handleLine?.let { line ->
-                    WatchRow(v.partnerHandle, line, title = v.handleTitle) {
-                        haptics.tick()
-                        scope.launch { runCatching { core.setAboutYouPartnerHandle(!v.partnerHandle) } }
-                    }
+                if (row.field == AboutField.PARTNER_EMAIL && v.handleLine != null) {
+                    NotifyChoiceRowView(AboutYouChoiceRules.handleRow(v.partnerName, v.partnerHandle)) { choiceFor = HANDLE_SHEET }
                 }
             }
         }
@@ -221,19 +234,5 @@ private fun SaidLine(said: AboutSaved?, onUndo: (String) -> Unit) {
     }
 }
 
-/** "Watch for requests": On/Off in a pill that blends to the accent, with what it means under it. */
-@Composable
-private fun WatchRow(on: Boolean, line: String, title: String = "Watch for requests", onToggle: () -> Unit) {
-    val dot by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "about-watch")
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
-            .semantics { contentDescription = title; selected = on }.minTouch().padding(vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
-            Text(os.meka.core.domain.LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)
-        }
-        os.meka.android.designsystem.SwitchPill(on, dot)
-    }
-}
+private const val WATCH_SHEET = "watch"
+private const val HANDLE_SHEET = "handle"

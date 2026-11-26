@@ -3,12 +3,13 @@ import SwiftUI
 
 /// Ask → Settings → About you on the Mac (rule 13, slice 1), like the Fold's AboutYouPane: who's who, home and work,
 /// typed once and kept in Meka's own synced data rather than MEKA's code. Each line is a field holding what's there;
-/// Return saves it (blank clears it, with Undo). The partner's Watch for requests switch, then the children (Remove on
+/// Return saves it (blank clears it, with Undo). The partner's Watch for requests and Handle her requests menus (On ·
+/// Off, walk-through week 5 A17), then the children (Remove on
 /// each, a field to add one: "Alex, U7, Oakfield School"). Only Strings, an Int and a Bool cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and each line under a field cross-fade (a refusal in the accent
 /// with a tick haptic, a save a light one); rows stagger in; children arrive and leave on the expand spring; the
-/// switch blends its colour. Reduce Motion: cross-fades.
+/// words under each On · Off menu cross-fade. Reduce Motion: cross-fades.
 struct AboutYouSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -33,7 +34,7 @@ struct AboutYouSheet: View {
                     ForEach(Array(v.rows.enumerated()), id: \.element.field.key) { i, row in
                         let partner = row.field.key == AboutYouFields.shared.PARTNER_EMAIL
                         line(row, watch: partner ? v.watchLine : nil, watching: v.partnerWatch,
-                             handle: partner ? v.handleLine : nil, handling: v.partnerHandle, handleTitle: v.handleTitle)
+                             handle: partner ? v.handleLine : nil, handling: v.partnerHandle, partnerName: v.partnerName)
                             .staggeredAppear(2 + i)
                     }
                     children(v).staggeredAppear(2 + v.rows.count)
@@ -53,7 +54,7 @@ struct AboutYouSheet: View {
     }
 
     @ViewBuilder
-    private func line(_ row: AboutRow, watch: String?, watching: Bool, handle: String?, handling: Bool, handleTitle: String) -> some View {
+    private func line(_ row: AboutRow, watch: String?, watching: Bool, handle: String?, handling: Bool, partnerName: String?) -> some View {
         let key = row.field.key
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             // A field's line belongs to its field: a wider gap before the next label (quality gate slice 26).
@@ -73,37 +74,48 @@ struct AboutYouSheet: View {
             saidLine(said[key], fallback: row.line) { back in
                 Task { if let r = await model.setAboutYou(key: key, text: back) { said[key] = r; texts[key] = nil } }
             }
-            if let watch {
-                HStack {
-                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text("Watch for requests").font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        Text(watch).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                            .contentTransition(.opacity)
-                            .animation(MekaMotion.appear(reduced: reduceMotion), value: watch)
-                    }
-                    Spacer()
-                    Toggle("Watch for requests", isOn: Binding(get: { watching }, set: { model.setAboutYouPartnerWatch($0) }))
-                        .labelsHidden().toggleStyle(.switch).tint(palette.accent)
+            // Walk-through week 5, A17: the partner's switches are On · Off menus from the core's sheets, as the Fold's
+            // rows and sheets, the lit choice's words under each.
+            if watch != nil {
+                choiceRow(choices.watchRow(on: watching), choices.watchSheet(partner: partnerName, on: watching)) { name in
+                    if let on = choices.named(on: watching, name: name)?.boolValue { model.setAboutYouPartnerWatch(on) }
                 }
-                .padding(.top, MekaSpace.xs)
             }
             // "Handle her requests for me" (2026-11-11): on by default, shown while her messages are watched; titled by
-            // her name once she's named ("Handle Morgan's requests for me", walk-through week 5 A17).
-            if let handle {
-                HStack {
-                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(handleTitle).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        Text(handle).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                            .contentTransition(.opacity)
-                            .animation(MekaMotion.appear(reduced: reduceMotion), value: handle)
-                    }
-                    Spacer()
-                    Toggle(handleTitle, isOn: Binding(get: { handling }, set: { model.setAboutYouPartnerHandle($0) }))
-                        .labelsHidden().toggleStyle(.switch).tint(palette.accent)
+            // her name once she's named ("Handle Morgan's requests for me").
+            if handle != nil {
+                choiceRow(choices.handleRow(partner: partnerName, on: handling), choices.handleSheet(partner: partnerName, on: handling)) { name in
+                    if let on = choices.named(on: handling, name: name)?.boolValue { model.setAboutYouPartnerHandle(on) }
                 }
-                .padding(.top, MekaSpace.xs)
             }
         }
+    }
+
+    private var choices: AboutYouChoiceRules { AboutYouChoiceRules.shared }
+
+    /// One On · Off row: its title and a menu saying what's in force, the lit choice's words under it; a pick sends only
+    /// the choice's name (a Bool crosses to the core).
+    private func choiceRow(_ row: NotifyChoiceRow, _ sheet: NotifyChoiceSheet, pick: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })
+        let litName = lit?.name ?? ""
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            HStack {
+                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Spacer()
+                Picker(sheet.title, selection: Binding(get: { litName }, set: { name in if name != litName { pick(name) } })) {
+                    ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+                .help(LoneWordGlue.shared.kept(line: sheet.note))
+                .accessibilityLabel(row.spoken)
+            }
+            Text(LoneWordGlue.shared.kept(line: lit?.line ?? "")).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: litName)
+        }
+        .padding(.top, MekaSpace.xs)
     }
 
     @ViewBuilder

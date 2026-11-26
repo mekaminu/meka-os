@@ -64,7 +64,9 @@ import os.meka.android.news.TickerChoice
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.ShellNav
 import os.meka.core.domain.AboutField
+import os.meka.core.domain.AboutYouChoiceRules
 import os.meka.core.domain.AboutYouRules
+import os.meka.core.domain.NotifyChoiceRow
 import os.meka.core.domain.DoneShow
 import os.meka.core.domain.MotionCheckRules
 import os.meka.core.domain.MotionChoice
@@ -304,6 +306,13 @@ class SettingsScreensTest {
                 if (empty.isNotEmpty()) fail("$name: still empty after typing every line: $empty")
                 if (v.children.size != 2) fail("$name: ${v.children.size} children for two")
                 if (v.watchLine == null || !v.partnerWatch) fail("$name: Watch for requests isn't on with a partner named")
+                // Walk-through week 5, A17: the partner's switches are rows ("Watch for requests" · "On" ›), no switch.
+                listOf(AboutYouChoiceRules.watchRow(true), AboutYouChoiceRules.handleRow("Morgan", true)).forEach { r ->
+                    if (compose.onAllNodes(hasContentDescription(r.spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
+                        // The rows sit below the partner's email; scroll there before deciding.
+                        reach(ABOUT_YOU_LIST_TAG, name, hasContentDescription(r.spoken) and hasClickAction(), "\"${r.title}\" row")
+                    }
+                }
             }
         }
     }
@@ -580,15 +589,33 @@ class SettingsScreensTest {
         tap(t, name, "Undo", undo)
         until { value(AboutField.HOME) == home }
         if (value(AboutField.HOME) != home) fail("$name: Undo didn't put Home back (\"${value(AboutField.HOME)}\")")
-        // Watch for requests, off and on.
-        val watch = hasContentDescription("Watch for requests")
+        // Watch for requests and Handle her requests (walk-through week 5, A17): rows opening On · Off sheets that say
+        // what each does by her name; no switch left on the page.
+        if (shows(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))) fail("$name: a switch is still open on the page")
+        fun choiceOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+        fun choose(row: NotifyChoiceRow, label: String, says: String) {
+            tap(t, name, row.title, hasContentDescription(row.spoken))
+            sheetUntil { choiceOpen() }
+            if (!choiceOpen()) fail("$name: ${row.title} opened no sheet")
+            if (!inSheet(says)) fail("$name: ${row.title}'s sheet doesn't say \"$says\"")
+            chooseInSheet(name, label)
+        }
         val on = v().partnerWatch
-        tap(t, name, "Watch for requests", watch)
-        until { v().partnerWatch != on }
-        if (v().partnerWatch == on) fail("$name: Watch for requests stayed ${if (on) "on" else "off"}")
-        tap(t, name, "Watch for requests", watch)
-        until { v().partnerWatch == on }
-        if (v().partnerWatch != on) fail("$name: Watch for requests didn't turn back")
+        if (!on) fail("$name: Watch for requests is off with a partner named")
+        choose(AboutYouChoiceRules.handleRow("Morgan", v().partnerHandle), "Off", "Morgan's requests wait in Needs you")
+        until { !v().partnerHandle }
+        if (v().partnerHandle) fail("$name: Off in Handle Morgan's requests' sheet left it on")
+        choose(AboutYouChoiceRules.handleRow("Morgan", false), "On", "What Morgan asks for is added at once")
+        until { v().partnerHandle }
+        if (!v().partnerHandle) fail("$name: On in Handle Morgan's requests' sheet left it off")
+        choose(AboutYouChoiceRules.watchRow(true), "Off", "Morgan's messages are treated like anyone's")
+        until { !v().partnerWatch }
+        if (v().partnerWatch) fail("$name: Off in Watch for requests' sheet left it on")
+        turns(500)
+        if (shows(hasContentDescription(AboutYouChoiceRules.handleRow("Morgan", true).spoken))) fail("$name: Handle Morgan's requests still shows while her messages aren't watched")
+        choose(AboutYouChoiceRules.watchRow(false), "On", "Navilife flags what Morgan asks you for")
+        until { v().partnerWatch }
+        if (!v().partnerWatch) fail("$name: Watch for requests didn't turn back on")
         assertTouchTargets(name)
         // Remove a child, then Undo (the children's Undo is the last on screen).
         val child = v().children.lastOrNull() ?: fail("$name: no children")

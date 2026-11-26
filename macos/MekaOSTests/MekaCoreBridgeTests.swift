@@ -3377,6 +3377,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.named(on: true, name: choices.ON))
     }
 
+    func testAboutYouChoicesReachSwift() {
+        // Walk-through week 5, A17: About you's Watch for requests and Handle her requests are On · Off menus.
+        let choices = AboutYouChoiceRules.shared
+        XCTAssertEqual(choices.watchRow(on: true).value, "On")
+        let watch = choices.watchSheet(partner: "Sam", on: false)
+        XCTAssertEqual(watch.choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(watch.choices.first(where: { $0.lit })?.line, "Sam's messages are treated like anyone's")
+        XCTAssertEqual(choices.handleRow(partner: "Sam", on: true).title, "Handle Sam's requests for me")
+        XCTAssertEqual(choices.handleSheet(partner: nil, on: true).choices.first(where: { $0.lit })?.label, "On")
+        XCTAssertEqual(choices.named(on: false, name: CallChoiceRules.shared.ON)?.boolValue, true)
+        XCTAssertNil(choices.named(on: true, name: CallChoiceRules.shared.ON))
+    }
+
     func testNotifyQuietChoicesReachSwift() {
         // Walk-through week 5, A17: Notifications' quiet hours and digest toggles are On · Off menus from the core's sheets.
         let choices = NotifyQuietChoiceRules.shared
