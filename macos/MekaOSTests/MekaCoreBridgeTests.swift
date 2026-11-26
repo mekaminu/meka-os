@@ -3337,6 +3337,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.liveNamed(on: false, name: "maybe"))
     }
 
+    func testDiscordChoicesReachSwift() {
+        // Walk-through week 5, A17: Work mode → Discord's Follow buttons and alert chips are menus built from the core's sheets.
+        let rules = DiscordChoiceRules.shared
+        let row = DiscordChannelRow(key: "example traders#signals", label: "#signals · Example Traders", watched: false, line: "last post 14:05")
+        XCTAssertEqual(rules.channelRow(row: row).value, "Not followed")
+        XCTAssertEqual(rules.channelLine(row: row), "Last post 14:05")
+        let sheet = rules.channelSheet(row: row)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["Following", "Not followed"])
+        XCTAssertEqual(sheet.choices.first(where: { $0.lit })?.label, "Not followed")
+        XCTAssertEqual(rules.followNamed(row: row, name: rules.FOLLOW)?.boolValue, true)
+        XCTAssertNil(rules.followNamed(row: row, name: rules.STOP))
+        XCTAssertEqual(rules.entryLabel(text: "stop", person: false), "“stop”")
+        XCTAssertEqual(rules.alertSheet(text: "Sam", person: true, alerting: true).choices.first(where: { $0.lit })?.label, "Alerts at once")
+        XCTAssertEqual(rules.alertNamed(alerting: true, name: rules.WAIT)?.boolValue, false)
+    }
+
     func testSchoolLeadChoicesReachSwift() {
         // Walk-through week 5, A17: Family → School emails' toggles are On · Off menus built from the core's sheets.
         let choices = SchoolLeadChoiceRules.shared

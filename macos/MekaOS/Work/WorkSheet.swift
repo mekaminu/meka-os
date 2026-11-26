@@ -536,20 +536,24 @@ struct WorkSheet: View {
                 Text(empty).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Walk-through week 5, A17: each channel is a Following · Not followed menu built from the core's sheet
+            // (`DiscordChoiceRules`), as the Fold's row and sheet, not an open Follow button.
             ForEach(view?.rows ?? [], id: \.key) { row in
+                let sheet = DiscordChoiceRules.shared.channelSheet(row: row)
                 HStack(spacing: MekaSpace.m) {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(row.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        Text(row.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(DiscordChoiceRules.shared.channelLine(row: row)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                             .contentTransition(.opacity)
                     }
                     Spacer()
-                    Button(row.watched ? "Following" : "Follow") { model.setDiscordWatched(row.key, on: !row.watched) }
-                        .buttonStyle(MekaPressStyle())
-                        .foregroundStyle(row.watched ? palette.accent : palette.textSecondary)
-                        .font(MekaType.itemMeta)
-                        .accessibilityLabel(row.watched ? "Stop following \(row.label)" : "Follow \(row.label)")
+                    discordMenu(sheet) { name in
+                        guard let on = DiscordChoiceRules.shared.followNamed(row: row, name: name)?.boolValue else { return }
+                        model.setDiscordWatched(row.key, on: on)
+                    }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(DiscordChoiceRules.shared.channelRow(row: row).spoken)
             }
             discordAlerts(view)
             ForEach(rules.LIMITS, id: \.self) { line in
@@ -574,27 +578,13 @@ struct WorkSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(rules.ALERTS_HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
-            let people = view?.people ?? []
-            let words = view?.words ?? []
-            if !people.isEmpty || !words.isEmpty {
-                HStack(spacing: MekaSpace.xs) {
-                    ForEach(people, id: \.self) { p in
-                        discordChip(p, spoken: "Stop alerting for posts from \(p)") { model.setDiscordAlert(p, person: true, add: false) }
-                    }
-                    ForEach(words, id: \.self) { w in
-                        discordChip("“\(w)”", spoken: "Stop alerting for posts saying \(w)") { model.setDiscordAlert(w, person: false, add: false) }
-                    }
-                }
-            }
+            // Walk-through week 5, A17: each person or word, and each poster under Posting lately, is an Alerts at once ·
+            // Waits on the card menu built from the core's sheet, not a chip with × or a "+ Sam" chip.
+            ForEach(view?.people ?? [], id: \.self) { p in discordAlertRow(p, person: true, alerting: true) }
+            ForEach(view?.words ?? [], id: \.self) { w in discordAlertRow(w, person: false, alerting: true) }
             if let suggested = view?.suggestedPeople, !suggested.isEmpty {
-                HStack(spacing: MekaSpace.xs) {
-                    Text("Posting lately").font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    ForEach(suggested, id: \.self) { p in
-                        Button("+ \(p)") { model.setDiscordAlert(p, person: true, add: true) }
-                            .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.caption)
-                            .accessibilityLabel("Alert for posts from \(p)")
-                    }
-                }
+                Text("Posting lately").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                ForEach(suggested, id: \.self) { p in discordAlertRow(p, person: true, alerting: false) }
             }
             HStack(spacing: MekaSpace.m) {
                 TextField("A name as Discord shows it, or a word", text: $discordAlertText)
@@ -619,14 +609,33 @@ struct WorkSheet: View {
         model.setDiscordAlert(typed, person: person, add: true)
     }
 
-    private func discordChip(_ label: String, spoken: String, remove: @escaping () -> Void) -> some View {
-        Button(action: remove) {
-            Text("\(label)  ×").font(MekaType.caption).foregroundStyle(palette.onAccent)
-                .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
-                .background(palette.accent, in: Capsule())
+    /// One person or word under "Alert me straight away" (walk-through week 5, A17): its name and a menu of the core's
+    /// two choices; picking one adds it to the list or takes it off.
+    private func discordAlertRow(_ text: String, person: Bool, alerting: Bool) -> some View {
+        let rules = DiscordChoiceRules.shared
+        let sheet = rules.alertSheet(text: text, person: person, alerting: alerting)
+        return HStack(spacing: MekaSpace.m) {
+            Text(rules.entryLabel(text: text, person: person)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Spacer()
+            discordMenu(sheet) { name in
+                guard let add = rules.alertNamed(alerting: alerting, name: name)?.boolValue else { return }
+                model.setDiscordAlert(text, person: person, add: add)
+            }
         }
-        .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(spoken)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(rules.alertRow(text: text, person: person, alerting: alerting).spoken)
+    }
+
+    /// A Discord choice as a menu: the lit choice shown, each choice's line as its help.
+    private func discordMenu(_ sheet: NotifyChoiceSheet, onPick: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { onPick(name) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.choices.first(where: { $0.lit })?.line ?? sheet.note))
     }
 
     /// Hours → each day (Places item 1): one row per work day, lit when it has its own hours; clicking a row unfolds

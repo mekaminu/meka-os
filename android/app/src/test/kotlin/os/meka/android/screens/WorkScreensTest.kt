@@ -31,6 +31,11 @@ import os.meka.android.work.AT_WORK_NOTE
 import os.meka.android.work.COMMUTE_TO_WORK_TAG
 import os.meka.android.work.LEAVING_TO_TAG
 import os.meka.android.work.MESSAGES_MARK_READ_TAG
+import os.meka.android.work.DISCORD_CHANNEL_TAG
+import os.meka.core.domain.DiscordCaptured
+import os.meka.core.domain.DiscordChannel
+import os.meka.core.domain.DiscordChoiceRules
+import os.meka.core.domain.DiscordRules
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -323,6 +328,49 @@ class WorkScreensTest {
         if (sheetOpen()) fail("Work: choosing On didn't close Mark read's sheet")
         if (compose.onAllNodes(hasContentDescription(MessagesChoiceRules.markReadRow(true).spoken)).fetchSemanticsNodes().isEmpty()) {
             fail("Work: Mark read's row doesn't say On after choosing it")
+        }
+        // Walk-through week 5, A17: Discord's channels and alerts are rows opening sheets. A channel Discord notified about
+        // is a row ("#signals · Example Traders" · "Not followed"); Following in its sheet follows it, and then a post
+        // from Sam there makes a Posting lately row whose Alerts at once puts Sam on the list.
+        fun await(what: () -> Boolean) {
+            repeat(40) {
+                if (what()) return@repeat
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(50)
+                compose.mainClock.advanceTimeBy(100)
+            }
+            turns(1_000)
+        }
+        fun pick(label: String) = compose.onAllNodes(hasText(label, substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        val signals = DiscordChannel(DiscordRules.key("Example Traders", "signals"), "Example Traders", "signals")
+        runBlocking { core.noteDiscord(listOf(DiscordCaptured(signals, "Alex", "Morning all", now - 60_000))) }
+        await { core.discordWatch.value.rows.isNotEmpty() }
+        val channelRow = core.discordWatch.value.rows.firstOrNull() ?: fail("Work: Discord didn't list the channel it was told about")
+        if (compose.onAllNodes(hasContentDescription(DiscordChoiceRules.channelRow(channelRow).spoken)).fetchSemanticsNodes().isEmpty()) {
+            fail("Work: no Discord row for ${channelRow.label} saying Not followed")
+        }
+        if (compose.onAllNodes(hasContentDescription("Follow ${channelRow.label}")).fetchSemanticsNodes().isNotEmpty()) fail("Work: Discord still has a Follow pill")
+        compose.onAllNodes(hasTestTag(DISCORD_CHANNEL_TAG) and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Work: Discord's channel row didn't open its sheet")
+        pick(DiscordChoiceRules.FOLLOWING_LABEL)
+        await { core.discordWatch.value.rows.firstOrNull()?.watched == true }
+        if (core.discordWatch.value.rows.firstOrNull()?.watched != true) fail("Work: Following in the channel's sheet didn't follow it (${core.discordWatch.value})")
+        if (sheetOpen()) fail("Work: choosing Following didn't close the channel's sheet")
+        runBlocking { core.noteDiscord(listOf(DiscordCaptured(signals, "Sam", "Entry at the open", now - 30_000))) }
+        await { "Sam" in core.discordWatch.value.suggestedPeople }
+        val samRow = DiscordChoiceRules.alertRow("Sam", person = true, alerting = false)
+        val sam = compose.onAllNodes(hasContentDescription(samRow.spoken) and hasClickAction())
+        if (sam.fetchSemanticsNodes().isEmpty()) fail("Work: no Posting lately row for Sam (${core.discordWatch.value.suggestedPeople})")
+        sam[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Work: Sam's row didn't open its sheet")
+        pick(DiscordChoiceRules.ALERT_LABEL)
+        await { "Sam" in core.discordWatch.value.people }
+        if ("Sam" !in core.discordWatch.value.people) fail("Work: Alerts at once in Sam's sheet didn't put Sam on the list (${core.discordWatch.value})")
+        if (compose.onAllNodes(hasContentDescription(DiscordChoiceRules.alertRow("Sam", person = true, alerting = true).spoken)).fetchSemanticsNodes().isEmpty()) {
+            fail("Work: Sam's row doesn't say Alerts at once after choosing it")
         }
         // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on
         // Navilife's hours like the empty page; it is taken again after the hand: work stopped (Start work now, Back to
