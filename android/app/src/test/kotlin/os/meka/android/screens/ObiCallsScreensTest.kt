@@ -117,6 +117,8 @@ class ObiCallsScreensTest {
         val n = compose.onAllNodes(hasContentDescription(description) and hasClickAction())
         if (n.fetchSemanticsNodes().isEmpty()) fail("Obi on calls: nothing to tap for $description")
         n[0].performSemanticsAction(SemanticsActions.OnClick)
+        // Let the tap land (a sheet rising or closing) before anything reads the screen again.
+        turns(1_000)
     }
 
     private fun waitFor(what: String, ok: () -> Boolean) {
