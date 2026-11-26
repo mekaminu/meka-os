@@ -35,6 +35,21 @@ class CallChoicesTest {
     }
 
     @Test
+    fun whatsAppCallsIsARowWhoseOnIsHisYes() {
+        assertEquals(NotifyChoiceRow("WhatsApp calls", "Off", "WhatsApp calls, Off. Opens the choices"), CallChoiceRules.whatsAppRow(false))
+        assertEquals("On", CallChoiceRules.whatsAppRow(true).value)
+        val s = CallChoiceRules.whatsAppSheet(false)
+        assertEquals(WhatsAppCallRules.TITLE, s.title)
+        assertEquals(listOf("On", "Off"), s.choices.map { it.label })
+        assertEquals(listOf("Off"), s.lit())
+        assertTrue("your message" in s.choices[0].line, s.choices[0].line)
+        assertTrue("ring as usual" in s.choices[1].line, s.choices[1].line)
+        assertTrue("your yes" in s.note, s.note)
+        assertEquals(listOf("On"), CallChoiceRules.whatsAppSheet(true).lit())
+        assertEquals(true, CallChoiceRules.named(false, CallChoiceRules.ON))
+    }
+
+    @Test
     fun aChoiceWritesOnlyWhatChanges() {
         assertEquals(true, CallChoiceRules.named(false, CallChoiceRules.ON))
         assertEquals(false, CallChoiceRules.named(true, CallChoiceRules.OFF))

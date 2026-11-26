@@ -30,6 +30,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.AT_WORK_NOTE
 import os.meka.android.work.COMMUTE_TO_WORK_TAG
 import os.meka.android.work.CALL_ASSISTANT_TAG
+import os.meka.android.work.WHATSAPP_CALLS_TAG
 import os.meka.android.work.LEAVING_TO_TAG
 import os.meka.android.work.MESSAGES_MARK_READ_TAG
 import os.meka.android.work.DISCORD_CHANNEL_TAG
@@ -48,6 +49,7 @@ import os.meka.android.work.callAssistantNote
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CommuteChoiceRules
 import os.meka.core.domain.CallChoiceRules
+import os.meka.core.domain.WhatsAppCallRules
 import os.meka.core.domain.LeavingChoiceRules
 import os.meka.core.domain.MessagesChoiceRules
 import os.meka.core.domain.MessagesSetupRules
@@ -204,6 +206,12 @@ class WorkScreensTest {
         if (compose.onAllNodes(hasText("Turn the call assistant", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
             fail("$name: the call assistant still has its Turn on / off pill")
         }
+        // Walk-through week 5, A17: WhatsApp calls' switch is a card row saying On/Off.
+        val waOn = ApplicationProvider.getApplicationContext<ShotApplication>().whatsAppCalls.settings.value.on
+        if (compose.onAllNodes(hasContentDescription(CallChoiceRules.whatsAppRow(waOn).spoken)).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: no WhatsApp calls row saying ${CallChoiceRules.whatsAppRow(waOn).value}")
+        }
+        if (compose.onAllNodes(hasContentDescription(WhatsAppCallRules.SWITCH)).fetchSemanticsNodes().isNotEmpty()) fail("$name: WhatsApp calls still has a switch")
         // Walk-through week 5, A17: Leaving now's On/Off pill, To chips and When chips are card rows saying what's chosen.
         val lv = core.leavingView.value
         val leavingRows = listOf(LeavingChoiceRules.switchRow(lv)) +
@@ -395,6 +403,23 @@ class WorkScreensTest {
             if (sheetOpen()) fail("Work: choosing in the call assistant's sheet didn't close it")
             if (compose.onAllNodes(hasContentDescription(CallChoiceRules.assistantRow(!was).spoken)).fetchSemanticsNodes().isEmpty()) {
                 fail("Work: the call assistant's row doesn't say what was chosen")
+            }
+        }
+        // Walk-through week 5, A17: WhatsApp calls' row opens On · Off; On turns it on (his yes), Off back off again.
+        val wa = ApplicationProvider.getApplicationContext<ShotApplication>().whatsAppCalls
+        for (step in 0..1) {
+            val was = wa.settings.value.on
+            val row = compose.onAllNodes(hasTestTag(WHATSAPP_CALLS_TAG) and hasClickAction())
+            if (row.fetchSemanticsNodes().isEmpty()) fail("Work: no WhatsApp calls row")
+            row[0].performSemanticsAction(SemanticsActions.OnClick)
+            turns(1_000)
+            if (!sheetOpen()) fail("Work: WhatsApp calls' row didn't open its sheet")
+            pick(if (was) CallChoiceRules.OFF_LABEL else CallChoiceRules.ON_LABEL)
+            await { wa.settings.value.on != was }
+            if (wa.settings.value.on == was) fail("Work: ${if (was) "Off" else "On"} in WhatsApp calls' sheet didn't switch it (step $step)")
+            if (sheetOpen()) fail("Work: choosing in WhatsApp calls' sheet didn't close it")
+            if (compose.onAllNodes(hasContentDescription(CallChoiceRules.whatsAppRow(!was).spoken)).fetchSemanticsNodes().isEmpty()) {
+                fail("Work: WhatsApp calls' row doesn't say what was chosen")
             }
         }
         // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on

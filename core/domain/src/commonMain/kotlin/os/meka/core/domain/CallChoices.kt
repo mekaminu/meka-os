@@ -6,6 +6,7 @@ package os.meka.core.domain
  * one card row saying what's in force ("Call assistant" · "On" ›, "Screen unknown callers" · "Off" ›) opening a sheet of
  * On · Off, the one in force lit, each saying what it does; a choice writes what the pill or switch wrote and closes the
  * sheet. The line under each row ([CallScreeningRules.statusLine], [ScreenUnknownRules.line]) stays as it was. Reuses
+ * WhatsApp calls' "Decline them at work and send this message" switch is the same ("WhatsApp calls" · "Off" ›). Reuses
  * Notifications' row and sheet shapes ([NotifyChoiceRow], [NotifyChoice], [NotifyChoiceSheet]). Pure; nothing stored.
  */
 object CallChoiceRules {
@@ -21,6 +22,9 @@ object CallChoiceRules {
     const val ASSISTANT_OFF_LINE = "Every call rings as usual; the assistant takes no messages"
     const val UNKNOWN_ON_LINE = "Numbers you don't know go to the assistant evenings and weekends too"
     const val UNKNOWN_OFF_LINE = "Outside work every call rings"
+    const val WHATSAPP_NOTE = "Only while Work mode is on; family and Always notify still ring. Choosing On is your yes to the message."
+    const val WHATSAPP_ON_LINE = "At work, WhatsApp calls are declined and the caller gets your message, once a day each"
+    const val WHATSAPP_OFF_LINE = "WhatsApp calls ring as usual"
     const val UNKNOWN_NEEDS_ASSISTANT = "; needs the call assistant on"
 
     /** The assistant's row: "Call assistant" · "On". */
@@ -38,6 +42,16 @@ object CallChoiceRules {
         ScreenUnknownRules.TITLE, UNKNOWN_NOTE,
         onOff(on, UNKNOWN_ON_LINE + if (assistantOn) "" else UNKNOWN_NEEDS_ASSISTANT, UNKNOWN_OFF_LINE),
     )
+
+    /** WhatsApp calls' row (Meka approved 2026-11-11): "WhatsApp calls" · "Off". */
+    fun whatsAppRow(on: Boolean): NotifyChoiceRow = row(WhatsAppCallRules.TITLE, on)
+
+    /**
+     * Its sheet: On declines WhatsApp calls at work and sends his message, Off lets them ring; the one in force lit. Choosing
+     * On is his yes to the message, as the switch was, so the note says so.
+     */
+    fun whatsAppSheet(on: Boolean): NotifyChoiceSheet =
+        NotifyChoiceSheet(WhatsAppCallRules.TITLE, WHATSAPP_NOTE, onOff(on, WHATSAPP_ON_LINE, WHATSAPP_OFF_LINE))
 
     /** True for On, false for Off; null when [name] isn't a choice or is already in force ([on]). */
     fun named(on: Boolean, name: String): Boolean? = when (name) {
