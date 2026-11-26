@@ -89,6 +89,9 @@ import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BlockedCallersView
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.ScreenUnknownRules
+import os.meka.core.domain.CallChoiceRules
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.ContactNumbers
 import os.meka.core.domain.HeldPreview
 import os.meka.core.domain.HeldPreviewRow
@@ -116,6 +119,13 @@ internal const val STEP_MINUTES = 15
 internal const val AT_WORK_NOTE =
     "\"Urgent\" or \"emergency\" in a message, or anyone on your always-notify list, alerts you straight away. " +
         "Navilife never replies and never marks anything read. What it holds stays on this phone."
+
+/** Work mode → Call assistant's rows (walk-through week 5, A17), for the screen tests. */
+const val CALL_ASSISTANT_TAG = "call-row:assistant"
+const val SCREEN_UNKNOWN_TAG = "call-row:screen-unknown"
+
+/** Which of the call assistant's sheets is open. */
+internal enum class CallSheet { ASSISTANT, UNKNOWN }
 
 /** The hours' own switch line, either way. */
 internal const val HOURS_ON_LINE = "Using these hours · tap to use the switch only"
@@ -194,6 +204,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         runCatching { pickContact.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI)) }
     }
     var callsOpen by rememberSaveable { mutableStateOf(false) }
+    var callSheet by remember { mutableStateOf<CallSheet?>(null) }
     val schedule = work.schedule
     fun save(s: WorkSchedule) = scope.launch { core.setWorkSchedule(s.days.sorted(), s.startMinute, s.endMinute, s.enabled) }
 
@@ -319,8 +330,9 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         ) { line ->
             Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(4)))
         }
-        PillButton(if (work.callAssistant) "Turn the call assistant off" else "Turn the call assistant on", filled = false) {
-            haptics.tick(); scope.launch { core.setCallAssistant(!work.callAssistant) }
+        // Walk-through week 5, A17: the On/Off pill is a card row ("Call assistant" · "On" ›) opening On · Off.
+        NotifyChoiceRowView(CallChoiceRules.assistantRow(work.callAssistant), Modifier.testTag(CALL_ASSISTANT_TAG).appear(rememberAppearance(4))) {
+            callSheet = CallSheet.ASSISTANT
         }
         AnimatedVisibility(
             work.callAssistant && !screening,
@@ -338,7 +350,16 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         // The number is About you's (rule 13); without it the line says where to add it.
         Text(LoneWordGlue.kept(CallScreeningRules.testLine()), style = MekaType.caption, color = Meka.colors.textSecondary)
         ScreenUnknownRow(work.screenUnknownAlways, work.callAssistant, Modifier.appear(rememberAppearance(4))) {
-            haptics.tick(); scope.launch { core.setScreenUnknownAlways(!work.screenUnknownAlways) }
+            callSheet = CallSheet.UNKNOWN
+        }
+        when (callSheet) {
+            CallSheet.ASSISTANT -> NotifyChoiceSheetView(CallChoiceRules.assistantSheet(work.callAssistant),
+                onChoose = { name -> CallChoiceRules.named(work.callAssistant, name)?.let { on -> scope.launch { core.setCallAssistant(on) } } },
+                onClose = { callSheet = null })
+            CallSheet.UNKNOWN -> NotifyChoiceSheetView(CallChoiceRules.unknownSheet(work.screenUnknownAlways, work.callAssistant),
+                onChoose = { name -> CallChoiceRules.named(work.screenUnknownAlways, name)?.let { on -> scope.launch { core.setScreenUnknownAlways(on) } } },
+                onClose = { callSheet = null })
+            null -> {}
         }
         // WhatsApp calls in Work mode (Meka approved 2026-11-11): decline them at work and send his one at-work message.
         WhatsAppCallsRow(work.callAssistant && !work.callAssistantPaused && screening, Modifier.appear(rememberAppearance(4)))
@@ -850,20 +871,16 @@ internal fun LiveCallRow(
     }
 }
 
+/**
+ * "Screen unknown callers all the time" (Meka 2026-10-22) under the call assistant: its row opens On · Off, the line under
+ * it cross-fades and the trade-off is said once. Needs the call assistant on to do anything.
+ */
 @Composable
-internal fun ScreenUnknownRow(on: Boolean, assistantOn: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+internal fun ScreenUnknownRow(on: Boolean, assistantOn: Boolean, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     val reduced = Meka.reducedMotion
-    val fill by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "screen-unknown")
     Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
-                .semantics { contentDescription = ScreenUnknownRules.TITLE; selected = on }
-                .minTouch().padding(vertical = MekaSpace.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(ScreenUnknownRules.TITLE, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-            os.meka.android.designsystem.SwitchPill(on, fill)
-        }
+        // Walk-through week 5, A17: the switch is a card row ("Screen unknown callers" · "Off" ›) opening On · Off.
+        NotifyChoiceRowView(CallChoiceRules.unknownRow(on), Modifier.testTag(SCREEN_UNKNOWN_TAG), onOpen = onOpen)
         Crossfade(ScreenUnknownRules.line(on, assistantOn), animationSpec = MekaMotion.appear(reduced), label = "screen-unknown-line") { line ->
             Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)
         }

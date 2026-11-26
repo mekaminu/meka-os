@@ -83,15 +83,22 @@ struct WorkSheet: View {
             Text("CALL ASSISTANT").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
                 .staggeredAppear(3)
-            Toggle(isOn: Binding(get: { callAssistant }, set: { model.setCallAssistant($0) })) {
+            // Walk-through week 5, A17: an On · Off menu built from the core's sheet (`CallChoiceRules`), as the Fold's row.
+            HStack(spacing: MekaSpace.m) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("Screen calls at work on the Fold").font(MekaType.itemMeta)
                     Text(LoneWordGlue.shared.kept(line: CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil, paused: model.work?.callAssistantPaused ?? false, screenUnknownAlways: screenUnknownAlways)))
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)
                 }
+                Spacer()
+                choiceMenu(CallChoiceRules.shared.assistantSheet(on: callAssistant)) { name in
+                    guard let on = CallChoiceRules.shared.named(on: callAssistant, name: name)?.boolValue else { return }
+                    model.setCallAssistant(on)
+                }
             }
-            .toggleStyle(.switch)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(CallChoiceRules.shared.assistantRow(on: callAssistant).spoken)
             .staggeredAppear(3)
             Text("Family, the always-notify list and anyone calling twice within 3 minutes ring; other calls are declined and the network's \"forward when busy\" sends them to \(CallScreeningRules.shared.assistantName(number: CallScreeningRules.shared.assistantNumber)), which takes a message. The Fold asks once for permission to screen calls.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -427,7 +434,7 @@ struct WorkSheet: View {
     /// The line under it cross-fades; it needs the call assistant on to do anything.
     private var screenUnknown: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Toggle(isOn: Binding(get: { screenUnknownAlways }, set: { model.setScreenUnknownAlways($0) })) {
+            HStack(spacing: MekaSpace.m) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(ScreenUnknownRules.shared.TITLE).font(MekaType.itemMeta)
                     Text(LoneWordGlue.shared.kept(line: ScreenUnknownRules.shared.line(on: screenUnknownAlways, assistantOn: callAssistant)))
@@ -435,8 +442,14 @@ struct WorkSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                 }
+                Spacer()
+                choiceMenu(CallChoiceRules.shared.unknownSheet(on: screenUnknownAlways, assistantOn: callAssistant)) { name in
+                    guard let on = CallChoiceRules.shared.named(on: screenUnknownAlways, name: name)?.boolValue else { return }
+                    model.setScreenUnknownAlways(on)
+                }
             }
-            .toggleStyle(.switch)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(CallChoiceRules.shared.unknownRow(on: screenUnknownAlways).spoken)
             Text(LoneWordGlue.shared.kept(line: ScreenUnknownRules.shared.TRADE_OFF))
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -547,7 +560,7 @@ struct WorkSheet: View {
                             .contentTransition(.opacity)
                     }
                     Spacer()
-                    discordMenu(sheet) { name in
+                    choiceMenu(sheet) { name in
                         guard let on = DiscordChoiceRules.shared.followNamed(row: row, name: name)?.boolValue else { return }
                         model.setDiscordWatched(row.key, on: on)
                     }
@@ -617,7 +630,7 @@ struct WorkSheet: View {
         return HStack(spacing: MekaSpace.m) {
             Text(rules.entryLabel(text: text, person: person)).font(MekaType.body).foregroundStyle(palette.textPrimary)
             Spacer()
-            discordMenu(sheet) { name in
+            choiceMenu(sheet) { name in
                 guard let add = rules.alertNamed(alerting: alerting, name: name)?.boolValue else { return }
                 model.setDiscordAlert(text, person: person, add: add)
             }
@@ -626,8 +639,8 @@ struct WorkSheet: View {
         .accessibilityLabel(rules.alertRow(text: text, person: person, alerting: alerting).spoken)
     }
 
-    /// A Discord choice as a menu: the lit choice shown, each choice's line as its help.
-    private func discordMenu(_ sheet: NotifyChoiceSheet, onPick: @escaping (String) -> Void) -> some View {
+    /// A choice sheet as a menu (Discord, the call assistant): the lit choice shown, each choice's line as its help.
+    private func choiceMenu(_ sheet: NotifyChoiceSheet, onPick: @escaping (String) -> Void) -> some View {
         let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
         return Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { onPick(name) } })) {
             ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }

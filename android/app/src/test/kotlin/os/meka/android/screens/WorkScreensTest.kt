@@ -29,6 +29,7 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.AT_WORK_NOTE
 import os.meka.android.work.COMMUTE_TO_WORK_TAG
+import os.meka.android.work.CALL_ASSISTANT_TAG
 import os.meka.android.work.LEAVING_TO_TAG
 import os.meka.android.work.MESSAGES_MARK_READ_TAG
 import os.meka.android.work.DISCORD_CHANNEL_TAG
@@ -46,6 +47,7 @@ import os.meka.android.work.WorkPane
 import os.meka.android.work.callAssistantNote
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CommuteChoiceRules
+import os.meka.core.domain.CallChoiceRules
 import os.meka.core.domain.LeavingChoiceRules
 import os.meka.core.domain.MessagesChoiceRules
 import os.meka.core.domain.MessagesSetupRules
@@ -194,6 +196,13 @@ class WorkScreensTest {
         }
         if (compose.onAllNodes(hasContentDescription("Commute to work:", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
             fail("$name: the commute still has a chip row")
+        }
+        // Walk-through week 5, A17: the call assistant's pill and Screen unknown callers' switch are card rows saying On/Off.
+        for (r in listOf(CallChoiceRules.assistantRow(w.callAssistant), CallChoiceRules.unknownRow(w.screenUnknownAlways))) {
+            if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no call assistant \"${r.title}\" row saying ${r.value}")
+        }
+        if (compose.onAllNodes(hasText("Turn the call assistant", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: the call assistant still has its Turn on / off pill")
         }
         // Walk-through week 5, A17: Leaving now's On/Off pill, To chips and When chips are card rows saying what's chosen.
         val lv = core.leavingView.value
@@ -371,6 +380,22 @@ class WorkScreensTest {
         if ("Sam" !in core.discordWatch.value.people) fail("Work: Alerts at once in Sam's sheet didn't put Sam on the list (${core.discordWatch.value})")
         if (compose.onAllNodes(hasContentDescription(DiscordChoiceRules.alertRow("Sam", person = true, alerting = true).spoken)).fetchSemanticsNodes().isEmpty()) {
             fail("Work: Sam's row doesn't say Alerts at once after choosing it")
+        }
+        // Walk-through week 5, A17: the call assistant's row opens On · Off; the other one there switches it, and back.
+        for (step in 0..1) {
+            val was = core.workMode.value.callAssistant
+            val assistant = compose.onAllNodes(hasTestTag(CALL_ASSISTANT_TAG) and hasClickAction())
+            if (assistant.fetchSemanticsNodes().isEmpty()) fail("Work: no call assistant row")
+            assistant[0].performSemanticsAction(SemanticsActions.OnClick)
+            turns(1_000)
+            if (!sheetOpen()) fail("Work: the call assistant's row didn't open its sheet")
+            pick(if (was) CallChoiceRules.OFF_LABEL else CallChoiceRules.ON_LABEL)
+            await { core.workMode.value.callAssistant != was }
+            if (core.workMode.value.callAssistant == was) fail("Work: ${if (was) "Off" else "On"} in the call assistant's sheet didn't switch it (step $step)")
+            if (sheetOpen()) fail("Work: choosing in the call assistant's sheet didn't close it")
+            if (compose.onAllNodes(hasContentDescription(CallChoiceRules.assistantRow(!was).spoken)).fetchSemanticsNodes().isEmpty()) {
+                fail("Work: the call assistant's row doesn't say what was chosen")
+            }
         }
         // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on
         // Navilife's hours like the empty page; it is taken again after the hand: work stopped (Start work now, Back to

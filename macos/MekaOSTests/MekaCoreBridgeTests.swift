@@ -3337,6 +3337,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.liveNamed(on: false, name: "maybe"))
     }
 
+    func testCallChoicesReachSwift() {
+        // Walk-through week 5, A17: the call assistant's and Screen unknown callers' switches are menus built from the core's sheets.
+        let rules = CallChoiceRules.shared
+        XCTAssertEqual(rules.assistantRow(on: true).value, "On")
+        XCTAssertEqual(rules.assistantSheet(on: false).choices.first(where: { $0.lit })?.label, "Off")
+        XCTAssertEqual(rules.unknownSheet(on: true, assistantOn: true).choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(rules.named(on: false, name: rules.ON)?.boolValue, true)
+        XCTAssertNil(rules.named(on: true, name: rules.ON))
+    }
+
     func testDiscordChoicesReachSwift() {
         // Walk-through week 5, A17: Work mode → Discord's Follow buttons and alert chips are menus built from the core's sheets.
         let rules = DiscordChoiceRules.shared
