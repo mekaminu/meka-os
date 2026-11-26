@@ -46,4 +46,19 @@ class GoalAddSheetTest {
         assertNull(GoalAddRules.cleanedTarget("  "))
         assertEquals("21 km", GoalAddRules.cleanedTarget(" 21 km "))
     }
+
+    @Test
+    fun studysAddCourseIsARowOpeningASheetThatReadsTheNameLikeTheOldBox() {
+        assertEquals("+ Add course", GoalAddRules.courseRow.label)
+        assertEquals("Add course, A course you're working through, its lessons to tick", GoalAddRules.rowSpoken(GoalAddRules.courseRow))
+        val s = GoalAddRules.courseSheet
+        assertEquals("Add", s.addLabel)
+        assertFalse(s.hint.endsWith("…"))
+        assertFalse(GoalAddRules.canAddCourse("   "))
+        assertFalse(GoalAddRules.canAddCourse("Course: "), "the prefix alone is no name")
+        assertFalse(GoalAddRules.canAddCourse("…"))
+        assertTrue(GoalAddRules.canAddCourse(" Data analytics "))
+        assertEquals("Data analytics", GoalAddRules.courseName("Add a course: Data analytics"))
+        assertEquals(StudyRules.courseTitle("Spanish"), GoalAddRules.courseName("Spanish\nGreetings"))
+    }
 }

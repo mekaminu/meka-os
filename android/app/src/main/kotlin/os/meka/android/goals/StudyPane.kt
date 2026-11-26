@@ -116,6 +116,7 @@ import os.meka.core.domain.StudyChip
 import os.meka.core.domain.StudyPlanInput
 import os.meka.core.domain.StudyPlanView
 import os.meka.core.domain.StudyCourseView
+import os.meka.core.domain.GoalAddRules
 import os.meka.core.domain.StudyDeletedRow
 import os.meka.core.domain.StudyLessonRow
 import os.meka.core.domain.StudyModule
@@ -137,8 +138,9 @@ import os.meka.core.facade.MekaCore
 
 /**
  * Goals' STUDY section (study plan, slice 1): one row per course (its ring with the percentage, the name, "5 of 24
- * lessons · about 18 h left" and the next lesson), a tap opening [StudyPane]; then "Add a course…". A course removed in
- * its pane comes back with Undo here for a few seconds.
+ * lessons · about 18 h left" and the next lesson), a tap opening [StudyPane]; then the "+ Add course" row, which opens a
+ * sheet for the name (walk-through week 5, A17: no open box on the page) and the new course's pane after Add. A course
+ * removed in its pane comes back with Undo here for a few seconds.
  */
 @Composable
 internal fun StudySection(
@@ -151,6 +153,7 @@ internal fun StudySection(
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
+    var adding by rememberSaveable { mutableStateOf(false) }
     Column(modifier.testTag("study-section"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         SectionLabel(StudyRules.SECTION)
         for (c in view.courses) {
@@ -163,10 +166,13 @@ internal fun StudySection(
         ) {
             removed?.let { r -> UndoLine(r) { haptics.light(); onUndo(r) } }
         }
-        Field(StudyRules.ADD_COURSE_HINT, Modifier.testTag("study-add-course")) { text -> onAdd(text) }
-        if (view.courses.isEmpty()) Text(studyShown(StudyRules.ADD_COURSE_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
+        GoalAddRowView(GoalAddRules.courseRow, Modifier.padding(top = MekaSpace.xs).testTag(STUDY_ADD_COURSE_TAG)) { adding = true }
     }
+    if (adding) CourseAddSheetView(onAdd = onAdd, onClose = { adding = false })
 }
+
+/** The tag the screen tests find Study's "+ Add course" row by. */
+const val STUDY_ADD_COURSE_TAG = "study-add-course"
 
 /** A course on Goals: its ring, name, progress line and next lesson, and a chevron. */
 @Composable

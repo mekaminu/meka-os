@@ -119,13 +119,29 @@ internal fun GoalAddSheetView(onAdd: (String, String?, GoalHorizon) -> Unit, onC
 }
 
 /**
- * The sheet both share. Motion: rises over a fading scrim (reduced motion: a cross-fade); the scrim, Close or Back
+ * Study's course sheet (walk-through week 5, A17): the course's name with an example, the note (its outline goes in the
+ * course, which opens next), Close · Add; Add stays dark until the name is one a course keeps.
+ */
+@Composable
+internal fun CourseAddSheetView(onAdd: (String) -> Unit, onClose: () -> Unit) {
+    var title by rememberSaveable { mutableStateOf("") }
+    GoalAddSheetFrame(
+        GoalAddRules.courseSheet, title, { title = it },
+        add = { GoalAddRules.courseName(title)?.let(onAdd) },
+        onClose = onClose,
+        canAdd = GoalAddRules.canAddCourse(title),
+    ) { }
+}
+
+/**
+ * The sheet all three share. Motion: rises over a fading scrim (reduced motion: a cross-fade); the scrim, Close or Back
  * closes it; Add closes it at once (light haptic).
  */
 @Composable
 private fun GoalAddSheetFrame(
     sheet: GoalAddSheet, title: String, onTitle: (String) -> Unit,
     add: () -> Unit, onClose: () -> Unit,
+    canAdd: Boolean = GoalAddRules.canAdd(title),
     choices: @Composable () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -134,7 +150,6 @@ private fun GoalAddSheetFrame(
     val rise = remember { Animatable(0f) }
     LaunchedEffect(Unit) { rise.animateTo(1f, MekaMotion.appear(reduced)) }
     val close: () -> Unit = { scope.launch { rise.animateTo(0f, MekaMotion.expand(reduced)); onClose() } }
-    val canAdd = GoalAddRules.canAdd(title)
     val save: () -> Unit = { if (canAdd) { haptics.light(); add(); onClose() } }
 
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {

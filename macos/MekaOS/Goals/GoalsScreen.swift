@@ -771,7 +771,7 @@ private struct MetricChartView: View {
 }
 
 /// Walk-through week 5, A17: "+ New habit" / "+ New goal" is one row opening a sheet, not an open box on the page.
-private struct GoalAddRowButton: View {
+struct GoalAddRowButton: View {
     let row: GoalAddRow
     let palette: MekaPalette
     let open: () -> Void

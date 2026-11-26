@@ -23,6 +23,7 @@ import org.robolectric.Shadows
 import os.meka.android.goals.GOALS_ADD_GOAL_TAG
 import os.meka.android.goals.GOALS_ADD_HABIT_TAG
 import os.meka.android.goals.GOAL_ADD_SHEET_TAG
+import os.meka.android.goals.STUDY_ADD_COURSE_TAG
 import os.meka.core.domain.GoalAddRules
 import kotlin.test.fail
 import kotlin.math.abs
@@ -142,7 +143,7 @@ class GoalsScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Goals")
         // Walk-through week 5, A17: no open "New habit…" / "New goal…" box on the page, only the rows that open a sheet.
-        listOf("New habit…", "New goal…", GoalAddRules.habitSheet.spokenHint, GoalAddRules.goalSheet.spokenHint).forEach { hint ->
+        listOf("New habit…", "New goal…", os.meka.core.domain.StudyRules.ADD_COURSE_HINT, GoalAddRules.habitSheet.spokenHint, GoalAddRules.goalSheet.spokenHint, GoalAddRules.courseSheet.spokenHint).forEach { hint ->
             if (compose.onAllNodes(hasContentDescription(hint) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
                     .fetchSemanticsNodes().isNotEmpty()) fail("$name: an open \"$hint\" box on the page")
         }
@@ -303,6 +304,48 @@ class GoalsScreensTest {
         val g = core.goalsView.value.goals.first { it.title == "Swim a mile" }
         if (g.target != "1.6 km without stopping" || g.horizon != GoalHorizon.YEAR) fail("Goals: the goal was added as ${g.target}, ${g.horizon}")
         waitFor("the goal sheet stayed open after Add") { !sheetOpen() }
+    }
+
+    /**
+     * By hand (walk-through week 5, A17): Study's "+ Add course" row opens a sheet, not an open box; Add is dark with no
+     * name and with "Course:" alone; a name adds the course (its pane opens next) and the sheet goes.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun addCourseByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        runBlocking { core.tick() }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("study")
+        turns()
+        if (compose.onAllNodes(hasText(GoalAddRules.courseRow.label), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("Goals: Study has no \"${GoalAddRules.courseRow.label}\" row")
+        compose.onNodeWithTag(STUDY_ADD_COURSE_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("Goals: + Add course opened no sheet")
+        if (addEnabled(GoalAddRules.courseSheet.title)) fail("Goals: the course sheet's Add is lit with no name")
+        typeInto(GoalAddRules.courseSheet.spokenHint, "Course: ")
+        if (addEnabled(GoalAddRules.courseSheet.title)) fail("Goals: the course sheet's Add is lit for \"Course:\" alone")
+        tapText(GoalAddRules.CLOSE)
+        waitFor("Close left the course sheet open") { !sheetOpen() }
+        if (core.studyView.value.courses.isNotEmpty()) fail("Goals: Close added a course")
+
+        compose.onNodeWithTag(STUDY_ADD_COURSE_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        typeInto(GoalAddRules.courseSheet.spokenHint, "  Data analytics ")
+        if (!addEnabled(GoalAddRules.courseSheet.title)) fail("Goals: Add stayed dark with a course name")
+        tapSaid("Add, ${GoalAddRules.courseSheet.title}")
+        waitFor("the course wasn't added") { core.studyView.value.courses.any { it.title == "Data analytics" } }
+        waitFor("the course sheet stayed open after Add") { !sheetOpen() }
     }
 
     private object GoalRulesLabels { val YEAR = os.meka.core.domain.GoalRules.horizonLabel(GoalHorizon.YEAR) }

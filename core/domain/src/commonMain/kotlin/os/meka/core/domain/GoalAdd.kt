@@ -53,6 +53,23 @@ object GoalAddRules {
         addLabel = ADD,
     )
 
+    /** Goals' STUDY "+ Add course" (walk-through week 5, A17): one row opening a sheet, not the old open box. */
+    val courseRow = GoalAddRow("+ Add course", "A course you're working through, its lessons to tick")
+
+    val courseSheet = GoalAddSheet(
+        title = "New course",
+        hint = "Data analytics",
+        spokenHint = "The course's name",
+        note = "The course opens next: paste its outline there, one lesson a line, or add it from a screenshot. Nothing leaves your data.",
+        addLabel = ADD,
+    )
+
+    /** Add on the course sheet lights only for a name the course would keep ("Course:" alone, or "…", isn't one). */
+    fun canAddCourse(title: String): Boolean = courseName(title) != null
+
+    /** The course's name as it's added: its first line, read the way the Study plan reads a typed course. */
+    fun courseName(title: String): String? = StudyRules.courseTitle(title.trim().lines().firstOrNull().orEmpty())
+
     /** The name as it's kept: trimmed, at most [MAX_TITLE]; null when there's nothing to add (Add stays dark). */
     fun cleaned(title: String): String? = title.trim().take(MAX_TITLE).trim().ifEmpty { null }
 

@@ -5,13 +5,13 @@ import UniformTypeIdentifiers
 
 /// Goals' STUDY section on the Mac (study plan, slice 1), like the Fold's StudySection: one row per course (its ring
 /// with the percentage, the name, "5 of 24 lessons · about 18 h left" and the next lesson), a click opening the
-/// course's sheet ([StudySheet]); then "Add a course…" (the new course opens). A course removed in its sheet comes
+/// course's sheet ([StudySheet]); then the "+ Add course" row opening [CourseAddSheet] (the new course opens). A course removed in its sheet comes
 /// back with Undo here for a few seconds.
 struct StudySection: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
-    @State private var text = ""
+    @State private var adding = false
     @State private var said: CoreModel.StudySaid?
     @State private var openId: String?
     @State private var removed: CoreModel.TripUndo?
@@ -64,22 +64,23 @@ struct StudySection: View {
                     if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.removed = nil } }
                 }
             }
-            TextField(StudyRules.shared.ADD_COURSE_HINT, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    let typed = text
-                    text = ""
-                    Task {
-                        let r = await model.addStudyCourse(typed)
-                        said = r
-                        if let id = r?.courseId { openId = id }
-                    }
-                }
-            if courses.isEmpty || said?.refused == true {
-                Text(said?.refused == true ? said?.line ?? "" : StudyRules.shared.ADD_COURSE_NOTE)
+            // Walk-through week 5, A17: "+ Add course" is a row opening a sheet, not an open box on the page.
+            GoalAddRowButton(row: GoalAddRules.shared.courseRow, palette: palette) { adding = true }
+                .padding(.top, MekaSpace.xs)
+            if said?.refused == true {
+                Text(said?.line ?? "")
                     .font(MekaType.caption)
-                    .foregroundStyle(said?.refused == true ? palette.accent : palette.textTertiary)
+                    .foregroundStyle(palette.accent)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .sheet(isPresented: $adding) {
+            CourseAddSheet(palette: palette, close: { adding = false }) { name in
+                Task {
+                    let r = await model.addStudyCourse(name)
+                    said = r
+                    if let id = r?.courseId { openId = id }
+                }
             }
         }
         .animation(MekaMotion.replan(reduced: reduceMotion), value: courses.map(\.id))
@@ -95,6 +96,39 @@ struct StudySection: View {
             openId = id
             model.studyOpenRequest = nil
         }
+    }
+}
+
+/// Study's course sheet on the Mac (walk-through week 5, A17), like the Fold's: the name with an example, the note,
+/// Close · Add (disabled until the name is one a course keeps). Add hands the name on and closes at once.
+struct CourseAddSheet: View {
+    let palette: MekaPalette
+    let close: () -> Void
+    let add: (String) -> Void
+    @State private var title = ""
+
+    var body: some View {
+        let sheet = GoalAddRules.shared.courseSheet
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            TextField(sheet.hint, text: $title).textFieldStyle(.roundedBorder).onSubmit(save)
+                .accessibilityLabel(sheet.spokenHint)
+            Text(sheet.note).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(GoalAddRules.shared.CLOSE, action: close).keyboardShortcut(.cancelAction)
+                Button(sheet.addLabel, action: save).keyboardShortcut(.defaultAction)
+                    .disabled(!GoalAddRules.shared.canAddCourse(title: title))
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
+    }
+
+    private func save() {
+        guard let name = GoalAddRules.shared.courseName(title: title) else { return }
+        add(name)
+        close()
     }
 }
 

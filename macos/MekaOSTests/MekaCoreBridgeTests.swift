@@ -3307,6 +3307,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(GoalRules.shared.HORIZONS.firstIndex(of: r.DEFAULT_HORIZON), 1)
     }
 
+    func testCourseAddSheetReachesSwift() {
+        // Walk-through week 5, A17: Study's + Add course row opens a sheet; "Course:" alone can't be added.
+        let r = GoalAddRules.shared
+        XCTAssertEqual(r.courseRow.label, "+ Add course")
+        XCTAssertFalse(r.canAddCourse(title: "Course: "))
+        XCTAssertEqual(r.courseName(title: " Data analytics "), "Data analytics")
+    }
+
     func testChaseWaitChoicesReachSwift() {
         // Walk-through week 5, A17: each Chase waits person is a menu built from the core's sheet; a pick's name reads back
         // to the days to set (0 = Back to usual).
