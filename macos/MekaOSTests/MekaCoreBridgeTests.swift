@@ -3337,6 +3337,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.liveNamed(on: false, name: "maybe"))
     }
 
+    func testTalkChoicesReachSwift() {
+        // Walk-through week 5, A17: Talk's Turn on / Turn off pills are On · Off menus built from the core's sheets.
+        let talk = TalkChoiceRules.shared
+        let over = BargeInRules.shared.section(on: true, mac: true)
+        XCTAssertTrue(talk.isSwitch(s: over))
+        XCTAssertTrue(talk.isOn(s: over))
+        XCTAssertEqual(talk.row(s: over)?.value, "On")
+        let sheet = talk.sheet(label: WelcomeBackRules.shared.LABEL, on: false, mac: true)
+        XCTAssertEqual(sheet?.choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(sheet?.choices.first(where: { $0.lit })?.label, "Off")
+        XCTAssertNotNil(talk.sheet(label: TalkAnywhereRules.shared.LABEL, on: true, mac: true))
+        XCTAssertEqual(talk.named(on: false, name: talk.ON)?.boolValue, true)
+        XCTAssertNil(talk.named(on: true, name: talk.ON))
+    }
+
     func testWeekAheadChoicesReachSwift() {
         // Walk-through week 5, A17: the week ahead's Sunday heads-up is one menu built from the core's sheet; a pick sends
         // only its name back and the core reads it to the setting.

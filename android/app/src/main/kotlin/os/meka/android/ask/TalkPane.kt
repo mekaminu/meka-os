@@ -58,6 +58,7 @@ import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.TalkOnOpenRules
 import os.meka.core.domain.TalkSetupSection
 import os.meka.core.domain.TalkStartRules
+import os.meka.core.domain.TalkChoiceRules
 
 /**
  * Ask → More → Talk (Talk without tapping the mic, slice 1): how to start talking to MEKA without the mic. The side
@@ -69,6 +70,10 @@ import os.meka.core.domain.TalkStartRules
  * over MEKA" ([BargeInRules.section], kept on this phone, on by default) after it, with Turn on / Turn off.
  * "Hello, Navilife" slice 3: Say “Hello Navilife” ([HelloWakeRules.section], kept on this phone, off by default) after
  * When I open Navilife; turning it on asks for the microphone if needed; without on-device speech it says so, no switch.
+ *
+ * Walk-through week 5, A17: each switch (When I open, Say “Hey Obi”, Talk over) is a card row under its label saying
+ * what's chosen ("Talk over Navilife" · "On" ›) opening an On · Off sheet ([TalkChoiceRules]), not an open Turn on /
+ * Turn off pill; the side button's Open default apps stays a button (an action, not a choice).
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; sections stagger in 40 ms apart; the side
  * button's status line blends to the accent once MEKA is the assistant; Open default apps presses in with a tick haptic.
@@ -111,6 +116,34 @@ fun TalkPane(onClose: () -> Unit) {
         add(minOf(3, size), BargeInRules.section(talkOver))
     }
 
+    // The switch a row opened, by its section's label (walk-through week 5, A17).
+    var sheet by remember { mutableStateOf<String?>(null) }
+    fun turn(label: String, on: Boolean) {
+        when (label) {
+            BargeInRules.LABEL -> {
+                talkOver = on
+                TalkAutoListen.setTalkOver(context, on)
+            }
+            HelloWakeRules.LABEL -> when {
+                !on -> setWake(false)
+                TalkAutoListen.micAllowed(context) -> setWake(true)
+                else -> { micFor = HelloWakeRules.LABEL; askMic.launch(Manifest.permission.RECORD_AUDIO) }
+            }
+            TalkOnOpenRules.LABEL -> when {
+                !on -> setListen(false)
+                TalkAutoListen.micAllowed(context) -> setListen(true)
+                else -> { micFor = TalkOnOpenRules.LABEL; askMic.launch(Manifest.permission.RECORD_AUDIO) }
+            }
+        }
+    }
+    sheet?.let { label ->
+        val now = sections.firstOrNull { it.label == label }?.let(TalkChoiceRules::isOn) ?: false
+        TalkChoiceRules.sheet(label, now, mac = false)?.let { sh ->
+            os.meka.android.notify.NotifyChoiceSheetView(sh,
+                onChoose = { name -> TalkChoiceRules.named(now, name)?.let { turn(label, it) } }, onClose = { sheet = null })
+        }
+    }
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -121,39 +154,33 @@ fun TalkPane(onClose: () -> Unit) {
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.TALK)).appear(rememberAppearance(0)))
         Text(view.intro, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
         sections.forEachIndexed { i, s ->
-            TalkSection(s, Modifier.appear(rememberAppearance(i + 1))) {
+            TalkSection(s, Modifier.appear(rememberAppearance(i + 1)), onOpen = { haptics.tick(); sheet = s.label }) {
                 haptics.tick()
-                when {
-                    s.label == BargeInRules.LABEL -> {
-                        talkOver = !talkOver
-                        TalkAutoListen.setTalkOver(context, talkOver)
-                    }
-                    s.label == HelloWakeRules.LABEL -> when {
-                        wake -> setWake(false)
-                        TalkAutoListen.micAllowed(context) -> setWake(true)
-                        else -> { micFor = HelloWakeRules.LABEL; askMic.launch(Manifest.permission.RECORD_AUDIO) }
-                    }
-                    s.label != TalkOnOpenRules.LABEL -> openDefaultApps(context)
-                    listenOnOpen -> setListen(false)
-                    TalkAutoListen.micAllowed(context) -> setListen(true)
-                    else -> { micFor = TalkOnOpenRules.LABEL; askMic.launch(Manifest.permission.RECORD_AUDIO) }
-                }
+                openDefaultApps(context)
             }
         }
     }
 }
 
+/** Settings → Talk's switch rows (walk-through week 5, A17), by section label, for the screen tests. */
+fun talkRowTag(label: String): String = "talk-row-" + label.filter { it.isLetter() }.lowercase()
+
 @Composable
-internal fun TalkSection(s: TalkSetupSection, modifier: Modifier, onAction: () -> Unit) {
+internal fun TalkSection(s: TalkSetupSection, modifier: Modifier, onOpen: () -> Unit = {}, onAction: () -> Unit) {
     val reduced = Meka.reducedMotion
     val statusColor by animateColorAsState(
         if (s.lit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "talk-status",
     )
     Column(modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(s.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.semantics { heading() })
+        // A switch is a row saying what's chosen, opening its On · Off sheet (walk-through week 5, A17).
+        val row = TalkChoiceRules.row(s)
+        if (row != null) {
+            os.meka.android.notify.NotifyChoiceRowView(row, Modifier.testTag(talkRowTag(s.label)), raised = true, onOpen = onOpen)
+        }
         Text(LoneWordGlue.kept(s.status), style = MekaType.body, color = statusColor)
         s.steps.forEach { step -> Text(LoneWordGlue.kept(step), style = MekaType.caption, color = Meka.colors.textSecondary) }
-        s.action?.let { label ->
+        s.action?.takeIf { row == null }?.let { label ->
             Spacer(Modifier.height(MekaSpace.xs))
             Box(
                 // Walk-through 2026-11-15, A21 part 9: the pale pill gets Light's 1 dp edge on the off-white page (none in Dark).

@@ -20,7 +20,10 @@ import SwiftUI
 /// on-device speech) and Welcome back (`WelcomeBackRules.section`, on by default), both kept on this Mac, after When I
 /// open Navilife (`WelcomeBackRules.macSetup`). Turning the phrase on asks for the microphone if not yet decided.
 ///
-/// Motion: the sheet scale-fades (system); sections stagger in; Turn on / Turn off presses in with a tick haptic and
+/// Walk-through week 5, A17: each switch is an On · Off menu under its label (`TalkChoiceRules`), not a Turn on / Turn off
+/// pill.
+///
+/// Motion: the sheet scale-fades (system); sections stagger in; a choice gives a tick haptic and
 /// the status line blends to the accent while on (`themeBlend`, the words cross-fade). Reduce Motion: cross-fades.
 struct TalkSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -53,6 +56,13 @@ struct TalkSheet: View {
                     Text(s.label.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                         .foregroundStyle(palette.textTertiary)
                         .accessibilityAddTraits(.isHeader)
+                    // Walk-through week 5, A17: a switch is one menu saying what's chosen (On / Off), as the Fold's
+                    // row and sheet, not an open Turn on / Turn off pill.
+                    if choices.isSwitch(s: s), let sheet = choices.sheet(label: s.label, on: choices.isOn(s: s), mac: true) {
+                        choiceMenu(sheet, s.label) { name in
+                            if choices.named(on: choices.isOn(s: s), name: name) != nil { toggle(s.label) }
+                        }
+                    }
                     Text(LoneWordGlue.shared.kept(line: s.status)).font(MekaType.body).foregroundStyle(s.lit ? palette.accent : palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
@@ -60,17 +70,6 @@ struct TalkSheet: View {
                     ForEach(s.steps, id: \.self) { step in
                         Text(LoneWordGlue.shared.kept(line: step)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let action = s.action, s.label == TalkOnOpenRules.shared.LABEL {
-                        switchButton(action, "listen when I open Navilife") { toggleListenOnOpen() }
-                    } else if let action = s.action, s.label == TalkAnywhereRules.shared.LABEL {
-                        switchButton(action, "⌥Space from any app") { toggleAnywhere() }
-                    } else if let action = s.action, s.label == BargeInRules.shared.LABEL {
-                        switchButton(action, "talk over Navilife to interrupt") { toggleTalkOver() }
-                    } else if let action = s.action, s.label == HelloWakeRules.shared.LABEL {
-                        switchButton(action, "say Hey Obi to start") { toggleWake() }
-                    } else if let action = s.action, s.label == WelcomeBackRules.shared.LABEL {
-                        switchButton(action, "welcome back after a while away") { toggleWelcome() }
                     }
                 }
                 .padding(.top, MekaSpace.m)
@@ -87,17 +86,31 @@ struct TalkSheet: View {
         .background(palette.surface)
     }
 
-    /// Turn on / Turn off under a section: presses in with a tick haptic (the caller's action gives it).
-    private func switchButton(_ action: String, _ what: String, _ run: @escaping () -> Void) -> some View {
-        Button(action, action: run)
-            .buttonStyle(MekaPressStyle())
-            .font(MekaType.itemMeta)
-            .foregroundStyle(palette.accent)
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-            .background(palette.surfaceRaised, in: Capsule())
-            .lightCardEdge(palette, radius: MekaRadius.pill)
-            .padding(.top, MekaSpace.xxs)
-            .accessibilityLabel("\(action): \(what)")
+    private var choices: TalkChoiceRules { TalkChoiceRules.shared }
+
+    /// One switch's On · Off menu, saying what's chosen; a pick sends only the choice's name (the core says what it sets).
+    private func choiceMenu(_ sheet: NotifyChoiceSheet, _ what: String, pick: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { pick(name) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
+        .accessibilityLabel(what)
+    }
+
+    /// Flips the switch called [label], as its pill did.
+    private func toggle(_ label: String) {
+        switch label {
+        case TalkOnOpenRules.shared.LABEL: toggleListenOnOpen()
+        case TalkAnywhereRules.shared.LABEL: toggleAnywhere()
+        case BargeInRules.shared.LABEL: toggleTalkOver()
+        case HelloWakeRules.shared.LABEL: toggleWake()
+        case WelcomeBackRules.shared.LABEL: toggleWelcome()
+        default: break
+        }
     }
 
     private func toggleAnywhere() {

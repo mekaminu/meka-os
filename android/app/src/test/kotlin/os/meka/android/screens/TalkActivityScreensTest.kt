@@ -29,6 +29,12 @@ import os.meka.android.activity.ACTIVITY_SHOW_ROW_TAG
 import os.meka.android.activity.ACTIVITY_SHOW_SHEET_TAG
 import os.meka.android.activity.ActivityPane
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.android.ask.talkRowTag
+import os.meka.core.domain.TalkChoiceRules
 import os.meka.android.ask.TalkAutoListen
 import os.meka.android.ask.TalkPane
 import os.meka.android.designsystem.Meka
@@ -118,7 +124,15 @@ class TalkActivityScreensTest {
         ScreenShots.assertShows(compose, name, view.intro)
         val sections = view.sections + TalkOnOpenRules.section(listenOnOpen) + BargeInRules.section(talkOver)
         ScreenShots.assertReadable(compose, name, sections.flatMap { listOf(it.status) + it.steps }, mustShow = false)
-        ScreenShots.assertEachOneLine(compose, name, sections.mapNotNull { it.action } + sections.map { it.label.uppercase() })
+        // Walk-through week 5, A17: each switch is a row saying what's chosen (On / Off), no open Turn on / Turn off pill.
+        val rows = sections.mapNotNull { TalkChoiceRules.row(it) }
+        if (rows.size < 2) fail("$name: only ${rows.size} switch rows")
+        rows.forEach { r -> if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no \"${r.title}\" row saying ${r.value}") }
+        listOf(TalkOnOpenRules.TURN_ON, TalkOnOpenRules.TURN_OFF).forEach {
+            if (compose.onAllNodes(hasText(it, substring = false)).fetchSemanticsNodes().isNotEmpty()) fail("$name: \"$it\" is still an open pill on the page")
+        }
+        ScreenShots.assertEachOneLine(compose, name, sections.mapNotNull { it.action }.filter { a -> sections.any { it.action == a && !TalkChoiceRules.isSwitch(it) } } +
+            sections.map { it.label.uppercase() })
         ScreenShots.assertNoLoneWords(compose, name, sections.flatMap { listOf(it.status) + it.steps } + view.intro)
     }
 
@@ -128,25 +142,28 @@ class TalkActivityScreensTest {
      * button's own click action, which needs no scroll, and the main looper and the clock are moved on by hand.
      */
     private fun talkOverByHand() {
-        val on = BargeInRules.section(true)
         val off = BargeInRules.section(false)
-        val buttons = compose.onAllNodes(hasText(on.action!!) and hasClickAction())
-        val count = buttons.fetchSemanticsNodes().size
-        if (count == 0) fail("Talk: no ${on.action} button")
-        // Talk over's own button: the last section saying it carries it.
-        buttons[count - 1].performSemanticsAction(SemanticsActions.OnClick)
-        // The tap's state change reaches the recomposer through a post on the main looper, which the paused clock never
-        // runs (CI run 1106: the line still said On). Run the looper and the frames by turns until the colour has
-        // blended; a waitForIdle here, with the blend waiting on the paused clock, is what never went idle in 1103.
-        repeat((SETTLE_MS / 100).toInt()) {
+        fun turns() = repeat((SETTLE_MS / 100).toInt()) {
             Shadows.shadowOf(Looper.getMainLooper()).idle()
             compose.mainClock.advanceTimeBy(100)
         }
+        fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+        // Walk-through week 5, A17: Talk over's row opens its On · Off sheet; Off there turns it off and closes it. The tap
+        // is the row's own click action, which needs no scroll (slice 27's scroll never went idle on the paused clock).
+        val row = compose.onAllNodes(hasTestTag(talkRowTag(BargeInRules.LABEL)) and hasClickAction())
+        if (row.fetchSemanticsNodes().isEmpty()) fail("Talk: no ${BargeInRules.LABEL} row")
+        row[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        if (!sheetOpen()) fail("Talk: the ${BargeInRules.LABEL} row didn't open its sheet")
+        compose.onAllNodes(hasText(TalkChoiceRules.OFF_LABEL, substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        if (sheetOpen()) fail("Talk: choosing Off didn't close the sheet")
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
-        if (TalkAutoListen.talkOver(context)) fail("Talk: Turn off didn't turn Talk over off")
+        if (TalkAutoListen.talkOver(context)) fail("Talk: Off didn't turn Talk over off")
         ScreenShots.awaitShows(compose, "talk-by-hand", LoneWordGlue.kept(off.status))
-        if (compose.onAllNodes(hasText(off.action!!) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
-            fail("Talk: no ${off.action} after Turn off")
+        if (compose.onAllNodes(hasContentDescription(TalkChoiceRules.row(off)!!.spoken)).fetchSemanticsNodes().isEmpty()) {
+            fail("Talk: the row doesn't say Off after choosing Off")
         }
         // Walk-through 2026-11-15 A12 ("talk by-hand = default"): Talk over sits at the foot of the pane, so the opening
         // shot (the default page) never showed it turned off. Swipe down to its Off and shoot that as `-below`, dropping
