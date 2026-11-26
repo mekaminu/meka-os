@@ -10,7 +10,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,9 +44,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -70,6 +65,7 @@ import os.meka.core.domain.LocalClock
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NotificationSettings
+import os.meka.core.domain.NotifyQuietChoiceRules
 import os.meka.core.domain.NotifyRules
 import os.meka.core.domain.NotifyTestRules
 import os.meka.core.facade.MekaCore
@@ -190,9 +186,8 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("Quiet hours", 2)
-        ToggleRow(NotifyRules.quietRow(quiet.enabled, quiet.summary), quiet.enabled, Modifier.appear(rememberAppearance(2))) {
-            haptics.tick(); saveQuiet(enabled = !quiet.enabled)
-        }
+        // Walk-through week 5, A17: the switch is a card row ("Quiet hours" · "22:00–07:00" ›) opening On · Off.
+        NotifyChoiceRowView(NotifyQuietChoiceRules.quietRow(quiet.enabled, quiet.summary), Modifier.appear(rememberAppearance(2))) { sheetFor = QUIET_SHEET }
         AnimatedVisibility(
             quiet.enabled,
             enter = if (Meka.reducedMotion) fadeIn() else expandVertically() + fadeIn(),
@@ -207,10 +202,10 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("Digests", 3)
-        listOf(NotificationSettings.MIDDAY to "Midday", NotificationSettings.EVENING to "Evening").forEach { (minute, name) ->
-            val on = settings.hasDigest(minute)
-            ToggleRow("$name · ${LocalClock.formatMinute(minute)}", on, Modifier.appear(rememberAppearance(3))) {
-                haptics.tick(); scope.launch { core.setDigest(minute, !on) }
+        listOf(NotificationSettings.MIDDAY, NotificationSettings.EVENING).forEach { minute ->
+            // Walk-through week 5, A17: each digest's switch is a card row ("Midday · 12:30" · "On" ›) opening On · Off.
+            NotifyChoiceRowView(NotifyQuietChoiceRules.digestRow(minute, settings.hasDigest(minute)), Modifier.appear(rememberAppearance(3))) {
+                sheetFor = DIGEST_SHEET + minute
             }
         }
         Text(LoneWordGlue.kept(NotifyRules.DIGEST_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -227,6 +222,20 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
         when (val open = sheetFor) {
             null -> Unit
+            QUIET_SHEET -> NotifyChoiceSheetView(
+                NotifyQuietChoiceRules.quietSheet(quiet.enabled, settings.digestsOn),
+                onChoose = { name -> NotifyQuietChoiceRules.named(quiet.enabled, name)?.let { on -> saveQuiet(enabled = on) } },
+                onClose = { sheetFor = null },
+            )
+            DIGEST_SHEET + NotificationSettings.MIDDAY, DIGEST_SHEET + NotificationSettings.EVENING -> {
+                val minute = open.removePrefix(DIGEST_SHEET).toInt()
+                val on = settings.hasDigest(minute)
+                NotifyChoiceSheetView(
+                    NotifyQuietChoiceRules.digestSheet(minute, on),
+                    onChoose = { name -> NotifyQuietChoiceRules.named(on, name)?.let { next -> scope.launch { core.setDigest(minute, next) } } },
+                    onClose = { sheetFor = null },
+                )
+            }
             DEVICE_SHEET -> NotifyChoiceSheetView(
                 NotifyRules.deviceSheet(device, DEVICE_TITLE),
                 onChoose = { name -> NotifyRules.deviceNamed(name)?.let { governor.setDevice(it) } },
@@ -245,6 +254,8 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
 
 private const val DEVICE_TITLE = "This phone"
 private const val DEVICE_SHEET = "device"
+private const val QUIET_SHEET = "quiet"
+private const val DIGEST_SHEET = "digest-"
 
 @Composable
 private fun testColor(ok: Boolean?) = when (ok) {
@@ -256,22 +267,6 @@ private fun testColor(ok: Boolean?) = when (ok) {
 @Composable
 private fun Label(text: String, index: Int) {
     Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(index)))
-}
-
-@Composable
-private fun ToggleRow(label: String, on: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val dot by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "toggle")
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
-            .semantics { contentDescription = label; selected = on }
-            .sizeIn(minHeight = MekaSpace.touch)
-            .padding(vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(LoneWordGlue.kept(label), style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-        os.meka.android.designsystem.SwitchPill(on, dot)
-    }
 }
 
 @Composable

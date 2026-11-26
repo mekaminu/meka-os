@@ -3377,6 +3377,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(choices.named(on: true, name: choices.ON))
     }
 
+    func testNotifyQuietChoicesReachSwift() {
+        // Walk-through week 5, A17: Notifications' quiet hours and digest toggles are On · Off menus from the core's sheets.
+        let choices = NotifyQuietChoiceRules.shared
+        XCTAssertEqual(choices.quietRow(enabled: true, summary: "22:00–07:00").value, "22:00–07:00")
+        XCTAssertEqual(choices.quietRow(enabled: false, summary: "22:00–07:00").value, "Off")
+        let quiet = choices.quietSheet(enabled: false, digestsOn: true)
+        XCTAssertEqual(quiet.choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(quiet.choices.first(where: { $0.lit })?.label, "Off")
+        XCTAssertEqual(choices.digestRow(minute: NotifyRules.shared.MIDDAY, on: true).title, "Midday · 12:30")
+        XCTAssertEqual(choices.digestSheet(minute: NotifyRules.shared.EVENING, on: false).choices.first(where: { $0.lit })?.label, "Off")
+        XCTAssertEqual(choices.named(on: false, name: CallChoiceRules.shared.ON)?.boolValue, true)
+        XCTAssertNil(choices.named(on: true, name: CallChoiceRules.shared.ON))
+    }
+
     func testTalkChoicesReachSwift() {
         // Walk-through week 5, A17: Talk's Turn on / Turn off pills are On · Off menus built from the core's sheets.
         let talk = TalkChoiceRules.shared

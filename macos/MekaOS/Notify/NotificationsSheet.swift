@@ -15,15 +15,35 @@ struct NotificationsSheet: View {
         (0..<Int(NotifyRules.shared.deviceCount)).map { NotifyRules.shared.deviceAt(index: Int32($0)) }
     private static let sources: [NoticeSource] =
         (0..<Int(NotifyRules.shared.sourceCount)).map { NotifyRules.shared.sourceAt(index: Int32($0)) }
-    private struct DigestTime: Identifiable { let minute: Int32; let name: String; var id: Int32 { minute } }
+    private struct DigestTime: Identifiable { let minute: Int32; var id: Int32 { minute } }
     private static let digests = [
-        DigestTime(minute: NotifyRules.shared.MIDDAY, name: "Midday · 12:30"),
-        DigestTime(minute: NotifyRules.shared.EVENING, name: "Evening · 18:00"),
+        DigestTime(minute: NotifyRules.shared.MIDDAY),
+        DigestTime(minute: NotifyRules.shared.EVENING),
     ]
 
     private var quietOn: Bool { model.notifySettings?.quiet.enabled ?? true }
     private var quietStart: Int { Int(model.notifySettings?.quiet.startMinute ?? 22 * 60) }
     private var quietEnd: Int { Int(model.notifySettings?.quiet.endMinute ?? 7 * 60) }
+    private var quietSummary: String { model.notifySettings?.quiet.summary ?? "" }
+    private var quietChoices: NotifyQuietChoiceRules { NotifyQuietChoiceRules.shared }
+
+    /// One On · Off row: its title, then a menu saying what's in force; a pick sends only the choice's name.
+    private func choiceRow(_ row: NotifyChoiceRow, _ sheet: NotifyChoiceSheet, pick: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack {
+            Text(row.title).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { pick(name) } })) {
+                ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
+            .accessibilityLabel(row.spoken)
+        }
+        .font(MekaType.itemMeta)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -80,8 +100,14 @@ struct NotificationsSheet: View {
             }
 
             section("QUIET HOURS", 2)
-            Toggle("Quiet hours", isOn: Binding(get: { quietOn }, set: { model.setQuietHours(enabled: $0, start: quietStart, end: quietEnd) }))
-                .staggeredAppear(2)
+            // Walk-through week 5, A17: quiet hours' switch is a menu saying what's in force, as the Fold's row and sheet.
+            choiceRow(quietChoices.quietRow(enabled: quietOn, summary: quietSummary),
+                      quietChoices.quietSheet(enabled: quietOn, digestsOn: model.notifySettings?.digestsOn ?? true)) { name in
+                if let on = quietChoices.named(on: quietOn, name: name)?.boolValue {
+                    model.setQuietHours(enabled: on, start: quietStart, end: quietEnd)
+                }
+            }
+            .staggeredAppear(2)
             if quietOn {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     stepper("From", value: quietStart) { model.setQuietHours(enabled: true, start: $0, end: quietEnd) }
@@ -95,10 +121,11 @@ struct NotificationsSheet: View {
 
             section("DIGESTS", 3)
             ForEach(Self.digests) { d in
-                Toggle(d.name, isOn: Binding(
-                    get: { model.notifySettings.map { NotifyRules.shared.hasDigest(settings: $0, minute: d.minute) } ?? true },
-                    set: { model.setDigest(d.minute, on: $0) }
-                ))
+                // Walk-through week 5, A17: each digest's switch is an On · Off menu, as the Fold's row and sheet.
+                let on = model.notifySettings.map { NotifyRules.shared.hasDigest(settings: $0, minute: d.minute) } ?? true
+                choiceRow(quietChoices.digestRow(minute: d.minute, on: on), quietChoices.digestSheet(minute: d.minute, on: on)) { name in
+                    if let next = quietChoices.named(on: on, name: name)?.boolValue { model.setDigest(d.minute, on: next) }
+                }
             }
             .staggeredAppear(3)
             Text(LoneWordGlue.shared.kept(line: NotifyRules.shared.DIGEST_NOTE))

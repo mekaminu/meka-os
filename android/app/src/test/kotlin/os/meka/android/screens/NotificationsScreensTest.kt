@@ -41,6 +41,8 @@ import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.NotificationSettings
 import os.meka.core.domain.NotifyRules
+import os.meka.core.domain.CallChoiceRules
+import os.meka.core.domain.NotifyQuietChoiceRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -202,8 +204,13 @@ class NotificationsScreensTest {
         val radios = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).fetchSemanticsNodes()
         if (radios.isNotEmpty()) fail("$name: ${radios.size} open choice chips on the page; they belong in a sheet")
         val rows = compose.onAllNodesWithTag(NOTIFY_CHOICE_ROW_TAG).fetchSemanticsNodes()
-        if (rows.size != 1 + NoticeSource.ADJUSTABLE.size) fail("$name: ${rows.size} choice rows, not This phone and ${NoticeSource.ADJUSTABLE.size} kinds")
-        (listOf(NotifyRules.deviceRow(DeviceAlerts.ALL, "This phone")) + NoticeSource.ADJUSTABLE.map { NotifyRules.tierRow(s, it) }).forEach { r ->
+        // Quiet hours and the two digests too: no switch rows left on the page.
+        if (rows.size != 4 + NoticeSource.ADJUSTABLE.size) fail("$name: ${rows.size} choice rows, not This phone, quiet hours, two digests and ${NoticeSource.ADJUSTABLE.size} kinds")
+        val switches = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)).fetchSemanticsNodes()
+        if (switches.isNotEmpty()) fail("$name: ${switches.size} open switches on the page; they belong in a sheet")
+        val onOff = listOf(NotifyQuietChoiceRules.quietRow(s.quiet.enabled, s.quiet.summary)) +
+            listOf(NotificationSettings.MIDDAY, NotificationSettings.EVENING).map { NotifyQuietChoiceRules.digestRow(it, s.hasDigest(it)) }
+        (listOf(NotifyRules.deviceRow(DeviceAlerts.ALL, "This phone")) + onOff + NoticeSource.ADJUSTABLE.map { NotifyRules.tierRow(s, it) }).forEach { r ->
             if (compose.onAllNodes(hasContentDescription(r.spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty())
                 fail("$name: no row reading \"${r.title} · ${r.value}\"")
         }
@@ -237,9 +244,14 @@ class NotificationsScreensTest {
             if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$desc\" to tap")
             n[0].performSemanticsAction(SemanticsActions.OnClick)
         }
-        tap(NotifyRules.QUIET_OFF)
-        until { core.notificationSettings.value.quiet.enabled && onScreen("22:00–07:00") }
-        if (!core.notificationSettings.value.quiet.enabled) fail("$name: the switch left quiet hours off")
+        // Walk-through week 5, A17: quiet hours' row opens On · Off; On saves it and closes the sheet.
+        val q = core.notificationSettings.value.quiet
+        tap(NotifyQuietChoiceRules.quietRow(q.enabled, q.summary).spoken)
+        until { compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty()) fail("$name: quiet hours' row didn't open its sheet")
+        tap(NotifyQuietChoiceRules.quietSheet(q.enabled, core.notificationSettings.value.digestsOn).choices.first { it.name == CallChoiceRules.ON }.spoken)
+        until { core.notificationSettings.value.quiet.enabled && onScreen("22:00–07:00") && compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty() }
+        if (!core.notificationSettings.value.quiet.enabled) fail("$name: On left quiet hours off")
         if (!onScreen(NotifyRules.quietNote(core.notificationSettings.value.digestsOn))) fail("$name: quiet hours on didn't unfold the times")
 
         tap("Until 15 minutes later")
@@ -248,10 +260,18 @@ class NotificationsScreensTest {
         if (!onScreen("22:00–07:15")) fail("$name: the switch row doesn't say the new time")
 
         // Digests are off in this fill: turn the midday one on, then off again.
-        tap("Midday · 12:30")
+        fun midday(on: Boolean) {
+            val now = core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY)
+            tap(NotifyQuietChoiceRules.digestRow(NotificationSettings.MIDDAY, now).spoken)
+            until { compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty() }
+            if (compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isEmpty()) fail("$name: the midday digest's row didn't open its sheet")
+            val pick = if (on) CallChoiceRules.ON else CallChoiceRules.OFF
+            tap(NotifyQuietChoiceRules.digestSheet(NotificationSettings.MIDDAY, now).choices.first { it.name == pick }.spoken)
+        }
+        midday(on = true)
         until { core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY) && onScreen("Next digest") }
         if (!core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY)) fail("$name: the midday digest didn't come on")
-        tap("Midday · 12:30")
+        midday(on = false)
         until { !core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY) && onScreen("No digests") }
         if (core.notificationSettings.value.hasDigest(NotificationSettings.MIDDAY)) fail("$name: the midday digest didn't go off")
 
