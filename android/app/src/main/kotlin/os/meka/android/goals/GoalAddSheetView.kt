@@ -134,7 +134,26 @@ internal fun CourseAddSheetView(onAdd: (String) -> Unit, onClose: () -> Unit) {
 }
 
 /**
- * The sheet all three share. Motion: rises over a fading scrim (reduced motion: a cross-fade); the scrim, Close or Back
+ * A sheet with just one line to add (walk-through week 5, A17; Review's "+ Add a win"): the line with an example, the
+ * note, Close · Add; Add stays dark until [canAdd] says the line is one that's kept. [onAdd] gets the line as typed.
+ */
+@Composable
+internal fun LineAddSheetView(
+    sheet: GoalAddSheet, canAdd: (String) -> Boolean, maxLength: Int,
+    onAdd: (String) -> Unit, onClose: () -> Unit,
+) {
+    var line by rememberSaveable { mutableStateOf("") }
+    GoalAddSheetFrame(
+        sheet, line, { line = it },
+        add = { if (canAdd(line)) onAdd(line) },
+        onClose = onClose,
+        canAdd = canAdd(line),
+        maxLength = maxLength,
+    ) { }
+}
+
+/**
+ * The sheet all of them share. Motion: rises over a fading scrim (reduced motion: a cross-fade); the scrim, Close or Back
  * closes it; Add closes it at once (light haptic).
  */
 @Composable
@@ -142,6 +161,7 @@ private fun GoalAddSheetFrame(
     sheet: GoalAddSheet, title: String, onTitle: (String) -> Unit,
     add: () -> Unit, onClose: () -> Unit,
     canAdd: Boolean = GoalAddRules.canAdd(title),
+    maxLength: Int = GoalAddRules.MAX_TITLE,
     choices: @Composable () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -179,7 +199,7 @@ private fun GoalAddSheetFrame(
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 Text(sheet.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
-                SheetField(sheet.hint, sheet.spokenHint, title, { onTitle(it.take(GoalAddRules.MAX_TITLE)) }) { save() }
+                SheetField(sheet.hint, sheet.spokenHint, title, { onTitle(it.take(maxLength)) }) { save() }
                 choices()
                 Text(LoneWordGlue.kept(sheet.note), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),

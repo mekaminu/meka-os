@@ -43,7 +43,13 @@ data class WinsView(
     val quarterCount: Int,
     /** Friday from 16:00 to the end of Sunday with no win this week: the review lights its Wins section. */
     val asking: Boolean,
+    /** The reviewed week is the one in progress (a win added lands today, not that week's Friday). */
+    val current: Boolean = true,
 ) {
+    /** "+ Add a win", the card row that opens [sheet] (walk-through week 5, A17: no open box on the page). */
+    val addRow: GoalAddRow get() = WinRules.addRow(current)
+    val sheet: GoalAddSheet get() = WinRules.sheet(current)
+
     companion object {
         val EMPTY = WinsView(emptyList(), WinRules.NONE_THIS_WEEK, WinRules.HINT_THIS_WEEK, "This quarter", emptyList(), 0, false)
     }
@@ -127,8 +133,30 @@ object WinRules {
             WinsWeek(ws, "Week of " + CivilDate.fromEpochDay(ws).let { "${it.day} ${Recurrence.MONTH_SHORT[it.month - 1]}" }, inWeek.map(::row))
         }
         val title = "This quarter · $qLabel" + if (inQuarter.isEmpty()) "" else " · " + ShutdownRules.count(inQuarter.size, "win")
-        return WinsView(week, weekLine, if (current) HINT_THIS_WEEK else HINT_PAST_WEEK, title, weeks, inQuarter.size, asking(wins, today, minute))
+        return WinsView(week, weekLine, if (current) HINT_THIS_WEEK else HINT_PAST_WEEK, title, weeks, inQuarter.size, asking(wins, today, minute), current)
     }
+
+    const val ADD_ROW = "+ Add a win"
+    const val EXAMPLE = "Shipped the Q3 report"
+
+    /** Review's Wins row (walk-through week 5, A17): one card row opening [sheet], where the open field used to be. */
+    fun addRow(current: Boolean) = GoalAddRow(
+        ADD_ROW,
+        if (current) "A line on what went well, kept for your reviews" else "A line on what went well that week, dated its Friday",
+    )
+
+    /** The sheet: the line with an example, where it's kept, Close · Add. Read as the old field read a typed line. */
+    fun sheet(current: Boolean) = GoalAddSheet(
+        title = if (current) "A win this week" else "A win that week",
+        hint = EXAMPLE,
+        spokenHint = if (current) HINT_THIS_WEEK else HINT_PAST_WEEK,
+        note = if (current) "Kept with today's date for your weekly and quarterly reviews. Nothing leaves your data."
+        else "Kept with that week's Friday for your reviews. Nothing leaves your data.",
+        addLabel = GoalAddRules.ADD,
+    )
+
+    /** Add on the sheet lights only for a line a win would keep (spaces or a lone dash isn't one). */
+    fun canAdd(text: String): Boolean = read(text) != null
 
     /** Adding a typed line to the week starting [weekStart]: refused when empty; the same line twice that week is kept once. */
     fun addPlan(

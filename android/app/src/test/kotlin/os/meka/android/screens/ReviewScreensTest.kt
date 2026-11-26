@@ -14,14 +14,12 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -34,11 +32,14 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.goals.GOAL_ADD_SHEET_TAG
+import os.meka.android.review.REVIEW_ADD_WIN_TAG
 import os.meka.android.review.ReflectionActions
 import os.meka.android.review.Week
 import os.meka.android.screens.ShotReviewWeek.Fill
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.DateGlue
+import os.meka.core.domain.GoalAddRules
 import os.meka.core.domain.ReviewDone
 import os.meka.core.domain.ReviewGoal
 import os.meka.core.domain.ReviewHabit
@@ -59,7 +60,7 @@ import kotlin.test.fail
  * wins and the quarter's, counted north-star numbers), on the Fold's cover and inner screens, Dark (and one in Light).
  * Saved under `review/` and read for nonsense (no lone dash for a number not counted yet), cut lines, broken words,
  * split numbers and dates, a grey line leaving a word alone, and every button answering a 48 dp touch. By hand: ‹ goes
- * back a week, › is off on this week and goes forward on a past one, Done reviewing, a win kept from the field, Remove
+ * back a week, › is off on this week and goes forward on a past one, Done reviewing, a win kept from the "+ Add a win" sheet (no open box on the page), Remove
  * on a win and "This quarter" unfolding.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -228,14 +229,29 @@ class ReviewScreensTest {
         if (compose.onAllNodes(hasContentDescription("Next week") and hasClickAction()).fetchSemanticsNodes().isNotEmpty()) {
             fail("$name: › can be tapped on this week")
         }
-        scrollTo("What went well")
-        compose.mainClock.autoAdvance = true
-        compose.onNode(hasContentDescription(winsView(Fill.MANY).hint) and hasSetTextAction()).performTextInput("Led the planning session")
-        compose.onNode(hasContentDescription(winsView(Fill.MANY).hint) and hasSetTextAction()).performImeAction()
-        compose.waitForIdle()
-        compose.mainClock.autoAdvance = false
-        turns()
-        if (taps.added != listOf("Led the planning session")) fail("$name: the field didn't keep the win (${taps.added})")
+        // Walk-through week 5, A17: "+ Add a win" is a row opening a sheet; no open box on the page.
+        val wins = winsView(Fill.MANY)
+        scrollTo(WinRules.ADD_ROW)
+        if (openBox(wins.hint)) fail("$name: an open \"${wins.hint}\" box on the page")
+        compose.onNodeWithTag(REVIEW_ADD_WIN_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("$name: + Add a win opened no sheet")
+        if (addEnabled(wins.sheet.title)) fail("$name: the win sheet's Add is lit with nothing typed")
+        typeInto(wins.sheet.spokenHint, " - ")
+        if (addEnabled(wins.sheet.title)) fail("$name: the win sheet's Add is lit for a lone dash")
+        val close = compose.onAllNodes(hasText(GoalAddRules.CLOSE) and hasClickAction(), useUnmergedTree = true)
+        if (close.fetchSemanticsNodes().isEmpty()) fail("$name: the win sheet has no Close")
+        close[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (sheetOpen()) fail("$name: Close left the win sheet open")
+        if (taps.added.isNotEmpty()) fail("$name: closing the sheet kept a win (${taps.added})")
+        compose.onNodeWithTag(REVIEW_ADD_WIN_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        typeInto(wins.sheet.spokenHint, "Led the planning session")
+        if (!addEnabled(wins.sheet.title)) fail("$name: Add stayed dark with a win typed")
+        tapSaid("Add, ${wins.sheet.title}")
+        if (taps.added != listOf("Led the planning session")) fail("$name: the sheet didn't keep the win (${taps.added})")
+        if (sheetOpen()) fail("$name: the win sheet stayed open after Add")
         clickNode(hasContentDescription("Remove Calm handover with the new starter"), "$name: a win's Remove")
         if (taps.removed.map { it.id } != listOf("w2")) fail("$name: Remove didn't remove that win (${taps.removed.map { it.id }})")
         scrollTo("This quarter")
@@ -246,6 +262,30 @@ class ReviewScreensTest {
         clickNode(hasText("Done reviewing"), "$name: Done reviewing")
         if (taps.reviewed != 1) fail("$name: Done reviewing did nothing")
     }
+
+    private fun sheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun openBox(spoken: String) = compose.onAllNodes(
+        hasContentDescription(spoken) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true,
+    ).fetchSemanticsNodes().isNotEmpty()
+
+    /** The sheet is a dialog, a second root: tap across both by what a screen reader says. */
+    private fun tapSaid(said: String) {
+        val n = compose.onAllNodes(hasContentDescription(said), useUnmergedTree = true)
+        if (n.fetchSemanticsNodes().isEmpty()) fail("Review: nothing to tap says \"$said\"")
+        n[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+    }
+
+    private fun typeInto(spoken: String, text: String) {
+        val f = compose.onAllNodes(hasContentDescription(spoken) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+        if (f.fetchSemanticsNodes().isEmpty()) fail("Review: the sheet has no \"$spoken\" field")
+        f[0].performSemanticsAction(SemanticsActions.SetText) { it(androidx.compose.ui.text.AnnotatedString(text)) }
+        turns(300)
+    }
+
+    private fun addEnabled(sheetTitle: String) = compose.onAllNodes(hasContentDescription("Add, $sheetTitle"), useUnmergedTree = true)
+        .fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == false
 
     /** Works by hand on a past week: › steps forward. */
     private fun byHandPast() {

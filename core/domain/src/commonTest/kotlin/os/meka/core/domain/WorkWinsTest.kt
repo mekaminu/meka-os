@@ -133,4 +133,25 @@ class WorkWinsTest {
         assertNull(card("  "))
         assertNull(card(null))
     }
+
+    @Test
+    fun reviewsAddAWinIsARowOpeningASheetThatReadsTheLineLikeTheOldField() {
+        val now = WinRules.view(emptyList(), 100, 102, 10 * 60)
+        val past = WinRules.view(emptyList(), 93, 102, 10 * 60)
+        assertTrue(now.current)
+        assertFalse(past.current)
+        assertEquals("+ Add a win", now.addRow.label)
+        assertEquals("Add a win, A line on what went well, kept for your reviews", GoalAddRules.rowSpoken(now.addRow))
+        assertTrue(past.addRow.line.contains("dated its Friday"))
+        assertEquals("A win this week", now.sheet.title)
+        assertEquals("A win that week", past.sheet.title)
+        assertEquals(WinRules.HINT_THIS_WEEK, now.sheet.spokenHint)
+        assertEquals(WinRules.HINT_PAST_WEEK, past.sheet.spokenHint)
+        assertEquals("Add", now.sheet.addLabel)
+        assertFalse(now.sheet.hint.endsWith("…"))
+        assertFalse(WinRules.canAdd("   "))
+        assertFalse(WinRules.canAdd(" - "), "a lone dash is no win")
+        assertTrue(WinRules.canAdd(" led the planning session "))
+        assertTrue(WinsView.EMPTY.current)
+    }
 }

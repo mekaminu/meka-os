@@ -37,20 +37,24 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.goals.fold
 import os.meka.android.goals.unfold
-import os.meka.android.lists.Field
+import os.meka.android.goals.GoalAddRowView
+import os.meka.android.goals.LineAddSheetView
+import androidx.compose.ui.platform.testTag
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.WinAdded
 import os.meka.core.domain.WinRow
+import os.meka.core.domain.WinRules
 import os.meka.core.domain.WinsView
 
 /**
- * Work wins in the weekly review (V1, slice 1): the reviewed week's wins, a field to keep one ("What went well this
- * week?"), and this quarter's wins week by week. Friday at 16:00 MEKA asks; until a win is kept the section's line is
+ * Work wins in the weekly review (V1, slice 1): the reviewed week's wins, the "+ Add a win" row opening a sheet to keep
+ * one ("What went well this week?"; walk-through week 5, A17: no open box on the page), and this quarter's wins week by week. Friday at 16:00 MEKA asks; until a win is kept the section's line is
  * lit in the accent.
  *
- * Motion: the section staggers in with the review's others; the line under the field and the week's line cross-fade
- * (the week's line blends to the accent while MEKA is asking); Add (Done) gives a light haptic and the win arrives with
+ * Motion: the section staggers in with the review's others; the line under the row and the week's line cross-fade
+ * (the week's line blends to the accent while MEKA is asking); the sheet rises over a fading scrim; its Add (or Done on
+ * the keyboard) gives a light haptic and the win arrives with
  * the list's item motion; Remove gives a tick and the row leaves; "This quarter" unfolds its weeks in place (expand
  * spring; the chevron turns; tick haptic). Reduced motion: cross-fades.
  */
@@ -82,17 +86,23 @@ internal fun LazyListScope.winsItems(
         val color by animateColorAsState(
             if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "win-said",
         )
+        var adding by rememberSaveable { mutableStateOf(false) }
         Column(Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(index)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Field(wins.hint) { typed -> onAdd(typed) }
+            // Walk-through week 5, A17: "+ Add a win" is a card row opening a sheet, not an open box on the page.
+            GoalAddRowView(wins.addRow, Modifier.testTag(REVIEW_ADD_WIN_TAG)) { adding = true }
             Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "win-said-line") { l ->
                 l?.let { Text(it, style = MekaType.caption, color = color) }
             }
         }
+        if (adding) LineAddSheetView(wins.sheet, WinRules::canAdd, WinRules.MAX_TEXT * 2, onAdd = onAdd, onClose = { adding = false })
     }
     if (wins.quarterCount > 0) item(key = "win-quarter") {
         WinsQuarter(wins, Modifier.animateItem().appear(rememberAppearance(index)), onToggleQuarter)
     }
 }
+
+/** The tag the screen tests find Review's "+ Add a win" row by. */
+const val REVIEW_ADD_WIN_TAG = "review-add-win"
 
 @Composable
 private fun WinLine(w: WinRow, modifier: Modifier, onRemove: () -> Unit) {

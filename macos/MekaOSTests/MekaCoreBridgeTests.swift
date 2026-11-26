@@ -2803,6 +2803,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.wins.defaultTier, NoticeTier.headsUp)
     }
 
+    func testWinAddSheetReachesSwift() {
+        // Walk-through week 5, A17: Review's "+ Add a win" row and its sheet come from the core; Add lights only for a
+        // line a win keeps.
+        let rules = WinRules.shared
+        let empty = WinsView.companion.EMPTY
+        XCTAssertEqual(empty.addRow.label, rules.ADD_ROW)
+        XCTAssertEqual(empty.sheet.title, "A win this week")
+        XCTAssertEqual(empty.sheet.spokenHint, rules.HINT_THIS_WEEK)
+        XCTAssertFalse(rules.canAdd(text: "  "))
+        XCTAssertTrue(rules.canAdd(text: "Led the planning session"))
+    }
+
     func testAnnualLeaveReachesSwift() {
         // Annual leave planner, slice 1: a typed stretch is read by the core's rules (leave already taken needs its
         // year), the words and the empty view reach the Mac (only Strings and Ints cross from the sheet).
