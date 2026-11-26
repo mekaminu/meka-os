@@ -12,7 +12,6 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -169,10 +168,10 @@ class ObiCallsScreensTest {
         waitFor("Don't keep didn't save and close the sheet") { core.workMode.value.recordingDays == 0 && !sheetOpen() }
         turns()
         ScreenShots.awaitShows(compose, "obi-calls-by-hand", "cap £30")
-        // The page reads the core again on its own thread: wait until the row says Don't keep, then show it.
+        // The page reads the core again on its own thread: wait until the row says Don't keep. (No performScrollTo: on
+        // this scrolling column with the clock paused its scroll never ends; the shot's top already differs, cap £30.)
         val kept = "${CallsChoiceRules.KEEP_TITLE}, Don't keep. Opens the choices"
         waitFor("the Keep recordings row doesn't say Don't keep") { compose.onAllNodes(hasContentDescription(kept)).fetchSemanticsNodes().isNotEmpty() }
-        compose.onAllNodes(hasContentDescription(kept))[0].performScrollTo()
         turns()
         ScreenShots.reshootAfterHand(compose, "obi-calls", "cover-dark-by-hand")
     }
