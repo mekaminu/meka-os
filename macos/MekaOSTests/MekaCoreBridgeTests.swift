@@ -3306,6 +3306,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(choices.mailNamed(name: choices.SHOW)?.boolValue, false)
     }
 
+    func testAppearanceChoicesReachSwift() {
+        // Walk-through week 5, A17: Appearance's theme, motion, done tasks and ticker are menus built from the core's
+        // sheets; the theme's ids are the Mac's own raw values.
+        let choices = AppearanceChoiceRules.shared
+        XCTAssertEqual(choices.themeSheet(id: MekaAppearance.system.rawValue).choices.map { $0.name },
+                       MekaAppearance.allCases.map { $0.rawValue })
+        XCTAssertEqual(choices.themeSheet(id: MekaAppearance.system.rawValue).choices.first(where: { $0.lit })?.label, "Auto")
+        XCTAssertEqual(choices.themeNamed(id: "dark", name: "light"), "light")
+        XCTAssertNil(choices.themeNamed(id: "dark", name: "dark"))
+        XCTAssertEqual(choices.motionSheet(stored: nil).choices.first(where: { $0.lit })?.label, "Expressive")
+        XCTAssertEqual(choices.motionNamed(stored: nil, name: "subtle")?.id, "subtle")
+        XCTAssertEqual(choices.doneSheet(show: .folded).choices.map { $0.label }, ["Folded", "Hidden", "Shown"])
+        XCTAssertEqual(choices.doneNamed(show: .folded, name: "H"), .hidden)
+        XCTAssertEqual(choices.tickerNamed(mode: .moving, name: "calm"), .calm)
+        XCTAssertNil(choices.tickerNamed(mode: .moving, name: "moving"))
+    }
+
     func testWeekAheadChoicesReachSwift() {
         // Walk-through week 5, A17: the week ahead's Sunday heads-up is one menu built from the core's sheet; a pick sends
         // only its name back and the core reads it to the setting.

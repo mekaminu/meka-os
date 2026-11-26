@@ -50,6 +50,12 @@ import os.meka.android.ask.ABOUT_YOU_LIST_TAG
 import os.meka.android.ask.AboutYouPane
 import os.meka.android.ask.SETTINGS_LIST_TAG
 import os.meka.android.ask.SettingsPane
+import os.meka.android.ask.APPEARANCE_DONE_ROW_TAG
+import os.meka.android.ask.APPEARANCE_MOTION_ROW_TAG
+import os.meka.android.ask.APPEARANCE_THEME_ROW_TAG
+import os.meka.android.ask.APPEARANCE_TICKER_ROW_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.core.domain.AppearanceChoiceRules
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.MotionPrefs
@@ -252,7 +258,7 @@ class SettingsScreensTest {
      * screen, its top (a copy of the connected shot) is dropped.
      */
     private fun shootAppearance(name: String) {
-        val differs = listOf(MotionCheckRules.PLAY_OPENING, "Topics ›", TickerMode.CALM.label, DoneShow.entries.first().label)
+        val differs = listOf(MotionCheckRules.PLAY_OPENING, "Topics ›", AppearanceChoiceRules.TICKER_HEAD, DoneShow.entries.first().label)
         turns(1_000) // the AI row's line may still be changing (connected phones): let the list's sizes settle
         val topIsCopy = !ScreenShots.anyOnScreen(compose, differs)
         val below = ScreenShots.shootBelow(compose, "settings", name, MotionCheckRules.PLAY_OPENING, settle = { turns(1_000) })
@@ -372,6 +378,39 @@ class SettingsScreensTest {
         compose.onAllNodes(field)[0].performImeAction()
     }
 
+    /** A choice's sheet is its own window (a second root): open it from its row and wait through the main looper. */
+    private fun openSheet(listTag: String, name: String, rowTag: String) {
+        reach(listTag, name, hasTestTag(rowTag), "$rowTag row")[0].performSemanticsAction(SemanticsActions.OnClick)
+        sheetUntil { sheetOpen() }
+        if (!sheetOpen()) fail("$name: $rowTag didn't open its sheet")
+    }
+
+    private fun chooseInSheet(name: String, label: String) {
+        compose.onAllNodes(hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        sheetUntil { !sheetOpen() }
+        if (sheetOpen()) fail("$name: choosing $label didn't close the sheet")
+    }
+
+    private fun inSheet(text: String): Boolean {
+        val m = SemanticsMatcher("shows \"$text\"") { node ->
+            node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.contains(text) } == true
+        }
+        return compose.onAllNodes(m and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+    }
+
+    private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
+
+    private fun sheetUntil(done: () -> Boolean) {
+        repeat(40) {
+            if (done()) return
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+    }
+
     private fun shows(m: SemanticsMatcher) = compose.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
 
     /**
@@ -425,35 +464,48 @@ class SettingsScreensTest {
             until(300) { opened.lastOrNull() == item }
             if (opened.lastOrNull() != item) fail("$name: ${item.label} opened ${opened.lastOrNull()?.label ?: "nothing"}")
         }
-        // Appearance unfolds in place.
+        // Appearance unfolds in place: its choices are rows saying what's chosen (walk-through week 5, A17), no chips.
         val appearance = hasText(MoreItem.APPEARANCE.label)
-        val light = hasText(ThemeChoice.LIGHT.label) and hasClickAction()
+        val themeRow = hasTestTag(APPEARANCE_THEME_ROW_TAG)
         tap(t, name, MoreItem.APPEARANCE.label, appearance)
-        until { shows(light) }
-        if (!shows(light)) fail("$name: Appearance didn't unfold its choices")
+        until { shows(themeRow) }
+        if (!shows(themeRow)) fail("$name: Appearance didn't unfold its choices")
+        listOf(APPEARANCE_MOTION_ROW_TAG, APPEARANCE_DONE_ROW_TAG, APPEARANCE_TICKER_ROW_TAG).forEach { tag ->
+            reach(t, name, hasTestTag(tag), "$tag row")
+        }
+        // The choices not in force aren't drawn on the page: each is in its row's sheet.
+        listOf(ThemeChoice.LIGHT.label, MotionChoice.SUBTLE.label, DoneShow.HIDDEN.label, TickerMode.CALM.label).forEach {
+            if (shows(hasText(it, substring = false))) fail("$name: \"$it\" is still an open chip on the page")
+        }
         assertTouchTargets(name)
-        // A theme chip takes, and Dark puts it back.
-        tap(t, name, ThemeChoice.LIGHT.label, light)
+        // A theme through its sheet takes, and Dark puts it back.
+        openSheet(t, name, APPEARANCE_THEME_ROW_TAG)
+        if (!inSheet(AppearanceChoiceRules.THEME_NOTE.substringBefore('.'))) fail("$name: the theme's sheet doesn't say what it touches")
+        chooseInSheet(name, ThemeChoice.LIGHT.label)
         until { ThemeChoice.load(context) == ThemeChoice.LIGHT }
         if (ThemeChoice.load(context) != ThemeChoice.LIGHT) fail("$name: Light didn't take (${ThemeChoice.load(context)})")
-        tap(t, name, ThemeChoice.DARK.label, hasText(ThemeChoice.DARK.label))
+        openSheet(t, name, APPEARANCE_THEME_ROW_TAG)
+        chooseInSheet(name, ThemeChoice.DARK.label)
         until { ThemeChoice.load(context) == ThemeChoice.DARK }
         if (ThemeChoice.load(context) != ThemeChoice.DARK) fail("$name: Dark didn't take back")
-        // Motion: the chip not lit now ("Off" is also the ticker's, so Expressive or Subtle).
+        // Motion: the choice not lit now (Expressive or Subtle).
         val lit = MotionRules.lit(MotionPrefs.state(context).value)
         val motion = listOf(MotionChoice.EXPRESSIVE, MotionChoice.SUBTLE).first { it != lit }
-        tap(t, name, motion.label, hasText(motion.label))
+        openSheet(t, name, APPEARANCE_MOTION_ROW_TAG)
+        chooseInSheet(name, motion.label)
         until { MotionPrefs.state(context).value == motion }
         if (MotionPrefs.state(context).value != motion) fail("$name: ${motion.label} didn't take")
-        // Done today on Today: a chip other than the one chosen, kept in the core.
+        // Done tasks on Today: a choice other than the one chosen, kept in the core.
         val shown = core.doneTodayChoice.value.show
         val done = DoneShow.entries.first { it != shown }
-        tap(t, name, done.label, hasText(done.label))
+        openSheet(t, name, APPEARANCE_DONE_ROW_TAG)
+        chooseInSheet(name, done.label)
         until { core.doneTodayChoice.value.show == done }
         if (core.doneTodayChoice.value.show != done) fail("$name: ${done.label} didn't take (${core.doneTodayChoice.value.show})")
         // News ticker: Calm or Always moving, whichever isn't chosen.
         val ticker = listOf(TickerMode.CALM, TickerMode.MOVING).first { it != TickerChoice.state(context).value }
-        tap(t, name, ticker.label, hasText(ticker.label))
+        openSheet(t, name, APPEARANCE_TICKER_ROW_TAG)
+        chooseInSheet(name, ticker.label)
         until { TickerChoice.state(context).value == ticker }
         if (TickerChoice.state(context).value != ticker) fail("$name: ${ticker.label} didn't take")
         assertTouchTargets(name)
@@ -468,8 +520,8 @@ class SettingsScreensTest {
         ScreenShots.reshootAfterHand(compose, "settings", "cover-dark-settings-by-hand")
         // A second tap folds it.
         tap(t, name, MoreItem.APPEARANCE.label, appearance)
-        until { !shows(light) }
-        if (shows(light)) fail("$name: a second tap on Appearance left it unfolded")
+        until { !shows(themeRow) }
+        if (shows(themeRow)) fail("$name: a second tap on Appearance left it unfolded")
     }
 
     /**

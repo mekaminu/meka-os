@@ -490,6 +490,21 @@ private struct AppearanceRow: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceMotion) private var systemReduce
 
+    private var choices: AppearanceChoiceRules { AppearanceChoiceRules.shared }
+
+    /// Walk-through week 5, A17: each choice is one menu saying what's chosen, as the Fold's row and sheet, not a
+    /// segmented row of every choice. A pick sends only the choice's name; the core says what it sets.
+    private func choiceMenu(_ sheet: NotifyChoiceSheet, pick: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { pick(name) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack {
@@ -498,12 +513,9 @@ private struct AppearanceRow: View {
                     Text(MoreItem.appearance.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
                 Spacer()
-                Picker(MoreItem.appearance.label, selection: $appearance) {
-                    ForEach(MekaAppearance.allCases) { a in Text(a.label).tag(a.rawValue) }
+                choiceMenu(choices.themeSheet(id: appearance)) { name in
+                    if let id = choices.themeNamed(id: appearance, name: name) { appearance = id }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
             }
             HStack {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -515,13 +527,9 @@ private struct AppearanceRow: View {
                 }
                 Spacer()
                 // Nothing chosen shows Expressive selected: it is what plays (Meka, 2026-10-08).
-                Picker("Motion", selection: Binding(get: { MotionRules.shared.lit(stored: MotionSetting.stored(motion)).id },
-                                                     set: { motion = $0 })) {
-                    ForEach(MotionSetting.all, id: \.id) { m in Text(m.label).tag(m.id) }
+                choiceMenu(choices.motionSheet(stored: MotionSetting.stored(motion))) { name in
+                    if let m = choices.motionNamed(stored: MotionSetting.stored(motion), name: name) { motion = m.id }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
                 .onChange(of: motion) { MekaHaptics.tick() }
             }
             MotionCheckView(motion: $motion, palette: palette)
@@ -534,14 +542,10 @@ private struct AppearanceRow: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.doneTodayShown.show.code)
                 }
                 Spacer()
-                Picker(DoneTodayRules.shared.HEADING, selection: Binding(
-                    get: { model.doneTodayShown.show.code },
-                    set: { code in if let s = DoneTodayChoiceMac.all.first(where: { $0.code == code }) { model.setDoneTodayShow(s) } })) {
-                    ForEach(DoneTodayChoiceMac.all, id: \.code) { s in Text(s.label).tag(s.code) }
+                let show = model.doneTodayShown.show
+                choiceMenu(choices.doneSheet(show: show)) { name in
+                    if let s = choices.doneNamed(show: show, name: name) { model.setDoneTodayShow(s) }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
             }
             // Text size (Mac text is too big, Meka 2026-10-15): the same four sizes as View → Text Size.
             TextSizeRow(palette: palette)
@@ -555,12 +559,9 @@ private struct AppearanceRow: View {
                 Spacer()
                 Button("Topics…") { model.showNews = true }
                     .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
-                Picker("News ticker", selection: $ticker) {
-                    ForEach(NewsTickerChoice.all, id: \.id) { m in Text(m.label).tag(m.id) }
+                choiceMenu(choices.tickerSheet(mode: NewsTickerChoice.mode(ticker))) { name in
+                    if let m = choices.tickerNamed(mode: NewsTickerChoice.mode(ticker), name: name) { ticker = m.id }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
             }
             HStack {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {

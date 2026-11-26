@@ -49,7 +49,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -69,7 +68,6 @@ import os.meka.android.export.YourData
 import os.meka.android.news.NewsPane
 import os.meka.android.news.TickerChoice
 import os.meka.android.news.rememberTickerMode
-import os.meka.core.domain.TickerMode
 import os.meka.android.notify.NotificationsPane
 import os.meka.android.search.SearchPane
 import os.meka.android.shell.MoreGroup
@@ -83,9 +81,7 @@ import os.meka.android.shell.ShellDestination
 import os.meka.android.shell.ShellNav
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.ThemeChoice
-import os.meka.core.domain.MotionChoice
 import os.meka.core.domain.MotionCheckRules
-import os.meka.core.domain.MotionRules
 import os.meka.core.domain.AppUpdateRules
 import os.meka.android.MekaApplication
 import os.meka.android.designsystem.MotionControl
@@ -95,6 +91,7 @@ import os.meka.android.today.CalendarsPane
 import os.meka.android.today.ShutdownPane
 import os.meka.android.work.WorkPane
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.AppearanceChoiceRules
 
 /**
  * ASK (build plan M1, Four tabs, one front door). The fourth tab and the front door to everything that isn't a tab.
@@ -596,6 +593,11 @@ internal fun MoreRow(
 
 /** Ask's own list, for the hand tests' bounded scrolls (quality gate (3)). */
 const val ASK_LIST_TAG = "ask-list"
+/** Appearance's choice rows (walk-through week 5, A17), for the screen tests. */
+const val APPEARANCE_THEME_ROW_TAG = "appearance-theme-row"
+const val APPEARANCE_MOTION_ROW_TAG = "appearance-motion-row"
+const val APPEARANCE_DONE_ROW_TAG = "appearance-done-row"
+const val APPEARANCE_TICKER_ROW_TAG = "appearance-ticker-row"
 internal const val SET_UP_LABEL_TAG = "life-setup-label"
 internal const val LIFE_WELCOME_TAG = "life-welcome"
 
@@ -706,27 +708,20 @@ internal fun AppearanceRow(
                 modifier = Modifier.padding(start = MekaSpace.xs).rotate(turn))
         }
         if (open) {
-            Row(
-                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.xs),
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                ThemeChoice.entries.forEach { c ->
-                    Chip(c.label, theme.choice == c) { haptics.tick(); theme.set(c) }
-                }
-            }
+            // Walk-through week 5, A17: each choice is one row saying what's chosen, opening a sheet of the choices
+            // (Notifications' row and sheet), not an open chip row.
+            var sheet by remember { mutableStateOf<String?>(null) }
+            val themeId = theme.choice.name.lowercase()
+            os.meka.android.notify.NotifyChoiceRowView(
+                AppearanceChoiceRules.themeRow(themeId),
+                Modifier.padding(horizontal = MekaSpace.m).testTag(APPEARANCE_THEME_ROW_TAG), raised = true,
+            ) { haptics.tick(); sheet = AppearanceChoiceRules.THEME_HEAD }
             // Motion (motion pass 2): MEKA's own motion on this phone, whatever the phone's animator scale says.
             val motion = Meka.motion
-            Text("Motion", style = MekaType.caption, color = Meka.colors.textSecondary,
-                modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
-            Row(
-                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                MotionChoice.entries.forEach { m ->
-                    // Nothing chosen shows Expressive lit: it is what plays (Meka, 2026-10-08).
-                    Chip(m.label, MotionRules.lit(motion.stored) == m) { haptics.tick(); motion.set(m) }
-                }
-            }
+            os.meka.android.notify.NotifyChoiceRowView(
+                AppearanceChoiceRules.motionRow(motion.stored),
+                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs).testTag(APPEARANCE_MOTION_ROW_TAG), raised = true,
+            ) { haptics.tick(); sheet = AppearanceChoiceRules.MOTION_HEAD }
             AnimatedContent(
                 targetState = motion.line,
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
@@ -736,16 +731,10 @@ internal fun AppearanceRow(
             if (core != null) DoneTodayChoiceSection(core)
             // News ticker (news ticker, slice 2): how the strip under Today's header moves, on this device; Topics
             // opens News (the topics and their sources).
-            Text("News ticker", style = MekaType.caption, color = Meka.colors.textSecondary,
-                modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
-            Row(
-                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                TickerMode.entries.forEach { m ->
-                    Chip(m.label, tickerMode == m) { haptics.tick(); TickerChoice.set(context, m) }
-                }
-            }
+            os.meka.android.notify.NotifyChoiceRowView(
+                AppearanceChoiceRules.tickerRow(tickerMode),
+                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs).testTag(APPEARANCE_TICKER_ROW_TAG), raised = true,
+            ) { haptics.tick(); sheet = AppearanceChoiceRules.TICKER_HEAD }
             Row(
                 Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xs),
                 verticalAlignment = Alignment.CenterVertically,
@@ -759,6 +748,27 @@ internal fun AppearanceRow(
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = openTopics)
                         // Works by hand (quality gate (3)): a 48 dp touch, the word drawn as before.
                         .minTouch().padding(horizontal = MekaSpace.xxs))
+            }
+            when (sheet) {
+                AppearanceChoiceRules.THEME_HEAD -> os.meka.android.notify.NotifyChoiceSheetView(
+                    AppearanceChoiceRules.themeSheet(themeId),
+                    onChoose = { name ->
+                        AppearanceChoiceRules.themeNamed(themeId, name)?.let { id ->
+                            ThemeChoice.entries.firstOrNull { it.name.lowercase() == id }?.let(theme.set)
+                        }
+                    },
+                    onClose = { sheet = null },
+                )
+                AppearanceChoiceRules.MOTION_HEAD -> os.meka.android.notify.NotifyChoiceSheetView(
+                    AppearanceChoiceRules.motionSheet(motion.stored),
+                    onChoose = { name -> AppearanceChoiceRules.motionNamed(motion.stored, name)?.let(motion.set) },
+                    onClose = { sheet = null },
+                )
+                AppearanceChoiceRules.TICKER_HEAD -> os.meka.android.notify.NotifyChoiceSheetView(
+                    AppearanceChoiceRules.tickerSheet(tickerMode),
+                    onChoose = { name -> AppearanceChoiceRules.tickerNamed(tickerMode, name)?.let { TickerChoice.set(context, it) } },
+                    onClose = { sheet = null },
+                )
             }
             // How the Fold reports it is held (bedside clock slice 1), live, so the bedside clock's trigger can be seen.
             os.meka.android.fold.FoldPostureLines(Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.xxs))
@@ -843,43 +853,26 @@ private fun DoneTodayChoiceSection(core: os.meka.core.facade.MekaCore) {
     var picked by remember { mutableStateOf<os.meka.core.domain.DoneShow?>(null) }
     LaunchedEffect(stored.show) { if (picked == stored.show) picked = null }
     val show = picked ?: stored.show
-    Text(os.meka.core.domain.DoneTodayRules.HEADING, style = MekaType.caption, color = Meka.colors.textSecondary,
-        modifier = Modifier.padding(start = MekaSpace.m, top = MekaSpace.xs))
-    Row(
-        Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        os.meka.core.domain.DoneShow.entries.forEach { c ->
-            Chip(c.label, show == c) {
-                haptics.tick()
+    var open by remember { mutableStateOf(false) }
+    os.meka.android.notify.NotifyChoiceRowView(
+        AppearanceChoiceRules.doneRow(show),
+        Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs).testTag(APPEARANCE_DONE_ROW_TAG), raised = true,
+    ) { haptics.tick(); open = true }
+    if (open) os.meka.android.notify.NotifyChoiceSheetView(
+        AppearanceChoiceRules.doneSheet(show),
+        onChoose = { name ->
+            AppearanceChoiceRules.doneNamed(show, name)?.let { c ->
                 picked = c
                 scope.launch { runCatching { core.setDoneTodayShow(c.code) } }
             }
-        }
-    }
+        },
+        onClose = { open = false },
+    )
     AnimatedContent(
         targetState = show.line,
         transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
         label = "done-choice-line", modifier = Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xxs),
     ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
-}
-
-/** A choice chip: the chosen one's colour blends across (`themeBlend`). */
-@Composable
-private fun Chip(label: String, chosen: Boolean, choose: () -> Unit) {
-    val bg by animateColorAsState(
-        if (chosen) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-bg",
-    )
-    val fg by animateColorAsState(
-        if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.themeBlend(Meka.reducedMotion), label = "chip-fg",
-    )
-    Text(
-        label, style = MekaType.caption, color = fg,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-            .clickable(role = Role.RadioButton) { if (!chosen) choose() }
-            .semantics { selected = chosen }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-    )
 }
 
 /** Life tiles in rows of [columns]; each row is keyed by its tiles so it glides when the order changes. */
