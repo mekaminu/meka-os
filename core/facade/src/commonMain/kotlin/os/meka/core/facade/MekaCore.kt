@@ -7641,6 +7641,26 @@ class MekaCore(
         return speakUpView()
     }
 
+    /**
+     * A choice in a Speaking up row's sheet (walk-through week 5, A17): [label] the section's label, [name] the choice's
+     * name ([os.meka.core.domain.SpeakUpChoiceRules]); a choice already in force or unknown changes nothing.
+     */
+    suspend fun speakUpChoose(label: String, name: String): os.meka.core.domain.SpeakUpView {
+        val section = speakUpView().sections.firstOrNull { it.label == label } ?: return speakUpView()
+        onCore {
+            val rules = os.meka.core.domain.SpeakUpChoiceRules
+            val m = rules.moment(section)
+            val on = rules.namedOn(section, name)
+            val often = rules.namedOften(section, name)
+            when {
+                m != null && on != null -> speakUp.setMoment(m, on)
+                often != null -> speakUp.setOften(often)
+            }
+            Unit
+        }
+        return speakUpView()
+    }
+
     /** "shh" / "not now" to Obi: mutes speaking up for 2 hours on every device. */
     suspend fun muteSpeakUp() = onCore { speakUp.mute(nowMs() + os.meka.core.domain.SpeakUpRules.MUTE_MS) }
 

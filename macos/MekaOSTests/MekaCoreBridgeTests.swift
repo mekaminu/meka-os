@@ -3352,6 +3352,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(talk.named(on: true, name: talk.ON))
     }
 
+    func testSpeakUpChoicesReachSwift() {
+        // Walk-through week 5, A17: Speaking up's moments and How often are menus built from the core's sheets; Mute isn't.
+        let rules = SpeakUpChoiceRules.shared
+        let urgent = TalkSetupSection(label: SpeakMoment.urgent.label, status: "On", lit: true, steps: [], action: SpeakUpRules.shared.TURN_OFF)
+        XCTAssertTrue(rules.isChoice(s: urgent))
+        XCTAssertEqual(rules.row(s: urgent)?.value, "On")
+        XCTAssertEqual(rules.sheet(s: urgent)?.choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(rules.namedOn(s: urgent, name: rules.OFF)?.boolValue, false)
+        let often = TalkSetupSection(label: SpeakUpRules.shared.OFTEN_LABEL, status: SpeakOften.more.label, lit: false, steps: [], action: SpeakOften.less.label)
+        XCTAssertEqual(rules.sheet(s: often)?.choices.first(where: { $0.lit })?.label, SpeakOften.more.label)
+        let mute = TalkSetupSection(label: SpeakUpRules.shared.MUTE_LABEL, status: "Not muted", lit: false, steps: [], action: SpeakUpRules.shared.MUTE_ACTION)
+        XCTAssertFalse(rules.isChoice(s: mute))
+        XCTAssertNil(rules.sheet(s: mute))
+    }
+
     func testWeekAheadChoicesReachSwift() {
         // Walk-through week 5, A17: the week ahead's Sunday heads-up is one menu built from the core's sheet; a pick sends
         // only its name back and the core reads it to the setting.

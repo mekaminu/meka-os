@@ -5,6 +5,10 @@ import SwiftUI
 /// Obi says out loud on his own (Turn on / Turn off), How often, and Mute for 2 hours / Speak again now. The words are
 /// the core's `SpeakUpRules.view`, synced with the Fold. On the Mac he speaks only while he is using it.
 ///
+/// Walk-through week 5, A17: each moment's switch and How often are a menu under the label saying what's chosen
+/// (`SpeakUpChoiceRules`), as the Fold's row and sheet, not an open Turn on / Turn off or "Up to 3 a day" pill; Mute for
+/// 2 hours / Speak again now stays a button.
+///
 /// Motion: the sheet scale-fades (system); sections stagger in; a button presses in with a tick haptic and the status
 /// line blends to the accent while on (`themeBlend`, the words cross-fade). Reduce Motion: cross-fades.
 struct SpeakUpSheet: View {
@@ -47,14 +51,18 @@ struct SpeakUpSheet: View {
                         Text(s.label.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                             .foregroundStyle(palette.textTertiary)
                             .accessibilityAddTraits(.isHeader)
-                        Text(LoneWordGlue.shared.kept(line: s.status)).font(MekaType.body).foregroundStyle(s.lit ? palette.accent : palette.textPrimary)
-                            .contentTransition(.opacity)
-                            .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: s.lit)
+                        if let sheet = choices.sheet(s: s) {
+                            choiceMenu(sheet, s.label)
+                        } else {
+                            Text(LoneWordGlue.shared.kept(line: s.status)).font(MekaType.body).foregroundStyle(s.lit ? palette.accent : palette.textPrimary)
+                                .contentTransition(.opacity)
+                                .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: s.lit)
+                        }
                         ForEach(s.steps, id: \.self) { step in
                             Text(LoneWordGlue.shared.kept(line: step)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        if let action = s.action {
+                        if let action = s.action, !choices.isChoice(s: s) {
                             let label = s.label
                             Button(action) { run(label) }
                                 .buttonStyle(MekaPressStyle())
@@ -82,6 +90,30 @@ struct SpeakUpSheet: View {
         .frame(width: 460)
         .background(palette.surface)
         .task { view = await model.speakUpView() }
+    }
+
+    private var choices: SpeakUpChoiceRules { SpeakUpChoiceRules.shared }
+
+    /// One choice's menu, saying what's chosen; a pick sends only the section's label and the choice's name (the core
+    /// reads them to the setting, so no Kotlin object crosses back).
+    private func choiceMenu(_ sheet: NotifyChoiceSheet, _ label: String) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { lit }, set: { name in if name != lit { choose(label, name) } })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
+        .accessibilityLabel(label)
+    }
+
+    private func choose(_ label: String, _ name: String) {
+        MekaHaptics.tick()
+        Task {
+            let next = await model.speakUpChoose(label, name)
+            withAnimation(MekaMotion.themeBlend(reduced: reduceMotion)) { if let next { view = next } }
+        }
     }
 
     private func run(_ label: String) {

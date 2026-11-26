@@ -44,6 +44,7 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MailAutopilotPanelRules
+import os.meka.core.domain.SpeakUpChoiceRules
 import os.meka.core.domain.SpeakUpView
 import os.meka.core.domain.TalkSetupSection
 import os.meka.core.facade.MekaCore
@@ -52,6 +53,10 @@ import os.meka.core.facade.MekaCore
  * Ask → Settings → Speaking up (the JARVIS step, slice 1): a section per moment Obi says out loud on his own, each with
  * Turn on / Turn off; How often (up to 6 a day or 3); Mute for 2 hours / Speak again now. The words are the core's
  * [os.meka.core.domain.SpeakUpRules.view], synced, the same as the Mac's sheet.
+ *
+ * Walk-through week 5, A17: each moment's switch and How often are a card row under the label saying what's chosen
+ * ("Your train" · "On" ›) opening a sheet of its choices ([SpeakUpChoiceRules]), not an open Turn on / Turn off or
+ * "Up to 3 a day" pill; Mute for 2 hours / Speak again now stays a button (an action for the next two hours).
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; sections stagger in 40 ms apart; a
  * button presses in with a tick haptic and the status line blends to the accent while on. Reduced motion: cross-fades.
@@ -66,6 +71,20 @@ fun SpeakUpPane(core: MekaCore, onClose: () -> Unit) {
     var view by remember { mutableStateOf<SpeakUpView?>(null) }
     var howOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { view = runCatching { core.speakUpView() }.getOrNull() }
+    // The choice a row opened, by its section's label (walk-through week 5, A17).
+    var sheet by remember { mutableStateOf<String?>(null) }
+    sheet?.let { label ->
+        val s = view?.sections?.firstOrNull { it.label == label } ?: return@let
+        SpeakUpChoiceRules.sheet(s)?.let { sh ->
+            os.meka.android.notify.NotifyChoiceSheetView(sh,
+                onChoose = { name ->
+                    if (SpeakUpChoiceRules.namedOn(s, name) != null || SpeakUpChoiceRules.namedOften(s, name) != null) {
+                        scope.launch { view = runCatching { core.speakUpChoose(label, name) }.getOrNull() ?: view }
+                    }
+                },
+                onClose = { sheet = null })
+        }
+    }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter).testTag("speak-up-pane"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -98,7 +117,7 @@ fun SpeakUpPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         v.sections.forEachIndexed { i, s ->
-            SpeakSection(s, Modifier.appear(rememberAppearance(i + 1))) {
+            SpeakSection(s, Modifier.appear(rememberAppearance(i + 1)), onOpen = { haptics.tick(); sheet = s.label }) {
                 haptics.tick()
                 scope.launch { view = runCatching { core.speakUpAction(s.label) }.getOrNull() ?: view }
             }
@@ -108,18 +127,27 @@ fun SpeakUpPane(core: MekaCore, onClose: () -> Unit) {
     }
 }
 
+/** Settings → Speaking up's choice rows (walk-through week 5, A17), by section label, for the screen tests. */
+fun speakRowTag(label: String): String = "speak-row-" + label.filter { it.isLetter() }.lowercase()
+
 @Composable
-private fun SpeakSection(s: TalkSetupSection, modifier: Modifier, onAction: () -> Unit) {
+private fun SpeakSection(s: TalkSetupSection, modifier: Modifier, onOpen: () -> Unit, onAction: () -> Unit) {
     val reduced = Meka.reducedMotion
     val statusColor by animateColorAsState(
         if (s.lit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "speak-status",
     )
     Column(modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(s.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.semantics { heading() })
-        Text(LoneWordGlue.kept(s.status), style = MekaType.body, color = statusColor)
+        // A choice is a row saying what's chosen, opening its sheet (walk-through week 5, A17).
+        val row = SpeakUpChoiceRules.row(s)
+        if (row != null) {
+            os.meka.android.notify.NotifyChoiceRowView(row, Modifier.testTag(speakRowTag(s.label)), raised = true, onOpen = onOpen)
+        } else {
+            Text(LoneWordGlue.kept(s.status), style = MekaType.body, color = statusColor)
+        }
         s.steps.forEach { step -> Text(LoneWordGlue.kept(step), style = MekaType.caption, color = Meka.colors.textSecondary) }
         // Quality gate slice 55: drawn 32 dp with its 48 dp touch outside, straight under the words (no extra gap).
-        s.action?.let { label ->
+        s.action?.takeIf { row == null }?.let { label ->
             TouchPill(label, Meka.colors.surfaceRaised, Meka.colors.accent, spoken = "$label: ${s.label}", onClick = onAction)
         }
     }

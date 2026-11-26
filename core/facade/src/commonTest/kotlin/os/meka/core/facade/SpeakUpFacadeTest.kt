@@ -62,6 +62,24 @@ class SpeakUpFacadeTest {
     }
 
     @Test
+    fun aRowsSheetChoiceSetsIt() = runTest {
+        val c = core()
+        try {
+            // Walk-through week 5, A17: a row's sheet picks by name; the same choice again or an unknown name changes nothing.
+            val train = SpeakMoment.TRAIN.label
+            assertEquals("Off", c.speakUpChoose(train, os.meka.core.domain.SpeakUpChoiceRules.OFF).sections.first { it.label == train }.status)
+            assertEquals("Off", c.speakUpChoose(train, os.meka.core.domain.SpeakUpChoiceRules.OFF).sections.first { it.label == train }.status)
+            assertEquals("On", c.speakUpChoose(train, os.meka.core.domain.SpeakUpChoiceRules.ON).sections.first { it.label == train }.status)
+            val less = c.speakUpChoose(SpeakUpRules.OFTEN_LABEL, os.meka.core.domain.SpeakOften.LESS.name)
+            assertEquals(os.meka.core.domain.SpeakOften.LESS.label, less.sections.first { it.label == SpeakUpRules.OFTEN_LABEL }.status)
+            val same = c.speakUpChoose(SpeakUpRules.OFTEN_LABEL, "maybe")
+            assertEquals(os.meka.core.domain.SpeakOften.LESS.label, same.sections.first { it.label == SpeakUpRules.OFTEN_LABEL }.status)
+            // Mute isn't a choice: a name there leaves it unmuted.
+            assertTrue(c.speakUpChoose(SpeakUpRules.MUTE_LABEL, os.meka.core.domain.SpeakUpChoiceRules.ON).sections.last().status == "Not muted")
+        } finally { c.close() }
+    }
+
+    @Test
     fun focusHoldsTheTrainButNotMoney() = runTest {
         val c = core()
         try {

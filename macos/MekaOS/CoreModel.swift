@@ -1848,6 +1848,12 @@ final class CoreModel {
         return try? await core.speakUpAction(label: label)
     }
 
+    /// A choice in a Speaking up menu (walk-through week 5, A17): the section's label and the choice's name, both strings.
+    func speakUpChoose(_ label: String, _ name: String) async -> SpeakUpView? {
+        guard let core else { return nil }
+        return try? await core.speakUpChoose(label: label, name: name)
+    }
+
     /// Obi is working on (Ada plans with you, part 3 slice 1): the standing errands' cards and switches, as the Fold's.
     func workingOnView() async -> WorkingOnView? {
         guard let core else { return nil }

@@ -42,7 +42,11 @@ import os.meka.core.domain.MailAutopilotPanelRules
 import os.meka.core.domain.MailFindAutoRules
 import os.meka.core.domain.SpeakMoment
 import os.meka.core.domain.SpeakOften
+import os.meka.core.domain.SpeakUpChoiceRules
 import os.meka.core.domain.SpeakUpRules
+import os.meka.android.ask.speakRowTag
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import androidx.compose.ui.test.hasAnyAncestor
 import os.meka.core.domain.TrustKind
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -204,6 +208,17 @@ class SpeakUpAutonomyScreensTest {
             fail("$name: the full how-to shows before How it works is tapped")
         }
         assertSlimPills(name, maxGapDp = 16f)
+        // Walk-through week 5, A17: each moment and How often is a row saying what's chosen; only Mute keeps a pill.
+        val rows = v.sections.mapNotNull { SpeakUpChoiceRules.row(it) }
+        if (rows.size != SpeakMoment.entries.size + 1) fail("$name: ${rows.size} choice rows")
+        rows.forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(r.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no \"${r.title}\" row saying ${r.value}")
+        }
+        (listOf(SpeakUpRules.TURN_ON, SpeakUpRules.TURN_OFF) + SpeakOften.entries.map { it.label }).forEach { word ->
+            if (compose.onAllNodes(hasTestTag("touch-pill") and hasText(word, substring = false), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                fail("$name: \"$word\" is still an open pill on the page")
+            }
+        }
         val mute = v.sections.last()
         when (fill) {
             Fill.EMPTY -> {
@@ -244,7 +259,7 @@ class SpeakUpAutonomyScreensTest {
         if (topIsCopy && below) java.io.File(ScreenShots.path("speak-up", name)).delete()
     }
 
-    /** Works by hand: Urgent's Turn off turns it off; How often swaps; Mute mutes for 2 hours and Speak again now ends it. */
+    /** Works by hand: Urgent's row → Off turns it off; How often's row → Up to 3 a day; Mute mutes for 2 hours and Speak again now ends it. */
     private fun speakByHand(core: MekaCore) {
         val name = "speak-up-by-hand"
         fun tap(description: String) {
@@ -262,11 +277,28 @@ class SpeakUpAutonomyScreensTest {
         until { !howShown() }
         if (howShown()) fail("$name: Hide left the how-to open")
 
-        tap("${SpeakUpRules.TURN_OFF}: ${SpeakMoment.URGENT.label}")
+        // Walk-through week 5, A17: a row opens its sheet; a choice there saves it and closes the sheet.
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        fun choose(label: String, choice: String) {
+            val row = compose.onAllNodes(hasTestTag(speakRowTag(label)) and hasClickAction())
+            if (row.fetchSemanticsNodes().isEmpty()) fail("$name: no $label row")
+            row[0].performSemanticsAction(SemanticsActions.OnClick)
+            until { sheetOpen() }
+            if (!sheetOpen()) fail("$name: the $label row didn't open its sheet")
+            compose.onAllNodes(hasText(choice, substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            until { !sheetOpen() }
+            if (sheetOpen()) fail("$name: choosing $choice didn't close the $label sheet")
+        }
+        choose(SpeakMoment.URGENT.label, SpeakUpChoiceRules.OFF_LABEL)
         until { runBlocking { core.speakUpView() }.sections.first().status == "Off" }
-        if (runBlocking { core.speakUpView() }.sections.first().status != "Off") fail("$name: Turn off left urgent from family on")
+        if (runBlocking { core.speakUpView() }.sections.first().status != "Off") fail("$name: Off left urgent from family on")
+        until { compose.onAllNodes(hasContentDescription("${SpeakMoment.URGENT.label}, Off. Opens the choices")).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription("${SpeakMoment.URGENT.label}, Off. Opens the choices")).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: the ${SpeakMoment.URGENT.label} row doesn't say Off after choosing Off")
+        }
 
-        tap("${SpeakOften.LESS.label}: ${SpeakUpRules.OFTEN_LABEL}")
+        choose(SpeakUpRules.OFTEN_LABEL, SpeakOften.LESS.label)
         until { onScreen("Said today: 0 of 3") }
         if (!onScreen("Said today: 0 of 3")) fail("$name: How often didn't change to up to 3 a day")
 
