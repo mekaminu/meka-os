@@ -86,8 +86,8 @@ private struct ShoppingRowView: View {
         }
         // Walk-through 2026-11-22 A17: each thing to buy is its own card, as Renewals' are, not bare text on the page.
         .padding(.leading, MekaSpace.m)
-        .padding(.trailing, MekaSpace.s)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.trailing, MekaSpace.xs)
+        .padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surface))
         .transition(.opacity)
     }

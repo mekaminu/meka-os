@@ -331,7 +331,7 @@ struct ListRowView<Details: View>: View {
         }
         // Walk-through 2026-11-22 A17: every row is its own card, as Renewals' are, on the surface whether opened or not.
         .padding(.horizontal, Self.inset)
-        .padding(.vertical, MekaSpace.s)
+        .padding(.vertical, MekaSpace.xs)
         .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surface))
         .transition(.opacity)
     }

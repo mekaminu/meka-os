@@ -433,7 +433,7 @@ internal fun ListRow(
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface).testTag(LIST_ROW_CARD_TAG)) {
         Column(
             Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) "Hide actions" else "Show actions") { onToggle() }
-                .minTouch().padding(horizontal = LIST_CARD_INSET, vertical = MekaSpace.s),
+                .minTouch().padding(horizontal = LIST_CARD_INSET, vertical = MekaSpace.xs),
         ) {
             Text(title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
             meta?.let { m ->
