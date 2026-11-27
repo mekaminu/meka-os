@@ -46,6 +46,7 @@ import os.meka.core.domain.AlarmRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.Feeling
+import os.meka.core.domain.FeelingChoiceRules
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.OnThisDayRules
 import os.meka.core.domain.ShutdownRules
@@ -429,16 +430,36 @@ class ShutdownScreensTest {
         if (v.done.none { it.title == "Fix the gate latch" }) fail("$name: the ticked task isn't in Done today")
     }
 
-    /** Tired is kept as today's feeling. */
+    /** Tired, picked in the feeling row's sheet, is kept as today's feeling and the row says it. */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun aFeelingPicksByHand() {
         val name = "cover-dark-feeling"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
-        tap(name, "Tired", hasText("Tired"))
-        until { runBlocking { core.feelingToday() } == Feeling.TIRED }
-        if (runBlocking { core.feelingToday() } != Feeling.TIRED) fail("$name: tapping Tired didn't keep it")
+        // Walk-through week 5, A17: the feeling is a row opening its sheet, not an open Good · Tired · Stretched row.
+        val row = FeelingChoiceRules.row(null)
+        scrollTo(hasContentDescription(row.spoken))
+        listOf("Good", "Tired", "Stretched").forEach { l ->
+            if (compose.onAllNodes(hasText(l), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: an open \"$l\" chip is still on the page")
+        }
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        tap(name, "How are you feeling?", hasContentDescription(row.spoken))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the row didn't open its sheet")
+        val line = FeelingChoiceRules.line(Feeling.TIRED)
+        // The sheet keeps short words with their neighbours (no-break spaces), so read it with plain spaces.
+        val says = SemanticsMatcher("reads \"$line\"") { n ->
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == line
+        }
+        if (compose.onAllNodes(says and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("$name: the sheet doesn't say \"$line\" for Tired")
+        compose.onAllNodes(hasText("Tired") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() && runBlocking { core.feelingToday() } == Feeling.TIRED }
+        if (sheetOpen()) fail("$name: choosing Tired didn't close the sheet")
+        if (runBlocking { core.feelingToday() } != Feeling.TIRED) fail("$name: choosing Tired didn't keep it")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("shutdown", name))
-        ScreenShots.assertShows(compose, name, "Tired, selected")
+        if (compose.onAllNodes(hasContentDescription(FeelingChoiceRules.row(Feeling.TIRED).spoken)).fetchSemanticsNodes().isEmpty())
+            fail("$name: the row doesn't say Tired")
     }
 
     /** The evening card's Turn off turns the card off, and the line under it says so. */

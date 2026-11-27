@@ -332,16 +332,9 @@ struct FeelingSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            SectionLabel(FeelingRules.shared.QUESTION, palette)
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(FeelingRules.shared.CHOICES, id: \.name) { f in
-                    let name = f.name
-                    chip(f.label, selected: picked == name) {
-                        picked = name
-                        Task { let o = await model.setFeeling(name); withAnimation(MekaMotion.appear(reduced: reduceMotion)) { offer = o } }
-                    }
-                }
-            }
+            // Walk-through week 5, A17: a "How are you feeling?" row with a menu of the same choices the Fold's sheet
+            // has, each saying what it offers for tomorrow, not an open chip row.
+            feelingRow
             if let o = offer {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(LoneWordGlue.shared.kept(line: o.line)).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
@@ -392,6 +385,35 @@ struct FeelingSection: View {
     }
 
     private func close() { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { offer = nil } }
+
+    private var pickedFeeling: Feeling? { FeelingRules.shared.CHOICES.first(where: { $0.name == picked }) }
+
+    private var feelingRow: some View {
+        let current = pickedFeeling
+        let row = FeelingChoiceRules.shared.row(picked: current)
+        let sheet = FeelingChoiceRules.shared.sheet(picked: current)
+        return HStack {
+            Text(row.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Menu {
+                ForEach(sheet.choices, id: \.name) { c in
+                    Button(c.lit ? "\(c.label) ✓ · \(c.line)" : "\(c.label) · \(c.line)") {
+                        guard let f = FeelingChoiceRules.shared.named(picked: pickedFeeling, name: c.name) else { return }
+                        let name = f.name
+                        picked = name
+                        Task { let o = await model.setFeeling(name); withAnimation(MekaMotion.appear(reduced: reduceMotion)) { offer = o } }
+                    }
+                }
+            } label: {
+                Text(row.value).font(MekaType.itemMeta)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
+            .accessibilityLabel(row.spoken)
+        }
+        .frame(maxWidth: 360)
+    }
 
     private func chip(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {

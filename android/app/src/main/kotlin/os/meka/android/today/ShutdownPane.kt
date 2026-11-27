@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.style.TextOverflow
 import os.meka.android.designsystem.wordsTap
 import androidx.compose.ui.semantics.contentDescription
@@ -69,6 +70,9 @@ import os.meka.core.domain.AlertHoldRules
 import os.meka.core.domain.Feeling
 import os.meka.core.domain.FeelingOffer
 import os.meka.core.domain.FeelingRules
+import os.meka.core.domain.FeelingChoiceRules
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.InstantTaskRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ShutdownItem
@@ -447,6 +451,7 @@ internal fun DailyReceiptLine(r: DailyReceipt, onOpen: () -> Unit, modifier: Mod
 }
 
 internal const val DAILY_RECEIPT_TAG = "today-receipt"
+internal const val SHUTDOWN_FEELING_ROW_TAG = "shutdown-feeling-row"
 
 /**
  * "How are you feeling?" (Week board, item (11)): Good · Tired · Stretched, kept on this phone only for a week. Tired
@@ -472,16 +477,22 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
         offer = runCatching { core.feelingOffer(f) }.getOrNull()
     }
     Column(modifier.fillMaxWidth()) {
-        SectionLabel(FeelingRules.QUESTION)
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), modifier = Modifier.padding(top = MekaSpace.xxs)) {
-            FeelingRules.CHOICES.forEach { f ->
-                FeelingChip(f.label, selected = picked == f) {
-                    haptics.tick()
+        // Walk-through week 5, A17: a "How are you feeling?" · "Not said" row opening its sheet, not an open chip row;
+        // each feeling in the sheet says what it offers for tomorrow. Nothing moves on a pick: the offer waits below.
+        var choosing by rememberSaveable { mutableStateOf(false) }
+        NotifyChoiceRowView(FeelingChoiceRules.row(picked), Modifier.testTag(SHUTDOWN_FEELING_ROW_TAG)) {
+            haptics.tick(); choosing = true
+        }
+        if (choosing) NotifyChoiceSheetView(
+            FeelingChoiceRules.sheet(picked),
+            onChoose = { name ->
+                FeelingChoiceRules.named(picked, name)?.let { f ->
                     picked = f; did = null; undo = null
                     scope.launch { offer = runCatching { core.setFeeling(f) }.getOrNull() }
                 }
-            }
-        }
+            },
+            onClose = { choosing = false },
+        )
         AnimatedVisibility(
             visible = offer != null && did == null,
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else fadeIn(MekaMotion.appear(false)) + expandVertically(),

@@ -2628,6 +2628,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(BriefLengthChoiceRules.shared.named(lengths: lengths, name: "standard"))
     }
 
+    func testFeelingChoicesReachSwift() {
+        // Walk-through week 5, A17: Shut down's feeling is a row with a menu, not an open chip row.
+        let none = FeelingChoiceRules.shared.row(picked: nil)
+        XCTAssertEqual(none.title, "How are you feeling?")
+        XCTAssertEqual(none.value, "Not said")
+        let sheet = FeelingChoiceRules.shared.sheet(picked: .tired)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["Good", "Tired", "Stretched"])
+        XCTAssertEqual(sheet.choices.filter { $0.lit }.map { $0.name }, ["TIRED"])
+        XCTAssertEqual(FeelingChoiceRules.shared.named(picked: .tired, name: "GOOD"), .good)
+        XCTAssertNil(FeelingChoiceRules.shared.named(picked: .tired, name: "TIRED"))
+    }
+
     func testWakeBufferChoicesReachSwift() {
         // Walk-through week 5, A17: Shut down's Time to get ready is a row with a menu, not an open chip row.
         let wake = WakeView.companion.EMPTY
