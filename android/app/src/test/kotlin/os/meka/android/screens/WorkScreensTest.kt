@@ -30,6 +30,12 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.AT_WORK_NOTE
 import os.meka.android.work.COMMUTE_TO_WORK_TAG
 import os.meka.android.work.CALL_ASSISTANT_TAG
+import os.meka.android.work.BLOCK_ADD_ROW_TAG
+import os.meka.android.goals.GOAL_ADD_SHEET_TAG
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.text.AnnotatedString
+import os.meka.core.domain.BlockedCallerRules
 import os.meka.android.work.WHATSAPP_CALLS_TAG
 import os.meka.android.work.LEAVING_TO_TAG
 import os.meka.android.work.MESSAGES_MARK_READ_TAG
@@ -205,6 +211,12 @@ class WorkScreensTest {
         }
         if (compose.onAllNodes(hasText("Turn the call assistant", substring = true)).fetchSemanticsNodes().isNotEmpty()) {
             fail("$name: the call assistant still has its Turn on / off pill")
+        }
+        // Walk-through week 5, A17: Spam protection's "Number to block" box is a "+ Block a number" row opening its sheet.
+        if (compose.onAllNodes(hasContentDescription(BlockedCallerRules.ADD_SPOKEN) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText),
+                useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: Spam protection still has an open Number to block box")
+        if (compose.onAllNodes(hasTestTag(BLOCK_ADD_ROW_TAG) and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: no + Block a number row")
         }
         // Walk-through week 5, A17: WhatsApp calls' switch is a card row saying On/Off.
         val waOn = ApplicationProvider.getApplicationContext<ShotApplication>().whatsAppCalls.settings.value.on
@@ -422,6 +434,37 @@ class WorkScreensTest {
                 fail("Work: WhatsApp calls' row doesn't say what was chosen")
             }
         }
+        // Walk-through week 5, A17: + Block a number opens its sheet; something that isn't a number keeps it open saying
+        // why, under the number, with nothing blocked; a real number and Block put it on the list and close the sheet.
+        fun blockSheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val blockBox = hasContentDescription(BlockedCallerRules.ADD_SPOKEN) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)
+        val blockButton = hasContentDescription("${BlockedCallerRules.addSheet.addLabel}, ${BlockedCallerRules.addSheet.title}")
+        if (blockSheetOpen()) fail("Work: the block sheet is open before + Block a number is tapped")
+        val blockedBefore = core.blockedCallers.value.rows.size
+        compose.onNodeWithTag(BLOCK_ADD_ROW_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!blockSheetOpen()) fail("Work: + Block a number opened no sheet")
+        if (compose.onAllNodes(blockButton, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) != true) {
+            fail("Work: Block is lit with nothing typed")
+        }
+        compose.onAllNodes(blockBox, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("call me")) }
+        turns(500)
+        compose.onAllNodes(blockButton, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        await { compose.onAllNodes(hasText(LoneWordGlue.kept(BlockedCallerRules.NOT_A_NUMBER)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        if (!blockSheetOpen()) fail("Work: something that isn't a number closed the block sheet")
+        if (compose.onAllNodes(hasText(LoneWordGlue.kept(BlockedCallerRules.NOT_A_NUMBER)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("Work: the block sheet doesn't say \"${BlockedCallerRules.NOT_A_NUMBER}\"")
+        }
+        if (core.blockedCallers.value.rows.size != blockedBefore) fail("Work: a refused number changed the block list")
+        compose.onNodeWithTag(GOAL_ADD_SHEET_TAG, useUnmergedTree = true).captureRoboImage(ScreenShots.path("work", "inner-dark-block-refused"))
+        compose.onAllNodes(blockBox, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString(BlockedCallerRules.ADD_EXAMPLE)) }
+        turns(500)
+        compose.onAllNodes(blockButton, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        await { core.blockedCallers.value.rows.size > blockedBefore && !blockSheetOpen() }
+        if (core.blockedCallers.value.rows.none { it.number == BlockedCallerRules.ADD_EXAMPLE }) {
+            fail("Work: Block in the sheet didn't block ${BlockedCallerRules.ADD_EXAMPLE} (${core.blockedCallers.value.rows})")
+        }
+        if (blockSheetOpen()) fail("Work: the block sheet stayed open once the number was blocked")
         // Walk-through 2026-11-15 A12 ("work inner by-hand = inner empty"): the shot was the opening screen, at work on
         // Navilife's hours like the empty page; it is taken again after the hand: work stopped (Start work now, Back to
         // my hours) and Saturday lit.

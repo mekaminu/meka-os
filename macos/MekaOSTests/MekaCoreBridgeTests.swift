@@ -2829,6 +2829,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.canLink(typed: "1234 5678", busy: false))
     }
 
+    func testBlockAddSheetReachesSwift() {
+        // Walk-through week 5, A17: Spam protection's "+ Block a number" row and its sheet come from the core; Block
+        // lights once something is typed and not while the number is checked; a refusal is said in the sheet.
+        let rules = BlockedCallerRules.shared
+        XCTAssertEqual(rules.addRow.label, rules.ADD_ROW)
+        let sheet = rules.addSheet
+        XCTAssertEqual(sheet.hint, rules.ADD_EXAMPLE)
+        XCTAssertEqual(sheet.spokenHint, rules.ADD_SPOKEN)
+        XCTAssertEqual(sheet.addLabel, rules.BLOCK_LABEL)
+        XCTAssertFalse(rules.canAdd(typed: " ", busy: false))
+        XCTAssertFalse(rules.canAdd(typed: "07700 900123", busy: true))
+        XCTAssertTrue(rules.canAdd(typed: "07700 900123", busy: false))
+        XCTAssertEqual(rules.sheetProblem(refused: true), rules.NOT_A_NUMBER)
+        XCTAssertNil(rules.sheetProblem(refused: false))
+    }
+
     func testVaultAddSheetReachesSwift() {
         // Walk-through week 5, A17: the Vault's "+ Add a document" row and its sheet come from the core; Add lights
         // once something is typed and not while the line is read.

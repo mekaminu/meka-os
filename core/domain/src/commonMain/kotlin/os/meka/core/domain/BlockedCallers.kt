@@ -138,6 +138,35 @@ object BlockedCallerRules {
     const val REPORT_LABEL = "Report to 7726"
     const val BLOCK_LABEL = "Block"
     const val BLOCKED_LINE = "Blocked · their calls won't ring"
+
+    // Walk-through week 5, A17: no open "Number to block" box on Work mode's page. "+ Block a number" is a card row
+    // opening a sheet with the number to type; like the Vault's sheet it stays open while the number is checked,
+    // closing once it is on the list (its row appears under Spam protection) and saying a refusal inside it.
+    const val ADD_ROW = "+ Block a number"
+    const val ADD_SPOKEN = "Number to block"
+    const val NOT_A_NUMBER = "That isn't a phone number"
+    /** The number from Ofcom's drama range, never a real line. */
+    const val ADD_EXAMPLE = "07700 900123"
+    /** The longest number kept from the sheet. */
+    const val MAX_TYPED = 40
+
+    /** The card row: "+ Block a number" with what blocking does under it. */
+    val addRow: GoalAddRow = GoalAddRow(ADD_ROW, "Its calls won't ring, on the phone or the Mac")
+
+    /** The sheet: the number with an example, what Navilife does with it, Close · Block. */
+    val addSheet: GoalAddSheet = GoalAddSheet(
+        title = "Block a number",
+        hint = ADD_EXAMPLE,
+        spokenHint = ADD_SPOKEN,
+        note = "Its calls are declined without ringing. It shows under Spam protection, where Unblock takes it off.",
+        addLabel = BLOCK_LABEL,
+    )
+
+    /** Block lights once something is typed and nothing is being blocked. */
+    fun canAdd(typed: String, busy: Boolean): Boolean = !busy && typed.isNotBlank()
+
+    /** What the sheet says under its number: why it wasn't blocked, or nothing. */
+    fun sheetProblem(refused: Boolean): String? = if (refused) NOT_A_NUMBER else null
     /** Under a held message's Block and Report on the Fold: what each does. */
     const val REPORT_HINT = "Report opens Messages with a text to 7726, your network's free scam line; you send it."
     /** The Mac can't send texts: what to send from the phone. */

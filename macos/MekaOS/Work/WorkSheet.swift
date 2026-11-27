@@ -19,8 +19,8 @@ struct WorkSheet: View {
     @State private var discordAlertText = ""
     @State private var openDay: Int?
     @State private var commuteDay: Int64?
-    @State private var blockNumber = ""
-    @State private var blockRefused = false
+    /// Walk-through week 5, A17: "+ Block a number" opens its sheet (no open box on the page).
+    @State private var blocking = false
     @State private var spamAdvancedOpen = false
     @State private var spamConfirming = false
     @State private var leavingTo = ""
@@ -389,23 +389,15 @@ struct WorkSheet: View {
                 Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            HStack {
-                TextField("Number to block", text: $blockNumber)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(block)
-                    .onChange(of: blockNumber) { blockRefused = false }
-                Button("Block", action: block)
-                    .disabled(blockNumber.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            if blockRefused {
-                Text("That isn't a phone number").font(MekaType.caption).foregroundStyle(palette.critical)
-                    .transition(.opacity)
-            }
+            // Walk-through week 5, A17: "+ Block a number" is a row opening the number's sheet, not an open box.
+            GoalAddRowButton(row: BlockedCallerRules.shared.addRow, palette: palette) { blocking = true }
+                .sheet(isPresented: $blocking) {
+                    BlockAddSheet(palette: palette) { blocking = false }
+                }
             spamAdvanced
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.rows.map(\.key) ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.suspects.map(\.key) ?? [])
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: blockRefused)
     }
 
     /// Obi on calls, slice 1 (Meka approved 2026-11-07): "Live conversation", synced with the Fold. Callers talk to Obi
@@ -494,13 +486,6 @@ struct WorkSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: spamAdvancedOpen)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: spamConfirming)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
-    }
-
-    private func block() {
-        let number = blockNumber
-        Task {
-            if await model.blockCaller(number) { blockNumber = "" } else { blockRefused = true }
-        }
     }
 
     /// Work mode → Messages (V1, messages assistant slice 5): the Fold reads the messages and keeps the never-to-AI
@@ -744,4 +729,57 @@ struct WorkSheet: View {
     }
 
     static func hhmm(_ minute: Int) -> String { String(format: "%02d:%02d", minute / 60, minute % 60) }
+}
+
+/// Spam protection's block sheet on the Mac (walk-through week 5, A17), like the Fold's: the number with an example,
+/// what blocking does, Close · Block (disabled until something is typed and while it's checked). It stays open until
+/// the number is on the list, one it can't take said under it in the critical colour with the number still there.
+/// Only Strings cross to the core.
+private struct BlockAddSheet: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    let close: () -> Void
+    @State private var typed = ""
+    @State private var busy = false
+    @State private var refused = false
+
+    var body: some View {
+        let rules = BlockedCallerRules.shared
+        let sheet = rules.addSheet
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            TextField(sheet.hint, text: $typed).textFieldStyle(.roundedBorder).onSubmit(block)
+                .accessibilityLabel(sheet.spokenHint)
+                .onChange(of: typed) { _, _ in refused = false }
+            if let problem = rules.sheetProblem(refused: refused) {
+                Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.critical)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+            Text(LoneWordGlue.shared.kept(line: sheet.note)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(GoalAddRules.shared.CLOSE, action: close).keyboardShortcut(.cancelAction)
+                Button(sheet.addLabel, action: block).keyboardShortcut(.defaultAction)
+                    .disabled(!rules.canAdd(typed: typed, busy: busy))
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
+        .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: refused)
+    }
+
+    private func block() {
+        let number = String(typed.prefix(Int(BlockedCallerRules.shared.MAX_TYPED)))
+        guard BlockedCallerRules.shared.canAdd(typed: number, busy: busy) else { return }
+        busy = true
+        Task {
+            let ok = await model.blockCaller(number)
+            busy = false
+            if ok { close() } else { refused = true }
+        }
+    }
 }
