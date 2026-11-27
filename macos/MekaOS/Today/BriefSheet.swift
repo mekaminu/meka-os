@@ -162,19 +162,14 @@ struct BriefSheet: View {
                         HStack {
                             SectionLabel("Headlines", palette)
                             Spacer()
-                            Menu("Topics") {
-                                ForEach(v.newsTopics, id: \.id) { t in
-                                    Toggle(t.label, isOn: Binding(
-                                        get: { t.chosen },
-                                        set: { model.setNewsTopic(t.id, on: $0) }
-                                    ))
-                                }
-                            }
-                            .menuStyle(.borderlessButton).fixedSize()
+                            // Walk-through week 5, A17: "Topics · Barça, AI +2", a menu of the core's ticks, as the Fold's row
+                            // and sheet (and News's), each topic saying what being chosen does.
+                            topicsMenu(v.newsTopics)
+                                .menuStyle(.borderlessButton).fixedSize()
                         }
                         .padding(.top, MekaSpace.l).staggeredAppear(5)
                         if !v.newsTopics.contains(where: \.chosen) {
-                            Text("No topics chosen. Pick some from Topics.").font(MekaType.caption)
+                            Text("No topics chosen. Open Topics to pick some.").font(MekaType.caption)
                                 .foregroundStyle(palette.textTertiary).staggeredAppear(5)
                         } else if v.headlines.isEmpty {
                             Text("No headlines yet. They're fetched every hour.").font(MekaType.caption)
@@ -267,6 +262,21 @@ struct BriefSheet: View {
         }
         .font(MekaType.itemMeta)
         .frame(maxWidth: 360)
+    }
+
+    /// Topics' ticks: each topic a toggle with what being chosen does; a tick sends only its id and a Bool to the core.
+    private func topicsMenu(_ topics: [NewsTopicChoice]) -> some View {
+        let choices = NewsChoiceRules.shared
+        let row = choices.topicsRow(topics: topics)
+        return Menu(row.title + " · " + row.value) {
+            ForEach(choices.topicsSheet(topics: topics).choices, id: \.name) { c in
+                let id = c.name
+                let lit = c.lit
+                Toggle(c.label + " · " + c.line, isOn: Binding(get: { lit }, set: { model.setNewsTopic(id, on: $0) }))
+            }
+        }
+        .help(LoneWordGlue.shared.kept(line: choices.TOPICS_NOTE))
+        .accessibilityLabel(row.spoken)
     }
 
     private func toggleListen(_ v: MorningBriefView) {

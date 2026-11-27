@@ -40,6 +40,8 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.BriefPane
+import os.meka.android.today.BRIEF_TOPICS_ROW_TAG
+import os.meka.core.domain.NewsChoiceRules
 import os.meka.core.domain.AboutField
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
@@ -256,8 +258,8 @@ class BriefScreensTest {
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertNoDotEndingALine(compose, name, lines)
         ScreenShots.assertReadable(compose, name, v.dayLines.map { it.title } + v.headlines.map { it.title }, mustShow = false)
-        // Topics is a real button: 48 dp to tap, like News's.
-        compose.onAllNodes(hasTestTag("brief-topics")).fetchSemanticsNodes().firstOrNull()?.let { topics ->
+        // Topics is a real row: 48 dp to tap, like News's.
+        compose.onAllNodes(hasTestTag(BRIEF_TOPICS_ROW_TAG)).fetchSemanticsNodes().firstOrNull()?.let { topics ->
             val touchDp = topics.boundsInRoot.height / compose.density.density
             if (touchDp < 47.5f) fail("$name: Topics is ${touchDp.toInt()} dp tall to tap (at least 48)")
         }
@@ -344,23 +346,43 @@ class BriefScreensTest {
 
     // ---- By hand ----
 
-    /** Topics opens the chips, a chip turns its topic on, Done folds them away. */
+    /**
+     * Walk-through week 5, A17: Topics is one "Topics" · "Barça, AI +2" row, not a Topics/Done toggle over a wall of
+     * chips; it opens a sheet of ticks that stays open while he picks (Barça off, then on again) and Done closes it.
+     */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun topicsOpenPickAndCloseByHand() {
         val name = "cover-dark-topics"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
-        val barca = core.briefView.value.newsTopics.first { it.id == "barca" }
-        val wasOn = barca.chosen
-        tap(name, "Topics", hasTestTag("brief-topics"))
-        ScreenShots.assertShows(compose, name, "Done")
-        tap(name, "the Barça chip", hasText(barca.label))
-        until { core.briefView.value.newsTopics.first { it.id == "barca" }.chosen != wasOn }
-        if (core.briefView.value.newsTopics.first { it.id == "barca" }.chosen == wasOn) fail("$name: tapping Barça left it as it was")
+        fun barca() = core.briefView.value.newsTopics.first { it.id == "barca" }.chosen
+        val wasOn = barca()
+        val row = NewsChoiceRules.topicsRow(core.briefView.value.newsTopics)
+        scrollTo(hasContentDescription(row.spoken))
+        // No open chip of a topic left on the page, chosen or not.
+        val unchosen = core.briefView.value.newsTopics.first { !it.chosen }.label
+        if (compose.onAllNodes(hasText(unchosen) and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            fail("$name: the \"$unchosen\" topic is an open chip on the page")
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        fun tick(label: String) = compose.onAllNodes(hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        tap(name, "Topics row", hasContentDescription(row.spoken))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the Topics row opened no sheet")
+        tick(core.briefView.value.newsTopics.first { it.id == "barca" }.label)
+        until { barca() != wasOn }
+        if (barca() == wasOn) fail("$name: ticking Barça left it as it was")
+        if (!sheetOpen()) fail("$name: a tick closed the Topics sheet (several may be picked)")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("brief", name))
-        tap(name, "Done", hasTestTag("brief-topics"))
-        if (compose.onAllNodes(hasText("Topics") and hasTestTag("brief-topics"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
-            fail("$name: Done didn't fold the topics away")
-        }
+        tick(core.briefView.value.newsTopics.first { it.id == "barca" }.label)
+        until { barca() == wasOn }
+        if (barca() != wasOn) fail("$name: a second tick didn't put Barça back")
+        compose.onAllNodes(hasText("Done") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() }
+        if (sheetOpen()) fail("$name: Done left the Topics sheet open")
+        val after = NewsChoiceRules.topicsRow(core.briefView.value.newsTopics)
+        if (compose.onAllNodes(hasContentDescription(after.spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+            fail("$name: no \"${after.title}\" · \"${after.value}\" row after Done")
     }
 
     /**

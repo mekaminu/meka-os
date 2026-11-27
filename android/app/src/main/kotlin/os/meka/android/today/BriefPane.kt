@@ -5,11 +5,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +61,6 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.android.goals.Chips
 import os.meka.android.notify.NotifyChoiceRowView
 import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.BriefLengthChoiceRules
@@ -80,6 +77,7 @@ import os.meka.core.domain.DueState
 import os.meka.core.domain.InstantTaskRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MorningBriefView
+import os.meka.core.domain.NewsChoiceRules
 import os.meka.core.domain.TaskMove
 import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
@@ -92,12 +90,12 @@ private const val GOT_IT_HOLD_MS = 600L
 /**
  * Morning brief (build plan M1): today at a glance (work hours, events and what's planned or due, in time order),
  * what you're waiting on, what needs you on your lists, habits and a running fast, and headlines from the news topics
- * chosen under "Topics" (synced; tapping one opens the article in the browser). "Got it" puts the card away here
+ * chosen on the "Topics" row, which opens a sheet of ticks (synced; tapping one opens the article in the browser). "Got it" puts the card away here
  * and on the Mac until tomorrow morning; so does closing the pane once it has been open long enough to read
  * ([os.meka.core.domain.BriefRules.READ_AFTER_MS], Calm Today). Nothing in the brief changes anything but the topic choice.
  *
- * Motion: sections stagger in 40 ms apart; chases due today are lit in the accent colour; the topic chips unfold in
- * place and a chosen chip's colour blends across; Got it pops a check (spring) with a light haptic and the pane drops
+ * Motion: sections stagger in 40 ms apart; chases due today are lit in the accent colour; the Topics sheet rises from
+ * the bottom and a ticked topic blends its dot with a tick haptic; Got it pops a check (spring) with a light haptic and the pane drops
  * away. Reduced motion: cross-fades only.
  */
 @Composable
@@ -150,7 +148,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
     var aiLine by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { aiLine = runCatching { core.aiFeatureLine(AiFeature.BRIEF) }.getOrNull() }
     var closing by remember { mutableStateOf(false) }
-    var topicsOpen by remember { mutableStateOf(false) }
+    var topicsOpen by rememberSaveable { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
 
     LazyColumn(
@@ -312,27 +310,22 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
 
         item(key = "h-news") {
             Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(5))) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    SectionLabel("Headlines", Modifier.weight(1f))
-                    // Quality gate slice 46: Topics/Done answers a 48 dp touch, as News's does.
-                    Text(if (topicsOpen) "Done" else "Topics", style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.testTag("brief-topics").clickable(role = Role.Button) { topicsOpen = !topicsOpen }.minTouch().padding(horizontal = MekaSpace.xs))
+                SectionLabel("Headlines")
+                // Walk-through week 5, A17: the topics are one "Topics" · "Barça, AI +2" › row opening a sheet of ticks
+                // (the same rules as News's, synced), not a Topics/Done toggle unfolding a wall of chips.
+                Box(Modifier.padding(top = MekaSpace.xs, bottom = MekaSpace.xs).testTag(BRIEF_TOPICS_ROW_TAG)) {
+                    NotifyChoiceRowView(NewsChoiceRules.topicsRow(v.newsTopics)) { haptics.tick(); topicsOpen = true }
                 }
-                AnimatedVisibility(
-                    visible = topicsOpen,
-                    enter = if (Meka.reducedMotion) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
-                    exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
-                ) {
-                    Box(Modifier.padding(bottom = MekaSpace.xs)) {
-                        Chips(null, v.newsTopics.map { it.label to it.chosen }) { i ->
-                            val t = v.newsTopics[i]
-                            haptics.tick()
-                            scope.launch { runCatching { core.setNewsTopic(t.id, !t.chosen) } }
-                        }
-                    }
-                }
+                if (topicsOpen) NotifyChoiceSheetView(
+                    NewsChoiceRules.topicsSheet(v.newsTopics),
+                    onChoose = { name ->
+                        NewsChoiceRules.topicNamed(v.newsTopics, name)?.let { t -> scope.launch { runCatching { core.setNewsTopic(t.id, !t.chosen) } } }
+                    },
+                    onClose = { topicsOpen = false },
+                    several = true,
+                )
                 when {
-                    v.newsTopics.none { it.chosen } -> NewsNote("No topics chosen. Tap Topics to pick some.")
+                    v.newsTopics.none { it.chosen } -> NewsNote("No topics chosen. Open Topics to pick some.")
                     v.headlines.isEmpty() -> NewsNote("No headlines yet. They're fetched every hour.")
                 }
             }
@@ -397,6 +390,7 @@ private fun ListenPill(speaking: Boolean, preparing: Boolean = false, modifier: 
 /** Test tag on each of the brief's Today rows (BriefDayRowTest). */
 internal const val BRIEF_DAY_ROW_TAG = "brief-day-row"
 internal const val BRIEF_LENGTH_ROW_TAG = "brief-length-row"
+internal const val BRIEF_TOPICS_ROW_TAG = "brief-topics-row"
 
 /** The lead slot every brief row's title follows: a task's tick circle or an event's dot. */
 private val BRIEF_LEAD = 22.dp
