@@ -13,10 +13,12 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.text.AnnotatedString
+import os.meka.android.export.VAULT_ADD_ROW_TAG
+import os.meka.android.goals.GOAL_ADD_SHEET_TAG
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -139,11 +141,13 @@ class VaultScreensTest {
         if (place == Place.VAULT) {
             val v = core.documentsView.value
             ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.pageLine))
-            ScreenShots.assertEachOneLine(compose, name, listOf(v.addHint))
-            // Week 5, A15: no document is named again by the page's line or the field's hint.
+            // Week 5, A17: no open box on the page; "+ Add a document" is a row opening the line's sheet.
+            if (editableBoxes().isNotEmpty()) fail("$name: an open input box on the Vault's page")
+            ScreenShots.assertShows(compose, name, DocumentRules.addRow(v.rows.size).label)
+            // Week 5, A15: no document is named again by the page's line.
             if (v.rows.size == 1) {
                 val title = v.rows.single().title
-                if (title in v.pageLine || title in v.addHint) fail("$name: \"$title\" said again above its card")
+                if (title in v.pageLine) fail("$name: \"$title\" said again above its card")
                 if (v.rows.single().status.startsWith("Expires in")) fail("$name: the card says \"Expires\" twice")
             }
             ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.title, it.line, it.status) }, mustShow = false)
@@ -186,18 +190,31 @@ class VaultScreensTest {
     }
 
     /**
-     * Works by hand (quality gate (3)): typing a document and Done on the keyboard adds its row; a tap on the row opens
+     * Works by hand (quality gate (3)): "+ Add a document" opens its sheet; a line Navilife can't read keeps the sheet
+     * open saying why; a document typed and Done on the keyboard adds its row and closes the sheet; a tap on the row opens
      * Add a copy and Remove (each a 48 dp touch); Remove takes it off.
      */
     private fun vaultByHand(core: MekaCore) {
         val name = "vault-by-hand"
         assertTouchTargets(name)
-        val field = hasContentDescription(DocumentRules.ADD_SPOKEN) and hasSetTextAction()
-        if (compose.onAllNodes(field).fetchSemanticsNodes().isEmpty()) fail("$name: no add field")
-        compose.onAllNodes(field)[0].performTextInput("Railcard 05/2027")
+        if (sheetOpen()) fail("$name: the add sheet is open before + Add a document is tapped")
+        // A date it can't read: the sheet stays open and says why under the line (A11), in it; nothing is added.
+        openSheetAndType(name, "Passport 31 Feb 2029")
+        addNode()[0].performSemanticsAction(SemanticsActions.OnClick)
         until { false }
-        compose.onAllNodes(field)[0].performImeAction()
+        if (!sheetOpen()) fail("$name: a date Navilife couldn't read closed the sheet")
+        if (compose.onAllNodes(hasText(LoneWordGlue.kept(DocumentRules.BAD_DATE)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: the sheet doesn't say \"${DocumentRules.BAD_DATE}\"")
+        }
+        if (core.documentsView.value.rows.size != 1) fail("$name: a refused line changed the documents")
+        compose.onNodeWithTag(GOAL_ADD_SHEET_TAG, useUnmergedTree = true).captureRoboImage(ScreenShots.path(Place.VAULT.area, "cover-dark-add-refused"))
+        // A line it reads, and Done on the keyboard: the document is kept and the sheet goes.
+        compose.onAllNodes(sheetBox(), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("Railcard 05/2027")) }
+        until { false }
+        compose.onAllNodes(sheetBox(), useUnmergedTree = true)[0].performImeAction()
         until { core.documentsView.value.rows.any { "Railcard" in it.title } }
+        until { !sheetOpen() }
+        if (sheetOpen()) fail("$name: the sheet stayed open once the Railcard was kept")
         val row = core.documentsView.value.rows.firstOrNull { "Railcard" in it.title } ?: fail("$name: Done on the field added no Railcard")
         // CI 2026-11-15 (run 43684548487): the core held the Railcard a frame before the list drew it; wait for the row too.
         until { compose.onAllNodes(hasContentDescription(row.spoken) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
@@ -215,6 +232,32 @@ class VaultScreensTest {
         compose.onAllNodes(remove)[0].performSemanticsAction(SemanticsActions.OnClick)
         until { core.documentsView.value.rows.none { it.id == row.id } }
         if (core.documentsView.value.rows.any { it.id == row.id }) fail("$name: Remove left the Railcard")
+    }
+
+    private fun sheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun sheetBox() = hasContentDescription(DocumentRules.ADD_SPOKEN) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)
+
+    /** Boxes with text to edit (none on the page, A17). */
+    private fun editableBoxes() = compose.onAllNodes(
+        SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true,
+    ).fetchSemanticsNodes()
+
+    private fun addNode() = compose.onAllNodes(hasContentDescription("${DocumentRules.ADD}, ${DocumentRules.addSheet("").title}"), useUnmergedTree = true)
+
+    private fun addLit() = addNode().fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == false
+
+    /** Opens the sheet from "+ Add a document" and types [line] into it; Add is dark until then. */
+    private fun openSheetAndType(name: String, line: String) {
+        compose.onNodeWithTag(VAULT_ADD_ROW_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        until { false }
+        if (!sheetOpen()) fail("$name: + Add a document opened no sheet")
+        if (addLit()) fail("$name: Add is lit with nothing typed")
+        val box = compose.onAllNodes(sheetBox(), useUnmergedTree = true)
+        if (box.fetchSemanticsNodes().isEmpty()) fail("$name: the sheet has no line to type")
+        box[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString(line)) }
+        until { false }
+        if (!addLit()) fail("$name: Add stayed dark with a line typed")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun vaultCoverEmpty() { shoot(Place.VAULT, "cover-dark-empty", Fill.EMPTY) }

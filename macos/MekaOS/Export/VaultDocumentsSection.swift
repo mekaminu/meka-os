@@ -2,8 +2,9 @@ import AppKit
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// The Vault's documents on the Mac (V2, slice 1), like the Fold's VaultDocuments: one field ("Passport expires 3 Mar
-/// 2029", "Theo passport 20 May 2027", "Railcard 05/2027") and a row per document with how long is left, the ones to
+/// The Vault's documents on the Mac (V2, slice 1), like the Fold's VaultDocuments: "+ Add a document" opening a sheet
+/// with one line ("Passport expires 3 Mar 2029", "Theo passport 20 May 2027", "Railcard 05/2027"; walk-through week 5,
+/// A17: no open box on the page) and a row per document with how long is left, the ones to
 /// renew first (status lit). Click a row for Remove. Only Strings cross to the core.
 /// Slice 2b: an opened row offers Add a copy… (a photo or PDF, sealed with the Vault key on this Mac), and once there is
 /// one Open copy (a sheet, in the app only), Replace copy… and Remove copy; the row says what is kept.
@@ -20,7 +21,7 @@ struct VaultDocumentsSection: View {
     let palette: MekaPalette
     /// Index the section's stagger starts at.
     var firstIndex = 0
-    @State private var text = ""
+    @State private var adding = false
     @State private var said: CoreModel.TripSaid?
     @State private var open: String?
     /// Slice 2b: what the last copy action said, by row, and the opened copy.
@@ -40,18 +41,21 @@ struct VaultDocumentsSection: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.pageLine)
                 .staggeredAppear(firstIndex + 1)
-            TextField(v?.addHint ?? DocumentRules.shared.ADD_HINT, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel(DocumentRules.shared.ADD_SPOKEN)
-                .onSubmit {
-                    let typed = text
-                    text = ""
-                    Task { said = await model.addDocument(typed) }
-                }
-                .staggeredAppear(firstIndex + 2)
-            if let said {
-                Text(said.line).font(MekaType.caption)
-                    .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
+            // Walk-through week 5, A17: "+ Add a document" is a row opening the line's sheet, not an open box.
+            GoalAddRowButton(row: DocumentRules.shared.addRow(kept: Int32(rows.count)), palette: palette) {
+                said = nil
+                adding = true
+            }
+            .staggeredAppear(firstIndex + 2)
+            .sheet(isPresented: $adding) {
+                DocumentAddSheet(palette: palette, hint: v?.addHint ?? DocumentRules.shared.ADD_HINT) { kept in
+                    said = kept
+                    adding = false
+                } close: { adding = false }
+            }
+            // What was kept, under the row; a refusal is said in the sheet, under the line it's about (A11).
+            if let said, !said.refused {
+                Text(said.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
@@ -115,6 +119,64 @@ struct VaultDocumentsSection: View {
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.sessionDidResignActiveNotification)) { _ in
             viewing = nil; model.lockVault()
+        }
+    }
+}
+
+/// The Vault's add sheet (walk-through week 5, A17), like the Fold's: the line with an example of a kind not on the
+/// list yet, what Navilife does with it, Close · Add (disabled until something is typed and while it's read). It stays
+/// open until the document is kept, a line it couldn't read said under it in the critical colour (A22) with the line
+/// still there. Only Strings cross to the core.
+private struct DocumentAddSheet: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    let hint: String
+    let kept: (CoreModel.TripSaid) -> Void
+    let close: () -> Void
+    @State private var typed = ""
+    @State private var busy = false
+    @State private var problem: String?
+
+    var body: some View {
+        let sheet = DocumentRules.shared.addSheet(hint: hint)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            TextField(sheet.hint, text: $typed).textFieldStyle(.roundedBorder).onSubmit(add)
+                .accessibilityLabel(sheet.spokenHint)
+                .onChange(of: typed) { _, _ in problem = nil }
+            if let problem {
+                Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.critical)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+            Text(LoneWordGlue.shared.kept(line: sheet.note)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(GoalAddRules.shared.CLOSE, action: close).keyboardShortcut(.cancelAction)
+                Button(sheet.addLabel, action: add).keyboardShortcut(.defaultAction)
+                    .disabled(!DocumentRules.shared.canAdd(typed: typed, busy: busy))
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
+        .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: problem)
+    }
+
+    private func add() {
+        let line = typed
+        guard DocumentRules.shared.canAdd(typed: line, busy: busy) else { return }
+        busy = true
+        Task {
+            let said = await model.addDocument(line)
+            busy = false
+            if let said, !said.refused {
+                kept(said)
+            } else {
+                problem = said?.line ?? DocumentRules.shared.NOT_READ
+            }
         }
     }
 }

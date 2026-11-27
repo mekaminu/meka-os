@@ -28,10 +28,12 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,7 +47,8 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
-import os.meka.android.lists.Field
+import os.meka.android.goals.GoalAddRowView
+import os.meka.android.goals.GoalAddSheetFrame
 import os.meka.android.security.FoldBiometric
 import os.meka.core.domain.DocumentAdded
 import os.meka.core.domain.DocumentRow
@@ -60,8 +63,9 @@ import os.meka.core.domain.VaultLockRules
 import os.meka.core.facade.MekaCore
 
 /**
- * The Vault's documents (V2, slice 1), above Your data: one field — "Passport expires 3 Mar 2029", "Theo passport 20
- * May 2027", "Railcard 05/2027" — and a row per document with how long is left, the ones to renew first (their status
+ * The Vault's documents (V2, slice 1), above Your data: "+ Add a document" opening a sheet with one line — "Passport
+ * expires 3 Mar 2029", "Theo passport 20 May 2027", "Railcard 05/2027" (walk-through week 5, A17: no open box on the
+ * page; the sheet stays open while the line is read, a refusal said in it in the critical colour) — and a row per document with how long is left, the ones to renew first (their status
  * lit). Tap a row for Remove. The expiry dates reach the plan as heads-ups (six months before a passport…).
  * Slice 2b: an opened row offers Add a copy (a photo or PDF from the system picker, sealed with the Vault key here),
  * and once there is one Open copy (shown in the app only, [VaultCopyViewer]), Replace copy and Remove copy; the row
@@ -106,9 +110,21 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
             copySaid = docId to said
         }
     }
-    val saidColor by animateColorAsState(
-        if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "docs-said",
-    )
+    var adding by rememberSaveable { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    fun add(text: String) {
+        if (!DocumentRules.canAdd(text, busy)) return
+        busy = true
+        scope.launch {
+            try {
+                val r = runCatching { core.addDocument(text) }.getOrNull()
+                    ?: DocumentAdded(DocumentRules.NOT_READ, refused = true)
+                if (!r.refused) { haptics.light(); adding = false } else haptics.tick()
+                said = r
+            } finally { busy = false }
+        }
+    }
+    if (adding) DocumentAddSheetView(v.addHint, DocumentRules.sheetProblem(said), busy, onAdd = ::add, onClose = { adding = false; said = said?.takeIf { !it.refused } })
     Column(
         Modifier.fillMaxWidth().animateContentSize(MekaMotion.expand(reduced)),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -118,15 +134,13 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
         Crossfade(v.pageLine, animationSpec = MekaMotion.appear(reduced), label = "docs-summary") { s ->
             Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(firstIndex + 1)))
         }
-        Field(v.addHint, Modifier.appear(rememberAppearance(firstIndex + 2)), description = DocumentRules.ADD_SPOKEN) { text ->
-            scope.launch {
-                val r = runCatching { core.addDocument(text) }.getOrNull()
-                if (r?.refused == false) haptics.light() else haptics.tick()
-                said = r
-            }
+        // Walk-through week 5, A17: "+ Add a document" is a card row opening the line's sheet, not an open box on the page.
+        GoalAddRowView(DocumentRules.addRow(v.rows.size), Modifier.testTag(VAULT_ADD_ROW_TAG).appear(rememberAppearance(firstIndex + 2))) {
+            said = null; adding = true
         }
-        Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "docs-added") { r ->
-            r?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
+        // What was kept, under the row; a refusal is said in the sheet, under the line it's about (A11).
+        Crossfade(DocumentRules.pageSaid(said), animationSpec = MekaMotion.appear(reduced), label = "docs-added") { line ->
+            line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
         v.rows.forEachIndexed { i, r ->
             key(r.id) {
@@ -273,4 +287,31 @@ private fun CopyAction(label: String, spoken: String, lit: Boolean, onClick: () 
             .semantics { contentDescription = spoken }
             .minTouch().padding(MekaSpace.xs),
     )
+}
+
+/** The tag the screen tests find the Vault's "+ Add a document" row by. */
+const val VAULT_ADD_ROW_TAG = "vault-add-row"
+
+/**
+ * The Vault's add sheet (walk-through week 5, A17): the line with an example of a kind not on the list yet, what
+ * Navilife does with it, Close · Add. Add stays dark until something is typed and while it's read; the sheet stays open
+ * until the document is kept, a line it couldn't read said under it in the critical colour (A22) with the line still there.
+ */
+@Composable
+internal fun DocumentAddSheetView(hint: String, problem: String?, busy: Boolean, onAdd: (String) -> Unit, onClose: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    var typed by rememberSaveable { mutableStateOf("") }
+    GoalAddSheetFrame(
+        DocumentRules.addSheet(hint), typed, { typed = it },
+        add = { onAdd(typed) }, onClose = onClose,
+        canAdd = DocumentRules.canAdd(typed, busy),
+        maxLength = 80,
+        closeOnAdd = false,
+    ) {
+        val enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false))
+        val exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false))
+        AnimatedVisibility(problem != null, enter = enter, exit = exit) {
+            Text(LoneWordGlue.kept(problem.orEmpty()), style = MekaType.caption, color = Meka.colors.critical)
+        }
+    }
 }

@@ -2829,6 +2829,21 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.canLink(typed: "1234 5678", busy: false))
     }
 
+    func testVaultAddSheetReachesSwift() {
+        // Walk-through week 5, A17: the Vault's "+ Add a document" row and its sheet come from the core; Add lights
+        // once something is typed and not while the line is read.
+        let rules = DocumentRules.shared
+        XCTAssertEqual(rules.addRow(kept: 0).label, rules.ADD_ROW)
+        XCTAssertEqual(rules.addRow(kept: 2).label, rules.ADD_ANOTHER_ROW)
+        let sheet = rules.addSheet(hint: rules.ADD_HINT)
+        XCTAssertEqual(sheet.hint, rules.ADD_HINT)
+        XCTAssertEqual(sheet.spokenHint, rules.ADD_SPOKEN)
+        XCTAssertEqual(sheet.addLabel, rules.ADD)
+        XCTAssertFalse(rules.canAdd(typed: " ", busy: false))
+        XCTAssertFalse(rules.canAdd(typed: "Railcard 05/2027", busy: true))
+        XCTAssertTrue(rules.canAdd(typed: "Railcard 05/2027", busy: false))
+    }
+
     func testAnnualLeaveReachesSwift() {
         // Annual leave planner, slice 1: a typed stretch is read by the core's rules (leave already taken needs its
         // year), the words and the empty view reach the Mac (only Strings and Ints cross from the sheet).

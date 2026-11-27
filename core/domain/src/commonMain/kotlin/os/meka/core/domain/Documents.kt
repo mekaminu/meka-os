@@ -142,6 +142,37 @@ object DocumentRules {
     const val BAD_DATE = "Navilife couldn't read that date. Try \"3 Mar 2029\" or \"05/2029\"."
     const val NOTE = "Names and dates only: Navilife keeps no document numbers. Open a document to add a copy (a photo or PDF), encrypted on this device first."
 
+    // Walk-through week 5, A17: no open input box on the Vault's page. "+ Add a document" is a card row opening a
+    // sheet with the line to type; like Watch's code sheet it stays open while the line is read, closing once the
+    // document is kept and saying a refusal inside it, under the line it's about.
+    const val ADD_ROW = "+ Add a document"
+    const val ADD_ANOTHER_ROW = "+ Add another document"
+    const val ADD = "Add"
+
+    /** The card row: "+ Add a document" (another once one is kept) with what it asks for under it. */
+    fun addRow(kept: Int): GoalAddRow = GoalAddRow(
+        if (kept > 0) ADD_ANOTHER_ROW else ADD_ROW,
+        "Its name and the day it runs out",
+    )
+
+    /** The sheet for [hint] (a kind not on the list yet): the line, what Navilife does with it, Close · Add. */
+    fun addSheet(hint: String): GoalAddSheet = GoalAddSheet(
+        title = "Add a document",
+        hint = hint,
+        spokenHint = ADD_SPOKEN,
+        note = "Navilife reminds you in time to renew. Names and dates only: no document numbers.",
+        addLabel = ADD,
+    )
+
+    /** Add lights once a line is typed and nothing is being added. */
+    fun canAdd(typed: String, busy: Boolean): Boolean = !busy && typed.isNotBlank()
+
+    /** What the sheet says under its line: a refusal only (a kept document closes the sheet; the page says it). */
+    fun sheetProblem(said: DocumentAdded?): String? = said?.takeIf { it.refused }?.line
+
+    /** What the page says under the row: what was kept, never a refusal (that stays in the sheet, A11). */
+    fun pageSaid(said: DocumentAdded?): String? = said?.takeIf { !it.refused }?.line
+
     private val KIND_WORDS: Map<String, DocKind> = buildMap {
         listOf("passport", "passports").forEach { put(it, DocKind.PASSPORT) }
         listOf("licence", "license", "driving", "photocard").forEach { put(it, DocKind.DRIVING_LICENCE) }
