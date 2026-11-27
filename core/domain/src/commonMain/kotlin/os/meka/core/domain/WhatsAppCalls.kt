@@ -156,6 +156,38 @@ object WhatsAppCallRules {
     fun cleaned(text: String?): String? =
         text?.trim()?.replace(Regex("[ \\t]+"), " ")?.take(MAX_MESSAGE)?.trim()?.takeIf { it.isNotEmpty() }
 
+    // Walk-through week 5, A17: no open message box on Work mode's page. "Your at-work message" is a card row showing
+    // the message (cut short at a word); it opens a sheet with the message to change, what happens to it, Close · Save.
+    const val MESSAGE_LABEL = "Your at-work message"
+    const val MESSAGE_SAVE = "Save"
+    /** How much of the message the row shows before "…". */
+    const val MESSAGE_ROW_MAX = 90
+
+    /** The row's line: the message itself, cut at a word with "…" past [MESSAGE_ROW_MAX] letters. */
+    fun messagePreview(message: String): String {
+        val words = cleaned(message) ?: DEFAULT_MESSAGE
+        if (words.length <= MESSAGE_ROW_MAX) return words
+        val cut = words.take(MESSAGE_ROW_MAX).substringBeforeLast(' ').trimEnd(',', ';', ':', '.', ' ')
+        return "$cut…"
+    }
+
+    /** The card row: "Your at-work message" with the message under it. */
+    fun messageRow(message: String): GoalAddRow = GoalAddRow(MESSAGE_LABEL, messagePreview(message))
+
+    /** The sheet: the message to change, what Navilife does with it, Close · Save. */
+    val messageSheet: GoalAddSheet = GoalAddSheet(
+        title = MESSAGE_LABEL,
+        hint = "Blank puts the suggested message back",
+        spokenHint = MESSAGE_LABEL,
+        note = "Sent through WhatsApp's own Reply, once a day to each person who WhatsApp-calls you while Work mode is on. " +
+            "Left blank, the suggested message goes back.",
+        addLabel = MESSAGE_SAVE,
+    )
+
+    /** Save lights once the words would change what's kept (blank keeps the suggested one, so it changes only a custom one). */
+    fun canSaveMessage(typed: String, saved: String): Boolean =
+        (cleaned(typed) ?: DEFAULT_MESSAGE) != (cleaned(saved) ?: DEFAULT_MESSAGE)
+
     /** Whether the message tells callers the assistant will pick up (so it is held back while it can't). */
     fun promisesAssistant(message: String): Boolean = Regex("\\bassistant\\b|\\bobi\\b", RegexOption.IGNORE_CASE).containsMatchIn(message)
 

@@ -37,6 +37,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.text.AnnotatedString
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.android.work.WHATSAPP_CALLS_TAG
+import os.meka.android.work.WHATSAPP_MESSAGE_TAG
 import os.meka.android.work.LEAVING_TO_TAG
 import os.meka.android.work.MESSAGES_MARK_READ_TAG
 import os.meka.android.work.DISCORD_CHANNEL_TAG
@@ -224,6 +225,11 @@ class WorkScreensTest {
             fail("$name: no WhatsApp calls row saying ${CallChoiceRules.whatsAppRow(waOn).value}")
         }
         if (compose.onAllNodes(hasContentDescription(WhatsAppCallRules.SWITCH)).fetchSemanticsNodes().isNotEmpty()) fail("$name: WhatsApp calls still has a switch")
+        if (compose.onAllNodes(hasContentDescription(WhatsAppCallRules.MESSAGE_LABEL) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText),
+                useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: WhatsApp calls still has an open message box")
+        if (compose.onAllNodes(hasTestTag(WHATSAPP_MESSAGE_TAG) and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: no Your at-work message row")
+        }
         // Walk-through week 5, A17: Leaving now's On/Off pill, To chips and When chips are card rows saying what's chosen.
         val lv = core.leavingView.value
         val leavingRows = listOf(LeavingChoiceRules.switchRow(lv)) +
@@ -434,6 +440,30 @@ class WorkScreensTest {
                 fail("Work: WhatsApp calls' row doesn't say what was chosen")
             }
         }
+        // Walk-through week 5, A17: WhatsApp calls' message is a "Your at-work message" row opening its sheet; Save
+        // stays dark until the words change, then keeps them, closes the sheet and the row shows the new message.
+        fun messageSheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val messageBox = hasContentDescription(WhatsAppCallRules.MESSAGE_LABEL) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)
+        val saveButton = hasContentDescription("${WhatsAppCallRules.messageSheet.addLabel}, ${WhatsAppCallRules.messageSheet.title}")
+        if (messageSheetOpen()) fail("Work: the message sheet is open before its row is tapped")
+        compose.onNodeWithTag(WHATSAPP_MESSAGE_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!messageSheetOpen()) fail("Work: Your at-work message opened no sheet")
+        if (compose.onAllNodes(saveButton, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) != true) {
+            fail("Work: Save is lit before the message is changed")
+        }
+        val newMessage = "At work until 5, I'll call you back after."
+        compose.onAllNodes(messageBox, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString(newMessage)) }
+        turns(500)
+        compose.onAllNodes(saveButton, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        await { wa.settings.value.message == newMessage && !messageSheetOpen() }
+        if (wa.settings.value.message != newMessage) fail("Work: Save in the message sheet didn't keep the message (${wa.settings.value.message})")
+        if (messageSheetOpen()) fail("Work: the message sheet stayed open after Save")
+        if (compose.onAllNodes(hasText(LoneWordGlue.kept(newMessage)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("Work: the message row doesn't show the saved message")
+        }
+        wa.setMessage("")
+        turns(500)
         // Walk-through week 5, A17: + Block a number opens its sheet; something that isn't a number keeps it open saying
         // why, under the number, with nothing blocked; a real number and Block put it on the list and close the sheet.
         fun blockSheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

@@ -166,6 +166,8 @@ internal fun GoalAddSheetFrame(
     maxLength: Int = GoalAddRules.MAX_TITLE,
     closeOnAdd: Boolean = true,
     keyboard: KeyboardType = KeyboardType.Text,
+    /** False for a few lines of words (WhatsApp calls' at-work message): the field wraps and Return is a new line. */
+    singleLine: Boolean = true,
     choices: @Composable () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -203,7 +205,7 @@ internal fun GoalAddSheetFrame(
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 Text(sheet.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
-                SheetField(sheet.hint, sheet.spokenHint, title, { onTitle(it.take(maxLength)) }, keyboard) { save() }
+                SheetField(sheet.hint, sheet.spokenHint, title, { onTitle(it.take(maxLength)) }, keyboard, singleLine) { save() }
                 choices()
                 Text(LoneWordGlue.kept(sheet.note), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -230,7 +232,10 @@ internal fun GoalAddSheetFrame(
 
 /** A one-line field in a raised pill inside a sheet; Done on the keyboard runs [onDone]. */
 @Composable
-private fun SheetField(hint: String, spoken: String, value: String, onValue: (String) -> Unit, keyboard: KeyboardType = KeyboardType.Text, onDone: () -> Unit) {
+private fun SheetField(
+    hint: String, spoken: String, value: String, onValue: (String) -> Unit,
+    keyboard: KeyboardType = KeyboardType.Text, singleLine: Boolean = true, onDone: () -> Unit,
+) {
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
             .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
@@ -239,11 +244,12 @@ private fun SheetField(hint: String, spoken: String, value: String, onValue: (St
         BasicTextField(
             value = value,
             onValueChange = onValue,
-            singleLine = true,
+            singleLine = singleLine,
+            maxLines = if (singleLine) 1 else 6,
             textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
             cursorBrush = SolidColor(Meka.colors.accent),
             keyboardOptions = KeyboardOptions(
-                keyboardType = keyboard, imeAction = ImeAction.Done,
+                keyboardType = keyboard, imeAction = if (singleLine) ImeAction.Done else ImeAction.Default,
                 capitalization = if (keyboard == KeyboardType.Text) KeyboardCapitalization.Sentences else KeyboardCapitalization.None,
             ),
             keyboardActions = KeyboardActions(onDone = { onDone() }),
