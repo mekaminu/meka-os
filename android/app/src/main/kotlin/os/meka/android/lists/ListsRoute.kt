@@ -53,7 +53,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -240,7 +239,7 @@ private fun LazyListScope.waiting(
         return
     }
     if (view.promised.isNotEmpty()) {
-        item(key = "label-promised") { SectionLabel("You promised", Modifier.animateItem().padding(start = MekaSpace.xs, top = MekaSpace.xs)) }
+        item(key = "label-promised") { SectionLabel("You promised", Modifier.animateItem().padding(start = LIST_CARD_INSET, top = MekaSpace.xs)) }
         items(view.promised, key = { "p-${it.id}" }) { p: PromiseItem ->
             ListRow(p.title, p.meta, p.state, open == p.id, { toggle(p.id) }, Modifier.animateItem()) {
                 p.notes?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary) }
@@ -253,7 +252,7 @@ private fun LazyListScope.waiting(
         }
     }
     if (view.waiting.isNotEmpty() && view.promised.isNotEmpty()) {
-        item(key = "label-waiting") { SectionLabel("Waiting for", Modifier.animateItem().padding(start = MekaSpace.xs, top = MekaSpace.m)) }
+        item(key = "label-waiting") { SectionLabel("Waiting for", Modifier.animateItem().padding(start = LIST_CARD_INSET, top = MekaSpace.m)) }
     }
     items(view.waiting, key = { "w-${it.id}" }) { w ->
         ListRow(w.title, w.meta, w.state, open == w.id, { toggle(w.id) }, Modifier.animateItem()) {
@@ -275,7 +274,7 @@ private fun LazyListScope.someday(
     ListsPageRules.tabEmpty(view, "someday")?.let { empty("someday", it) }
     view.someday.forEach { g ->
         item(key = "g-${g.kind.name}") {
-            SectionLabel(g.label, Modifier.animateItem().padding(start = MekaSpace.xs, top = MekaSpace.m))
+            SectionLabel(g.label, Modifier.animateItem().padding(start = LIST_CARD_INSET, top = MekaSpace.m))
         }
         items(g.items, key = { "s-${it.id}" }) { t: Task ->
             ListRow(t.title, null, DueState.NONE, open == t.id, { toggle(t.id) }, Modifier.animateItem()) {
@@ -414,8 +413,14 @@ internal fun tabLabelSize(fits: (TextUnit) -> Boolean): TextUnit {
     return TAB_MIN_SIZE
 }
 
+/** Each row's card, for the screen tests (walk-through 2026-11-22 A17: rows are cards, not bare text). */
+const val LIST_ROW_CARD_TAG = "list-row-card"
+
+/** Inside a row's card the words start this far in, as in Renewals' cards; the headings over the cards start there too. */
+internal val LIST_CARD_INSET = MekaSpace.m
+
 /**
- * A list row: title and meta; tapping unfolds [details] in place (reduced motion: cross-fade). When the meta changes
+ * A list row, drawn as a card: title and meta; tapping unfolds [details] in place (reduced motion: cross-fade). When the meta changes
  * (a new chase date, a renewal rolling on) the new line slides up into place.
  */
 @Composable
@@ -423,11 +428,12 @@ internal fun ListRow(
     title: String, meta: String?, state: DueState, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier,
     details: @Composable () -> Unit,
 ) {
-    val bg by animateColorAsState(if (expanded) Meka.colors.surface else Color.Transparent, MekaMotion.appear(Meka.reducedMotion), label = "row-bg")
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)) {
+    // Walk-through 2026-11-22 A17: every row is its own card, as Renewals' are (Promises, Shopping, Home upkeep, Car and
+    // Money dates floated on the page). The card stays on the surface when opened, so its raised chips still show.
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface).testTag(LIST_ROW_CARD_TAG)) {
         Column(
             Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) "Hide actions" else "Show actions") { onToggle() }
-                .minTouch().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+                .minTouch().padding(horizontal = LIST_CARD_INSET, vertical = MekaSpace.s),
         ) {
             Text(title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
             meta?.let { m ->
@@ -439,7 +445,7 @@ internal fun ListRow(
         }
         AnimatedVisibility(expanded, enter = unfold(), exit = fold()) {
             Column(
-                Modifier.fillMaxWidth().padding(start = MekaSpace.xs, end = MekaSpace.xs, bottom = MekaSpace.m),
+                Modifier.fillMaxWidth().padding(start = LIST_CARD_INSET, end = LIST_CARD_INSET, bottom = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) { details() }
         }

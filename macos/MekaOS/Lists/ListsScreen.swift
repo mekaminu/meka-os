@@ -235,6 +235,7 @@ struct ListsScreen: View {
         Text(text.uppercased())
             .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
             .foregroundStyle(palette.textTertiary)
+            .padding(.leading, MekaSpace.m)
     }
 
     // MARK: Someday
@@ -248,6 +249,7 @@ struct ListsScreen: View {
             Text(g.label.uppercased())
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary)
+                .padding(.leading, MekaSpace.m)
                 .padding(.top, MekaSpace.m)
             ForEach(g.items, id: \.id) { t in
                 ListRowView(title: t.title, meta: nil, due: false, expanded: open == t.id, palette: palette, toggle: { toggle(t.id) }) {
@@ -294,6 +296,8 @@ struct ListsScreen: View {
 
 /// A list row: title and meta; clicking unfolds the actions in place.
 struct ListRowView<Details: View>: View {
+    /// Inside a row's card the words start this far in; the headings over the cards start there too.
+    static var inset: CGFloat { MekaSpace.m }
     @Environment(\.mekaReduceMotion) var reduceMotion
     let title: String
     let meta: String?
@@ -325,8 +329,10 @@ struct ListRowView<Details: View>: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(MekaSpace.xs)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(expanded ? palette.surface : .clear))
+        // Walk-through 2026-11-22 A17: every row is its own card, as Renewals' are, on the surface whether opened or not.
+        .padding(.horizontal, Self.inset)
+        .padding(.vertical, MekaSpace.s)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surface))
         .transition(.opacity)
     }
 }

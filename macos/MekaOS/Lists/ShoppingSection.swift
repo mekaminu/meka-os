@@ -28,6 +28,7 @@ struct ShoppingSection: View {
                     .foregroundStyle(palette.accent)
             }
         }
+        .padding(.leading, MekaSpace.m)
         .padding(.bottom, MekaSpace.xs)
         .sheet(isPresented: $shopping) { ShopModeSheet(source: .shopping, palette: palette) }
         // Nil on a blank Lists page: its one line has said it (walk-through 2026-11-22, A15).
@@ -46,6 +47,7 @@ struct ShoppingSection: View {
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
             }
+            .padding(.leading, MekaSpace.m)
             .padding(.top, MekaSpace.m)
             ForEach(got, id: \.id) { s in ShoppingRowView(item: s, palette: palette) }
         }
@@ -82,8 +84,11 @@ private struct ShoppingRowView: View {
                 .font(MekaType.caption)
                 .foregroundStyle(palette.textTertiary)
         }
-        .padding(.horizontal, MekaSpace.xs)
-        .padding(.vertical, MekaSpace.xs)
+        // Walk-through 2026-11-22 A17: each thing to buy is its own card, as Renewals' are, not bare text on the page.
+        .padding(.leading, MekaSpace.m)
+        .padding(.trailing, MekaSpace.s)
+        .padding(.vertical, MekaSpace.s)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surface))
         .transition(.opacity)
     }
 }

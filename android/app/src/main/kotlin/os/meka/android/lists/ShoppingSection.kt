@@ -1,5 +1,6 @@
 package os.meka.android.lists
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,7 +55,7 @@ internal fun LazyListScope.shopping(v: ShoppingView, emptyLine: String?, core: M
         val haptics = rememberMekaHaptics()
         // Shop mode (Checklists in tasks, slice 2): the list full screen, big rows, the screen kept awake.
         var shopping by remember { mutableStateOf(false) }
-        Row(Modifier.animateItem().fillMaxWidth().padding(start = MekaSpace.xs, bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.animateItem().fillMaxWidth().padding(start = LIST_CARD_INSET, bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             Text(v.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
             if (ShopModeRules.offer(v.toBuy.size + v.got.size)) {
                 Text(
@@ -75,7 +77,7 @@ internal fun LazyListScope.shopping(v: ShoppingView, emptyLine: String?, core: M
     items(v.toBuy, key = { "sh-${it.id}" }) { s -> ShoppingRow(s, core, act, Modifier.animateItem()) }
     if (v.got.isNotEmpty()) {
         item(key = "sh-got") {
-            Row(Modifier.animateItem().fillMaxWidth().padding(start = MekaSpace.xs, top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.animateItem().fillMaxWidth().padding(start = LIST_CARD_INSET, top = MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
                 SectionLabel("Got", Modifier.weight(1f))
                 Text(
                     "Clear", style = MekaType.caption, color = Meka.colors.accent,
@@ -91,7 +93,12 @@ internal fun LazyListScope.shopping(v: ShoppingView, emptyLine: String?, core: M
 @Composable
 private fun ShoppingRow(s: ShoppingItem, core: MekaCore, act: (suspend () -> Unit) -> Unit, modifier: Modifier) {
     val haptics = rememberMekaHaptics()
-    Row(modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+    // Walk-through 2026-11-22 A17: each thing to buy is its own card, as Renewals' are, not bare text on the page.
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surface).testTag(LIST_ROW_CARD_TAG)
+            .padding(start = LIST_CARD_INSET, end = MekaSpace.xs, top = MekaSpace.xxs, bottom = MekaSpace.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         // Works by hand (quality gate): the 22 dp ring answers a 44 dp touch that bleeds into the row's start, as on Today.
         Box(
             Modifier.bleedStart(TickSize.BLEED).size(TickSize.TOUCH).clip(CircleShape)

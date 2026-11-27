@@ -38,6 +38,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.lists.LISTS_LIST_TAG
+import os.meka.android.lists.LIST_ROW_CARD_TAG
 import os.meka.android.lists.LIST_TAB_TAG
 import os.meka.android.lists.ListTab
 import os.meka.android.lists.ListsRoute
@@ -141,6 +142,7 @@ class ListsScreensTest {
         ScreenShots.assertShows(compose, name, "Lists")
         assertTabsWhole(name)
         if (tab == ListTab.WAITING && fill == Fill.MANY) assertRowsUnderHeadings(name)
+        if (fill != Fill.EMPTY && tab != ListTab.RENEWALS) assertRowsInCards(name, titles(tab, fill))
         when {
             // Nothing on any list: one line says so and how to start, said once (walk-through 2026-11-22, A15): no
             // "None" tiles, no tab instruction, no "Nothing to chase" under it.
@@ -332,6 +334,23 @@ class ListsScreensTest {
         val row = left("Send Sam the photos") ?: fail("$name: no promise row")
         val px = compose.density.density
         if (kotlin.math.abs(heading - row) > 1.5f * px) fail("$name: You promised starts ${(row - heading) / px} dp from its rows' titles")
+    }
+
+    /**
+     * Walk-through 2026-11-22 A17: Promises' and Shopping's rows floated on the page as bare text while Renewals used
+     * cards. Each row shown is drawn inside its own card, the words 16 dp in from the card's edge.
+     */
+    private fun assertRowsInCards(name: String, rows: List<String>) {
+        val cards = compose.onAllNodes(hasTestTag(LIST_ROW_CARD_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        if (cards.isEmpty()) fail("$name: no row drawn as a card")
+        val px = compose.density.density
+        rows.forEach { title ->
+            val word = compose.onAllNodes(hasText(title), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: return@forEach
+            val card = cards.firstOrNull { it.left <= word.left && it.right >= word.right && it.top <= word.top && it.bottom >= word.bottom }
+                ?: fail("$name: \"$title\" isn't inside a card")
+            val inset = (word.left - card.left) / px
+            if (inset < 15f) fail("$name: \"$title\" starts ${inset.toInt()} dp from its card's edge, not 16")
+        }
     }
 
     /** All five tabs, each label whole inside its slot (TabLabelCut, set from the label's own layout). */
