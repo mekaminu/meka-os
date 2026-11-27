@@ -66,6 +66,7 @@ struct WatchSheet: View {
             WatchLinkCodeSheet(palette: palette) { linking = false }
         }
     }
+}
 
 private struct WatchLinkRowView: View {
     let row: LinkedWatchRow
