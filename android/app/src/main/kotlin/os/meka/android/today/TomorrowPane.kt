@@ -1,5 +1,7 @@
 package os.meka.android.today
 
+import os.meka.android.calendar.rememberEventUndo
+import os.meka.android.calendar.EventUndoBar
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -88,6 +90,9 @@ internal fun TomorrowPeekCard(peek: TomorrowPeek, onOpen: () -> Unit, modifier: 
     }
 }
 
+/** The Tomorrow sheet's Undo bar, for the hand tests. */
+const val TOMORROW_UNDO_TAG = "tomorrow-undo"
+
 /**
  * The Tomorrow sheet, from the peek or the date under the greeting (any time of day): tomorrow's work line, train,
  * weather and school over its events and tasks in time order. A task ticks off (Today's ring and haptic), or moves to
@@ -108,13 +113,17 @@ fun TomorrowPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ 
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    var said by remember { mutableStateOf<String?>(null) }
+    val undo = rememberEventUndo()
     var failed by remember { mutableStateOf<String?>(null) }
     val onFail: (String) -> Unit = { failed = it }
-    val tick: (String) -> Unit = { id -> failed = null; said = null; TaskTaps.move(scope, id, TaskMove.DONE, onFail) { core.complete(id) } }
+    val tick: (String) -> Unit = { id -> failed = null; undo.clear(); TaskTaps.move(scope, id, TaskMove.DONE, onFail) { core.complete(id) } }
     fun move(id: String, toToday: Boolean) {
         haptics.tick(); failed = null
-        TaskTaps.move(scope, id, if (toToday) TaskMove.TODAY else TaskMove.DAY_AFTER, onFail) { said = core.moveTomorrowTask(id, toToday) }
+        // Walk-through 2026-11-22: the moved line is the Undo bar's ("Moved “Gym” to Today · Undo"), not a bare line.
+        TaskTaps.move(scope, id, if (toToday) TaskMove.TODAY else TaskMove.DAY_AFTER, onFail) {
+            val line = core.moveTomorrowTask(id, toToday)
+            undo.show(line) { core.undoTomorrowMove() }
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -135,7 +144,7 @@ fun TomorrowPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ 
             item(key = "header") { TomorrowSheetHeader(v, Modifier.appear(rememberAppearance(1))) }
             item(key = "said") {
                 AnimatedContent(
-                    targetState = failed ?: said,
+                    targetState = failed,
                     transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                     label = "tomorrow-said",
                 ) { line ->
@@ -173,6 +182,7 @@ fun TomorrowPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "‹ 
                 }
             }
         }
+        EventUndoBar(undo, Modifier.align(Alignment.BottomCenter).testTag(TOMORROW_UNDO_TAG))
     }
 }
 

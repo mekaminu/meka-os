@@ -256,10 +256,22 @@ class TomorrowScreensTest {
         compose.onAllNodes(hasText("Today") and hasClickAction(), useUnmergedTree = true)[1].performSemanticsAction(SemanticsActions.OnClick)
         until { core.shutdownView.value.tomorrow.rows.none { it.id == "t-$school" } }
         assertTrue(core.shutdownView.value.left.any { it.task.id == school })
-        val moved = LoneWordGlue.kept("Moved “Ring the school about the trip” to Today")
+        // Walk-through 2026-11-22: the moved line is the Undo bar's, with an Undo that puts the task back on tomorrow.
+        val moved = "Moved “Ring the school about the trip” to Today"
         until { shows(moved) }
         assertTrue(shows(moved), "$name: the move isn't said")
+        assertTrue(compose.onAllNodes(hasText("Undo") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "$name: the moved line has no Undo")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("tomorrow", "$name-moved"))
+        compose.onAllNodes(hasText("Undo") and hasClickAction(), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.shutdownView.value.tomorrow.rows.any { it.id == "t-$school" } }
+        assertTrue(core.shutdownView.value.tomorrow.rows.any { it.id == "t-$school" }, "$name: Undo didn't put the task back on tomorrow")
+        assertTrue(core.shutdownView.value.left.none { it.task.id == school }, "$name: after Undo the task is still left from today")
+        until { shows(LoneWordGlue.kept("1 event · 2 tasks")) }
+        assertTrue(shows(LoneWordGlue.kept("1 event · 2 tasks")), "$name: after Undo the sheet doesn't count it again")
+        // And Today again, for the rest of the walk.
+        compose.onAllNodes(hasText("Today") and hasClickAction(), useUnmergedTree = true)[1].performSemanticsAction(SemanticsActions.OnClick)
+        until { core.shutdownView.value.tomorrow.rows.none { it.id == "t-$school" } }
         assertEquals(listOf("t-$gym"), core.shutdownView.value.tomorrow.rows.filter { !it.isEvent }.map { it.id })
         val afterMove = assertNotNull(core.shutdownView.value.peek).line
         assertTrue(afterMove.contains("1 task ·") && !afterMove.contains("2 tasks"), afterMove)

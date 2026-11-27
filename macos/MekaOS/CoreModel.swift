@@ -341,6 +341,8 @@ final class CoreModel {
     var showTomorrow = false
     /// What the Tomorrow sheet's last move did ("Moved “Gym” to Today"), or why it didn't.
     private(set) var tomorrowSaid: String?
+    /// The moved line offers Undo (walk-through 2026-11-22): true after a move that landed, until Undo or the next move.
+    private(set) var tomorrowCanUndo = false
     /// The smart wake alarm (Alarms, slice 1): the next morning's suggested time and the alarm if set. Synced with the Fold.
     private(set) var wake: WakeView?
     /// Quick alarms and timers typed into capture (Alarms, slice 2), soonest first. Synced with the Fold.
@@ -2588,9 +2590,11 @@ final class CoreModel {
         taskTaps = InstantTaskRules.shared.move(taps: taskTaps, id: id, move: move)
         showShutdownView()
         guard let core else { forgetTaskMove([id], move); return }
+        tomorrowCanUndo = false
         Task {
             do {
                 tomorrowSaid = try await core.moveTomorrowTask(taskId: id, toToday: toToday)
+                tomorrowCanUndo = true
             } catch {
                 tomorrowSaid = InstantTapRules.shared.failedLine(what: InstantTaskRules.shared.what(move: move), reason: error.localizedDescription)
             }
@@ -2598,9 +2602,22 @@ final class CoreModel {
         }
     }
 
+    /// Undo on the Tomorrow sheet's moved line: the task goes back to tomorrow, its time as it was; the line goes.
+    func undoTomorrowMove() {
+        guard tomorrowCanUndo, let core else { return }
+        MekaHaptics.tick()
+        tomorrowCanUndo = false
+        tomorrowSaid = nil
+        Task {
+            _ = try? await core.undoTomorrowMove()
+            showShutdownView()
+        }
+    }
+
     /// Opening the Tomorrow sheet starts it without an old move's line.
     func openTomorrow() {
         tomorrowSaid = nil
+        tomorrowCanUndo = false
         showTomorrow = true
     }
 

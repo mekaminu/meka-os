@@ -98,8 +98,16 @@ struct TomorrowSheet: View {
                             .padding(.bottom, MekaSpace.xs)
                             .staggeredAppear(1)
                         if let said = model.tomorrowSaid {
-                            Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                                .transition(.opacity)
+                            HStack(spacing: MekaSpace.s) {
+                                Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                                // Walk-through 2026-11-22: the moved line has an Undo, as the Fold's Undo bar.
+                                if model.tomorrowCanUndo {
+                                    Button("Undo") { model.undoTomorrowMove() }
+                                        .buttonStyle(.plain).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                                        .accessibilityIdentifier("tomorrow-undo")
+                                }
+                            }
+                            .transition(.opacity)
                         }
                         if rows.isEmpty && p.bills == nil && p.study == nil {
                             Text("Nothing planned for tomorrow yet.")

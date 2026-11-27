@@ -7207,10 +7207,28 @@ class MekaCore(
         val today = cal.epochDayOf(nowMs())
         val t = tasks.get(taskId)?.takeIf { !it.lifecycle.isTerminal } ?: throw os.meka.core.domain.ValidationException("That task isn't open any more")
         val day = if (toToday) today else today + 2
+        // Walk-through 2026-11-22 (Tomorrow's moved line had no Undo): where it was, for [undoTomorrowMove].
+        val was = TomorrowUndo(taskId, os.meka.core.domain.TaskWhenRules.dayOf(t, today, cal), os.meka.core.domain.TaskWhenRules.minuteOf(t, today, cal))
         tasks.setWhen(taskId, day, os.meka.core.domain.ShutdownRules.movedMinute(t, day, today, cal.minuteOfDay(nowMs()), cal))
+        tomorrowUndo = was
         followBlocks(listOf(taskId))
         os.meka.core.domain.ShutdownRules.movedLine(t.title, day, today)
     }
+    /**
+     * Undo on the Tomorrow sheet's moved line: the last task [moveTomorrowTask] moved goes back to its day and time.
+     * Once only; false when there's nothing to undo, the task is done or gone, or its day has passed.
+     */
+    suspend fun undoTomorrowMove(): Boolean = onCore {
+        val u = tomorrowUndo ?: return@onCore false
+        tomorrowUndo = null
+        tasks.get(u.taskId)?.takeIf { !it.lifecycle.isTerminal } ?: return@onCore false
+        if (u.day < ZoneCalendar(timeZone).epochDayOf(nowMs())) return@onCore false
+        tasks.setWhen(u.taskId, u.day, u.minute)
+        followBlocks(listOf(u.taskId))
+        true
+    }
+    private class TomorrowUndo(val taskId: String, val day: Long, val minute: Int?)
+    private var tomorrowUndo: TomorrowUndo? = null
     /** "Move the rest to tomorrow": everything still left from today waits for tomorrow. */
     suspend fun carryAllToTomorrow() = onCore {
         val left = os.meka.core.domain.ShutdownRules.left(tasks.all(), dayWindow(nowMs())).map { it.id }

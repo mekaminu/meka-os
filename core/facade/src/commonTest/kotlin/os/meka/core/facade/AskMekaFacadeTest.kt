@@ -1131,6 +1131,13 @@ class AskMekaFacadeTest {
         assertTrue(after.tomorrow.rows.isEmpty())
         assertEquals(listOf("Create CR", "Ring the school"), after.left.map { it.task.title }.sorted())
         assertEquals("Tomorrow · Fri 9 Oct · nothing planned yet", after.peek?.line)
+        // Undo on the moved line puts it back on tomorrow, once.
+        assertTrue(c.undoTomorrowMove())
+        c.tick()
+        assertEquals(listOf(id), c.shutdownView.value.tomorrow.rows.mapNotNull { ShutdownRules.taskIdOf(it) })
+        assertEquals(listOf("Create CR"), c.shutdownView.value.left.map { it.task.title })
+        assertFalse(c.undoTomorrowMove())
+        assertEquals("Moved “Ring the school” to Today", c.moveTomorrowTask(id, toToday = true))
         // And on to the day after tomorrow from there isn't offered for today's tasks; a done task can't move.
         c.complete(id)
         assertFailsWith<ValidationException> { c.moveTomorrowTask(id, toToday = false) }
