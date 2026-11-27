@@ -741,16 +741,15 @@ internal fun NeedsYouColumn(
     // the ten-minute inbox's strip, the mail cards) ran to the box's own edges, Done and Start on its border and, in
     // Light, across its outline. Everything in a box now sits 8 dp in from its sides, as on the Mac (ShellView's box);
     // the box's surface and its Light edge still run the full width behind it.
-    val inBox = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge).padding(horizontal = NEEDS_YOU_BOX_INSET) else Modifier
+    val box = needsYouBoxPieces()
+    val inBox = if (boxed) box.inBox else Modifier
     // Meka 2026-11-18 23:34 ("a tall empty gap" under a box's last card): inside a box a card is as tall as its content
     // and its own padding, and the box's foot closes it; the extra gap under each card is for the unboxed list only.
     val cardGap = if (boxed) Modifier else Modifier.padding(bottom = MekaSpace.m)
     val inBoxLine = if (boxed) Modifier.fillMaxWidth().groupBoxFill(boxFill, boxEdge).padding(horizontal = MekaSpace.m) else Modifier
     val inBoxLead = inBox
     // Messages and FYI rows share the box's colour, so each is parted from the one above by the mockup's hairline.
-    val boxLine = Meka.colors.hairline
-    fun inBoxRow(first: Boolean): Modifier =
-        if (boxed) Modifier.groupBoxRow(boxFill, boxLine, first, boxEdge).padding(horizontal = MekaSpace.xs) else Modifier
+    fun inBoxRow(first: Boolean): Modifier = if (boxed) box.row(first) else Modifier
     /** An open group's rounded foot, under the last thing in its box (To decide's has its own key). */
     fun androidx.compose.foundation.lazy.LazyListScope.boxEnd(g: NeedsYouGroup) {
         if (boxed && g in present && inG(g)) item(key = "${g.id}-box-end") { NeedsYouGroupBoxEnd(Modifier.animateItem()) }

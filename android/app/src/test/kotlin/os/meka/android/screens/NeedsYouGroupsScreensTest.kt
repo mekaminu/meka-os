@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -45,7 +47,10 @@ import os.meka.android.today.NEEDS_YOU_ROW_TAG
 import os.meka.android.today.NeedsYouMessageRowView
 import os.meka.android.today.NeedsYouChips
 import os.meka.android.today.NeedsYouFyiRowView
+import os.meka.android.today.NeedsYouGroupBoxEnd
 import os.meka.android.today.NeedsYouGroupFoot
+import os.meka.android.today.needsYouBoxPieces
+import os.meka.android.today.NEEDS_YOU_BOX_END_TAG
 import os.meka.android.today.NeedsYouGroupHeadView
 import os.meka.android.today.NeedsYouGroupLead
 import os.meka.android.today.NeedsYouGroupStore
@@ -164,6 +169,9 @@ class NeedsYouGroupsScreensTest {
                     NeedsYouChips(NeedsYouLayoutRules.chips(1, 3, fyi.size, 3), filter, {
                         filter = it; open = NeedsYouGroupRules.pick(open, it)
                     })
+                    // Walk-through 2026-11-22 A17 (g2a 8): an open group is one box as in the app (NeedsYouRoute), its
+                    // rows on the head's surface and a rounded foot under the last, not a head over loose rows.
+                    val box = needsYouBoxPieces()
                     shown.forEach { g ->
                         val o = g in open
                         NeedsYouGroupHeadView(
@@ -172,16 +180,19 @@ class NeedsYouGroupsScreensTest {
                         )
                         if (o && g == NeedsYouGroup.DECIDE) {
                             NeedsYouGroupLead(NeedsYouGroupRules.listsLead(listsCard.why), listsCard.yesLabel, { goThrough++ },
-                                Modifier.testTag(NEEDS_YOU_LISTS_LEAD_TAG))
-                            NeedsYouGroupFoot(foot, { footTaps++ })
+                                box.inBox.testTag(NEEDS_YOU_LISTS_LEAD_TAG).padding(bottom = MekaSpace.xs))
+                            NeedsYouGroupFoot(foot, { footTaps++ }, box.inBox)
+                            NeedsYouGroupBoxEnd()
                         }
                         if (o && g == NeedsYouGroup.MESSAGES) {
-                            messages.forEach { NeedsYouMessageRowView(it, false, {}) {} }
+                            messages.forEachIndexed { i, m -> NeedsYouMessageRowView(m, false, {}, box.row(i == 0)) {} }
+                            NeedsYouGroupBoxEnd()
                         }
                         if (o && g == NeedsYouGroup.FYI) {
-                            NeedsYouGroupLead(NeedsYouGroupRules.FYI_LEAD, NeedsYouGroupRules.CLEAR_ALL, {})
-                            pg.of(fyi).forEach { NeedsYouFyiRowView(it, {}) }
-                            NeedsYouPager(pg, { page = it })
+                            NeedsYouGroupLead(NeedsYouGroupRules.FYI_LEAD, NeedsYouGroupRules.CLEAR_ALL, {}, box.inBox.padding(bottom = MekaSpace.xs))
+                            pg.of(fyi).forEachIndexed { i, f -> NeedsYouFyiRowView(f, {}, box.row(i == 0)) }
+                            NeedsYouPager(pg, { page = it }, box.inBox)
+                            NeedsYouGroupBoxEnd()
                         }
                     }
                 }
@@ -198,8 +209,29 @@ class NeedsYouGroupsScreensTest {
         turns()
     }
 
+    /**
+     * Walk-through 2026-11-22 A17 (g2a 8): an open group's head and the row under it are one box, so the list's gap
+     * between them is the head's own surface (it showed the page's colour, the head squared off over nothing). Reads the
+     * pixel just inside the head's foot and the one in the middle of the gap under it, 6 dp in from the box's left side.
+     */
+    private fun assertJoined(name: String, g: NeedsYouGroup) {
+        val head = compose.onAllNodesWithTag(NEEDS_YOU_GROUP_TAG, useUnmergedTree = true)
+            .filter(hasContentDescription(g.title, substring = true))[0].fetchSemanticsNode()
+        val screen = compose.onNodeWithTag("screen").fetchSemanticsNode()
+        val d = head.layoutInfo.density.density
+        val shot = compose.onNodeWithTag("screen").captureToImage().toPixelMap()
+        val b = head.boundsInRoot
+        val x = (b.left - screen.boundsInRoot.left + 6 * d).toInt()
+        val inHead = shot[x, (b.bottom - screen.boundsInRoot.top - 2).toInt()]
+        val inGap = shot[x, (b.bottom - screen.boundsInRoot.top + MekaSpace.xs.value * d / 2f).toInt()]
+        if (inHead != inGap) fail("$name: ${g.title}'s head is split from its box (the gap under it is $inGap, the head $inHead)")
+    }
+
     private fun shoot(name: String, theme: ThemeChoice = ThemeChoice.DARK) {
         draw(theme)
+        listOf(NeedsYouGroup.DECIDE, NeedsYouGroup.MESSAGES).forEach { assertJoined(name, it) }
+        val ends = compose.onAllNodesWithTag(NEEDS_YOU_BOX_END_TAG, useUnmergedTree = true).fetchSemanticsNodes().size
+        if (ends != 2) fail("$name: $ends rounded box feet for the two open groups, not 2")
         if (!onScreen("1 to decide · 3 to reply · 7 FYI · 3 mail")) fail("$name: the header's counts aren't shown")
         if (!onScreen(NeedsYouGroupRules.CLOSE_ALL)) fail("$name: Close all is missing while To decide and Messages are open")
         NeedsYouGroup.entries.filter { it != NeedsYouGroup.SCHOOL }.forEach { if (!onScreen(it.title)) fail("$name: the ${it.title} box is missing") }

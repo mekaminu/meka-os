@@ -3,6 +3,7 @@ package os.meka.android.today
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.draw.drawBehind
@@ -39,6 +40,22 @@ internal val NEEDS_YOU_BOX_GAP = MekaSpace.xs
 internal val NEEDS_YOU_BOX_INSET = MekaSpace.xs
 
 internal const val NEEDS_YOU_BOX_END_TAG = "needs-you-box-end"
+
+/**
+ * Walk-through 2026-11-22 A17 (g2a 8): the pieces of an open group's box, as the list gives them, so the screen tests
+ * draw a box the way the app does (the groups shots drew the head and its rows bare, a head squared off over a gap with
+ * the rows floating under it). [inBox] is a card, a lead or a foot line on the box's surface 8 dp in from its sides;
+ * [row] a Messages or FYI row parted from the one above by the hairline ([first] leaves it out).
+ */
+internal class NeedsYouBoxPieces(private val fill: Color, private val edge: Color?, private val line: Color) {
+    val inBox: Modifier get() = Modifier.groupBoxFill(fill, edge).padding(horizontal = NEEDS_YOU_BOX_INSET)
+    fun row(first: Boolean): Modifier = Modifier.groupBoxRow(fill, line, first, edge).padding(horizontal = MekaSpace.xs)
+}
+
+/** The box pieces in the current theme: the surface, Light's 1 dp edge ([LightInk.cardEdge]) and the hairline. */
+@Composable
+internal fun needsYouBoxPieces(): NeedsYouBoxPieces =
+    NeedsYouBoxPieces(Meka.colors.surface, LightInk.cardEdge(Meka.colors, Meka.theme.isDark), Meka.colors.hairline)
 
 /** A row inside a group's box: the box's [fill] behind it and across the gap above it, joining it to the row before. */
 internal fun Modifier.groupBoxFill(fill: Color, edge: Color? = null): Modifier = drawWithContent {
