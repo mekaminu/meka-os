@@ -341,22 +341,25 @@ internal const val NEEDS_YOU_FYI_CARD_TAG = "needs-you-fyi-card"
 internal fun NeedsYouFyiRowView(row: NeedsYouFyiRow, onSeen: () -> Unit, modifier: Modifier = Modifier, card: Boolean = false) {
     val haptics = rememberMekaHaptics()
     val shape = RoundedCornerShape(MekaRadius.m)
-    val look = if (card) {
-        Modifier.clip(shape).background(Meka.colors.surface).lightCardEdge(shape)
-            .testTag(NEEDS_YOU_FYI_CARD_TAG).padding(start = MekaSpace.m, end = MekaSpace.xxs)
-    } else Modifier.padding(start = MekaSpace.xxs)
-    Row(
-        modifier.fillMaxWidth().then(look).semantics(mergeDescendants = true) { contentDescription = row.spoken }.testTag(NEEDS_YOU_FYI_TAG),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(row.who, style = MekaType.captionStrong, color = Meka.colors.textPrimary, maxLines = 1,
-            modifier = Modifier.padding(end = MekaSpace.xs))
-        Text(row.what, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f))
-        Box(
-            Modifier.clip(CircleShape).clickable(onClickLabel = NeedsYouLayoutRules.SEEN) { haptics.light(); onSeen() }.minTouchSquare(),
-            contentAlignment = Alignment.Center,
-        ) { Text("✓", style = MekaType.captionStrong, color = Meka.colors.textTertiary) }
+    // The card is its own layout around the row, so its tag's bounds are the card's edge, not the row's padded inside.
+    val outer = if (card) {
+        modifier.fillMaxWidth().clip(shape).background(Meka.colors.surface).lightCardEdge(shape).testTag(NEEDS_YOU_FYI_CARD_TAG)
+    } else modifier.fillMaxWidth()
+    val inset = if (card) Modifier.padding(start = MekaSpace.m, end = MekaSpace.xxs) else Modifier.padding(start = MekaSpace.xxs)
+    Box(outer) {
+        Row(
+            Modifier.fillMaxWidth().then(inset).semantics(mergeDescendants = true) { contentDescription = row.spoken }.testTag(NEEDS_YOU_FYI_TAG),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(row.who, style = MekaType.captionStrong, color = Meka.colors.textPrimary, maxLines = 1,
+                modifier = Modifier.padding(end = MekaSpace.xs))
+            Text(row.what, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+            Box(
+                Modifier.clip(CircleShape).clickable(onClickLabel = NeedsYouLayoutRules.SEEN) { haptics.light(); onSeen() }.minTouchSquare(),
+                contentAlignment = Alignment.Center,
+            ) { Text("✓", style = MekaType.captionStrong, color = Meka.colors.textTertiary) }
+        }
     }
 }
 
