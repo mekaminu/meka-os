@@ -33,6 +33,38 @@ class RenewalBoardTest {
     }
 
     @Test
+    fun theNumbersAreOneLineUnderThePagesOwnTiles() {
+        // Walk-through week 5, A17: no second tile set on the Lists page.
+        r.add("Streaming", ObligationKind.SUBSCRIPTION, today + 27, RenewalRepeat.MONTHLY, cost = "10.99", cancelByDaysBefore = 3)
+        r.add("Car insurance", ObligationKind.INSURANCE, today + 14, RenewalRepeat.YEARLY, cost = "420")
+        val b = RenewalBoardRules.board(r.view(), today, RenewalTab.COMING_UP)
+        assertEquals("2 in the next 30 days · 1 to cancel · about £552 a year", b.summary)
+        assertEquals("Nothing in the next 30 days", RenewalBoardRules.summary(0, 0, 0))
+        assertEquals("About £24 a year", RenewalBoardRules.summary(0, 0, 2400))
+    }
+
+    @Test
+    fun whichRenewalsIsARowOpeningItsThreeChoices() {
+        r.add("Streaming", ObligationKind.SUBSCRIPTION, today + 27, RenewalRepeat.YEARLY, cost = "24")
+        val b = RenewalBoardRules.board(r.view(), today, RenewalTab.ALL)
+        assertEquals(NotifyChoiceRow("Showing", "All", "Showing all. Opens the choices"), b.showRow)
+        val sheet = RenewalBoardRules.showSheet(RenewalTab.ALL)
+        assertEquals(listOf("Coming up", "All", "Done"), sheet.choices.map { it.label })
+        assertEquals(listOf(false, true, false), sheet.choices.map { it.lit })
+        assertTrue(sheet.choices.all { it.line.isNotBlank() })
+        assertEquals(RenewalTab.DONE, RenewalBoardRules.tabNamed(sheet.choices[2].name))
+        assertNull(RenewalBoardRules.tabNamed("nope"))
+    }
+
+    @Test
+    fun aCardNeverRepeatsItsTitleUnderIt() {
+        // "Boiler service / Boiler service" (walk-through week 5, finding g6 7).
+        r.add("Boiler service", ObligationKind.BOILER, today + 40, RenewalRepeat.YEARLY)
+        val c = RenewalBoardRules.board(r.view(), today, RenewalTab.ALL).cards.single()
+        assertEquals("Every year", c.sub)
+    }
+
+    @Test
     fun aCardHasItsDateTileCostAndCancelBadge() {
         r.add("Streaming", ObligationKind.SUBSCRIPTION, CivilDate.toEpochDay(2026, 11, 25), RenewalRepeat.YEARLY, cost = "24", cancelByDaysBefore = 3)
         val c = RenewalBoardRules.board(r.view(), today, RenewalTab.ALL).cards.single()

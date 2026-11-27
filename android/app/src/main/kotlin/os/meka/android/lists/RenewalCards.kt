@@ -67,9 +67,11 @@ import os.meka.core.domain.RenewalItem
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.RenewalRules
 import os.meka.core.domain.RenewalTab
-import os.meka.core.domain.RenewalTile
 import os.meka.core.domain.SessionRules
 import os.meka.core.facade.MekaCore
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
+import androidx.compose.animation.Crossfade
 
 /*
  * Renewals keep their email, slice 2 (Meka 2026-10-28, the "Renewals" mockup approved 22:20): the Renewals list as
@@ -79,24 +81,31 @@ import os.meka.core.facade.MekaCore
  * Edit rises a sheet of rows, each opening its own choices. The disclaimer is said once, at the foot.
  */
 
-/** The tiles, the tabs and the cards for [board]; the suggestion rows and the foot follow ([renewalFoot]). */
+/** The tag the screen tests find the board's one line by. */
+const val RENEWAL_SUMMARY_TAG = "renewal-summary"
+
+/** The numbers line, the Showing row and the cards for [board]; the suggestion rows and the foot follow ([renewalFoot]). */
 internal fun LazyListScope.renewalBoard(
     board: RenewalBoard, open: String?, toggle: (String) -> Unit, setTab: (RenewalTab) -> Unit, core: MekaCore,
     act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit, tap: () -> Unit,
 ) {
-    item(key = "r-board-tiles") {
-        Row(Modifier.animateItem().fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            board.tiles.forEach { t -> BoardTile(t, Modifier.weight(1f)) }
+    // Walk-through week 5, A17: the Lists page has its own tiles and tabs, so the board's numbers are one line and
+    // Coming up · All · Done is a row opening its three choices, not a second tile set and pill bar.
+    item(key = "r-board-summary") {
+        Crossfade(board.summary, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "renewal-summary",
+            modifier = Modifier.animateItem()) { line ->
+            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                modifier = Modifier.fillMaxWidth().padding(start = LIST_CARD_INSET).testTag(RENEWAL_SUMMARY_TAG))
         }
     }
-    item(key = "r-board-tabs") {
-        Row(
-            Modifier.animateItem().fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
-                .background(Meka.colors.surface).padding(MekaSpace.xxs),
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-        ) {
-            RenewalBoardRules.TABS.forEach { t -> TabPill(t.label, t == board.tab, Modifier.weight(1f)) { tap(); setTab(t) } }
-        }
+    item(key = "r-board-show") {
+        var choosing by rememberSaveable { mutableStateOf(false) }
+        NotifyChoiceRowView(board.showRow, Modifier.animateItem()) { tap(); choosing = true }
+        if (choosing) NotifyChoiceSheetView(
+            RenewalBoardRules.showSheet(board.tab),
+            onChoose = { name -> RenewalBoardRules.tabNamed(name)?.let(setTab) },
+            onClose = { choosing = false },
+        )
     }
     board.empty?.let { line ->
         item(key = "r-board-empty") {
@@ -116,32 +125,6 @@ internal fun LazyListScope.renewalFoot() {
             modifier = Modifier.animateItem().fillMaxWidth().padding(top = MekaSpace.m),
         )
     }
-}
-
-@Composable
-private fun BoardTile(t: RenewalTile, modifier: Modifier) {
-    Column(
-        modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .semantics(mergeDescendants = true) { contentDescription = "${t.label} ${t.value}" },
-    ) {
-        Text(t.label.uppercase(), style = MekaType.cardLabel, color = Meka.colors.textTertiary, maxLines = 2)
-        AnimatedContent(t.value, transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) }, label = "renewal-tile") { v ->
-            Text(v, style = MekaType.nowTitle, color = if (t.warn) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun TabPill(label: String, on: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (on) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(Meka.reducedMotion), label = "renewal-tab")
-    Text(
-        label, style = MekaType.captionStrong, color = if (on) Meka.colors.textPrimary else Meka.colors.textSecondary,
-        textAlign = TextAlign.Center, maxLines = 1,
-        modifier = modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-            .semantics { selected = on }
-            .clickable(role = Role.Tab, onClick = onClick).minTouch().padding(vertical = MekaSpace.xs)
-            .testTag("renewal-tab-$label"),
-    )
 }
 
 @Composable

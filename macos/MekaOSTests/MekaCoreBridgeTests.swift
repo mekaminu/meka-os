@@ -2627,6 +2627,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual((0..<Int(RenewalBoardRules.shared.tabCount)).map { RenewalBoardRules.shared.tabAt(index: Int32($0)).label }, ["Coming up", "All", "Done"])
         XCTAssertEqual(RenewalBoardRules.shared.costShort(pence: 2400, repeats: RenewalRules.shared.repeatAt(index: 4)), "£24/yr")
         XCTAssertEqual(RenewalBoardRules.shared.editKeyAt(index: 0).name, "DUE")
+        // Walk-through week 5, A17: one line of numbers and a Showing menu, not a second tile set and pill bar.
+        XCTAssertEqual(board.summary, "Nothing in the next 30 days")
+        XCTAssertEqual(board.showRow.title, "Showing")
+        XCTAssertEqual(board.showRow.value, "Coming up")
+        let sheet = RenewalBoardRules.shared.showSheet(tab: board.tab)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["Coming up", "All", "Done"])
+        XCTAssertEqual(sheet.choices.map { $0.lit }, [true, false, false])
+        XCTAssertEqual(RenewalBoardRules.shared.tabNamed(name: sheet.choices[2].name).map { Int($0.ordinal) }, 2)
     }
 
     func testCarReachesSwift() {

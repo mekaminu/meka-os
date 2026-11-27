@@ -49,6 +49,9 @@ import os.meka.android.lists.TabCountShown
 import os.meka.android.lists.TAB_LABEL_ROOM
 import os.meka.core.domain.LifePageRules
 import os.meka.core.domain.ListRules
+import os.meka.core.domain.RenewalBoardRules
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import androidx.compose.ui.test.hasAnyAncestor
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
 import os.meka.core.domain.ShoppingRules
@@ -90,6 +93,11 @@ class ListsScreensTest {
     }
 
     private enum class Fill { EMPTY, ONE, MANY }
+
+    /** The fixture's renewals as one line: Car insurance (5 days, cancel by 3 before) and £10.99 a month (12 days). */
+    private val RENEWALS_LINE = "2 in the next 30 days · 1 to cancel · about £552 a year"
+
+    private fun showing(tab: String) = "Showing ${tab.lowercase()}. Opens the choices"
 
     private val longWait = "A refund for the cancelled flight to Lisbon in the summer"
 
@@ -156,10 +164,17 @@ class ListsScreensTest {
             tab == ListTab.SHOPPING -> ScreenShots.assertShows(compose, name, "Milk")
             tab == ListTab.RENEWALS -> {
                 ScreenShots.assertShows(compose, name, "Car insurance")
-                // Renewals keep their email, slice 2: the approved cards: tiles, the tabs and a lit cancel-by badge.
-                ScreenShots.assertShows(compose, name, "NEXT 30 DAYS")
-                ScreenShots.assertShows(compose, name, "Coming up")
+                // Renewals keep their email, slice 2: the approved cards and a lit cancel-by badge. Walk-through week 5,
+                // A17: under the page's own tiles and tabs, the board's numbers are one line and Coming up · All · Done
+                // a Showing row, not a second tile set and pill bar.
+                ScreenShots.assertShows(compose, name, RENEWALS_LINE)
                 ScreenShots.assertShows(compose, name, "cancel in 2 days")
+                if (compose.onAllNodes(hasContentDescription(showing("Coming up"))).fetchSemanticsNodes().isEmpty()) fail("$name: no Showing · Coming up row")
+                listOf("NEXT 30 DAYS", "TO CANCEL", "A YEAR", "All").forEach { said ->
+                    if (compose.onAllNodes(hasText(said)).fetchSemanticsNodes().isNotEmpty()) fail("$name: Renewals still draws \"$said\" under the page's tiles")
+                }
+                // "Boiler service / Boiler service" said nothing: its repeat under it instead.
+                if (compose.onAllNodes(hasText("Boiler service")).fetchSemanticsNodes().size > 1) fail("$name: Boiler service says its name twice")
             }
             else -> {
                 ScreenShots.assertShows(compose, name, "Send Sam the photos")
@@ -312,6 +327,34 @@ class ListsScreensTest {
         tabsByHand(name)
     }
 
+    /**
+     * Works by hand, Renewals (walk-through week 5, A17): the Showing row opens its sheet of three; Done there closes
+     * it, the row says Done and the closed list's line shows; All brings every renewal back, Boiler service with its
+     * repeat under it.
+     */
+    private fun renewalsByHand(core: MekaCore) {
+        val name = "lists-renewals-by-hand"
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        fun choose(from: String, choice: String) {
+            tap(name, "Showing · $from", hasContentDescription(showing(from)))
+            until { sheetOpen() }
+            if (!sheetOpen()) fail("$name: the Showing row didn't open its sheet")
+            ScreenShots.assertShows(compose, name, RenewalBoardRules.SHOW_TITLE)
+            compose.onAllNodes(hasText(choice, substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            until { !sheetOpen() && compose.onAllNodes(hasContentDescription(showing(choice))).fetchSemanticsNodes().isNotEmpty() }
+            if (sheetOpen()) fail("$name: choosing $choice didn't close the sheet")
+            if (compose.onAllNodes(hasContentDescription(showing(choice))).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say $choice")
+        }
+        choose("Coming up", "Done")
+        reach(name, hasText("Nothing renewed off the list", substring = true), "Done tab's line")
+        if (compose.onAllNodes(hasText("Car insurance")).fetchSemanticsNodes().isNotEmpty()) fail("$name: Done still shows Car insurance")
+        choose("Done", "All")
+        reach(name, hasText("Boiler service"), "Boiler service on All")
+        reach(name, hasText("Every year"), "Boiler service's repeat under it")
+        ScreenShots.reshootAfterHand(compose, "lists", "cover-dark-renewals-by-hand")
+    }
+
     /** The tabs by hand: a tap on Promises lights it and its promise shows; a tap on Shopping brings the list back. */
     private fun tabsByHand(name: String) {
         fun tab(t: ListTab) = hasTestTag(LIST_TAB_TAG) and hasContentDescription(t.label, substring = true) and hasClickAction()
@@ -388,6 +431,9 @@ class ListsScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun coverRenewals() { shoot("cover-dark-renewals", ListTab.RENEWALS, Fill.MANY) }
+
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun renewalsByHand() { renewalsByHand(shoot("cover-dark-renewals-by-hand", ListTab.RENEWALS, Fill.MANY)) }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun promisesByHand() { promisesByHand(shoot("cover-dark-promises-by-hand", ListTab.WAITING, Fill.ONE)) }

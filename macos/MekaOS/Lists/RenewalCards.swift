@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 /// Renewals keep their email, slice 2, on the Mac (Meka 2026-10-28, the "Renewals" mockup approved 22:20): the
-/// Renewals list as cards. Three tiles, Coming up · All · Done (the lit pill cross-fades), and a card per renewal with
+/// Renewals list as cards. One line of numbers, a Showing menu (Coming up · All · Done; walk-through week 5, A17), and a card per renewal with
 /// its date tile, cost and "cancel in N days" badge. A click unfolds it (opacity + move; Reduce Motion: opacity) into
 /// Renews · Cancel by · Repeats tiles, the From the email box and Renewed · Cancelled it · Edit; Edit opens a sheet of
 /// rows (menus, a date field and fields: the Mac's simpler layout). Only Strings and numbers cross to the core.
@@ -17,40 +17,12 @@ struct RenewalBoardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            HStack(spacing: MekaSpace.xs) {
-                ForEach(board.tiles, id: \.label) { t in
-                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(t.label.uppercased()).font(MekaType.cardLabel).tracking(MekaType.cardLabelTracking)
-                            .foregroundStyle(palette.textTertiary).lineLimit(1)
-                        Text(t.value).font(MekaType.nowTitle).foregroundStyle(t.warn ? palette.accent : palette.textPrimary)
-                            .contentTransition(.opacity)
-                    }
-                    .padding(MekaSpace.m)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
-                    .accessibilityElement(children: .combine)
-                }
-            }
-            HStack(spacing: MekaSpace.xxs) {
-                ForEach(0..<Int(RenewalBoardRules.shared.tabCount), id: \.self) { i in
-                    let label = RenewalBoardRules.shared.tabAt(index: Int32(i)).label
-                    Button {
-                        guard i != tab else { return }
-                        MekaHaptics.tick()
-                        withAnimation(MekaMotion.appear(reduced: reduceMotion)) { tab = i; open = nil }
-                    } label: {
-                        Text(label).font(MekaType.captionStrong)
-                            .foregroundStyle(i == tab ? palette.textPrimary : palette.textSecondary)
-                            .frame(maxWidth: .infinity).padding(.vertical, MekaSpace.xs)
-                            .background(Capsule().fill(i == tab ? palette.surfaceRaised : .clear))
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(MekaPressStyle())
-                    .accessibilityAddTraits(i == tab ? .isSelected : [])
-                }
-            }
-            .padding(MekaSpace.xxs)
-            .background(Capsule().fill(palette.surface))
+            // Walk-through week 5, A17: the Lists page has its own tiles and tabs, so the board's numbers are one line
+            // and Coming up · All · Done is a Showing menu, not a second tile set and pill bar.
+            Text(board.summary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+                .padding(.leading, MekaSpace.m)
+            showRow
             if let empty = board.empty {
                 Text(empty).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).padding(.vertical, MekaSpace.xs)
             }
@@ -59,6 +31,32 @@ struct RenewalBoardView: View {
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tab)
+    }
+
+    /// "Showing" · a menu of Coming up · All · Done, each saying which renewals it shows; a pick sends only its name.
+    private var showRow: some View {
+        let row = board.showRow
+        let sheet = RenewalBoardRules.shared.showSheet(tab: board.tab)
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack {
+            Text(row.title).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Picker(sheet.title, selection: Binding(get: { lit }, set: { name in
+                guard name != lit, let t = RenewalBoardRules.shared.tabNamed(name: name) else { return }
+                MekaHaptics.tick()
+                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { tab = Int(t.ordinal); open = nil }
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(sheet.choices.first(where: { $0.lit })?.line ?? sheet.note)
+            .accessibilityLabel(row.spoken)
+        }
+        .font(MekaType.itemMeta)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
     }
 }
 

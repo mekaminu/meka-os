@@ -50,6 +50,13 @@ data class RenewalBoard(
     val empty: String?,
     /** Said once, at the foot of the list. */
     val footer: String,
+    /**
+     * The tiles said as one line under the Lists page's own tiles (walk-through week 5, A17: no second tile set):
+     * "2 in the next 30 days · 1 to cancel · about £552 a year".
+     */
+    val summary: String = "",
+    /** "Showing" · "Coming up" ›: which renewals the cards are, opening [RenewalBoardRules.showSheet]. */
+    val showRow: NotifyChoiceRow = RenewalBoardRules.showRow(tab),
 )
 
 object RenewalBoardRules {
@@ -98,8 +105,48 @@ object RenewalBoardRules {
             RenewalTab.ALL -> null
             RenewalTab.DONE -> "Nothing renewed off the list or cancelled in the last three months."
         }
-        return RenewalBoard(tiles, tab, cards, empty, FOOTER)
+        return RenewalBoard(tiles, tab, cards, empty, FOOTER, summary(next30, toCancel, v.yearlyPence), showRow(tab))
     }
+
+    const val SHOWING = "Showing"
+    const val SHOW_TITLE = "Which renewals"
+    const val SHOW_NOTE = "Only changes what this list shows. Every renewal still reminds you on its day."
+    const val COMING_UP_LINE = "What needs doing now, then the next three months"
+    const val ALL_LINE = "Every renewal and bill on the radar, soonest first"
+    const val DONE_LINE = "Renewed, paid or cancelled in the last three months"
+
+    /**
+     * The board's three numbers as one line (walk-through week 5, A17: the Lists page already has its tiles):
+     * "2 in the next 30 days · 1 to cancel · about £552 a year"; a part that is nothing is left out
+     * ("Nothing in the next 30 days" when every part is).
+     */
+    fun summary(next30: Int, toCancel: Int, yearlyPence: Long): String {
+        val parts = listOfNotNull(
+            "$next30 in the next $AHEAD_DAYS days".takeIf { next30 > 0 },
+            "$toCancel to cancel".takeIf { toCancel > 0 },
+            "about ${RenewalRules.formatPence(roundPounds(yearlyPence))} a year".takeIf { yearlyPence > 0 },
+        )
+        return if (parts.isEmpty()) "Nothing in the next $AHEAD_DAYS days" else parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
+    }
+
+    /** The row in place of the Coming up · All · Done pills: "Showing" · "Coming up" ›. */
+    fun showRow(tab: RenewalTab): NotifyChoiceRow = NotifyChoiceRow(SHOWING, tab.label, "$SHOWING ${tab.label.lowercase()}. Opens the choices")
+
+    /** Its sheet: Coming up · All · Done, each saying which renewals it shows, the one in force lit. */
+    fun showSheet(tab: RenewalTab): NotifyChoiceSheet = NotifyChoiceSheet(
+        SHOW_TITLE, SHOW_NOTE,
+        TABS.map { t ->
+            val line = when (t) {
+                RenewalTab.COMING_UP -> COMING_UP_LINE
+                RenewalTab.ALL -> ALL_LINE
+                RenewalTab.DONE -> DONE_LINE
+            }
+            NotifyChoice(t.name, t.label, line, t == tab, "${t.label}, $line" + if (t == tab) ", chosen" else "")
+        },
+    )
+
+    /** The tab a sheet choice names; null when it isn't one. */
+    fun tabNamed(name: String): RenewalTab? = RenewalTab.entries.firstOrNull { it.name == name }
 
     /** Whole pounds for the year tile (it is an estimate): £1,139.88 → £1,140. */
     private fun roundPounds(pence: Long): Long = ((pence + 50) / 100) * 100
@@ -110,8 +157,12 @@ object RenewalBoardRules {
         val (badge, warn) = badge(i, today)
         val sub = listOfNotNull(
             RenewalRules.kindLabel(i.kind).takeIf { i.kind != ObligationKind.OTHER && !i.title.contains(it, ignoreCase = true) },
-            i.subject?.trim()?.takeIf { it.isNotEmpty() },
-        ).joinToString(" · ").ifEmpty { RenewalRules.kindLabel(i.kind) }
+            i.subject?.trim()?.takeIf { it.isNotEmpty() && !it.equals(i.title.trim(), ignoreCase = true) },
+        ).joinToString(" · ").ifEmpty {
+            // "Boiler service" under "Boiler service" said nothing (walk-through week 5, A17): its repeat instead.
+            val kind = RenewalRules.kindLabel(i.kind)
+            if (i.title.contains(kind, ignoreCase = true)) i.repeatLabel else kind
+        }
         val cost = i.costPence?.let { costShort(it, i.repeats) }
         val tiles = listOf(
             RenewalTile(dueWord(i), RenewalRules.dayWord(i.dueDay, today).replaceFirstChar { it.uppercase() }, warn = !closed && i.dueDay < today),
