@@ -13,14 +13,11 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,13 +49,18 @@ import os.meka.core.domain.AlarmRules
 import os.meka.core.domain.DurationGlue
 import os.meka.core.domain.ShutdownRules
 import os.meka.core.domain.TomorrowPreview
+import os.meka.core.domain.WakeBufferChoiceRules
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
+
+internal const val WAKE_BUFFER_ROW_TAG = "wake-buffer-row"
 
 /**
  * The smart wake alarm in the evening shutdown (Alarms, slice 1): MEKA's suggestion from tomorrow's first commitment
  * less the get-ready buffer, ‹ › to move it five minutes (tick haptic, digits roll), Set alarm / Turn off, "Use 06:30"
- * when something earlier came in, and the buffer as chips. Synced with the Mac. Without "Alarms & reminders" allowed
+ * when something earlier came in, and the buffer as a row opening its sheet. Synced with the Mac. Without "Alarms & reminders" allowed
  * the line under it says it may ring up to 5 minutes late, with a one-tap grant (ADR-007).
  * Motion: the digits slide the way the time moved, the line cross-fades, chips blend; reduced motion cross-fades.
  */
@@ -156,27 +159,17 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier, under: T
                 }.minTouch(),
             )
         }
-        Text("Time to get ready", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.m))
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xxs),
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-        ) {
-            w.bufferChoices.forEach { b ->
-                val chosen = b == w.bufferMin
-                val bg by androidx.compose.animation.animateColorAsState(
-                    if (chosen) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.themeBlend(reduced), label = "wake-buffer",
-                )
-                Text(
-                    AlarmRules.duration(b), style = MekaType.caption,
-                    color = if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
-                    // Quality gate slice 47: a 48 dp touch; the pill itself stays its drawn size.
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                        .clickable(role = Role.Button) { haptics.tick(); act { core.setWakeBuffer(b) } }.minTouch()
-                        .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                )
-            }
-        }
+        // Walk-through week 5, A17: the get-ready buffer is a row opening its sheet, not an open chip row (whose fifth
+        // chip ran off the cover's edge). A pick moves the suggestion only, never an alarm already set.
+        var choosing by rememberSaveable { mutableStateOf(false) }
+        NotifyChoiceRowView(
+            WakeBufferChoiceRules.row(w), Modifier.padding(top = MekaSpace.m).testTag(WAKE_BUFFER_ROW_TAG),
+        ) { haptics.tick(); choosing = true }
+        if (choosing) NotifyChoiceSheetView(
+            WakeBufferChoiceRules.sheet(w),
+            onChoose = { name -> WakeBufferChoiceRules.named(w, name)?.let { b -> act { core.setWakeBuffer(b) } } },
+            onClose = { choosing = false },
+        )
     }
 }
 

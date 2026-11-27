@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The smart wake alarm in the evening shutdown (Alarms, slice 1): the time MEKA suggests from tomorrow's first
 /// commitment less the get-ready buffer, ‹ › to move it five minutes, Set alarm / Turn off, "Use 06:30" when something
-/// earlier came in, and the buffer as a menu. Synced with the Fold, which rings it; this Mac shows it as a notification.
+/// earlier came in, and the buffer as a row with a menu. Synced with the Fold, which rings it; this Mac shows it as a notification.
 /// Motion: the digits roll as the time steps (tick haptic), the line cross-fades; Reduce Motion: cross-fades.
 struct WakeSection: View {
     @Environment(CoreModel.self) private var model
@@ -68,18 +68,36 @@ struct WakeSection: View {
                         .transition(.opacity)
                 }
             }
-            Menu(wake.bufferLine) {
-                ForEach(wake.bufferChoices.map { $0.int32Value }, id: \.self) { m in
-                    Button(AlarmRules.shared.bufferLine(min: m)) { model.setWakeBuffer(m) }
-                }
-            }
-            .menuStyle(.button).fixedSize()
-            .font(MekaType.caption)
+            // Walk-through week 5, A17: the get-ready buffer is a row with a menu of the same choices the Fold's sheet
+            // has, each with the time it would suggest; a pick moves the suggestion only, never an alarm already set.
+            bufferRow
         }
         .animation(MekaMotion.replan(reduced: reduceMotion), value: minute)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.useSuggestionLabel)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.trains?.line)
+    }
+
+    private var bufferRow: some View {
+        let row = WakeBufferChoiceRules.shared.row(v: wake)
+        let sheet = WakeBufferChoiceRules.shared.sheet(v: wake)
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack {
+            Text(row.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Picker(sheet.title, selection: Binding(get: { lit }, set: { name in
+                if let b = WakeBufferChoiceRules.shared.named(v: wake, name: name) { model.setWakeBuffer(b.int32Value) }
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text("\(c.label) · \(c.line)").tag(c.name) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
+            .accessibilityLabel(row.spoken)
+        }
+        .font(MekaType.itemMeta)
+        .padding(.top, MekaSpace.xs)
     }
 
     private func step(_ by: Int32) {

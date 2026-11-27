@@ -2615,6 +2615,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(RenewalRules.shared.repeatLabel(r: .halfYearly), "Every 6 months")
     }
 
+    func testWakeBufferChoicesReachSwift() {
+        // Walk-through week 5, A17: Shut down's Time to get ready is a row with a menu, not an open chip row.
+        let wake = WakeView.companion.EMPTY
+        let row = WakeBufferChoiceRules.shared.row(v: wake)
+        XCTAssertEqual(row.title, "Time to get ready")
+        XCTAssertEqual(row.value, "1 h")
+        let sheet = WakeBufferChoiceRules.shared.sheet(v: wake)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["30 min", "45 min", "1 h", "1 h 15", "1 h 30", "2 h"])
+        XCTAssertEqual(sheet.choices.filter { $0.lit }.map { $0.label }, ["1 h"])
+        XCTAssertEqual(WakeBufferChoiceRules.shared.named(v: wake, name: "45")?.int32Value, 45)
+        XCTAssertNil(WakeBufferChoiceRules.shared.named(v: wake, name: "60"))
+    }
+
     func testRenewalBoardReachesSwift() {
         // Renewals keep their email, slice 2: the cards' tiles, tabs and words reach the Mac (only Strings cross).
         let today = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 29)

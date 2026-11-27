@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -39,13 +40,16 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.today.ShutdownPane
+import os.meka.core.domain.AlarmRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.Feeling
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.OnThisDayRules
 import os.meka.core.domain.ShutdownRules
+import os.meka.core.domain.WakeBufferChoiceRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
@@ -448,6 +452,41 @@ class ShutdownScreensTest {
         if (!core.shutdownView.value.cardOff) fail("$name: Turn off left the card on")
         scrollTo(hasText("Turn on"))
         ScreenShots.assertShows(compose, name, "Turn on")
+    }
+
+    /**
+     * Walk-through 2026-11-22 A17 (g3a 5): "Time to get ready" was an open chip row whose fifth chip ran off the cover's
+     * right edge. Now it is one card row ("Time to get ready" · "1 h" ›) opening a sheet of the buffers, each saying the
+     * time it would suggest; a pick keeps the buffer and closes the sheet, and the row says it.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun getReadyIsARowByHand() {
+        val name = "cover-dark-get-ready"
+        val core = setUp(ThemeChoice.DARK, Fill.MANY)
+        val w = core.wakeView.value
+        val row = WakeBufferChoiceRules.row(w)
+        scrollTo(hasContentDescription(row.spoken))
+        if (compose.onAllNodes(hasContentDescription(row.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: no \"${row.spoken}\" row")
+        // No open chip of a buffer on the page.
+        w.bufferChoices.filter { it != w.bufferMin }.forEach { b ->
+            if (textNodes(AlarmRules.duration(b)).isNotEmpty()) fail("$name: an open \"${AlarmRules.duration(b)}\" chip is still on the page")
+        }
+        val pick = w.bufferChoices.first { it != w.bufferMin }
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        tap(name, "Time to get ready", hasContentDescription(row.spoken))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the row didn't open its sheet")
+        val line = WakeBufferChoiceRules.line(w, pick)
+        if (compose.onAllNodes(hasText(line) and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("$name: the sheet doesn't say \"$line\" for ${AlarmRules.duration(pick)}")
+        compose.onAllNodes(hasText(AlarmRules.duration(pick)) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() && core.wakeView.value.bufferMin == pick }
+        if (sheetOpen()) fail("$name: choosing ${AlarmRules.duration(pick)} didn't close the sheet")
+        if (core.wakeView.value.bufferMin != pick) fail("$name: the buffer is ${core.wakeView.value.bufferMin} min, not $pick")
+        val after = WakeBufferChoiceRules.row(core.wakeView.value)
+        if (compose.onAllNodes(hasContentDescription(after.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say ${after.value}")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("shutdown", name))
     }
 
     /** Shut down calls it a day: the day is shut down on every device and the check says so. */
