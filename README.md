@@ -497,6 +497,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/shutdown/cover-dark-carry.png](docs/screens/fold/shutdown/cover-dark-carry.png)
 - [fold/shutdown/cover-dark-empty.png](docs/screens/fold/shutdown/cover-dark-empty.png)
 - [fold/shutdown/cover-dark-feeling.png](docs/screens/fold/shutdown/cover-dark-feeling.png)
+- [fold/shutdown/cover-dark-get-ready.png](docs/screens/fold/shutdown/cover-dark-get-ready.png)
 - [fold/shutdown/cover-dark-many-foot.png](docs/screens/fold/shutdown/cover-dark-many-foot.png)
 - [fold/shutdown/cover-dark-many-tomorrow.png](docs/screens/fold/shutdown/cover-dark-many-tomorrow.png)
 - [fold/shutdown/cover-dark-many.png](docs/screens/fold/shutdown/cover-dark-many.png)
