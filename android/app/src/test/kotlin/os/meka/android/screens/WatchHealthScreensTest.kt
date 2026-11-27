@@ -6,16 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -29,7 +29,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.ask.HealthDevice
 import os.meka.android.ask.HealthPane
+import os.meka.android.ask.WATCH_LINK_ROW_TAG
 import os.meka.android.ask.WatchPane
+import os.meka.android.goals.GOAL_ADD_SHEET_TAG
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
@@ -136,11 +138,11 @@ class WatchHealthScreensTest {
         }
     }
 
-    private fun settle(area: String, name: String) {
+    private fun settle(area: String, name: String, shoot: Boolean = true) {
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path(area, name))
+        if (shoot) compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path(area, name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
@@ -157,37 +159,20 @@ class WatchHealthScreensTest {
         val core = setUp(theme, server)
         runBlocking { core.refreshWatches() }
         show { WatchPane(core, onClose = {}) }
-        if (wrongCode) {
-            // A wrong code typed once the screen is open (opening it reads the watches afresh and clears a problem).
-            compose.mainClock.advanceTimeBy(SETTLE_MS)
-            compose.waitForIdle()
-            // Wait for the screen's own read (the second) to finish, so it can't clear the problem afterwards.
-            var turns = 0
-            while (turns++ < 40 && server!!.listed < 2) {
-                Shadows.shadowOf(Looper.getMainLooper()).idle()
-                Thread.sleep(50)
-                compose.mainClock.advanceTimeBy(100)
-            }
-            if (server!!.listed < 2) fail("$name: Watch didn't read the watches on open")
-            Thread.sleep(100)
-            server.refuse = DeviceLinkCodec.ERR_CODE
-            // Typed into the field first, as he would: a wrong code is said only under the code it's about (A11).
-            compose.onAllNodes(hasContentDescription("Code from the watch") and hasSetTextAction())[0].performTextInput("1234 5678")
-            repeat(5) {
-                Shadows.shadowOf(Looper.getMainLooper()).idle()
-                compose.mainClock.advanceTimeBy(100)
-            }
-            runBlocking { check(!core.linkWatch("1234 5678")) }
-        }
-        settle("watch", name)
+        // A wrong code's shot is the code's sheet (below), so the page itself isn't shot under its name.
+        settle("watch", name, shoot = !wrongCode)
         val v = core.watchLinkView.value ?: fail("$name: Watch never read the server")
+        val row = WatchLinkRules.linkRow(v.rows.size)
         ScreenShots.assertShows(compose, name, "Watch")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
-        ScreenShots.assertEachOneLine(compose, name, listOf("Code from the watch") + v.rows.map { it.title })
-        val lines = listOf(v.summary, v.how) + v.rows.map { it.line } + listOfNotNull(v.problem)
+        ScreenShots.assertShows(compose, name, row.label)
+        ScreenShots.assertEachOneLine(compose, name, listOf(row.label) + v.rows.map { it.title })
+        val lines = listOf(v.summary, v.how, row.line) + v.rows.map { it.line } + listOfNotNull(v.problem)
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
+        // Walk-through week 5, A17: the code is typed in a sheet opened from "+ Link a watch", not an open box.
+        if (codeBoxes().isNotEmpty()) fail("$name: an open \"${WatchLinkRules.CODE_SPOKEN}\" box on the page")
         when {
             !connected -> if (v.problem != WatchLinkRules.NOT_CONNECTED) fail("$name: not connected, but the problem says \"${v.problem}\"")
             fill == Fill.EMPTY -> if (v.rows.isNotEmpty() || v.problem != null) fail("$name: $v with nothing linked")
@@ -197,55 +182,103 @@ class WatchHealthScreensTest {
             }
             fill == Fill.MANY -> {
                 if (v.rows.size != 2) fail("$name: ${v.rows.size} rows for two watches")
-                if (wrongCode) {
-                    if (v.problem != WatchLinkRules.WRONG_CODE) fail("$name: a wrong code says \"${v.problem}\"")
-                    ScreenShots.assertShows(compose, name, LoneWordGlue.kept(WatchLinkRules.WRONG_CODE))
-                } else {
-                    // Walk-through 2026-11-22 A14: the two-watch shot showed a typed code and its error; it shows the
-                    // two watches and an empty field, and the wrong code has shots of its own.
-                    if (v.problem != null) fail("$name: two watches linked, but it says \"${v.problem}\"")
-                    val typed = compose.onAllNodes(hasContentDescription("Code from the watch") and hasSetTextAction())
-                        .fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsProperties.EditableText)?.text }
-                    if (typed.any { it.isNotBlank() }) fail("$name: the code field holds \"${typed.first()}\"")
-                }
+                if (row.label != WatchLinkRules.LINK_ANOTHER_ROW) fail("$name: two watches linked, but the row says \"${row.label}\"")
+                // Walk-through 2026-11-22 A14: the two-watch shot shows the two watches and no error; the wrong code
+                // has shots of its own.
+                if (v.problem != null) fail("$name: two watches linked, but it says \"${v.problem}\"")
                 // The newest first.
                 if (v.rows.first().title != WatchLinkRules.DEFAULT_NAME) fail("$name: the older watch is first: ${v.rows}")
             }
         }
+        if (wrongCode) wrongCodeInSheet(name, core, server!!)
         return core
     }
 
-    /** Works by hand: type the code the watch shows, tap Link, and the watch's row arrives. */
-    private fun linkByHand(core: MekaCore) {
-        compose.onAllNodes(hasContentDescription("Code from the watch") and hasSetTextAction())[0].performTextInput("1234 5678")
-        // The typed code reaches the recomposer (and enables Link) through a main-looper post: run it by turns.
-        repeat(5) {
-            Shadows.shadowOf(Looper.getMainLooper()).idle()
-            compose.mainClock.advanceTimeBy(100)
+    /** The code field in the sheet (or, wrongly, on the page): what a screen reader calls it, with text to edit. */
+    private fun codeBoxes() = compose.onAllNodes(
+        hasContentDescription(WatchLinkRules.CODE_SPOKEN) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText),
+        useUnmergedTree = true,
+    ).fetchSemanticsNodes()
+
+    private fun turns(n: Int = 5, sleepMs: Long = 0) = repeat(n) {
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        if (sleepMs > 0) Thread.sleep(sleepMs)
+        compose.mainClock.advanceTimeBy(100)
+    }
+
+    private fun sheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /** Opens the code's sheet from "+ Link a watch" and types [code] into it. */
+    private fun openSheetAndType(name: String, code: String) {
+        compose.onNodeWithTag(WATCH_LINK_ROW_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(10)
+        if (!sheetOpen()) fail("$name: + Link a watch opened no sheet")
+        if (linkLit()) fail("$name: Link is lit with nothing typed")
+        val box = compose.onAllNodes(
+            hasContentDescription(WatchLinkRules.CODE_SPOKEN) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText),
+            useUnmergedTree = true,
+        )
+        if (box.fetchSemanticsNodes().isEmpty()) fail("$name: the sheet has no code field")
+        box[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString(code)) }
+        // The typed code reaches the recomposer (and lights Link) through a main-looper post: run it by turns.
+        turns(5)
+        if (!linkLit()) fail("$name: Link stayed dark with a code typed")
+    }
+
+    private fun linkNode() = compose.onAllNodes(hasContentDescription("${WatchLinkRules.LINK}, ${WatchLinkRules.linkSheet.title}"), useUnmergedTree = true)
+
+    private fun linkLit() = linkNode().fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == false
+
+    /**
+     * A wrong code typed in the sheet, as he would: the sheet stays open, saying why under the code it's about (A11),
+     * in the critical colour (A22); the shot is the sheet.
+     */
+    private fun wrongCodeInSheet(name: String, core: MekaCore, server: Server) {
+        // Wait for the screen's own read (the second) to finish, so it can't clear the problem afterwards.
+        var waited = 0
+        while (waited++ < 40 && server.listed < 2) turns(1, sleepMs = 50)
+        if (server.listed < 2) fail("$name: Watch didn't read the watches on open")
+        Thread.sleep(100)
+        server.refuse = DeviceLinkCodec.ERR_CODE
+        openSheetAndType(name, "1234 5678")
+        linkNode()[0].performSemanticsAction(SemanticsActions.OnClick)
+        repeat(40) {
+            if (core.watchLinkView.value?.problem != null) return@repeat
+            turns(1, sleepMs = 50)
         }
-        compose.onAllNodes(hasText("Link") and hasClickAction())[0].performClick()
+        turns((SETTLE_MS / 100).toInt())
+        compose.waitForIdle()
+        val v = core.watchLinkView.value ?: fail("$name: no view after Link")
+        if (v.problem != WatchLinkRules.WRONG_CODE) fail("$name: a wrong code says \"${v.problem}\"")
+        if (!sheetOpen()) fail("$name: a wrong code closed the sheet")
+        compose.onNodeWithTag(GOAL_ADD_SHEET_TAG, useUnmergedTree = true).captureRoboImage(ScreenShots.path("watch", name))
+        val said = LoneWordGlue.kept(WatchLinkRules.WRONG_CODE)
+        if (compose.onAllNodes(hasText(said), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: the sheet doesn't say \"$said\"")
+        }
+        if (v.rows.size != 2) fail("$name: a wrong code changed the watches (${v.rows.size})")
+    }
+
+    /** Works by hand: + Link a watch, type the code the watch shows, tap Link, and the sheet goes and the watch's row arrives. */
+    private fun linkByHand(core: MekaCore) {
+        openSheetAndType("watch-by-hand", "1234 5678")
+        linkNode()[0].performSemanticsAction(SemanticsActions.OnClick)
         // The link runs on the screen's scope and then the core's own thread: give it real time, then let the screen catch up.
         repeat(40) {
             if (core.watchLinkView.value?.rows?.isNotEmpty() == true) return@repeat
-            Shadows.shadowOf(Looper.getMainLooper()).idle()
-            Thread.sleep(50)
-            compose.mainClock.advanceTimeBy(100)
+            turns(1, sleepMs = 50)
         }
-        repeat((SETTLE_MS / 100).toInt()) {
-            Shadows.shadowOf(Looper.getMainLooper()).idle()
-            compose.mainClock.advanceTimeBy(100)
-        }
+        turns((SETTLE_MS / 100).toInt())
         val v = core.watchLinkView.value ?: fail("Watch: no view after Link")
         if (v.rows.size != 1) fail("Watch: Link didn't link the watch (${v.rows.size} rows, problem \"${v.problem}\")")
+        if (sheetOpen()) fail("Watch: the code's sheet stayed open once the watch was linked")
         ScreenShots.assertShows(compose, "watch-by-hand", "Linked today")
         ScreenShots.assertShows(compose, "watch-by-hand", LINKED_BY_HAND)
         ScreenShots.assertShows(compose, "watch-by-hand", LoneWordGlue.kept(v.summary))
+        ScreenShots.assertShows(compose, "watch-by-hand", WatchLinkRules.LINK_ANOTHER_ROW)
         // Week 5 A11: the by-hand shot shows the watch the hand linked, not the empty state it started from.
         ScreenShots.reshootAfterHand(compose, "watch", "cover-dark-by-hand")
-        // The field clears for the next one.
-        if (compose.onAllNodes(hasText("1234 5678"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
-            fail("Watch: the code is still in the field after linking")
-        }
+        if (codeBoxes().isNotEmpty()) fail("Watch: a code box is still open after linking")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun watchCoverNotConnected() { watch("cover-dark-not-connected", Fill.EMPTY, connected = false) }

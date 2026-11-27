@@ -116,4 +116,24 @@ class WatchLinkTest {
         assertEquals(WatchLinkRules.TOO_MANY, WatchLinkRules.problemShown(WatchLinkRules.TOO_MANY, ""))
         assertNull(WatchLinkRules.problemShown(null, "1234"))
     }
+
+    @Test
+    fun theCodeIsTypedInASheetOpenedFromARowNotAnOpenField() {
+        // Walk-through week 5, A17: "+ Link a watch" is a card row opening the code's sheet.
+        assertEquals(GoalAddRow("+ Link a watch", "Type the 8-digit code the watch shows"), WatchLinkRules.linkRow(0))
+        assertEquals("+ Link another watch", WatchLinkRules.linkRow(2).label)
+        assertEquals("Link a watch, Type the 8-digit code the watch shows", GoalAddRules.rowSpoken(WatchLinkRules.linkRow(0)))
+        val s = WatchLinkRules.linkSheet
+        assertEquals("Link a watch", s.title)
+        assertEquals("Code from the watch", s.spokenHint)
+        assertEquals("Link", s.addLabel)
+        assertEquals(WatchLinkRules.showCode("12345678"), s.hint)
+        assertTrue(s.note.contains("10 minutes"))
+        assertEquals("1234 5678", WatchLinkRules.typedCode("1234 5678 9"))
+        assertEquals("12345678", WatchLinkRules.typedCode("12-34-5678"))
+        assertEquals("", WatchLinkRules.typedCode("abc"))
+        assertFalse(WatchLinkRules.canLink("  ", busy = false))
+        assertFalse(WatchLinkRules.canLink("1234 5678", busy = true))
+        assertTrue(WatchLinkRules.canLink("1234", busy = false))
+    }
 }

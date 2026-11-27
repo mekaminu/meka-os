@@ -38,7 +38,7 @@ object WatchLinkRules {
     const val CODE_MINUTES = 10
     const val CODE_MS = CODE_MINUTES * 60_000L
 
-    const val HOW = "Open Navilife on the watch: it shows an 8-digit code. Type it here within 10 minutes."
+    const val HOW = "Open Navilife on the watch: it shows an 8-digit code. Tap + Link a watch and type it within 10 minutes."
     const val NOT_CONNECTED = "Connect this device to your server first."
     const val NO_KEY = "This device's key isn't registered with Navilife's server yet · try again in a minute"
     const val NO_ROUTE = "Navilife's server can't link watches yet · it arrives with the next deploy"
@@ -91,6 +91,40 @@ object WatchLinkRules {
      */
     fun problemShown(problem: String?, typed: String): String? =
         if (problem == WRONG_CODE && typed.isBlank()) null else problem
+
+    // ---- linking from a sheet (walk-through week 5, A17: no open input boxes on a page) ----
+
+    const val LINK_ROW = "+ Link a watch"
+    const val LINK_ANOTHER_ROW = "+ Link another watch"
+    const val CODE_SPOKEN = "Code from the watch"
+    const val LINK = "Link"
+
+    /**
+     * Watch's card row where the open code field was: "+ Link a watch" (or "+ Link another watch" once one is linked)
+     * with what it asks for under it; it opens [linkSheet].
+     */
+    fun linkRow(linked: Int): GoalAddRow = GoalAddRow(
+        if (linked > 0) LINK_ANOTHER_ROW else LINK_ROW,
+        "Type the $CODE_DIGITS-digit code the watch shows",
+    )
+
+    /**
+     * The sheet: the code with an example, where the watch shows it, Close · Link. Unlike an add sheet it stays open
+     * while the server checks the code, closing once the watch is linked and saying a refusal inside it.
+     */
+    val linkSheet = GoalAddSheet(
+        title = "Link a watch",
+        hint = "1234 5678",
+        spokenHint = CODE_SPOKEN,
+        note = "Open Navilife on the watch to see its code. A code lasts $CODE_MINUTES minutes; the watch shows a new one when it runs out.",
+        addLabel = LINK,
+    )
+
+    /** What the code field keeps of what was typed: digits and spaces, at most "1234 5678"'s nine characters. */
+    fun typedCode(raw: String): String = raw.filter { it in '0'..'9' || it == ' ' }.take(CODE_DIGITS + 1)
+
+    /** Link lights once something is typed (a short code is answered with [NOT_A_CODE], as the field's Link was). */
+    fun canLink(typed: String, busy: Boolean): Boolean = !busy && typed.isNotBlank()
 
     /** The server's refusal (`code` · `wait` · `revoked`) in words. */
     fun refusal(reason: String?): String = when (reason) {

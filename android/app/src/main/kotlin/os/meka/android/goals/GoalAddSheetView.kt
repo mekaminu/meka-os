@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -154,14 +155,17 @@ internal fun LineAddSheetView(
 
 /**
  * The sheet all of them share. Motion: rises over a fading scrim (reduced motion: a cross-fade); the scrim, Close or Back
- * closes it; Add closes it at once (light haptic).
+ * closes it; Add closes it at once (light haptic), unless [closeOnAdd] is false (Watch's Link: the caller closes it once
+ * the server says yes). [keyboard] picks the field's keyboard (Watch's code: digits).
  */
 @Composable
-private fun GoalAddSheetFrame(
+internal fun GoalAddSheetFrame(
     sheet: GoalAddSheet, title: String, onTitle: (String) -> Unit,
     add: () -> Unit, onClose: () -> Unit,
     canAdd: Boolean = GoalAddRules.canAdd(title),
     maxLength: Int = GoalAddRules.MAX_TITLE,
+    closeOnAdd: Boolean = true,
+    keyboard: KeyboardType = KeyboardType.Text,
     choices: @Composable () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -170,7 +174,7 @@ private fun GoalAddSheetFrame(
     val rise = remember { Animatable(0f) }
     LaunchedEffect(Unit) { rise.animateTo(1f, MekaMotion.appear(reduced)) }
     val close: () -> Unit = { scope.launch { rise.animateTo(0f, MekaMotion.expand(reduced)); onClose() } }
-    val save: () -> Unit = { if (canAdd) { haptics.light(); add(); onClose() } }
+    val save: () -> Unit = { if (canAdd) { haptics.light(); add(); if (closeOnAdd) onClose() } }
 
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
@@ -199,7 +203,7 @@ private fun GoalAddSheetFrame(
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 Text(sheet.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.semantics { heading() })
-                SheetField(sheet.hint, sheet.spokenHint, title, { onTitle(it.take(maxLength)) }) { save() }
+                SheetField(sheet.hint, sheet.spokenHint, title, { onTitle(it.take(maxLength)) }, keyboard) { save() }
                 choices()
                 Text(LoneWordGlue.kept(sheet.note), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -226,7 +230,7 @@ private fun GoalAddSheetFrame(
 
 /** A one-line field in a raised pill inside a sheet; Done on the keyboard runs [onDone]. */
 @Composable
-private fun SheetField(hint: String, spoken: String, value: String, onValue: (String) -> Unit, onDone: () -> Unit) {
+private fun SheetField(hint: String, spoken: String, value: String, onValue: (String) -> Unit, keyboard: KeyboardType = KeyboardType.Text, onDone: () -> Unit) {
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
             .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
@@ -238,7 +242,10 @@ private fun SheetField(hint: String, spoken: String, value: String, onValue: (St
             singleLine = true,
             textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
             cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, capitalization = KeyboardCapitalization.Sentences),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboard, imeAction = ImeAction.Done,
+                capitalization = if (keyboard == KeyboardType.Text) KeyboardCapitalization.Sentences else KeyboardCapitalization.None,
+            ),
             keyboardActions = KeyboardActions(onDone = { onDone() }),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = spoken },
         )

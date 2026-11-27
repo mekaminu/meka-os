@@ -2815,6 +2815,20 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.canAdd(text: "Led the planning session"))
     }
 
+    func testWatchLinkSheetReachesSwift() {
+        // Walk-through week 5, A17: Watch's "+ Link a watch" row and its code sheet come from the core; Link lights
+        // once something is typed and not while the server checks.
+        let rules = WatchLinkRules.shared
+        XCTAssertEqual(rules.linkRow(linked: 0).label, rules.LINK_ROW)
+        XCTAssertEqual(rules.linkRow(linked: 1).label, rules.LINK_ANOTHER_ROW)
+        XCTAssertEqual(rules.linkSheet.spokenHint, rules.CODE_SPOKEN)
+        XCTAssertEqual(rules.linkSheet.addLabel, rules.LINK)
+        XCTAssertEqual(rules.typedCode(raw: "12-34 5678x"), "1234 5678")
+        XCTAssertFalse(rules.canLink(typed: " ", busy: false))
+        XCTAssertFalse(rules.canLink(typed: "1234 5678", busy: true))
+        XCTAssertTrue(rules.canLink(typed: "1234 5678", busy: false))
+    }
+
     func testAnnualLeaveReachesSwift() {
         // Annual leave planner, slice 1: a typed stretch is read by the core's rules (leave already taken needs its
         // year), the words and the empty view reach the Mac (only Strings and Ints cross from the sheet).
