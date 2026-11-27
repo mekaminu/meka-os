@@ -35,6 +35,9 @@ import os.meka.android.designsystem.MekaSpace
 /** The list's gap between items, which a row in a box paints over so the box reads as one. */
 internal val NEEDS_YOU_BOX_GAP = MekaSpace.xs
 
+/** How far in from a box's sides everything in it sits (cards, leads, pagers), as the Mac's box pads its contents. */
+internal val NEEDS_YOU_BOX_INSET = MekaSpace.xs
+
 internal const val NEEDS_YOU_BOX_END_TAG = "needs-you-box-end"
 
 /** A row inside a group's box: the box's [fill] behind it and across the gap above it, joining it to the row before. */

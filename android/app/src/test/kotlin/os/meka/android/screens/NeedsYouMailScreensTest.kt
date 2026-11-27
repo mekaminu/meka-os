@@ -41,6 +41,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NEEDS_YOU_LIST_TAG
 import os.meka.android.today.NEEDS_YOU_GROUP_TAG
 import os.meka.android.today.NEEDS_YOU_BOX_END_TAG
+import os.meka.android.today.NEEDS_YOU_MAIL_LEAD_TAG
 import os.meka.android.today.NEEDS_YOU_CHIPS_TAG
 import os.meka.android.today.NEEDS_YOU_HEADER_ACTION_TAG
 import os.meka.android.today.NEEDS_YOU_RIGHT_TAG
@@ -245,6 +246,12 @@ class NeedsYouMailScreensTest {
         val inHead = shot.getPixel(x, ((h.top + h.bottom) / 2f).toInt())
         val inGap = shot.getPixel(x, (h.bottom + 4 * dp).toInt())
         if (inGap != inHead) fail("$name: the screen shows through between Mail to answer's head and what's in it")
+        // Walk-through 2026-11-22 A17 (g2a 7): the ten-minute inbox's strip ran to the box's edges, Start on its border.
+        compose.onAllNodes(hasTestTag(NEEDS_YOU_MAIL_LEAD_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+            .firstOrNull()?.boundsInRoot?.let { lead ->
+                if ((lead.left - h.left) / dp < 7.5f || (h.right - lead.right) / dp < 7.5f)
+                    fail("$name: the ten-minute inbox's strip isn't 8 dp in from Mail to answer's sides")
+            }
         list.performScrollToKey("${NeedsYouGroup.MAIL.id}-box-end")
         turns()
         val top = head()?.bottom ?: Float.NEGATIVE_INFINITY

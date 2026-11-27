@@ -732,17 +732,21 @@ internal fun NeedsYouColumn(
                     ?: needsMail?.tiles?.takeIf { it.isNotEmpty() }?.let(NeedsYouGroupRules::tidiedPeek) ?: archived?.let { "Archived for you" }.orEmpty(), open)
         }
     }
-    // Walk-through 2026-11-15 A17: a group is one box, its rows on the head's surface (NeedsYouGroupBox.kt). Cards keep
-    // their own padding; plain rows and lines take the head's inset.
+    // Walk-through 2026-11-15 A17: a group is one box, its rows on the head's surface (NeedsYouGroupBox.kt). Plain lines
+    // take the head's inset.
     val boxFill = Meka.colors.surface
     // A21 part 5: in Light the box's sides carry the 1 dp track-ink edge (NeedsYouGroupBox.kt); none in Dark.
     val boxEdge = os.meka.android.designsystem.LightInk.cardEdge(Meka.colors, Meka.theme.isDark)
-    val inBox = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge) else Modifier
+    // Walk-through 2026-11-22 A17 (g2a 7): a card in a box (To decide's overdue task and its ← Tomorrow · Done → row,
+    // the ten-minute inbox's strip, the mail cards) ran to the box's own edges, Done and Start on its border and, in
+    // Light, across its outline. Everything in a box now sits 8 dp in from its sides, as on the Mac (ShellView's box);
+    // the box's surface and its Light edge still run the full width behind it.
+    val inBox = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge).padding(horizontal = NEEDS_YOU_BOX_INSET) else Modifier
     // Meka 2026-11-18 23:34 ("a tall empty gap" under a box's last card): inside a box a card is as tall as its content
     // and its own padding, and the box's foot closes it; the extra gap under each card is for the unboxed list only.
     val cardGap = if (boxed) Modifier else Modifier.padding(bottom = MekaSpace.m)
     val inBoxLine = if (boxed) Modifier.fillMaxWidth().groupBoxFill(boxFill, boxEdge).padding(horizontal = MekaSpace.m) else Modifier
-    val inBoxLead = if (boxed) Modifier.groupBoxFill(boxFill, boxEdge).padding(horizontal = MekaSpace.xs) else Modifier
+    val inBoxLead = inBox
     // Messages and FYI rows share the box's colour, so each is parted from the one above by the mockup's hairline.
     val boxLine = Meka.colors.hairline
     fun inBoxRow(first: Boolean): Modifier =

@@ -206,6 +206,17 @@ class NeedsYouScreensTest {
         val screen = shot.getPixel((head.left / 2f).toInt().coerceAtLeast(0), ((head.top + head.bottom) / 2f).toInt())
         if (inHead == screen) fail("$name: $title's head is the screen's colour, so the check can't tell")
         if (inGap != inHead) fail("$name: the screen shows through between $title's head and what's in it")
+        // Walk-through 2026-11-22 A17 (g2a 7): To decide's top card sat on the box's edges, Done → on its border; a card
+        // in a box sits 8 dp in from both its sides.
+        if (group == NeedsYouGroup.DECIDE) {
+            compose.onAllNodes(hasTestTag(NeedsYouStackRules.TOP_CARD_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+                .firstOrNull()?.boundsInRoot?.let { card ->
+                    val inLeft = (card.left - head.left) / dp
+                    val inRight = (head.right - card.right) / dp
+                    if (inLeft < 7.5f || inRight < 7.5f)
+                        fail("$name: To decide's top card is ${inLeft.toInt()} dp and ${inRight.toInt()} dp in from the box's sides, not 8")
+                }
+        }
         // The foot may sit below the screen's edge: scroll to it, look, and scroll back for the rest of the test.
         val list = compose.onAllNodes(hasTestTag(NEEDS_YOU_LIST_TAG)).onFirst()
         list.performScrollToKey(endKey)
