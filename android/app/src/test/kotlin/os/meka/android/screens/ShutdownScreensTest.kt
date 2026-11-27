@@ -477,7 +477,11 @@ class ShutdownScreensTest {
         until { sheetOpen() }
         if (!sheetOpen()) fail("$name: the row didn't open its sheet")
         val line = WakeBufferChoiceRules.line(w, pick)
-        if (compose.onAllNodes(hasText(line) and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // The sheet keeps short words with their neighbours (no-break spaces), so read it with plain spaces.
+        val says = SemanticsMatcher("reads \"$line\"") { n ->
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == line
+        }
+        if (compose.onAllNodes(says and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
             fail("$name: the sheet doesn't say \"$line\" for ${AlarmRules.duration(pick)}")
         compose.onAllNodes(hasText(AlarmRules.duration(pick)) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
             .performSemanticsAction(SemanticsActions.OnClick)
