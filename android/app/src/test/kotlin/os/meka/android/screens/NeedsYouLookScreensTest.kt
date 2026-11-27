@@ -14,6 +14,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -32,6 +34,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.today.NEEDS_YOU_FYI_CARD_TAG
 import os.meka.android.today.NEEDS_YOU_ROW_TAG
 import os.meka.android.today.NeedsYouChips
 import os.meka.android.today.NeedsYouFyiRowView
@@ -113,7 +116,7 @@ class NeedsYouLookScreensTest {
                         }
                     }
                     NeedsYouHead(NeedsYouLayoutRules.head(NeedsYouLayoutRules.FYI_HEAD, fyi.size))
-                    fyi.forEach { c -> NeedsYouFyiRowView(NeedsYouLayoutRules.fyiRow(c), {}) }
+                    fyi.forEach { c -> NeedsYouFyiRowView(NeedsYouLayoutRules.fyiRow(c), {}, card = true) }
                 }
             }
         }
@@ -140,9 +143,28 @@ class NeedsYouLookScreensTest {
         messages.forEach { c -> if (!onScreen(c.title)) fail("$name: ${c.title}'s row is missing") }
         if (!onScreen("2 to reply") || !onScreen("1 to reply")) fail("$name: the badges aren't read")
         if (!onScreen("Casey") || !onScreen("Robin")) fail("$name: the FYI rows are missing")
+        assertFyiRowsAreCards(name, listOf("Casey", "Robin"))
         val rows = messages.map { NeedsYouLayoutRules.row(it) }
         ScreenShots.assertEachOneLine(compose, name, rows.drop(1).map { it.line } + rows.map { it.badge })
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", name))
+    }
+
+    /**
+     * Walk-through 2026-11-22 A17 (g2a 16): "Casey · Thanked you…" and "Robin · Jokes the boys…" sat loose on the page
+     * under the message cards. Each FYI row is its own card now, its name 16 dp in from the card's edge.
+     */
+    private fun assertFyiRowsAreCards(name: String, who: List<String>) {
+        val cards = compose.onAllNodes(hasTestTag(NEEDS_YOU_FYI_CARD_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        if (cards.size != who.size) fail("$name: ${cards.size} FYI cards for ${who.size} FYI rows")
+        val px = compose.density.density
+        who.forEach { w ->
+            val word = compose.onAllNodes(hasText(w), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+                ?: fail("$name: $w's FYI row is missing")
+            val card = cards.firstOrNull { it.left <= word.left && it.right >= word.right && it.top <= word.top && it.bottom >= word.bottom }
+                ?: fail("$name: $w's FYI row isn't inside a card")
+            val inset = (word.left - card.left) / px
+            if (inset < 15f || inset > 17f) fail("$name: $w starts ${inset.toInt()} dp from its card's edge, not 16")
+        }
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun coverDark() = shoot("cover-dark")

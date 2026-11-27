@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
+import os.meka.android.designsystem.lightCardEdge
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
@@ -328,13 +329,24 @@ private fun NeedsYouPill(label: String, gold: Boolean = false, onClick: () -> Un
     }
 }
 
-/** A chat needing nothing: who, what, and a ✓ that clears it (Done, with Undo on the bar). */
+/** An FYI row drawn as its own card, for the screen tests (walk-through 2026-11-22 A17, g2a 16). */
+internal const val NEEDS_YOU_FYI_CARD_TAG = "needs-you-fyi-card"
+
+/**
+ * A chat needing nothing: who, what, and a ✓ that clears it (Done, with Undo on the bar). Inside a group's box the row
+ * sits on the box's surface; on a page of cards ([card], the command centre) it is its own card like the message rows
+ * above it, the words 16 dp in (walk-through 2026-11-22 A17: "Casey · Thanked you…" floated loose under the cards).
+ */
 @Composable
-internal fun NeedsYouFyiRowView(row: NeedsYouFyiRow, onSeen: () -> Unit, modifier: Modifier = Modifier) {
+internal fun NeedsYouFyiRowView(row: NeedsYouFyiRow, onSeen: () -> Unit, modifier: Modifier = Modifier, card: Boolean = false) {
     val haptics = rememberMekaHaptics()
+    val shape = RoundedCornerShape(MekaRadius.m)
+    val look = if (card) {
+        Modifier.clip(shape).background(Meka.colors.surface).lightCardEdge(shape)
+            .testTag(NEEDS_YOU_FYI_CARD_TAG).padding(start = MekaSpace.m, end = MekaSpace.xxs)
+    } else Modifier.padding(start = MekaSpace.xxs)
     Row(
-        modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }.testTag(NEEDS_YOU_FYI_TAG)
-            .padding(start = MekaSpace.xxs),
+        modifier.fillMaxWidth().then(look).semantics(mergeDescendants = true) { contentDescription = row.spoken }.testTag(NEEDS_YOU_FYI_TAG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(row.who, style = MekaType.captionStrong, color = Meka.colors.textPrimary, maxLines = 1,

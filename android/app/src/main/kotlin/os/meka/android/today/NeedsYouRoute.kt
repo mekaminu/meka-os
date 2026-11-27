@@ -1268,7 +1268,7 @@ internal fun NeedsYouColumn(
             }
             fyiChats.forEach { chat ->
                 item(key = "fyi-${chat.key}") {
-                    NeedsYouFyiRowView(NeedsYouLayoutRules.fyiRow(chat), { moves.onTriageChat(chat, ChatFinishTap.DONE) }, Modifier.animateItem())
+                    NeedsYouFyiRowView(NeedsYouLayoutRules.fyiRow(chat), { moves.onTriageChat(chat, ChatFinishTap.DONE) }, Modifier.animateItem(), card = true)
                 }
             }
         }
