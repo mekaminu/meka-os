@@ -71,6 +71,8 @@ import os.meka.core.domain.Feeling
 import os.meka.core.domain.FeelingOffer
 import os.meka.core.domain.FeelingRules
 import os.meka.core.domain.FeelingChoiceRules
+import os.meka.core.domain.ShutdownMove
+import os.meka.core.domain.ShutdownMoveChoiceRules
 import os.meka.android.notify.NotifyChoiceRowView
 import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.InstantTaskRules
@@ -162,9 +164,14 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
         items(v.left, key = { "l-" + it.task.id }) { item ->
             LeftRow(
                 item, tick,
-                tomorrow = { haptics.tick(); failed = null; TaskTaps.move(scope, item.task.id, TaskMove.TOMORROW, onFail) { core.carryOver(item.task.id) } },
-                skip = { haptics.tick(); failed = null; TaskTaps.move(scope, item.task.id, TaskMove.SKIP, onFail) { core.skipOccurrence(item.task.id) } },
-                someday = { haptics.tick(); failed = null; TaskTaps.move(scope, item.task.id, TaskMove.SOMEDAY, onFail) { core.moveToSomeday(item.task.id, SomedayKind.IDEA) } },
+                move = { m ->
+                    haptics.tick(); failed = null
+                    when (m) {
+                        ShutdownMove.TOMORROW -> TaskTaps.move(scope, item.task.id, TaskMove.TOMORROW, onFail) { core.carryOver(item.task.id) }
+                        ShutdownMove.SKIP -> TaskTaps.move(scope, item.task.id, TaskMove.SKIP, onFail) { core.skipOccurrence(item.task.id) }
+                        ShutdownMove.SOMEDAY -> TaskTaps.move(scope, item.task.id, TaskMove.SOMEDAY, onFail) { core.moveToSomeday(item.task.id, SomedayKind.IDEA) }
+                    }
+                },
                 modifier = Modifier.animateItem().appear(rememberAppearance(1)),
             )
         }
@@ -253,31 +260,44 @@ private fun CardSwitch(v: ShutdownView, said: String?, modifier: Modifier, onSet
 private fun LeftRow(
     item: ShutdownItem,
     tick: (String) -> Unit,
-    tomorrow: () -> Unit,
-    skip: () -> Unit,
-    someday: () -> Unit,
+    move: (ShutdownMove) -> Unit,
     modifier: Modifier,
 ) {
     val t = item.task
+    // Walk-through week 5, A17: one "Move ›" on the row opening its sheet, not an open Tomorrow · Skip · Someday chip
+    // row under every task. The sheet lists only the moves this task can make, each saying what it does.
+    var choosing by rememberSaveable(t.id) { mutableStateOf(false) }
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
         CompleteButton(t, tick)
         Spacer(Modifier.width(MekaSpace.m))
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(top = MekaSpace.xs)) {
             // Quality gate slice 48: task rows use the regular body weight (Fold review 2026-10-08).
             Text(t.title, style = MekaType.body, color = Meka.colors.textPrimary)
             item.line?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = if (item.overdue) Meka.colors.critical else Meka.colors.textSecondary) }
-            Row(
-                // No padding above: the chips' 48 dp touch already leaves ~8 dp over their pills (slice 48).
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                ShutdownChip("Tomorrow", tomorrow)
-                if (item.canSkip) ShutdownChip("Skip", skip)
-                if (item.canSomeday) ShutdownChip("Someday", someday)
-            }
+        }
+        Spacer(Modifier.width(MekaSpace.xs))
+        Row(
+            Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                .clickable(role = Role.Button) { choosing = true }
+                .semantics(mergeDescendants = true) { contentDescription = ShutdownMoveChoiceRules.spoken(item) }
+                .minTouch().padding(horizontal = MekaSpace.xs)
+                .testTag(SHUTDOWN_MOVE_TAG),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Text(ShutdownMoveChoiceRules.MOVE, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1)
+            Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
         }
     }
+    if (choosing) NotifyChoiceSheetView(
+        ShutdownMoveChoiceRules.sheet(item),
+        onChoose = { name -> ShutdownMoveChoiceRules.named(item, name)?.let(move) },
+        onClose = { choosing = false },
+    )
 }
+
+/** The tag the screen tests find a left task's Move › by. */
+internal const val SHUTDOWN_MOVE_TAG = "shutdown-move"
 
 /**
  * Shut down's tomorrow block (walk-through 2026-11-22 A15, g3a 11): the label ("Tomorrow · Thu 22 Oct") and the counts on

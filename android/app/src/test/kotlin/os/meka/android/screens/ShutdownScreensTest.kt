@@ -47,6 +47,8 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.Feeling
 import os.meka.core.domain.FeelingChoiceRules
+import os.meka.core.domain.ShutdownMoveChoiceRules
+import os.meka.android.today.SHUTDOWN_MOVE_TAG
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.OnThisDayRules
 import os.meka.core.domain.ShutdownRules
@@ -266,18 +268,24 @@ class ShutdownScreensTest {
         if (bold.isNotEmpty()) fail("$name: rows drawn heavier than body:\n" + bold.joinToString("\n") { "- $it" })
     }
 
-    /** A left task's Tomorrow chip sits right under its words (slice 47's shots: ~20 dp below its line). */
+    /**
+     * Walk-through week 5, A17: each left task has one Move › on its own row, not an open Tomorrow · Skip · Someday chip
+     * row under its words; the Move sits beside its task's title.
+     */
     private fun assertChipsFollowTheirTask(name: String, left: Int) {
+        listOf("Skip", "Someday").forEach { l ->
+            if (compose.onAllNodes(hasText(l, substring = false) and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+                fail("$name: an open \"$l\" chip is still on the page")
+        }
         if (left == 0) return
-        val chips = compose.onAllNodes(hasText("Tomorrow") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
-        val texts = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes()
-        chips.forEach { chip ->
-            val top = chip.boundsInRoot.top
-            val above = texts.filter { it.id != chip.id && it.boundsInRoot.bottom <= top + 1f && it.boundsInRoot.left >= chip.boundsInRoot.left - 1f }
-                .maxByOrNull { it.boundsInRoot.bottom } ?: return@forEach
-            val gap = dp(top - above.boundsInRoot.bottom)
-            // The chip's 48 dp touch leaves ~7 dp over its pill; anything more is a gap of its own.
-            if (gap > 2f) fail("$name: a Tomorrow chip's touch starts ${gap.toInt()} dp under the words above it (at most 2)")
+        val moves = compose.onAllNodes(hasTestTag(SHUTDOWN_MOVE_TAG)).fetchSemanticsNodes()
+        if (moves.isEmpty()) fail("$name: no Move › beside the tasks left from today")
+        moves.forEach { m ->
+            val spoken = m.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString().orEmpty()
+            val title = spoken.removePrefix("Move ").substringBefore(". Opens")
+            val t = textNodes(title).firstOrNull() ?: return@forEach
+            if (m.boundsInRoot.bottom < t.boundsInRoot.top || m.boundsInRoot.top > t.boundsInRoot.bottom)
+                fail("$name: \"$title\"'s Move › isn't on its row")
         }
     }
 
@@ -409,8 +417,20 @@ class ShutdownScreensTest {
     fun tomorrowCarriesItByHand() {
         val name = "cover-dark-carry"
         val core = setUp(ThemeChoice.DARK, Fill.ONE)
-        tap(name, "Tomorrow under the gate latch", hasText("Tomorrow"))
-        until { core.shutdownView.value.left.isEmpty() }
+        // Walk-through week 5, A17: the move is one Move › on the task's row opening its sheet, not an open chip.
+        val item = core.shutdownView.value.left.first { it.task.title == "Fix the gate latch" }
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        tap(name, "the gate latch's Move", hasContentDescription(ShutdownMoveChoiceRules.spoken(item)))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: Move didn't open its sheet")
+        val says = SemanticsMatcher("reads \"${ShutdownMoveChoiceRules.TOMORROW_LINE}\"") { n ->
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == ShutdownMoveChoiceRules.TOMORROW_LINE
+        }
+        if (compose.onAllNodes(says and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("$name: the sheet doesn't say what Tomorrow does")
+        compose.onAllNodes(hasText("Tomorrow", substring = false) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() && core.shutdownView.value.left.isEmpty() }
         val v = core.shutdownView.value
         if (v.left.isNotEmpty()) fail("$name: Tomorrow left the gate latch in Left from today")
         if (v.tomorrow.rows.none { it.title == "Fix the gate latch" }) fail("$name: the gate latch isn't in Tomorrow (${v.tomorrow.rows.map { it.title }})")

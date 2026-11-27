@@ -2628,6 +2628,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(BriefLengthChoiceRules.shared.named(lengths: lengths, name: "standard"))
     }
 
+    func testShutdownMoveChoicesReachSwift() {
+        // Walk-through week 5, A17: Shut down's per-task Tomorrow · Skip · Someday is one Move menu on the row.
+        XCTAssertEqual(ShutdownMoveChoiceRules.shared.MOVE, "Move")
+        XCTAssertEqual(ShutdownMoveChoiceRules.shared.label(m: .tomorrow), "Tomorrow")
+        XCTAssertEqual(ShutdownMoveChoiceRules.shared.label(m: .skip), "Skip")
+        XCTAssertEqual(ShutdownMoveChoiceRules.shared.line(m: .someday), ShutdownMoveChoiceRules.shared.SOMEDAY_LINE)
+        XCTAssertEqual(ShutdownMove.tomorrow.name, "TOMORROW")
+    }
+
     func testFeelingChoicesReachSwift() {
         // Walk-through week 5, A17: Shut down's feeling is a row with a menu, not an open chip row.
         let none = FeelingChoiceRules.shared.row(picked: nil)

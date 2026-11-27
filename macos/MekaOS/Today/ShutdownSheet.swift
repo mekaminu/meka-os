@@ -169,18 +169,40 @@ private struct LeftRow: View {
                 if let line = item.line {
                     Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(item.overdue ? palette.critical : palette.textSecondary)
                 }
-                HStack(spacing: MekaSpace.m) {
-                    Button("Tomorrow") { model.carryOver(item.task.id) }
-                    if item.canSkip { Button("Skip") { model.skip(item.task.id) } }
-                    if item.canSomeday { Button("Someday") { model.moveToSomeday(item.task.id) } }
-                }
-                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
-                .padding(.top, MekaSpace.xxs)
             }
             Spacer()
+            // Walk-through week 5, A17: one Move menu on the row with the moves this task can make, each saying what
+            // it does, not an open Tomorrow · Skip · Someday row under every task (the Fold's sheet has the same).
+            moveMenu
         }
         .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)
+    }
+
+    private var moveMenu: some View {
+        let sheet = ShutdownMoveChoiceRules.shared.sheet(item: item)
+        let id = item.task.id
+        let moves = sheet.choices.map { ($0.name, "\($0.label) · \($0.line)") }
+        return Menu {
+            ForEach(moves, id: \.0) { m in
+                Button(m.1) { move(m.0, id: id) }
+            }
+        } label: {
+            Text(ShutdownMoveChoiceRules.shared.MOVE).font(MekaType.itemMeta)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(LoneWordGlue.shared.kept(line: sheet.note))
+        .accessibilityLabel(ShutdownMoveChoiceRules.shared.spoken(item: item))
+    }
+
+    private func move(_ name: String, id: String) {
+        switch name {
+        case ShutdownMove.tomorrow.name: model.carryOver(id)
+        case ShutdownMove.skip.name: model.skip(id)
+        case ShutdownMove.someday.name: model.moveToSomeday(id)
+        default: break
+        }
     }
 }
 
