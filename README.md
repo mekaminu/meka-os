@@ -388,6 +388,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/news/cover-dark-marked.png](docs/screens/fold/news/cover-dark-marked.png)
 - [fold/news/cover-dark-one.png](docs/screens/fold/news/cover-dark-one.png)
 - [fold/news/cover-dark-story.png](docs/screens/fold/news/cover-dark-story.png)
+- [fold/news/cover-dark-topics-sheet.png](docs/screens/fold/news/cover-dark-topics-sheet.png)
 - [fold/news/cover-dark-topics.png](docs/screens/fold/news/cover-dark-topics.png)
 - [fold/news/cover-light-many.png](docs/screens/fold/news/cover-light-many.png)
 - [fold/news/inner-dark-empty.png](docs/screens/fold/news/inner-dark-empty.png)
