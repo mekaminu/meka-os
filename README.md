@@ -566,6 +566,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/tomorrow/fold-light-moved.png](docs/screens/fold/tomorrow/fold-light-moved.png)
 - [fold/tomorrow/fold-light-peek.png](docs/screens/fold/tomorrow/fold-light-peek.png)
 - [fold/tomorrow/fold-light.png](docs/screens/fold/tomorrow/fold-light.png)
+- [fold/train-queue/cover-dark-add-link.png](docs/screens/fold/train-queue/cover-dark-add-link.png)
 - [fold/train-queue/cover-dark-by-hand.png](docs/screens/fold/train-queue/cover-dark-by-hand.png)
 - [fold/train-queue/cover-dark-empty.png](docs/screens/fold/train-queue/cover-dark-empty.png)
 - [fold/train-queue/cover-dark-many.png](docs/screens/fold/train-queue/cover-dark-many.png)
