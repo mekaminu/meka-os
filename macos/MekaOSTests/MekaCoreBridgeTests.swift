@@ -2628,6 +2628,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(WakeBufferChoiceRules.shared.named(v: wake, name: "60"))
     }
 
+    func testSpendPlanRowReachesSwift() {
+        // Walk-through week 5, A17: Spending plans' plan chips are a Showing menu of the plans.
+        XCTAssertEqual(SpendPlanRules.shared.SHOWING, "Showing")
+        XCTAssertEqual(SpendPlanRules.shared.PLAN_SHEET, "Which plan")
+        let empty = SpendPlansView.companion.EMPTY
+        XCTAssertNil(SpendPlanRules.shared.planRow(v: empty, chosen: nil))
+        XCTAssertTrue(SpendPlanRules.shared.planSheet(v: empty, chosen: nil).choices.isEmpty)
+        XCTAssertNil(SpendPlanRules.shared.planNamed(v: empty, name: "gone"))
+    }
+
     func testArchivedAllFiltersReachSwift() {
         // Walk-through week 5, A17: All tidied mail's kind and sender chip rows are a Showing and a From menu.
         XCTAssertEqual(ArchivedAllRules.shared.SHOWING, "Showing")

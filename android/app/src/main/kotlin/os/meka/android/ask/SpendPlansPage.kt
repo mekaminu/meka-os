@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +75,8 @@ import os.meka.core.domain.VaultFileOpened
 import os.meka.core.domain.VaultFileRules
 import os.meka.core.facade.MekaCore
 
+internal const val SPEND_PLAN_ROW_TAG = "spend-plan-row"
+
 /** The page's own list, for the hand tests' bounded scrolls. */
 const val SPEND_PLANS_LIST_TAG = "spend-plans-list"
 
@@ -112,6 +116,7 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
     var sheet by remember { mutableStateOf<SpendSheet?>(null) }
     var said by remember { mutableStateOf<SpendSaid?>(null) }
     var removing by remember { mutableStateOf<String?>(null) }
+    var choosingPlan by rememberSaveable { mutableStateOf(false) }
     val plan = v.plan(chosen)
     val say: (SpendSaid?) -> Unit = { r -> if (r == null || r.refused) haptics.tick() else haptics.light(); said = r }
     // Slice 4: a thing's shop link opens in the browser; only links the core checked (plain https) ever reach here.
@@ -177,11 +182,12 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
                     if (v.canAdd) GoldPill(SpendPlanRules.NEW_PLAN, "spend-new-plan") { haptics.light(); said = null; sheet = SpendSheet.NewPlan }
                 }
             }
-            if (v.chips.isNotEmpty()) item(key = "chips") {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).appear(rememberAppearance(1)),
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    v.chips.forEach { c ->
-                        MoneyChip(c.name, on = c.id == plan?.id, tag = "spend-chip-${c.id}") { haptics.tick(); chosen = c.id; page = 0; months = 1 }
+            // Walk-through week 5, A17: the plans are a "Showing" · "Christmas gifts" › row opening their sheet, not an
+            // open chip row (its third plan ran off the cover's edge).
+            SpendPlanRules.planRow(v, chosen)?.let { row ->
+                item(key = "chips") {
+                    NotifyChoiceRowView(row, Modifier.appear(rememberAppearance(1)).testTag(SPEND_PLAN_ROW_TAG)) {
+                        haptics.tick(); choosingPlan = true
                     }
                 }
             }
@@ -291,6 +297,11 @@ internal fun SpendPlansPage(core: MekaCore, onBack: () -> Unit) {
             }
         }
 
+        if (choosingPlan) NotifyChoiceSheetView(
+            SpendPlanRules.planSheet(v, chosen),
+            onChoose = { name -> SpendPlanRules.planNamed(v, name)?.let { id -> if (id != plan?.id) { chosen = id; page = 0; months = 1; said = null } } },
+            onClose = { choosingPlan = false },
+        )
         // The sheets, as Money's: a new plan, add, change and today's rate.
         val asMoney: (SpendSaid?) -> MoneySaved? = { s -> s?.let { MoneySaved(it.line, refused = it.refused) } }
         MoneyDetailSheet(sheet as? SpendSheet.NewPlan, title = { SpendPlanRules.NEW_SHEET }, tag = "spend-new-sheet", done = SpendPlanRules.DONE,

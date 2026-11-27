@@ -341,4 +341,29 @@ class SpendPlansTest {
         assertEquals(SpendPlanRules.PHOTO_NO_KEY, SpendPlanRules.photoProblem(VaultFileRules.NO_KEY))
         assertEquals(VaultFileRules.OFFLINE, SpendPlanRules.photoProblem(VaultFileRules.OFFLINE))
     }
+    /** Walk-through week 5, A17: the plan chips are one "Showing" row opening a sheet, each plan saying what it holds. */
+    @Test
+    fun thePlansAreAShowingRowOpeningASheet() {
+        assertNull(SpendPlanRules.planRow(SpendPlansView.EMPTY, null))
+        val gifts = pFold.add("Christmas gifts 20 Dec", "GBP").id!!
+        val home = pFold.add("Money home", "GBP").id!!
+        pFold.addThing(gifts, "Lego set", "For Alex", "60", dec)
+        val boots = pFold.addThing(gifts, "Football boots", "For Sam", "45", nov).id!!
+        pFold.setDone(boots, true)
+        val v = view()
+        val row = SpendPlanRules.planRow(v, null)!!
+        assertEquals("Showing", row.title)
+        assertEquals("Christmas gifts", row.value)
+        assertEquals("Showing Christmas gifts, 2 plans. Opens the choices", row.spoken)
+        assertEquals("Money home", SpendPlanRules.planRow(v, home)!!.value)
+        val sheet = SpendPlanRules.planSheet(v, home)
+        assertEquals("Which plan", sheet.title)
+        assertEquals(listOf("Christmas gifts", "Money home"), sheet.choices.map { it.label })
+        assertEquals("£105 · needed by 20 Dec · £60 to go", sheet.choices[0].line)
+        assertEquals("Nothing on it yet", sheet.choices[1].line)
+        assertEquals(listOf(false, true), sheet.choices.map { it.lit })
+        assertTrue(sheet.choices[1].spoken.endsWith(", chosen"))
+        assertEquals(gifts, SpendPlanRules.planNamed(v, sheet.choices[0].name))
+        assertNull(SpendPlanRules.planNamed(v, "gone"))
+    }
 }

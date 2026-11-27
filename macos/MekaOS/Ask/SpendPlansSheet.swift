@@ -53,13 +53,11 @@ struct SpendPlansSheet: View {
                         .popover(isPresented: $newOpen, arrowEdge: .bottom) { newPlanPopover }
                 }
             }
-            if let chips = v?.chips, !chips.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: MekaSpace.xs) {
-                        ForEach(chips, id: \.id) { c in
-                            pill(c.name, on: c.id == plan?.id) { chosen = c.id; page = 0; months = 1 }
-                        }
-                    }
+            // Walk-through week 5, A17: the plans are a "Showing" row, a menu of the plans' sheet, not an open chip row.
+            if let v, let row = SpendPlanRules.shared.planRow(v: v, chosen: chosen) {
+                planRow(row, sheet: SpendPlanRules.shared.planSheet(v: v, chosen: chosen)) { name in
+                    guard let id = SpendPlanRules.shared.planNamed(v: v, name: name) else { return }
+                    chosen = id; page = 0; months = 1; said = nil
                 }
                 .staggeredAppear(1)
             }
@@ -112,6 +110,31 @@ struct SpendPlansSheet: View {
 
     private func choosePhoto(_ id: String) {
         Task { if let s = await model.chooseSpendThingPhoto(id) { said = s } }
+    }
+
+    /// The "Showing" row: its title, then a menu of the plans (each plan's line as the help); a pick sends only its id.
+    private func planRow(_ row: NotifyChoiceRow, sheet: NotifyChoiceSheet, choose: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack {
+            Text(row.title).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Picker(sheet.title, selection: Binding(get: { lit }, set: { name in
+                guard name != lit else { return }
+                MekaHaptics.tick()
+                choose(name)
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(sheet.choices.first(where: { $0.lit })?.line ?? sheet.note)
+            .accessibilityLabel(row.spoken)
+            .accessibilityIdentifier("spend-plan-row")
+        }
+        .font(MekaType.itemMeta)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
     }
 
     private func pill(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {

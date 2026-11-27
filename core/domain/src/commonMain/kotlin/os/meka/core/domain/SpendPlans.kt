@@ -508,6 +508,42 @@ object SpendPlanRules {
         )
     }
 
+    // ---- Walk-through week 5, A17: the plan chips are one row opening a sheet (they ran off the cover's edge) ----
+
+    const val SHOWING = "Showing"
+    const val PLAN_SHEET = "Which plan"
+    const val NOTHING_YET = "Nothing on it yet"
+    const val PLAN_NOTE = "Only changes which plan this page shows. Nothing is added, moved or removed."
+
+    /** What a plan says in its sheet: "£450 · needed by Sun 20 Dec · £185 to go", whatever of it is known. */
+    fun planLine(d: SpendPlanDetail): String {
+        if (d.rows.isEmpty()) return listOfNotNull(NOTHING_YET, d.by).joinToString(" · ")
+        val toGo = d.spentLine.substringAfter(" · ", "").takeIf { d.spentLine.contains(" to go") }
+        return listOfNotNull(d.total, d.by, toGo).joinToString(" · ")
+    }
+
+    /** "Showing" · "Christmas gifts" ›, the plan on the page ([chosen], else the first); null with no plans. */
+    fun planRow(v: SpendPlansView, chosen: String?): NotifyChoiceRow? {
+        val p = v.plan(chosen) ?: return null
+        val more = if (v.plans.size > 1) ", ${v.plans.size} plans" else ""
+        return NotifyChoiceRow(SHOWING, p.name, "$SHOWING ${p.name}$more. Opens the choices")
+    }
+
+    /** Every plan, each saying its total and day, the one on the page lit. */
+    fun planSheet(v: SpendPlansView, chosen: String?): NotifyChoiceSheet {
+        val on = v.plan(chosen)?.id
+        return NotifyChoiceSheet(
+            PLAN_SHEET, PLAN_NOTE,
+            v.plans.map { d ->
+                val line = planLine(d)
+                NotifyChoice(d.id, d.name, line, d.id == on, "${d.name}, $line" + if (d.id == on) ", chosen" else "")
+            },
+        )
+    }
+
+    /** The plan a sheet choice names, or null when it's gone. */
+    fun planNamed(v: SpendPlansView, name: String): String? = v.plans.firstOrNull { it.id == name }?.id
+
     /** Every plan for [today]; [money] his average month from Money (null before it has one, or while Money is locked). */
     fun view(plans: List<SpendPlanItem>, things: List<SpendThing>, money: SpendMonthMoney?, today: Long): SpendPlansView {
         val details = plans.map { detail(it, things, money, today) }
