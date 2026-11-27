@@ -9,6 +9,6 @@ mac: NEWS
 mac_where: Ask → Daily → News
 ---
 what: the headlines on the topics you choose, also read in the morning brief and shown on the news widget.
-how: Open News to choose topics and sources (Spanish sources is a row opening On or Off) (one that isn't coming through says so after the lanes); say "the headlines" or "more news" to Talk to hear them.
+how: Open News → Topics to choose topics and sources (each a row opening ticks; Spanish sources a row opening On or Off) (one that isn't coming through says so after the lanes); say "the headlines" or "more news" to Talk to hear them.
 tip: A brass dot marks a story you haven't read; Mark all read puts them away, with Undo, and the ticker and brief lead with new ones. Save for the train puts a story's link in your train queue.
-tip: Under Topics, Sources switches a publisher off everywhere news shows, and + Follow a name or word takes a team, person or word ("Arsenal, Lamine Yamal"): stories naming one lead News, the ticker and the brief; the Following row lists them, and choosing one stops following it, with Undo.
+tip: Under Topics, the Sources row ticks a publisher off everywhere news shows, and + Follow a name or word takes a team, person or word ("Arsenal, Lamine Yamal"): stories naming one lead News, the ticker and the brief; the Following row lists them, and choosing one stops following it, with Undo.

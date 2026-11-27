@@ -407,17 +407,15 @@ object NewsRules {
         return seen + quietOff
     }
 
-    /** "12 sources with stories just now · 2 off · tap one to leave its stories out of News and the brief" / "… · all on · …"; null with none. */
+    /** "12 sources with stories just now" / "… · 1 not coming through"; null with none. */
     fun sourceSwitchesLine(sources: List<NewsSourceChoice>): String? {
         if (sources.isEmpty()) return null
-        val off = sources.count { !it.on }
         // A22: the count is of sources with stories just now, so it never reads as every source the caption names.
         val n = sources.count { it.on && it.stories > 0 }
         val down = sources.count { it.on && it.down }
+        // Walk-through week 5, A17: the Sources row says what's off and its sheet what a tap does, so the line doesn't.
         return (if (n == 0) "No source with stories just now" else "$n source" + (if (n == 1) "" else "s") + " with stories just now") +
-            " · " + (if (off == 0) "all on" else "$off off") +
-            (if (down > 0) " · $down not coming through" else "") +
-            " · tap one to leave its stories out of News and the brief"
+            (if (down > 0) " · $down not coming through" else "")
     }
 
     /** Leaves out the stories from switched-off sources ([offKeys]: [sourceKey]s). */

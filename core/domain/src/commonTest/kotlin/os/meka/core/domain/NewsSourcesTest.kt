@@ -45,13 +45,13 @@ class NewsSourcesTest {
         assertEquals(listOf("The Verge", "Hacker News", "TechCrunch"), on.sources.map { it.name })
         assertEquals("The Verge · 2", on.sources.first().label)
         assertTrue(on.sources.all { it.on })
-        assertEquals("3 sources with stories just now · all on · tap one to leave its stories out of News and the brief", on.sourcesLine)
+        assertEquals("3 sources with stories just now", on.sourcesLine)
         assertEquals(listOf("Health · nothing in the last two days"), on.quiet)
 
         val off = NewsRules.place(all, topics, now, sourcesOff = listOf("The Verge", "hacker news", "Gone Away"))
         assertEquals(listOf("a3"), off.items.map { it.id })
         assertEquals(listOf("The Verge · off", "Hacker News · off", "TechCrunch · 1", "Gone Away · off"), off.sources.map { it.label })
-        assertEquals("1 source with stories just now · 3 off · tap one to leave its stories out of News and the brief", off.sourcesLine)
+        assertEquals("1 source with stories just now", off.sourcesLine)
         assertEquals(listOf("Health · nothing in the last two days", "Tech news · its sources are off"), off.quiet)
         assertNull(off.emptyLine)
     }
@@ -63,7 +63,7 @@ class NewsSourcesTest {
         assertTrue(place.lanes.isEmpty())
         assertEquals("Nothing from the sources you have on · turn some back on under Topics", place.emptyLine)
         assertTrue(place.quiet.isEmpty())
-        assertEquals("No source with stories just now · 1 off · tap one to leave its stories out of News and the brief", place.sourcesLine)
+        assertEquals("No source with stories just now", place.sourcesLine)
         assertNull(NewsRules.place(emptyList(), emptyList(), now).sourcesLine)
     }
 

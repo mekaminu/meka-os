@@ -117,15 +117,43 @@ struct NewsSheet: View {
         .accessibilityLabel(choices.spanishRow(on: on).spoken)
     }
 
+    /// Topics' ticks: each topic a toggle with its line; a tick sends only its id and a Bool to the core.
+    private func topicsMenu(_ topics: [NewsTopicChoice]) -> some View {
+        let choices = NewsChoiceRules.shared
+        let row = choices.topicsRow(topics: topics)
+        return Menu(row.title + " · " + row.value) {
+            ForEach(choices.topicsSheet(topics: topics).choices, id: \.name) { c in
+                let id = c.name
+                let lit = c.lit
+                Toggle(c.label + " · " + c.line, isOn: Binding(get: { lit }, set: { model.setNewsTopic(id, on: $0) }))
+            }
+        }
+        .accessibilityLabel(row.spoken)
+    }
+
+    /// Sources' ticks: each source a toggle with its stories just now; a tick sends only its name and a Bool.
+    private func sourcesMenu(_ sources: [NewsSourceChoice]) -> some View {
+        let choices = NewsChoiceRules.shared
+        let row = choices.sourcesRow(sources: sources)
+        return Menu((row?.title ?? choices.SOURCES_TITLE) + " · " + (row?.value ?? "")) {
+            ForEach(choices.sourcesSheet(sources: sources).choices, id: \.name) { c in
+                let name = choices.sourceNamed(sources: sources, name: c.name)?.name ?? c.label
+                let lit = c.lit
+                Toggle(c.label + " · " + c.line, isOn: Binding(get: { lit }, set: { model.setNewsSource(name, on: $0) }))
+            }
+        }
+        .accessibilityLabel(row?.spoken ?? choices.SOURCES_TITLE)
+    }
+
     @ViewBuilder
     private func list(_ place: NewsPlace) -> some View {
         HStack {
             Text("News").font(MekaType.upNextTitle).staggeredAppear(0)
             Spacer()
             Menu("Topics") {
-                ForEach(place.topics, id: \.id) { t in
-                    Toggle(t.label, isOn: Binding(get: { t.chosen }, set: { model.setNewsTopic(t.id, on: $0) }))
-                }
+                // Walk-through week 5, A17: Topics is one "Topics · Barça, AI +2" submenu of ticks from the core's
+                // sheet, as the Fold's row and sheet, each saying what being chosen does.
+                topicsMenu(place.topics)
                 // English only by default (Fold review 2026-10-09 07:26). Walk-through week 5, A17: Spanish sources is
                 // On · Off from the core's sheet, as the Fold's row and sheet, each choice saying what it does.
                 Divider()
@@ -134,12 +162,7 @@ struct NewsSheet: View {
                 // News, the ticker and the brief on both apps).
                 if !place.sources.isEmpty {
                     Divider()
-                    Menu("Sources") {
-                        ForEach(place.sources, id: \.key) { src in
-                            let name = src.name
-                            Toggle(src.label, isOn: Binding(get: { src.on }, set: { model.setNewsSource(name, on: $0) }))
-                        }
-                    }
+                    sourcesMenu(place.sources)
                 }
                 // Full news hub, slice 3: what he follows; choosing one stops following it.
                 if !place.follows.isEmpty {

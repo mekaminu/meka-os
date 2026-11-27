@@ -41,6 +41,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.goals.GOAL_ADD_SHEET_TAG
 import os.meka.android.news.NEWS_FOLLOWING_ROW_TAG
 import os.meka.android.news.NEWS_FOLLOW_ROW_TAG
+import os.meka.android.news.NEWS_TOPICS_ROW_TAG
 import os.meka.android.news.NewsPane
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.news.PICTURE_TAG
@@ -341,11 +342,18 @@ class NewsScreensTest {
         if (compose.onAllNodes(hasText(NewsRules.spanishLine(false), substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
             fail("$name: the old \"${NewsRules.spanishLine(false)}\" line is still on the page")
         ScreenShots.assertShows(compose, name, "Done")
-        // A11 (walk-through 2026-11-15): a source chip was cut to "Football E" at the right edge; they wrap whole now.
-        val sources = core.newsPlace.value.sources.map { it.label }
-        if (sources.isEmpty()) fail("$name: no source chips to check")
-        ScreenShots.assertNotSliced(compose, name, sources)
-        // The open topics, their sources now wrapped whole, fill the cover screen; the lanes sit below it.
+        // Walk-through week 5, A17: Topics and Sources are one row each, not open walls of chips.
+        val topicsRow = NewsChoiceRules.topicsRow(core.newsPlace.value.topics)
+        val sourcesRow = NewsChoiceRules.sourcesRow(core.newsPlace.value.sources) ?: fail("$name: no sources to check")
+        listOf(topicsRow, sourcesRow).forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(r.spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty()) fail("$name: no \"${r.title}\" · \"${r.value}\" row")
+        }
+        val unchosen = core.newsPlace.value.topics.first { !it.chosen }.label
+        if (compose.onAllNodes(hasText(unchosen) and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            fail("$name: the \"$unchosen\" topic is an open chip on the page")
+        core.newsPlace.value.sources.forEach { src ->
+            if (compose.onAllNodes(hasText(src.label), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: \"${src.label}\" is an open chip on the page")
+        }
         check(core, name, lanesInView = false)
 
         fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
@@ -374,6 +382,53 @@ class NewsScreensTest {
         turns()
         ScreenShots.assertShows(compose, name, "Topics")
         if (rowShown(false)) fail("$name: Done left the topics open")
+    }
+
+    /**
+     * Walk-through week 5, A17: Topics opens a sheet of ticks that stays open while he picks (UK added, then taken off
+     * again) and Done closes it; Sources does the same, a source ticked off leaving the row saying "1 off".
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun topicsAndSourcesTickByHand() {
+        val name = "cover-dark-topics-sheet"
+        val core = setUp(ThemeChoice.DARK, Fill.MANY)
+        untilShows(name, core.newsPlace.value.items.first().title)
+        tap(name, "Topics", hasTestTag("news-topics"))
+        until { compose.onAllNodes(hasTestTag(NEWS_TOPICS_ROW_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        fun tick(label: String) = compose.onAllNodes(hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        fun uk() = core.newsPlace.value.topics.first { it.id == "uk" }.chosen
+
+        tap(name, "Topics row", hasContentDescription(NewsChoiceRules.topicsRow(core.newsPlace.value.topics).spoken))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the Topics row opened no sheet")
+        if (uk()) fail("$name: UK chosen before the tick")
+        tick("UK")
+        until { uk() }
+        if (!uk()) fail("$name: ticking UK didn't choose it")
+        if (!sheetOpen()) fail("$name: a tick closed the Topics sheet (several may be picked)")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("news", name))
+        tick("UK")
+        until { !uk() }
+        if (uk()) fail("$name: a second tick left UK chosen")
+        tap(name, "Done", hasText("Done") and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))
+        until { !sheetOpen() }
+        if (sheetOpen()) fail("$name: Done left the Topics sheet open")
+
+        val first = core.newsPlace.value.sources.first()
+        tap(name, "Sources row", hasContentDescription(NewsChoiceRules.sourcesRow(core.newsPlace.value.sources)!!.spoken))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the Sources row opened no sheet")
+        tick(first.name)
+        until { core.newsPlace.value.sources.any { it.key == first.key && !it.on } }
+        if (core.newsPlace.value.sources.none { it.key == first.key && !it.on }) fail("$name: ticking ${first.name} off left it on")
+        tap(name, "Done", hasText("Done") and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))
+        until { !sheetOpen() }
+        val row = NewsChoiceRules.sourcesRow(core.newsPlace.value.sources)!!
+        if (row.value != "1 off") fail("$name: the Sources row reads \"${row.value}\" with one off")
+        until { compose.onAllNodes(hasContentDescription(row.spoken) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription(row.spoken) and hasClickAction()).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say 1 off")
     }
 
     /**

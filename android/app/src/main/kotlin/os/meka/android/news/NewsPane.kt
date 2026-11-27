@@ -68,7 +68,6 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
-import os.meka.android.goals.Chips
 import os.meka.android.goals.GoalAddRowView
 import os.meka.android.goals.LineAddSheetView
 import os.meka.android.notify.NotifyChoiceRowView
@@ -91,8 +90,8 @@ private const val SWIPE_DP = 72f
 
 /**
  * News (build plan M1, "News ticker + AI/tech sources", slice 1): Ask → More → News. The chosen topics as lanes,
- * Barça first, then AI, then the rest, each story once with its source and age; Topics unfolds the chips (synced with
- * the brief's), with Spanish sources a row opening On · Off (walk-through week 5, A17). Tapping a story springs its detail sheet up: title, source and time, the feed's own summary as plain
+ * Barça first, then AI, then the rest, each story once with its source and age; Topics unfolds its rows (synced with
+ * the brief's): Topics, Spanish sources, Sources and Following each a row opening its sheet (walk-through week 5, A17). Tapping a story springs its detail sheet up: title, source and time, the feed's own summary as plain
  * text, "Read full story" (opens the browser, https only), and Previous/Next (buttons or a sideways swipe).
  * Headlines are untrusted (ADR-006): text only, nothing in MEKA acts on them.
  *
@@ -108,7 +107,7 @@ private const val SWIPE_DP = 72f
  * (Undo for 6 s); each lane's name carries "3 new". In a story, **Save for the train** puts its link in the train
  * queue, then "✓ In your train queue".
  *
- * Motion: lanes stagger in 40 ms apart; pictures cross-fade in over their tiles; the topic chips unfold in place and a chosen chip's colour blends with a tick
+ * Motion: lanes stagger in 40 ms apart; pictures cross-fade in over their tiles; Topics' rows unfold in place and a ticked topic or source blends its dot with a tick
  * haptic; the detail springs up from the bottom; Previous/Next slide the story across the way you moved with a tick
  * haptic. Reduced motion: cross-fades only.
  */
@@ -138,6 +137,21 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
         NewsChoiceRules.spanishSheet(place.spanishSources),
         onChoose = { name -> NewsChoiceRules.named(place.spanishSources, name)?.let { on -> scope.launch { runCatching { core.setNewsSpanish(on) } } } },
         onClose = { spanishOpen = false },
+    )
+    // Walk-through week 5, A17: Topics' and Sources' sheets of ticks (several lit; a tap writes what the chip wrote).
+    var topicsSheetOpen by remember { mutableStateOf(false) }
+    var sourcesSheetOpen by remember { mutableStateOf(false) }
+    if (topicsSheetOpen) NotifyChoiceSheetView(
+        NewsChoiceRules.topicsSheet(place.topics),
+        onChoose = { name -> NewsChoiceRules.topicNamed(place.topics, name)?.let { t -> scope.launch { runCatching { core.setNewsTopic(t.id, !t.chosen) } } } },
+        onClose = { topicsSheetOpen = false },
+        several = true,
+    )
+    if (sourcesSheetOpen) NotifyChoiceSheetView(
+        NewsChoiceRules.sourcesSheet(place.sources),
+        onChoose = { name -> NewsChoiceRules.sourceNamed(place.sources, name)?.let { src -> scope.launch { runCatching { core.setNewsSource(src.name, !src.on) } } } },
+        onClose = { sourcesSheetOpen = false },
+        several = true,
     )
     // Walk-through week 5, A17: the Following list and the Follow sheet.
     var followingOpen by remember { mutableStateOf(false) }
@@ -189,10 +203,10 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                     exit = if (Meka.reducedMotion) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
                 ) {
                     Column(Modifier.padding(bottom = MekaSpace.m)) {
-                        Chips(null, place.topics.map { it.label to it.chosen }) { i ->
-                            val t = place.topics[i]
-                            haptics.tick()
-                            scope.launch { runCatching { core.setNewsTopic(t.id, !t.chosen) } }
+                        // Walk-through week 5, A17: the topics are one "Topics" · "Barça, AI +2" › row opening ticks,
+                        // not an open wall of chips.
+                        Box(Modifier.testTag(NEWS_TOPICS_ROW_TAG)) {
+                            NotifyChoiceRowView(NewsChoiceRules.topicsRow(place.topics)) { topicsSheetOpen = true }
                         }
                         // English only by default (Fold review 2026-10-09 07:26). Walk-through week 5, A17: Spanish
                         // sources is a card row ("Spanish sources" · "Off" ›) opening On · Off, not an open chip row.
@@ -205,13 +219,10 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                         )
                         // Full news hub, slice 2: a switch per source in the chosen topics; off leaves its stories out
                         // of News, the ticker and the brief on both apps. The chip's colour blends like a topic's.
-                        if (place.sources.isNotEmpty()) {
-                            Box(Modifier.padding(top = MekaSpace.m)) {
-                                Chips("Sources", place.sources.map { it.label to it.on }) { i ->
-                                    val src = place.sources[i]
-                                    haptics.tick()
-                                    scope.launch { runCatching { core.setNewsSource(src.name, !src.on) } }
-                                }
+                        // Walk-through week 5, A17: one "Sources" · "All on" › row opening ticks, not a block of chips.
+                        NewsChoiceRules.sourcesRow(place.sources)?.let { row ->
+                            Box(Modifier.padding(top = MekaSpace.m).testTag(NEWS_SOURCES_ROW_TAG)) {
+                                NotifyChoiceRowView(row) { sourcesSheetOpen = true }
                             }
                             place.sourcesLine?.let { line ->
                                 Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
@@ -551,4 +562,6 @@ private fun NavButton(label: String, id: String?, go: (String) -> Unit) {
 
 /** The tags the screen tests find News's Following row and "+ Follow a name or word" row by. */
 const val NEWS_FOLLOWING_ROW_TAG = "news-following-row"
+const val NEWS_TOPICS_ROW_TAG = "news-topics-row"
+const val NEWS_SOURCES_ROW_TAG = "news-sources-row"
 const val NEWS_FOLLOW_ROW_TAG = "news-follow-row"

@@ -3546,6 +3546,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(choices.followSheet.addLabel, "Follow")
         XCTAssertFalse(choices.canFollow(text: " "))
         XCTAssertTrue(choices.canFollow(text: "Arsenal"))
+        // Topics and Sources: one row each opening ticks.
+        let topics = [NewsTopicChoice(id: "barca", label: "Barça", chosen: true), NewsTopicChoice(id: "uk", label: "UK", chosen: false)]
+        XCTAssertEqual(choices.topicsRow(topics: topics).value, "Barça")
+        XCTAssertEqual(choices.topicsSheet(topics: topics).choices.map { $0.lit }, [true, false])
+        let sources = [NewsSourceChoice(key: "bbc news", name: "BBC News", stories: 3, on: false, down: false)]
+        XCTAssertEqual(choices.sourcesRow(sources: sources)?.value, "All off")
+        XCTAssertEqual(choices.sourceNamed(sources: sources, name: "bbc news")?.name, "BBC News")
     }
 
     func testAboutYouChoicesReachSwift() {

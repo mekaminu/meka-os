@@ -59,4 +59,37 @@ class NewsChoicesTest {
         assertEquals("Arsenal", rules.unfollowNamed(two, "Arsenal"))
         assertNull(rules.unfollowNamed(two, "Chelsea"))
     }
+
+    @Test
+    fun topicsAreOneRowOpeningTicksThatSayWhatTheyDo() {
+        val topics = listOf(NewsTopicChoice("barca", "Barça", true), NewsTopicChoice("ai", "AI", true), NewsTopicChoice("top", "Top stories", true),
+            NewsTopicChoice("uk", "UK", false))
+        assertEquals(NotifyChoiceRow("Topics", "Barça, AI +1", "Topics 3 of 4: Barça, AI, Top stories. Opens the list"), rules.topicsRow(topics))
+        assertEquals("Barça", rules.topicsRow(topics.take(1)).value)
+        assertEquals("None chosen", rules.topicsRow(topics.map { it.copy(chosen = false) }).value)
+        val s = rules.topicsSheet(topics)
+        assertEquals(listOf("Barça", "AI", "Top stories", "UK"), s.choices.map { it.label })
+        assertEquals(listOf(true, true, true, false), s.choices.map { it.lit })
+        assertEquals(rules.TOPIC_ON_LINE, s.choices[0].line)
+        assertEquals(rules.TOPIC_OFF_LINE, s.choices[3].line)
+        assertEquals("uk", rules.topicNamed(topics, "uk")?.id)
+        assertNull(rules.topicNamed(topics, "UK"))
+    }
+
+    @Test
+    fun sourcesAreOneRowOpeningTicksWithTheirStories() {
+        assertNull(rules.sourcesRow(emptyList()))
+        val on = listOf(NewsSourceChoice("bbc news", "BBC News", 3, true), NewsSourceChoice("the verge", "The Verge", 1, true, down = true),
+            NewsSourceChoice("sky sports", "Sky Sports", 0, true))
+        assertEquals(NotifyChoiceRow("Sources", "All on", "Sources 3, all on. Opens the list"), rules.sourcesRow(on))
+        val some = on.mapIndexed { i, s -> if (i == 2) s.copy(on = false) else s }
+        assertEquals("1 off", rules.sourcesRow(some)?.value)
+        assertEquals("All off", rules.sourcesRow(on.map { it.copy(on = false) })?.value)
+        val sheet = rules.sourcesSheet(some)
+        assertEquals(listOf("BBC News", "The Verge", "Sky Sports"), sheet.choices.map { it.label })
+        assertEquals(listOf("3 stories just now", "1 story just now · not coming through", "Off · its stories stay out"), sheet.choices.map { it.line })
+        assertEquals(listOf(true, true, false), sheet.choices.map { it.lit })
+        assertEquals("Sky Sports", rules.sourceNamed(some, "sky sports")?.name)
+        assertNull(rules.sourceNamed(some, "Sky Sports"))
+    }
 }
