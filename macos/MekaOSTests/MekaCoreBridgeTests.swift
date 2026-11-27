@@ -3518,6 +3518,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(choices.opens(row: AutonomyRules.shared.LOCKED[0]))
     }
 
+    func testNewsChoicesReachSwift() {
+        // Walk-through week 5, A17: News's Spanish sources is On · Off from the core's sheet.
+        let choices = NewsChoiceRules.shared
+        XCTAssertEqual(choices.spanishRow(on: false).value, "Off")
+        let sheet = choices.spanishSheet(on: false)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["On", "Off"])
+        XCTAssertEqual(sheet.choices.first(where: { $0.lit })?.line, "English only, wherever news shows")
+        XCTAssertEqual(choices.named(on: false, name: CallChoiceRules.shared.ON)?.boolValue, true)
+        XCTAssertNil(choices.named(on: false, name: CallChoiceRules.shared.OFF))
+    }
+
     func testAboutYouChoicesReachSwift() {
         // Walk-through week 5, A17: About you's Watch for requests and Handle her requests are On · Off menus.
         let choices = AboutYouChoiceRules.shared

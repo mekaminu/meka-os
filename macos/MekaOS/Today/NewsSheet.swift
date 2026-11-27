@@ -104,6 +104,19 @@ struct NewsSheet: View {
         }
     }
 
+    /// Spanish sources' On · Off submenu; a pick sends only a Bool to the core.
+    private func spanishPicker(_ on: Bool) -> some View {
+        let choices = NewsChoiceRules.shared
+        let sheet = choices.spanishSheet(on: on)
+        let litName = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return Picker(sheet.title, selection: Binding(get: { litName }, set: { name in
+            if let pick = choices.named(on: on, name: name)?.boolValue { model.setNewsSpanish(on: pick) }
+        })) {
+            ForEach(sheet.choices, id: \.name) { c in Text(c.label + " · " + c.line).tag(c.name) }
+        }
+        .accessibilityLabel(choices.spanishRow(on: on).spoken)
+    }
+
     @ViewBuilder
     private func list(_ place: NewsPlace) -> some View {
         HStack {
@@ -113,9 +126,10 @@ struct NewsSheet: View {
                 ForEach(place.topics, id: \.id) { t in
                     Toggle(t.label, isOn: Binding(get: { t.chosen }, set: { model.setNewsTopic(t.id, on: $0) }))
                 }
-                // English only by default (Fold review 2026-10-09 07:26): Spanish sources are a switch, off.
+                // English only by default (Fold review 2026-10-09 07:26). Walk-through week 5, A17: Spanish sources is
+                // On · Off from the core's sheet, as the Fold's row and sheet, each choice saying what it does.
                 Divider()
-                Toggle("Spanish sources", isOn: Binding(get: { place.spanishSources }, set: { model.setNewsSpanish(on: $0) }))
+                spanishPicker(place.spanishSources)
                 // Full news hub, slice 2: a switch per source in the chosen topics (off leaves its stories out of
                 // News, the ticker and the brief on both apps).
                 if !place.sources.isEmpty {

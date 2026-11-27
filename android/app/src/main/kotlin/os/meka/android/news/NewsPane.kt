@@ -74,12 +74,15 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.goals.Chips
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.calendar.EventDetailPane
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.NewsChoiceRules
 import os.meka.core.domain.NewsDetail
 import os.meka.core.domain.NewsItem
 import os.meka.core.domain.NewsLane
@@ -93,7 +96,7 @@ private const val SWIPE_DP = 72f
 /**
  * News (build plan M1, "News ticker + AI/tech sources", slice 1): Ask → More → News. The chosen topics as lanes,
  * Barça first, then AI, then the rest, each story once with its source and age; Topics unfolds the chips (synced with
- * the brief's). Tapping a story springs its detail sheet up: title, source and time, the feed's own summary as plain
+ * the brief's), with Spanish sources a row opening On · Off (walk-through week 5, A17). Tapping a story springs its detail sheet up: title, source and time, the feed's own summary as plain
  * text, "Read full story" (opens the browser, https only), and Previous/Next (buttons or a sideways swipe).
  * Headlines are untrusted (ADR-006): text only, nothing in MEKA acts on them.
  *
@@ -133,6 +136,13 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
     LaunchedEffect(followNote) { if (followNote != null) { delay(6_000); followNote = null; unfollowed = null } }
     // Full news hub, slice 5: which feeds aren't coming through (the server's list, at most every 10 minutes).
     LaunchedEffect(Unit) { core.refreshNewsSources() }
+    // Walk-through week 5, A17: Spanish sources' On · Off sheet.
+    var spanishOpen by remember { mutableStateOf(false) }
+    if (spanishOpen) NotifyChoiceSheetView(
+        NewsChoiceRules.spanishSheet(place.spanishSources),
+        onChoose = { name -> NewsChoiceRules.named(place.spanishSources, name)?.let { on -> scope.launch { runCatching { core.setNewsSpanish(on) } } } },
+        onClose = { spanishOpen = false },
+    )
     BackHandler(enabled = openId != null && eventOpen == null) { openId = null }
     BackHandler(enabled = eventOpen != null) { eventOpen = null }
 
@@ -169,17 +179,11 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                             haptics.tick()
                             scope.launch { runCatching { core.setNewsTopic(t.id, !t.chosen) } }
                         }
-                        // English only by default (Fold review 2026-10-09 07:26): Spanish sources are a switch, off.
+                        // English only by default (Fold review 2026-10-09 07:26). Walk-through week 5, A17: Spanish
+                        // sources is a card row ("Spanish sources" · "Off" ›) opening On · Off, not an open chip row.
                         Box(Modifier.padding(top = MekaSpace.m)) {
-                            Chips("Spanish sources", listOf("Off" to !place.spanishSources, "On" to place.spanishSources)) { i ->
-                                val on = i == 1
-                                if (on != place.spanishSources) {
-                                    haptics.tick()
-                                    scope.launch { runCatching { core.setNewsSpanish(on) } }
-                                }
-                            }
+                            NotifyChoiceRowView(NewsChoiceRules.spanishRow(place.spanishSources)) { spanishOpen = true }
                         }
-                        Text(LoneWordGlue.kept(place.spanishLine), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
                         Text(
                             LoneWordGlue.kept(place.sourcesCaption),
                             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs),

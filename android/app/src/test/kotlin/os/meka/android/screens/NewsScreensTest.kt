@@ -14,7 +14,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -35,11 +38,13 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.news.NewsPane
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.news.PICTURE_TAG
 import os.meka.android.news.TILE_TAG
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeadlineFields
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.NewsChoiceRules
 import os.meka.core.domain.NewsRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.facade.NewsImagesApi
@@ -259,7 +264,7 @@ class NewsScreensTest {
         val bareStories = place.items.count { it.imageKey == null }
         if (thumbs(TILE_TAG) > bareStories) fail("$name: ${thumbs(TILE_TAG)} initials tiles drawn, but only $bareStories stories have no picture")
         if (lanesInView && place.items.any { it.imageKey != null } && thumbs(PICTURE_TAG) == 0) fail("$name: stories with pictures, but none drawn")
-        val lines = listOfNotNull(place.emptyLine, place.unreadLine, place.followsLine, place.spanishLine, place.sourcesCaption, place.sourcesLine) +
+        val lines = listOfNotNull(place.emptyLine, place.unreadLine, place.followsLine, place.sourcesCaption, place.sourcesLine) +
             place.quiet + place.lanes.map { it.sources } + place.items.map { it.meta }
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
@@ -315,14 +320,22 @@ class NewsScreensTest {
 
     // ---- By hand ----
 
-    /** Topics opens the chips (with the Spanish switch and its line) and Done folds them away again. */
+    /**
+     * Topics opens the chips (with Spanish sources a row, walk-through week 5 A17) and Done folds them away again. The
+     * row opens On · Off saying what each does; On turns the Spanish sources on and the row says so; Off turns them back.
+     */
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun topicsOpenAndCloseByHand() {
         val name = "cover-dark-topics"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
         untilShows(name, core.newsPlace.value.items.first().title)
         tap(name, "Topics", hasTestTag("news-topics"))
-        untilShows(name, LoneWordGlue.kept(core.newsPlace.value.spanishLine))
+        fun rowShown(on: Boolean) = compose.onAllNodes(hasContentDescription(NewsChoiceRules.spanishRow(on).spoken) and hasClickAction()).fetchSemanticsNodes().isNotEmpty()
+        until { rowShown(false) }
+        if (!rowShown(false)) fail("$name: no \"Spanish sources\" · \"Off\" row under the topics")
+        // The old "Off · English only" line under an open Off · On chip row is gone.
+        if (compose.onAllNodes(hasText(NewsRules.spanishLine(false), substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            fail("$name: the old \"${NewsRules.spanishLine(false)}\" line is still on the page")
         ScreenShots.assertShows(compose, name, "Done")
         // A11 (walk-through 2026-11-15): a source chip was cut to "Football E" at the right edge; they wrap whole now.
         val sources = core.newsPlace.value.sources.map { it.label }
@@ -330,11 +343,44 @@ class NewsScreensTest {
         ScreenShots.assertNotSliced(compose, name, sources)
         // The open topics, their sources now wrapped whole, fill the cover screen; the lanes sit below it.
         check(core, name, lanesInView = false)
+
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        fun inSheet(line: String) = compose.onAllNodes(
+            SemanticsMatcher("reads \"$line\"") { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == line }
+                and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true,
+        ).fetchSemanticsNodes().isNotEmpty()
+        fun choose(on: Boolean, label: String) {
+            tap(name, "Spanish sources", hasContentDescription(NewsChoiceRules.spanishRow(on).spoken))
+            until { sheetOpen() }
+            if (!sheetOpen()) fail("$name: Spanish sources opened no sheet")
+            listOf(NewsChoiceRules.SPANISH_ON_LINE, NewsChoiceRules.SPANISH_OFF_LINE).forEach { l -> if (!inSheet(l)) fail("$name: the sheet doesn't say \"$l\"") }
+            compose.onAllNodes(hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            until { !sheetOpen() && core.newsPlace.value.spanishSources == !on }
+            if (sheetOpen()) fail("$name: choosing $label didn't close the sheet")
+        }
+        choose(false, "On")
+        if (!core.newsPlace.value.spanishSources) fail("$name: On in Spanish sources' sheet left them off")
+        until { rowShown(true) }
+        if (!rowShown(true)) fail("$name: the row doesn't say On")
+        choose(true, "Off")
+        if (core.newsPlace.value.spanishSources) fail("$name: Off in Spanish sources' sheet left them on")
+
         tap(name, "Done", hasTestTag("news-topics"))
         turns()
         ScreenShots.assertShows(compose, name, "Topics")
-        val left = compose.onAllNodes(hasText(LoneWordGlue.kept(core.newsPlace.value.spanishLine)), useUnmergedTree = true).fetchSemanticsNodes()
-        if (left.isNotEmpty()) fail("$name: Done left the topics open")
+        if (rowShown(false)) fail("$name: Done left the topics open")
+    }
+
+    /** Waits (real time too: the core writes on its own thread) until [done]. */
+    private fun until(done: () -> Boolean) {
+        var i = 0
+        while (!done() && i++ < 80) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns(500)
     }
 
     /** Mark all read says how many it marked, with Undo; Undo brings the dots back. */
