@@ -377,6 +377,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/needs-you/open-cover-dark.png](docs/screens/fold/needs-you/open-cover-dark.png)
 - [fold/needs-you/open-cover-light.png](docs/screens/fold/needs-you/open-cover-light.png)
 - [fold/needs-you/open-inner-dark.png](docs/screens/fold/needs-you/open-inner-dark.png)
+- [fold/needs-you/tidied-filters-cover-dark.png](docs/screens/fold/needs-you/tidied-filters-cover-dark.png)
 - [fold/needs-you/tidied-pages-cover-dark.png](docs/screens/fold/needs-you/tidied-pages-cover-dark.png)
 - [fold/needs-you/tidied-select-cover-dark.png](docs/screens/fold/needs-you/tidied-select-cover-dark.png)
 - [fold/needs-you/tidied-trash-all-cover-dark.png](docs/screens/fold/needs-you/tidied-trash-all-cover-dark.png)
