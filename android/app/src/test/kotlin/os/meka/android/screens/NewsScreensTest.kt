@@ -425,7 +425,7 @@ class NewsScreensTest {
             .performSemanticsAction(SemanticsActions.OnClick)
         until { !sheetOpen() && core.newsPlace.value.follows.isEmpty() }
         if (core.newsPlace.value.follows.isNotEmpty()) fail("$name: choosing Arsenal didn't stop following it")
-        untilShows(name, "Stopped following Arsenal")
+        untilShows(name, LoneWordGlue.kept("Stopped following Arsenal"))
         ScreenShots.assertShows(compose, name, "Undo")
     }
 
