@@ -417,7 +417,9 @@ class NewsScreensTest {
         until { sheetOpen() }
         if (!sheetOpen()) fail("$name: Following opened no sheet")
         val line = NewsChoiceRules.followingSheet(core.newsPlace.value.follows).choices.first { it.label == "Arsenal" }.line
-        if (compose.onAllNodes(hasText(line, substring = true) and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // The sheet keeps a lone last word with its neighbour (a no-break space), so it is read with plain spaces.
+        val reads = SemanticsMatcher("reads \"$line\"") { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == line }
+        if (compose.onAllNodes(reads and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
             fail("$name: the Following sheet doesn't say \"$line\"")
         compose.onAllNodes(hasText("Arsenal") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
             .performSemanticsAction(SemanticsActions.OnClick)
