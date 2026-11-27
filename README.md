@@ -584,6 +584,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/trips/cover-light-many.png](docs/screens/fold/trips/cover-light-many.png)
 - [fold/trips/inner-dark-empty.png](docs/screens/fold/trips/inner-dark-empty.png)
 - [fold/trips/inner-dark-many.png](docs/screens/fold/trips/inner-dark-many.png)
+- [fold/vault/cover-dark-add-refused.png](docs/screens/fold/vault/cover-dark-add-refused.png)
 - [fold/vault/cover-dark-by-hand.png](docs/screens/fold/vault/cover-dark-by-hand.png)
 - [fold/vault/cover-dark-empty.png](docs/screens/fold/vault/cover-dark-empty.png)
 - [fold/vault/cover-dark-many.png](docs/screens/fold/vault/cover-dark-many.png)
