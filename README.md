@@ -383,6 +383,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/needs-you/tidied-trash-all-cover-dark.png](docs/screens/fold/needs-you/tidied-trash-all-cover-dark.png)
 - [fold/news/cover-dark-bare-story.png](docs/screens/fold/news/cover-dark-bare-story.png)
 - [fold/news/cover-dark-empty.png](docs/screens/fold/news/cover-dark-empty.png)
+- [fold/news/cover-dark-follow.png](docs/screens/fold/news/cover-dark-follow.png)
 - [fold/news/cover-dark-many.png](docs/screens/fold/news/cover-dark-many.png)
 - [fold/news/cover-dark-marked.png](docs/screens/fold/news/cover-dark-marked.png)
 - [fold/news/cover-dark-one.png](docs/screens/fold/news/cover-dark-one.png)
