@@ -57,18 +57,10 @@ struct BriefSheet: View {
                 .accessibilityLabel(speaker.speaking ? "Stop reading the brief" : "Read the brief aloud")
                 .staggeredAppear(0)
                 // Slice 3: how long the spoken brief is (synced): Short ~45 s · Standard ~90 s · Full ~3 min.
-                Picker("Length", selection: Binding(
-                    get: { v.lengths.first(where: \.chosen)?.id ?? "standard" },
-                    set: { id in
-                        speaker.stop()
-                        model.setBriefLength(id)
-                    }
-                )) {
-                    ForEach(v.lengths, id: \.id) { c in Text(c.label).tag(c.id) }
-                }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
-                .help("How long the spoken brief is")
-                .staggeredAppear(0)
+                // Walk-through week 5, A17: a "Length" row with a menu of the same choices the Fold's sheet has, each
+                // saying how long it runs and what it names, not an open segmented row.
+                lengthRow(v)
+                    .staggeredAppear(0)
                 // AI layer completeness slice 3: while Navilife's AI can't write it, how the brief is read instead.
                 if let aiLine = AiFeatureRules.shared.line(feature: .brief, view: model.aiStatus) {
                     Text(LoneWordGlue.shared.kept(line: aiLine)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -252,6 +244,31 @@ struct BriefSheet: View {
     }
 
     /// Listen reads the brief aloud (light haptic); Stop ends it (tick haptic).
+    private func lengthRow(_ v: MorningBriefView) -> some View {
+        let row = BriefLengthChoiceRules.shared.row(lengths: v.lengths)
+        let sheet = BriefLengthChoiceRules.shared.sheet(lengths: v.lengths)
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? "standard"
+        return HStack {
+            Text(row.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Picker(sheet.title, selection: Binding(get: { lit }, set: { name in
+                if let id = BriefLengthChoiceRules.shared.named(lengths: v.lengths, name: name) {
+                    speaker.stop()
+                    model.setBriefLength(id)
+                }
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text("\(c.label) · \(c.line)").tag(c.name) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
+            .accessibilityLabel(row.spoken)
+        }
+        .font(MekaType.itemMeta)
+        .frame(maxWidth: 360)
+    }
+
     private func toggleListen(_ v: MorningBriefView) {
         if speaker.speaking || preparing != nil {
             MekaHaptics.tick()

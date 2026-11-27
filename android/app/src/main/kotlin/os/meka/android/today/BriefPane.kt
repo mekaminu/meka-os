@@ -64,6 +64,9 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.goals.Chips
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.core.domain.BriefLengthChoiceRules
 import os.meka.android.ask.MekaSpeaker
 import android.Manifest
 import android.content.pm.PackageManager
@@ -188,16 +191,22 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                         modifier = Modifier.padding(top = MekaSpace.xs).testTag("brief-ai-line"))
                 }
                 // Slice 3: how long the spoken brief is (synced): Short ~45 s · Standard ~90 s · Full ~3 min.
-                Box(Modifier.padding(top = MekaSpace.xs)) {
-                    Chips(null, v.lengths.map { it.label to it.chosen }) { i ->
-                        val c = v.lengths[i]
-                        if (!c.chosen) {
-                            haptics.tick()
+                // Walk-through week 5, A17: a "Length" · "Standard" row opening its sheet, not an open chip row; each
+                // length in the sheet says how long it runs and what it names.
+                var choosingLength by rememberSaveable { mutableStateOf(false) }
+                NotifyChoiceRowView(
+                    BriefLengthChoiceRules.row(v.lengths), Modifier.padding(top = MekaSpace.m).testTag(BRIEF_LENGTH_ROW_TAG),
+                ) { haptics.tick(); choosingLength = true }
+                if (choosingLength) NotifyChoiceSheetView(
+                    BriefLengthChoiceRules.sheet(v.lengths),
+                    onChoose = { name ->
+                        BriefLengthChoiceRules.named(v.lengths, name)?.let { id ->
                             speaker.stop()
-                            scope.launch { runCatching { core.setBriefLength(c.id) } }
+                            scope.launch { runCatching { core.setBriefLength(id) } }
                         }
-                    }
-                }
+                    },
+                    onClose = { choosingLength = false },
+                )
             }
         }
 
@@ -387,6 +396,7 @@ private fun ListenPill(speaking: Boolean, preparing: Boolean = false, modifier: 
 
 /** Test tag on each of the brief's Today rows (BriefDayRowTest). */
 internal const val BRIEF_DAY_ROW_TAG = "brief-day-row"
+internal const val BRIEF_LENGTH_ROW_TAG = "brief-length-row"
 
 /** The lead slot every brief row's title follows: a task's tick circle or an event's dot. */
 private val BRIEF_LEAD = 22.dp

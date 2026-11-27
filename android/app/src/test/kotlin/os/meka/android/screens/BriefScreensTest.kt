@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasAnyAncestor
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
+import os.meka.core.domain.BriefLength
+import os.meka.core.domain.BriefLengthChoiceRules
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -357,15 +362,39 @@ class BriefScreensTest {
         }
     }
 
-    /** A length chip picks how long the spoken brief is. */
+    /**
+     * Walk-through week 5, A17: the brief's length is a "Length" · "Standard" row opening its sheet, not an open chip
+     * row; the sheet says what Short says, and picking it closes the sheet and the row says Short.
+     */
     @Test @Config(qualifiers = ScreenShots.COVER)
-    fun aLengthChipPicksByHand() {
+    fun theLengthRowPicksByHand() {
         val name = "cover-dark-length"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
         if (core.briefView.value.lengths.first { it.id == "short" }.chosen) fail("$name: Short starts chosen")
-        tap(name, "Short", hasText("Short"))
-        until { core.briefView.value.lengths.first { it.id == "short" }.chosen }
-        if (!core.briefView.value.lengths.first { it.id == "short" }.chosen) fail("$name: tapping Short didn't pick it")
+        val row = BriefLengthChoiceRules.row(core.briefView.value.lengths)
+        scrollTo(hasContentDescription(row.spoken))
+        // No open chip of a length on the page.
+        listOf("Short", "Full").forEach { l ->
+            if (compose.onAllNodes(hasText(l), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) fail("$name: an open \"$l\" chip is still on the page")
+        }
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        tap(name, "Length", hasContentDescription(row.spoken))
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the row didn't open its sheet")
+        val line = BriefLengthChoiceRules.line(BriefLength.SHORT)
+        // The sheet keeps short words with their neighbours (no-break spaces), so read it with plain spaces.
+        val says = SemanticsMatcher("reads \"$line\"") { n ->
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == line
+        }
+        if (compose.onAllNodes(says and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("$name: the sheet doesn't say \"$line\" for Short")
+        compose.onAllNodes(hasText("Short") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() && core.briefView.value.lengths.first { it.id == "short" }.chosen }
+        if (sheetOpen()) fail("$name: choosing Short didn't close the sheet")
+        if (!core.briefView.value.lengths.first { it.id == "short" }.chosen) fail("$name: choosing Short didn't pick it")
+        val after = BriefLengthChoiceRules.row(core.briefView.value.lengths)
+        if (compose.onAllNodes(hasContentDescription(after.spoken)).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say Short")
     }
 
     /** A task's circle in Today completes it, and the row leaves. */

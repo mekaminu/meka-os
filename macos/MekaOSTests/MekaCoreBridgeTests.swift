@@ -2615,6 +2615,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(RenewalRules.shared.repeatLabel(r: .halfYearly), "Every 6 months")
     }
 
+    func testBriefLengthChoicesReachSwift() {
+        // Walk-through week 5, A17: the brief's length is a row with a menu, not an open segmented row.
+        let lengths = MorningBriefView.companion.EMPTY.lengths
+        let row = BriefLengthChoiceRules.shared.row(lengths: lengths)
+        XCTAssertEqual(row.title, "Length")
+        XCTAssertEqual(row.value, "Standard")
+        let sheet = BriefLengthChoiceRules.shared.sheet(lengths: lengths)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["Short", "Standard", "Full"])
+        XCTAssertEqual(sheet.choices.filter { $0.lit }.map { $0.name }, ["standard"])
+        XCTAssertEqual(BriefLengthChoiceRules.shared.named(lengths: lengths, name: "full"), "full")
+        XCTAssertNil(BriefLengthChoiceRules.shared.named(lengths: lengths, name: "standard"))
+    }
+
     func testWakeBufferChoicesReachSwift() {
         // Walk-through week 5, A17: Shut down's Time to get ready is a row with a menu, not an open chip row.
         let wake = WakeView.companion.EMPTY
