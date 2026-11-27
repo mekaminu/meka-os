@@ -13,6 +13,8 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
@@ -31,6 +33,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.TRIP_GOING_SHEET_TAG
 import os.meka.android.ask.TripListsPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
@@ -309,23 +312,31 @@ class TripListsScreensTest {
             core.tick()
         }
         show(core, tripId)
-        compose.onNodeWithTag("trip-head").performClick()
         compose.mainClock.advanceTimeBy(1_000L)
         compose.waitForIdle()
         val name = "cover-dark-going"
+        // The page says who's going and the leave time once, in the header; no open chip row or box on it (A17, g6a 9).
+        ScreenShots.assertShows(compose, name, "2 people")
+        ScreenShots.assertShows(compose, name, "leave home 06:30 Wednesday")
+        ScreenShots.assertNotCornerClipped(compose, name, "leave home 06:30 Wednesday")
+        compose.onAllNodesWithTag("trip-going").assertCountEquals(0)
+        compose.onAllNodes(hasSetTextAction() and hasContentDescription(TripListRules.LEAVE_DESCRIPTION)).assertCountEquals(0)
+        // Walk-through A14: "Before we leave" has its margin inside its tab, not against the pill's edge.
+        ScreenShots.assertInset(compose, name, TripList.LEAVE.label, "trip-tab-${TripList.LEAVE.wire}", minDp = 8f)
+        // The header's › opens the sheet.
+        compose.onNodeWithTag("trip-head").performClick()
+        compose.mainClock.advanceTimeBy(1_000L)
+        compose.waitForIdle()
+        compose.onNodeWithTag(TRIP_GOING_SHEET_TAG).assertExists()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("trip-lists", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertNoBrokenWords(compose, name)
-        ScreenShots.assertShows(compose, name, "2 people")
-        ScreenShots.assertShows(compose, name, "leave home 06:30 Wednesday")
         ScreenShots.assertShows(compose, name, "WHO'S GOING")
-        ScreenShots.assertNotCornerClipped(compose, name, "leave home 06:30 Wednesday")
-        // Walk-through A13: the saved time is the field's own text (not the hint's grey), and no example under it.
+        // Walk-through A13: the saved time is the field's own text (not the hint's grey), and no example under it;
+        // g6a 9: nor the time again under it.
         compose.onNode(hasSetTextAction() and hasContentDescription(TripListRules.LEAVE_DESCRIPTION)).assert(hasText("06:30"))
-        compose.onNodeWithTag("trip-leave-caption", useUnmergedTree = true).assert(hasText("You leave home at 06:30", substring = true))
+        compose.onNodeWithTag("trip-leave-caption", useUnmergedTree = true).assert(hasText(TripListRules.LEAVE_SAVED))
         compose.onAllNodes(hasText("for example", substring = true)).assertCountEquals(0)
-        // Walk-through A14: "Before we leave" has its margin inside its tab, not against the pill's edge.
-        ScreenShots.assertInset(compose, name, TripList.LEAVE.label, "trip-tab-${TripList.LEAVE.wire}", minDp = 8f)
         // A chip lights in the next frame; the core's write lands after.
         compose.onNodeWithTag("trip-going-kids").performClick()
         compose.mainClock.advanceTimeBy(16L)
@@ -333,6 +344,10 @@ class TripListsScreensTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Going"))
         compose.mainClock.autoAdvance = true
         compose.waitUntil(5_000L) { core.tripListsView.value.single().going.last().on }
+        // The sheet stays open while he picks; Close takes it away.
+        compose.onNodeWithTag(TRIP_GOING_SHEET_TAG).assertExists()
+        compose.onNodeWithText("Close").performClick()
+        compose.waitUntil(5_000L) { compose.onAllNodesWithTag(TRIP_GOING_SHEET_TAG).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test

@@ -8,7 +8,7 @@ import SwiftUI
 /// sink and fade. Right-click → Remove, with Undo for a few seconds. Slice 2b: an empty trip offers "Start from <last
 /// trip>", copying its lists unticked, with Undo; slice 2e adds "Save as a template for next time" at the foot and
 /// offers saved templates first (right-click → Forget this template). Slice 2d: a click on the header (or "Add who's going and when you
-/// leave") opens who's going (chips lit at once, written after) and Leave home at; the dates line counts the people and
+/// leave") opens, as a sheet (walk-through week 5, A17), who's going (chips lit at once, written after) and Leave home at; the dates line counts the people and
 /// the countdown says when he leaves. Synced with the Fold. Slice 3b: Obi's suggestions above the field, one card per
 /// tab: his line, chips (a click adds that one), Add all and Not now; nothing is added without a click.
 ///
@@ -190,8 +190,9 @@ struct TripListsPanel: View {
                 Button(TripListRules.shared.DONE) {
                     MekaHaptics.tick()
                     leaveSaid = nil
-                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { editing = false }
+                    editing = false
                 }
+                .keyboardShortcut(.cancelAction)
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.itemMeta)
                 .foregroundStyle(palette.accent)
@@ -219,11 +220,14 @@ struct TripListsPanel: View {
                 Text(v.dates).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
                 Text(v.countdown).font(MekaType.captionStrong).foregroundStyle(v.countdownLit ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
-                if v.needsSetUp && !editing {
+                if v.needsSetUp {
                     Text(TripListRules.shared.SET_UP).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .trailing) {
+                Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary).accessibilityHidden(true)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
@@ -231,9 +235,16 @@ struct TripListsPanel: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: v.dates)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: v.countdown)
         .staggeredAppear(0)
-        if editing {
-            goingEditor(v)
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        // Walk-through week 5, A17 (g6a 9): who's going and the leave time are the header's sheet, not an open editor
+        // on the panel; the sheet stays open while he picks and closes on Done.
+        .sheet(isPresented: $editing, onDismiss: { leaveSaid = nil }) {
+            VStack(alignment: .leading, spacing: MekaSpace.m) {
+                Text(TripListRules.shared.EDIT).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
+                goingEditor(v)
+            }
+            .padding(MekaSpace.l)
+            .frame(minWidth: 380, alignment: .leading)
+            .background(palette.surface)
         }
         HStack(spacing: MekaSpace.xs) {
             bar(v.bought)

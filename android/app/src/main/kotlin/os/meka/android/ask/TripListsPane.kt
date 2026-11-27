@@ -134,7 +134,9 @@ import os.meka.core.facade.MekaCore
  *
  * Slice 2d: a tap on the header (or "Add who's going and when you leave" on a new trip) opens who's going (Me, his
  * partner, the kids: chips lit at once, written after) and Leave home at ("06:30"); the dates line then counts the
- * people and the countdown says when he leaves. The editor opens and closes on the expand spring (a fade when reduced).
+ * people and the countdown says when he leaves. Walk-through week 5, A17: the two are the header's sheet (the header a
+ * card row ending in ›), rising over a fading scrim on the expand spring (a cross-fade when reduced), not an open
+ * editor on the page; under the saved time the sheet says what it does rather than the time again.
  *
  * Slice 2e: "Save as a template for next time" at the foot (a dashed outline, as the mockup; "Update the Lisbon template" once
  * saved); a new trip's empty lists offer saved templates first, then the last trip; a long press forgets a template.
@@ -253,6 +255,7 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trip-list-said",
     )
 
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().testTag("trip-lists")
             .onGloballyPositioned { val b = it.boundsInRoot(); listTop = b.top; listBottom = b.bottom },
@@ -269,90 +272,27 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
             return@LazyColumn
         }
         item(key = "head") {
-            Column(
+            // A17 (g6a 9): the header is a card row whose › opens who's going and the leave time in a sheet.
+            Row(
                 Modifier.fillMaxWidth().appear(rememberAppearance(0))
                     // No rounded clip: the countdown sits flush in its bottom-left corner and lost its first glyph
                     // (walk-through 2026-11-02 A1); the press shows across the head.
-                    .clickable(role = Role.Button, onClickLabel = TripListRules.EDIT) { haptics.tick(); editing = !editing }
-                    .semantics(mergeDescendants = true) { if (editing) stateDescription = "Editing who's going" }
+                    .clickable(role = Role.Button, onClickLabel = TripListRules.EDIT) { haptics.tick(); editing = true }
+                    .semantics(mergeDescendants = true) {}
                     .testTag("trip-head"),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(v.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
-                Crossfade(v.dates, animationSpec = MekaMotion.appear(reduced), label = "trip-dates") { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-                Crossfade(v.countdown, animationSpec = MekaMotion.appear(reduced), label = "trip-countdown") {
-                    Text(it, style = MekaType.captionStrong, color = if (v.countdownLit) Meka.colors.accent else Meka.colors.textSecondary)
-                }
-                if (v.needsSetUp && !editing) {
-                    Text(TripListRules.SET_UP, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.minTouch().testTag("trip-set-up"))
-                }
-            }
-        }
-        item(key = "going") {
-            AnimatedVisibility(
-                visible = editing,
-                enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
-                exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).lightCardEdge(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                        .padding(MekaSpace.m).testTag("trip-going"),
-                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                ) {
-                    Text(TripListRules.GOING_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        for (c in v.going) {
-                            val on = goingPending[c.wire] ?: c.on
-                            val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "trip-going-chip")
-                            Text(
-                                c.label, style = MekaType.caption, color = if (on) Meka.colors.onAccent else Meka.colors.textPrimary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                                    .clickable(role = Role.Checkbox) {
-                                        haptics.light()
-                                        goingPending[c.wire] = !on
-                                        scope.launch { if (runCatching { core.setTripGoing(tripId, c.wire, !on) }.isFailure) goingPending.remove(c.wire) }
-                                    }
-                                    .semantics { contentDescription = c.label; stateDescription = if (on) "Going" else "Not going" }
-                                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-going-${c.wire}"),
-                            )
-                        }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(v.title, style = MekaType.nowTitle, color = Meka.colors.textPrimary)
+                    Crossfade(v.dates, animationSpec = MekaMotion.appear(reduced), label = "trip-dates") { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                    Crossfade(v.countdown, animationSpec = MekaMotion.appear(reduced), label = "trip-countdown") {
+                        Text(it, style = MekaType.captionStrong, color = if (v.countdownLit) Meka.colors.accent else Meka.colors.textSecondary)
                     }
-                    Text(TripListRules.LEAVE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
-                    // The saved time is the field's own text, drawn like typing, never the hint's grey (walk-through A13).
-                    var leaveText by remember(tripId, v.leave) { mutableStateOf(v.leave) }
-                    Field(
-                        TripListRules.LEAVE_HINT, Modifier.testTag("trip-leave-field"), value = leaveText, onValue = { leaveText = it },
-                        description = TripListRules.LEAVE_DESCRIPTION, keep = true,
-                    ) { text ->
-                        scope.launch {
-                            val r = runCatching { core.setTripLeave(tripId, text) }.getOrNull()
-                            if (r?.refused == false) haptics.light() else haptics.reject()
-                            leaveSaid = r
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        Crossfade(leaveSaid, animationSpec = MekaMotion.appear(reduced), label = "trip-leave-said", modifier = Modifier.weight(1f)) { r ->
-                            Text(r?.line ?: TripListRules.leaveCaption(v.leave), style = MekaType.caption,
-                                color = if (r?.refused == true) Meka.colors.accent else if (r == null && v.leave.isEmpty()) Meka.colors.textTertiary else Meka.colors.textSecondary,
-                                modifier = Modifier.testTag("trip-leave-caption"))
-                        }
-                        if (v.leave.isNotEmpty()) {
-                            Text("Clear", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
-                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                    .clickable(role = Role.Button) {
-                                        haptics.tick()
-                                        scope.launch { leaveSaid = runCatching { core.setTripLeave(tripId, "") }.getOrNull() }
-                                    }
-                                    .semantics { contentDescription = "Clear the leave time" }
-                                    .minTouch().padding(MekaSpace.xs))
-                        }
-                        Text(TripListRules.DONE, style = MekaType.itemMeta, color = Meka.colors.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                                .clickable(role = Role.Button) { haptics.tick(); editing = false; leaveSaid = null }
-                                .minTouch().padding(MekaSpace.xs).testTag("trip-going-done"))
+                    if (v.needsSetUp) {
+                        Text(TripListRules.SET_UP, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.minTouch().testTag("trip-set-up"))
                     }
                 }
+                Text("›", style = MekaType.body, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
             }
         }
         item(key = "bars") {
@@ -800,7 +740,67 @@ fun TripListsPane(core: MekaCore, tripId: String, onBack: () -> Unit) {
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
+    // Walk-through week 5, A17 (g6a 9): who's going and the leave time were an open chip row and an open box unfolded on
+    // the page under the header; they are now the header's sheet, rising over the page (LifeSheet), so the page keeps
+    // only the header's own line ("2 people · leave home 06:30 Wednesday").
+    LifeSheet(editing && v != null, TripListRules.EDIT, TRIP_GOING_SHEET_TAG, onClose = { editing = false; leaveSaid = null }) {
+        if (v != null) Column(Modifier.fillMaxWidth().testTag("trip-going"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(TripListRules.GOING_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                for (c in v.going) {
+                    val on = goingPending[c.wire] ?: c.on
+                    val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "trip-going-chip")
+                    Text(
+                        c.label, style = MekaType.caption, color = if (on) Meka.colors.onAccent else Meka.colors.textPrimary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+                            .clickable(role = Role.Checkbox) {
+                                haptics.light()
+                                goingPending[c.wire] = !on
+                                scope.launch { if (runCatching { core.setTripGoing(tripId, c.wire, !on) }.isFailure) goingPending.remove(c.wire) }
+                            }
+                            .semantics { contentDescription = c.label; stateDescription = if (on) "Going" else "Not going" }
+                            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).testTag("trip-going-${c.wire}"),
+                    )
+                }
+            }
+            Text(TripListRules.LEAVE_LABEL, style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+            // The saved time is the field's own text, drawn like typing, never the hint's grey (walk-through A13).
+            var leaveText by remember(tripId, v.leave) { mutableStateOf(v.leave) }
+            Field(
+                TripListRules.LEAVE_HINT, Modifier.testTag("trip-leave-field"), value = leaveText, onValue = { leaveText = it },
+                description = TripListRules.LEAVE_DESCRIPTION, keep = true,
+            ) { text ->
+                scope.launch {
+                    val r = runCatching { core.setTripLeave(tripId, text) }.getOrNull()
+                    if (r?.refused == false) haptics.light() else haptics.reject()
+                    leaveSaid = r
+                }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Crossfade(leaveSaid, animationSpec = MekaMotion.appear(reduced), label = "trip-leave-said", modifier = Modifier.weight(1f)) { r ->
+                    Text(r?.line ?: TripListRules.leaveCaption(v.leave), style = MekaType.caption,
+                        color = if (r?.refused == true) Meka.colors.accent else if (r == null && v.leave.isEmpty()) Meka.colors.textTertiary else Meka.colors.textSecondary,
+                        modifier = Modifier.testTag("trip-leave-caption"))
+                }
+                if (v.leave.isNotEmpty()) {
+                    Text("Clear", style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                            .clickable(role = Role.Button) {
+                                haptics.tick()
+                                scope.launch { leaveSaid = runCatching { core.setTripLeave(tripId, "") }.getOrNull() }
+                            }
+                            .semantics { contentDescription = "Clear the leave time" }
+                            .minTouch().padding(MekaSpace.xs))
+                }
+            }
+        }
+    }
+    }
 }
+
+/** The tag the screen tests find the header's who's-going sheet by. */
+internal const val TRIP_GOING_SHEET_TAG = "trip-going-sheet"
 
 /**
  * Slice 3b: Obi's card for one tab: a small brass orb and his line, the chips (only [keys] still showing; a tap adds

@@ -231,9 +231,13 @@ object TripListRules {
     const val LEAVE_NOT_READ = "Type the time you leave home, for example 06:30 or 6.30am."
     const val LEAVE_CLEARED = "No leave time"
 
-    /** Under the leave field: the example while none is saved, else what the saved time does (walk-through A13: never the example under a saved time). */
+    /**
+     * Under the leave field: the example while none is saved, else what the saved time does (walk-through A13: never the
+     * example under a saved time; week 5 g6a 9: nor the time again, which the header and the field already show).
+     */
     fun leaveCaption(leave: String): String =
-        if (leave.isBlank()) LEAVE_DESCRIPTION else "You leave home at $leave on the first day. Type another time to change it."
+        if (leave.isBlank()) LEAVE_DESCRIPTION else LEAVE_SAVED
+    const val LEAVE_SAVED = "On the first day; the countdown and the on-the-day reminders count from it. Type another time to change it."
     const val DONE = "Done"
     /** Slice 2e. */
     const val SAVE_TEMPLATE = "Save as a template for next time"
