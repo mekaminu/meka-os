@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -93,6 +92,7 @@ import os.meka.core.domain.NotifyChoiceRow
 import os.meka.core.domain.NotifyChoiceSheet
 import os.meka.android.notify.NotifyChoiceRowView
 import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.core.domain.MailLabelChoiceRules
 import os.meka.core.domain.MeetingPrepLead
 import os.meka.core.domain.MailWarrantyLevel
 import os.meka.core.facade.ConnectStart
@@ -375,7 +375,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     }
 }
 
-/** One account: its label and provider, the address, its state, Reconnect when the sign-in ended, and the label chips. */
+/** One account: its label and provider, the address, its state, Reconnect when the sign-in ended, and the Label row. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MailAccountCard(
@@ -477,14 +477,17 @@ private fun MailAccountCard(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),
         ) {
-            // The quality gate's Mail shots (slice 31): on the cover screen the three chips squeezed "Disconnect" onto two
-            // lines; the chips wrap among themselves instead and Disconnect stays whole at the end.
-            FlowRow(
-                Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-            ) {
-                MailAccountRules.LABELS.forEach { l -> LabelChip(l, selected = l == row.label) { if (l != row.label) onLabel(l) } }
+            // Walk-through week 5, A17: a "Label" · "Personal" row opening its sheet, not an open chip row; each label in
+            // the sheet says what it does (Business is the mail Protected time can hold). Disconnect stays whole at the end.
+            var choosingLabel by rememberSaveable(row.provider, row.email, "label") { mutableStateOf(false) }
+            NotifyChoiceRowView(MailLabelChoiceRules.row(row.label), Modifier.weight(1f), raised = true) {
+                haptics.tick(); choosingLabel = true
             }
+            if (choosingLabel) NotifyChoiceSheetView(
+                MailLabelChoiceRules.sheet(row.label),
+                onChoose = { name -> MailLabelChoiceRules.named(row.label, name)?.let(onLabel) },
+                onClose = { choosingLabel = false },
+            )
             Text(MailAccountRules.DISCONNECT, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, softWrap = false,
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); asking = !asking }.minTouch())
         }
@@ -793,19 +796,6 @@ private fun SenderLine(s: MailSenderRow, onRule: () -> Unit = {}, onUnsubscribe:
                 modifier = Modifier.clickable(role = Role.Button) { onUnsubscribe() }.minTouch().padding(start = MekaSpace.m))
         }
     }
-}
-
-/** A label chip; its fill blends as it changes (tick haptic from the caller). */
-@Composable
-private fun LabelChip(label: MailLabel, selected: Boolean, onClick: () -> Unit) {
-    val fill by animateColorAsState(if (selected) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(Meka.reducedMotion), label = "mail-chip")
-    Text(
-        label.label, style = MekaType.caption, color = if (selected) Meka.colors.onAccent else Meka.colors.textSecondary,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-            .clickable(role = Role.RadioButton) { onClick() }
-            .semantics { contentDescription = "Label ${label.label}"; this.selected = selected }
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
-    )
 }
 
 /** Nothing connected: the empty line and Connect Gmail · Connect Outlook in one raised card. */

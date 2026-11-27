@@ -2615,6 +2615,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(RenewalRules.shared.repeatLabel(r: .halfYearly), "Every 6 months")
     }
 
+    func testMailLabelChoicesReachSwift() {
+        // Walk-through week 5, A17: a mail account's label is a row with a menu, not an open row of label buttons.
+        let row = MailLabelChoiceRules.shared.row(label: .personal)
+        XCTAssertEqual(row.title, "Label")
+        XCTAssertEqual(row.value, "Personal")
+        let sheet = MailLabelChoiceRules.shared.sheet(label: .personal)
+        XCTAssertEqual(sheet.choices.map { $0.label }, ["Personal", "Business", "Outlook"])
+        XCTAssertEqual(sheet.choices.filter { $0.lit }.map { $0.name }, ["PERSONAL"])
+        XCTAssertEqual(MailLabelChoiceRules.shared.named(label: .personal, name: "BUSINESS"), .business)
+        XCTAssertNil(MailLabelChoiceRules.shared.named(label: .personal, name: "PERSONAL"))
+    }
+
     func testBriefLengthChoicesReachSwift() {
         // Walk-through week 5, A17: the brief's length is a row with a menu, not an open segmented row.
         let lengths = MorningBriefView.companion.EMPTY.lengths

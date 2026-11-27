@@ -46,6 +46,8 @@ import os.meka.core.domain.LifeAuditReviewRules
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MailAccountFacts
 import os.meka.core.domain.MailAccountRules
+import os.meka.core.domain.MailLabel
+import os.meka.core.domain.MailLabelChoiceRules
 import os.meka.core.domain.MailAccountsView
 import os.meka.core.domain.MailAutopilotPanelRules
 import os.meka.core.domain.MailAutoDraftRules
@@ -99,7 +101,7 @@ class MailScreensTest {
     private val waits = listOf("Sam Taylor" to 7, "Alex Brown" to 1)
 
     /** Navilife's server, as far as Mail asks it: sync and the mail accounts (never a token). */
-    private inner class Server(val mail: List<MailAccountFacts>) : SyncTransport, AccountsApi {
+    private inner class Server(var mail: List<MailAccountFacts>) : SyncTransport, AccountsApi {
         val ops = InMemoryServerOpStore()
         val service = SyncService(ops)
 
@@ -127,6 +129,11 @@ class MailScreensTest {
         override suspend fun accounts(): List<ConnectedAccount> = emptyList()
         override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> = emptyList()
         override suspend fun mailAccounts(): List<MailAccountFacts> = mail
+        // A17: the Label row's sheet relabels an account as the server does.
+        override suspend fun setMailLabel(provider: String, email: String, label: String): List<MailAccountFacts> {
+            mail = mail.map { if (it.provider == provider && it.email == email) it.copy(label = label) else it }
+            return mail
+        }
     }
 
     private val personal = MailAccountFacts(
@@ -336,6 +343,15 @@ class MailScreensTest {
             if (compose.onAllNodes(hasText(label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG)).fetchSemanticsNodes().isNotEmpty())
                 fail("$name: a \"$label\" chip on the page; it belongs in its row's sheet")
         }
+        // Each account's label is one "Label" · "Personal" row, no open Personal · Business · Outlook chip row.
+        MailLabel.entries.forEach { l ->
+            if (compose.onAllNodes(hasText(l.label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG)).fetchSemanticsNodes().isNotEmpty())
+                fail("$name: a \"${l.label}\" label chip on the page; it belongs in the account's Label sheet")
+        }
+        runBlocking { core.mailAccounts() }?.rows?.forEach { r ->
+            if (compose.onAllNodes(hasContentDescription(MailLabelChoiceRules.row(r.label).spoken)).fetchSemanticsNodes().isEmpty())
+                fail("$name: no Label row reading \"${r.label.label}\" on ${r.title}")
+        }
         val prep = runBlocking { core.meetingPrepLeadSetting() }
         if (compose.onAllNodes(hasContentDescription(MailChoiceRules.prepRow(prep).spoken)).fetchSemanticsNodes().isEmpty())
             fail("$name: no Meeting prep row reading \"${prep.label}\"")
@@ -377,6 +393,25 @@ class MailScreensTest {
         tapSaid(name, reset.spoken)
         until { samDays() == null && !sheetOpen() }
         if (samDays() != null) fail("$name: Back to usual left Sam Taylor on his own wait")
+    }
+
+    /** Works by hand (A17): the account's Label row opens its sheet, which says what Business does; Business relabels it, closes the sheet and the row says so. */
+    private fun labelByHand(core: MekaCore) {
+        val name = "mail-label-by-hand"
+        File(ScreenShots.path("mail", "cover-dark-label-by-hand")).delete()
+        fun label() = runBlocking { core.mailAccounts() }?.rows?.firstOrNull()?.label
+        if (label() != MailLabel.PERSONAL) fail("$name: the account starts as ${label()}")
+        tapSaid(name, MailLabelChoiceRules.row(MailLabel.PERSONAL).spoken)
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the Label row didn't open its sheet")
+        val business = MailLabelChoiceRules.sheet(MailLabel.PERSONAL).choices.first { it.name == MailLabel.BUSINESS.name }
+        tapSaid(name, business.spoken)
+        until { label() == MailLabel.BUSINESS && !sheetOpen() }
+        if (label() != MailLabel.BUSINESS) fail("$name: Business didn't relabel the account")
+        if (sheetOpen()) fail("$name: the sheet stayed open after a choice")
+        val row = MailLabelChoiceRules.row(MailLabel.BUSINESS).spoken
+        until { compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription(row)).fetchSemanticsNodes().isEmpty()) fail("$name: the row doesn't say Business")
     }
 
     private fun sheetOpen() = compose.onAllNodesWithTag(NOTIFY_CHOICE_SHEET_TAG).fetchSemanticsNodes().isNotEmpty()
@@ -466,6 +501,7 @@ class MailScreensTest {
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerEmpty() { mail("inner-dark-empty", Fill.EMPTY) }
     @Test @Config(qualifiers = ScreenShots.INNER) fun innerMany() { mail("inner-dark-many", Fill.MANY) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun prepByHand() { prepByHand(mail("cover-dark-prep-by-hand", Fill.EMPTY, below = false)) }
+    @Test @Config(qualifiers = ScreenShots.COVER) fun labelByHand() { labelByHand(mail("cover-dark-label-by-hand", Fill.ONE, below = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun waitsByHand() { waitsByHand(mail("cover-dark-waits-by-hand", Fill.MANY, below = false)) }
     @Test @Config(qualifiers = ScreenShots.COVER) fun autopilotByHand() {
         autopilotByHand(mail("cover-dark-by-hand", Fill.ONE, below = false))

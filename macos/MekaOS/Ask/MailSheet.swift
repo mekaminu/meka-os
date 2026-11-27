@@ -497,6 +497,27 @@ private struct MailAccountRowView: View {
     @State private var allSenders = false
 
     /// One sender: its name, "example.com · 8 emails · last Mon 12 Oct", Unsubscribe (or Open page), and the state once asked.
+    /// Walk-through week 5, A17: "Label" with a menu of Personal · Business · Outlook, each saying what it does.
+    private var labelRow: some View {
+        let label = row.label
+        let shown = MailLabelChoiceRules.shared.row(label: label)
+        let sheet = MailLabelChoiceRules.shared.sheet(label: label)
+        return HStack(spacing: MekaSpace.xs) {
+            Text(shown.title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            Picker(sheet.title, selection: Binding(get: { label.name }, set: { name in
+                if let picked = MailLabelChoiceRules.shared.named(label: label, name: name) { onLabel(picked) }
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text("\(c.label) · \(c.line)").tag(c.name) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
+            .accessibilityLabel(shown.spoken)
+        }
+        .font(MekaType.caption)
+    }
+
     @ViewBuilder private func senderLine(_ s: MailSenderRow) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 0) {
@@ -649,19 +670,9 @@ private struct MailAccountRowView: View {
                 .transition(.opacity)
             }
             HStack(spacing: MekaSpace.xs) {
-                ForEach(MailAccountRules.shared.LABELS, id: \.name) { label in
-                    let on = label == row.label
-                    Button(label.label) { if !on { onLabel(label) } }
-                        .buttonStyle(MekaPressStyle())
-                        .font(MekaType.caption)
-                        .foregroundStyle(on ? palette.onAccent : palette.textSecondary)
-                        .padding(.horizontal, MekaSpace.m)
-                        .padding(.vertical, MekaSpace.xxs)
-                        .background(Capsule().fill(on ? palette.accent : palette.hairline))
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
-                        .accessibilityLabel("Label \(label.label)")
-                        .accessibilityAddTraits(on ? .isSelected : [])
-                }
+                // Walk-through week 5, A17: a "Label" row with a menu of the same choices the Fold's sheet has, each
+                // saying what that label does, not an open row of label buttons.
+                labelRow
                 Spacer()
                 Button(MailAccountRules.shared.DISCONNECT) {
                     MekaHaptics.tick()
