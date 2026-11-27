@@ -98,7 +98,7 @@ struct TomorrowSheet: View {
                             .padding(.bottom, MekaSpace.xs)
                             .staggeredAppear(1)
                         if let said = model.tomorrowSaid {
-                            HStack(spacing: MekaSpace.s) {
+                            HStack(spacing: MekaSpace.xs) {
                                 Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                                 // Walk-through 2026-11-22: the moved line has an Undo, as the Fold's Undo bar.
                                 if model.tomorrowCanUndo {
