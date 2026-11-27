@@ -3541,6 +3541,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(sheet.choices.first(where: { $0.lit })?.line, "English only, wherever news shows")
         XCTAssertEqual(choices.named(on: false, name: CallChoiceRules.shared.ON)?.boolValue, true)
         XCTAssertNil(choices.named(on: false, name: CallChoiceRules.shared.OFF))
+        // Follow: "+ Follow a name or word" opens a sheet whose Follow waits for a name.
+        XCTAssertEqual(choices.followRow.label, "+ Follow a name or word")
+        XCTAssertEqual(choices.followSheet.addLabel, "Follow")
+        XCTAssertFalse(choices.canFollow(text: " "))
+        XCTAssertTrue(choices.canFollow(text: "Arsenal"))
     }
 
     func testAboutYouChoicesReachSwift() {

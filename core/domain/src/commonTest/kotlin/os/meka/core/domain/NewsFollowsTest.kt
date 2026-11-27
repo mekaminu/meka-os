@@ -52,7 +52,7 @@ class NewsFollowsTest {
         assertEquals("BBC News · 20 min ago · Arsenal", place.lanes.first().items.first().meta)
         assertEquals(listOf("a1"), place.lanes[1].items.map { it.id })
         assertEquals(listOf("Arsenal · 2", "Bitcoin · none yet"), place.follows.map { it.label })
-        assertEquals("Following 2 · stories naming them lead News, the ticker and the brief · tap one to stop", place.followsLine)
+        assertEquals("Following 2 · stories naming them lead News, the ticker and the brief", place.followsLine)
         // Nothing followed: as before, and the line says what following does.
         val none = NewsRules.place(all, topics, now)
         assertEquals(listOf("ai"), none.lanes.map { it.topicId })

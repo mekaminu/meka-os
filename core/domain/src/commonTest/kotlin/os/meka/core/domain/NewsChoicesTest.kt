@@ -2,6 +2,7 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -33,5 +34,29 @@ class NewsChoicesTest {
         assertEquals(false, rules.named(true, CallChoiceRules.OFF))
         assertNull(rules.named(false, CallChoiceRules.OFF))
         assertNull(rules.named(true, "later"))
+    }
+
+    @Test
+    fun followIsARowOpeningASheetThatWaitsForAName() {
+        assertEquals("+ Follow a name or word", rules.followRow.label)
+        assertEquals("Follow", rules.followSheet.addLabel)
+        assertFalse(rules.canFollow(""))
+        assertFalse(rules.canFollow(" , a ,"))
+        assertTrue(rules.canFollow("Arsenal"))
+        assertTrue(rules.canFollow("x, Lamine Yamal"))
+    }
+
+    @Test
+    fun followingIsOneRowNamingThemAndASheetToStopOne() {
+        assertNull(rules.followingRow(emptyList()))
+        val two = listOf(NewsFollowChoice("arsenal", "Arsenal", 3), NewsFollowChoice("lamine yamal", "Lamine Yamal", 0))
+        assertEquals(NotifyChoiceRow("Following", "Arsenal, Lamine Yamal", "Following 2: Arsenal, Lamine Yamal. Opens the list"), rules.followingRow(two))
+        assertEquals("Arsenal, Lamine Yamal +1", rules.followingRow(two + NewsFollowChoice("bitcoin", "Bitcoin", 1))?.value)
+        val s = rules.followingSheet(two + NewsFollowChoice("bitcoin", "Bitcoin", 1))
+        assertEquals(listOf("Arsenal", "Lamine Yamal", "Bitcoin"), s.choices.map { it.label })
+        assertEquals(listOf("3 stories in the last two days · stop following", "No stories yet · stop following", "1 story in the last two days · stop following"), s.choices.map { it.line })
+        assertTrue(s.choices.none { it.lit })
+        assertEquals("Arsenal", rules.unfollowNamed(two, "Arsenal"))
+        assertNull(rules.unfollowNamed(two, "Chelsea"))
     }
 }

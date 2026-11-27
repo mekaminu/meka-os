@@ -20,7 +20,7 @@ import SwiftUI
 /// Slice 2: Topics → Sources lists every source in the chosen topics with its story count, a switch each (synced; off
 /// leaves its stories out of News, the ticker and the brief), and a chosen topic with nothing to show says why after
 /// the lanes ("AI · its sources are off").
-/// Slice 3: Follow — a field under the captions takes a team, a person or a word ("Arsenal, Lamine Yamal"); stories
+/// Slice 3: Follow — "+ Follow a name or word" under the captions opens a sheet that takes a team, a person or a word ("Arsenal, Lamine Yamal"); stories
 /// naming one lead News in a Following lane whatever their topic, and reach the ticker and the brief on both apps.
 /// Topics → Following lists each with its count; choosing one stops following it, with Undo.
 struct NewsSheet: View {
@@ -33,7 +33,7 @@ struct NewsSheet: View {
     @State private var forward = true
     @State private var marked: String?
     @State private var trainLine: CoreModel.QueueSaid?
-    @State private var followText = ""
+    @State private var followAdding = false
     @State private var followNote: String?
     @State private var unfollowed: String?
 
@@ -68,15 +68,9 @@ struct NewsSheet: View {
     /// Full news hub, slice 3: the Follow field, and its line (what following does, or what just changed, with Undo).
     @ViewBuilder
     private func followRow(_ place: NewsPlace) -> some View {
+        // Walk-through week 5, A17: no open Follow box on the page; "+ Follow a name or word" opens the Follow sheet.
         if place.canFollowMore {
-            TextField("Follow a team, person or word…", text: $followText)
-                .textFieldStyle(.roundedBorder).font(MekaType.body)
-                .onSubmit {
-                    let typed = followText
-                    guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                    followText = ""
-                    Task { unfollowed = nil; followNote = await model.newsFollow(typed) }
-                }
+            GoalAddRowButton(row: NewsChoiceRules.shared.followRow, palette: palette) { followAdding = true }
         }
         HStack {
             Text(LoneWordGlue.shared.kept(line: followNote ?? place.followsLine)).font(MekaType.caption)
@@ -91,6 +85,12 @@ struct NewsSheet: View {
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: followNote)
+        .sheet(isPresented: $followAdding) {
+            LineAddSheet(sheet: NewsChoiceRules.shared.followSheet, palette: palette,
+                         canAdd: { NewsChoiceRules.shared.canFollow(text: $0) }, close: { followAdding = false }) { typed in
+                Task { unfollowed = nil; followNote = await model.newsFollow(typed) }
+            }
+        }
         .task(id: followNote) {
             guard followNote != nil else { return }
             try? await Task.sleep(for: .seconds(6))

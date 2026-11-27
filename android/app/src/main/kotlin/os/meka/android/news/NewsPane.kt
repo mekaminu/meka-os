@@ -12,11 +12,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -74,12 +69,13 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.goals.Chips
+import os.meka.android.goals.GoalAddRowView
+import os.meka.android.goals.LineAddSheetView
 import os.meka.android.notify.NotifyChoiceRowView
 import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.calendar.EventDetailPane
-import os.meka.android.today.SectionLabel
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NewsChoiceRules
@@ -143,6 +139,25 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
         onChoose = { name -> NewsChoiceRules.named(place.spanishSources, name)?.let { on -> scope.launch { runCatching { core.setNewsSpanish(on) } } } },
         onClose = { spanishOpen = false },
     )
+    // Walk-through week 5, A17: the Following list and the Follow sheet.
+    var followingOpen by remember { mutableStateOf(false) }
+    var followAdding by rememberSaveable { mutableStateOf(false) }
+    if (followingOpen) NotifyChoiceSheetView(
+        NewsChoiceRules.followingSheet(place.follows),
+        onChoose = { name ->
+            NewsChoiceRules.unfollowNamed(place.follows, name)?.let { f ->
+                scope.launch {
+                    if (runCatching { core.newsUnfollow(f) }.getOrDefault(false)) { unfollowed = f; followNote = "Stopped following $f" }
+                }
+            }
+        },
+        onClose = { followingOpen = false },
+    )
+    if (followAdding) LineAddSheetView(
+        NewsChoiceRules.followSheet, canAdd = NewsChoiceRules::canFollow, maxLength = NewsRules.MAX_FOLLOW_CHARS * 4,
+        onAdd = { typed -> scope.launch { unfollowed = null; followNote = runCatching { core.newsFollow(typed) }.getOrNull() } },
+        onClose = { followAdding = false },
+    )
     BackHandler(enabled = openId != null && eventOpen == null) { openId = null }
     BackHandler(enabled = eventOpen != null) { eventOpen = null }
 
@@ -203,31 +218,17 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                             }
                         }
                         // Full news hub, slice 3: words and names he follows; a story naming one leads News (any topic),
-                        // the ticker and the brief. A tap on a chip stops following it, with Undo.
-                        Box(Modifier.padding(top = MekaSpace.m)) {
-                            if (place.follows.isNotEmpty()) {
-                                Chips("Follow", place.follows.map { it.label to true }) { i ->
-                                    val f = place.follows[i]
-                                    haptics.tick()
-                                    scope.launch {
-                                        if (runCatching { core.newsUnfollow(f.name) }.getOrDefault(false)) {
-                                            unfollowed = f.name; followNote = "Stopped following ${f.name}"
-                                        }
-                                    }
-                                }
-                            } else {
-                                SectionLabel("Follow")
+                        // the ticker and the brief. Walk-through week 5, A17: no open chip row or box on the page — the
+                        // names are one "Following" · "Arsenal, Lamine Yamal" › row opening the list (choosing one
+                        // stops following it, with Undo), and "+ Follow a name or word" opens the Follow sheet.
+                        NewsChoiceRules.followingRow(place.follows)?.let { row ->
+                            Box(Modifier.padding(top = MekaSpace.m).testTag(NEWS_FOLLOWING_ROW_TAG)) {
+                                NotifyChoiceRowView(row) { followingOpen = true }
                             }
                         }
                         if (place.canFollowMore) {
-                            Box(Modifier.padding(top = MekaSpace.xs)) {
-                                FollowField { typed ->
-                                    haptics.tick()
-                                    scope.launch {
-                                        unfollowed = null
-                                        followNote = runCatching { core.newsFollow(typed) }.getOrNull()
-                                    }
-                                }
+                            Box(Modifier.padding(top = if (place.follows.isEmpty()) MekaSpace.m else MekaSpace.xs)) {
+                                GoalAddRowView(NewsChoiceRules.followRow, Modifier.testTag(NEWS_FOLLOW_ROW_TAG)) { followAdding = true }
                             }
                         }
                         AnimatedContent(followNote, label = "follow-note") { note ->
@@ -548,25 +549,6 @@ private fun NavButton(label: String, id: String?, go: (String) -> Unit) {
     )
 }
 
-/** Full news hub, slice 3: the Follow field under Topics — type a team, a person or a word, Done follows it. */
-@Composable
-private fun FollowField(onDone: (String) -> Unit) {
-    var text by rememberSaveable { mutableStateOf("") }
-    val hint = "Follow a team, person or word…"
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
-    ) {
-        if (text.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
-        BasicTextField(
-            value = text,
-            onValueChange = { text = it.take(200) },
-            singleLine = true,
-            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-            cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onDone(text); text = "" } }),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = hint },
-        )
-    }
-}
+/** The tags the screen tests find News's Following row and "+ Follow a name or word" row by. */
+const val NEWS_FOLLOWING_ROW_TAG = "news-following-row"
+const val NEWS_FOLLOW_ROW_TAG = "news-follow-row"

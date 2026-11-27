@@ -352,11 +352,11 @@ object NewsRules {
         return follows.firstOrNull { f -> followKey(f).let { k -> k.isNotEmpty() && text.contains(" $k ") } }
     }
 
-    /** "Follow a word or name…" with none; "Following 2 · stories naming them lead News, the ticker and the brief · tap one to stop". */
+    /** "Follow a team, …" with none; "Following 2 · stories naming them lead News, the ticker and the brief". */
     fun followsLine(follows: List<NewsFollowChoice>): String = when {
         follows.isEmpty() -> "Follow a team, a person, a company or a word: stories naming it lead News, the ticker and the brief, whatever their topic"
-        follows.size >= MAX_FOLLOWS -> "Following $MAX_FOLLOWS, the most · tap one to stop following it"
-        else -> "Following ${follows.size} · stories naming them lead News, the ticker and the brief · tap one to stop"
+        follows.size >= MAX_FOLLOWS -> "Following $MAX_FOLLOWS, the most · stop one under Following to add another"
+        else -> "Following ${follows.size} · stories naming them lead News, the ticker and the brief"
     }
 
     /** A source's key: its name as [storyKey] makes it ("BBC  Sport" and "bbc sport" are one source). */

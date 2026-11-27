@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -37,6 +38,9 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.goals.GOAL_ADD_SHEET_TAG
+import os.meka.android.news.NEWS_FOLLOWING_ROW_TAG
+import os.meka.android.news.NEWS_FOLLOW_ROW_TAG
 import os.meka.android.news.NewsPane
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.news.PICTURE_TAG
@@ -370,6 +374,57 @@ class NewsScreensTest {
         turns()
         ScreenShots.assertShows(compose, name, "Topics")
         if (rowShown(false)) fail("$name: Done left the topics open")
+    }
+
+    /**
+     * Walk-through week 5, A17: Follow has no open box or chip row on the page. "+ Follow a name or word" opens the Follow
+     * sheet (Follow dark until a name is typed); following one puts a "Following" · "Arsenal" row there, which opens the
+     * list; choosing a name stops following it and the page offers Undo.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun followAndStopByHand() {
+        val name = "cover-dark-follow"
+        val core = setUp(ThemeChoice.DARK, Fill.MANY)
+        untilShows(name, core.newsPlace.value.items.first().title)
+        tap(name, "Topics", hasTestTag("news-topics"))
+        until { compose.onAllNodes(hasTestTag(NEWS_FOLLOW_ROW_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            fail("$name: an open input box is on the page")
+        if (compose.onAllNodes(hasTestTag(NEWS_FOLLOWING_ROW_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            fail("$name: a Following row with nothing followed")
+
+        fun addOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val box = hasContentDescription(NewsChoiceRules.followSheet.spokenHint) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)
+        val follow = hasContentDescription("${NewsChoiceRules.followSheet.addLabel}, ${NewsChoiceRules.followSheet.title}")
+        fun followDark() = compose.onAllNodes(follow, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == true
+        compose.onNodeWithTag(NEWS_FOLLOW_ROW_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        until { addOpen() }
+        if (!addOpen()) fail("$name: + Follow a name or word opened no sheet")
+        if (!followDark()) fail("$name: Follow is lit with nothing typed")
+        compose.onAllNodes(box, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("Arsenal")) }
+        turns(500)
+        if (followDark()) fail("$name: Follow stayed dark with a name typed")
+        compose.onAllNodes(follow, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { !addOpen() && core.newsPlace.value.follows.any { it.name == "Arsenal" } }
+        if (addOpen()) fail("$name: the Follow sheet stayed open after Follow")
+        if (core.newsPlace.value.follows.none { it.name == "Arsenal" }) fail("$name: Follow didn't follow Arsenal")
+
+        val row = NewsChoiceRules.followingRow(core.newsPlace.value.follows) ?: fail("$name: no Following row in the rules")
+        until { compose.onAllNodes(hasContentDescription(row.spoken) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("news", name))
+        tap(name, "Following", hasContentDescription(row.spoken))
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: Following opened no sheet")
+        val line = NewsChoiceRules.followingSheet(core.newsPlace.value.follows).choices.first { it.label == "Arsenal" }.line
+        if (compose.onAllNodes(hasText(line, substring = true) and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("$name: the Following sheet doesn't say \"$line\"")
+        compose.onAllNodes(hasText("Arsenal") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() && core.newsPlace.value.follows.isEmpty() }
+        if (core.newsPlace.value.follows.isNotEmpty()) fail("$name: choosing Arsenal didn't stop following it")
+        untilShows(name, "Stopped following Arsenal")
+        ScreenShots.assertShows(compose, name, "Undo")
     }
 
     /** Waits (real time too: the core writes on its own thread) until [done]. */
