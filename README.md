@@ -233,6 +233,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/lists/cover-dark-many.png](docs/screens/fold/lists/cover-dark-many.png)
 - [fold/lists/cover-dark-one.png](docs/screens/fold/lists/cover-dark-one.png)
 - [fold/lists/cover-dark-promises-by-hand.png](docs/screens/fold/lists/cover-dark-promises-by-hand.png)
+- [fold/lists/cover-dark-renewals-by-hand.png](docs/screens/fold/lists/cover-dark-renewals-by-hand.png)
 - [fold/lists/cover-dark-renewals.png](docs/screens/fold/lists/cover-dark-renewals.png)
 - [fold/lists/cover-dark-shopping-by-hand.png](docs/screens/fold/lists/cover-dark-shopping-by-hand.png)
 - [fold/lists/cover-dark-shopping.png](docs/screens/fold/lists/cover-dark-shopping.png)
