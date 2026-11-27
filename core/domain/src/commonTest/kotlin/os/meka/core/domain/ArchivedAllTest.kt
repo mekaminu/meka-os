@@ -180,4 +180,49 @@ class ArchivedAllTest {
         assertTrue(l.kinds.none { it.label == ArchivedAllRules.ALL || it.label == "All" }, "the kind row has no chip named like the sender row's")
         assertTrue(l.senders.none { it.label.startsWith(ArchivedAllRules.ALL) })
     }
+
+    /** Week 5, A17: the kind and sender chip rows (cut at the cover's edge) are rows opening a sheet each. */
+    @Test
+    fun theKindAndSenderFiltersAreRowsOpeningTheirSheets() {
+        val today = mixed("mt1", listOf(
+            email("a", "Deliveroo", "2 for 1", 9 * 60),
+            email("b", "Deliveroo", "Lunch deal", 9 * 60 + 30),
+            email("c", "Amazon", "Deals", 10 * 60),
+            email("d", "The Digest", "This week", 10 * 60 + 5, tidy = MailTidy.NEWSLETTER),
+        ), at(12 * 60))
+        val promos = ArchivedAllRules.list(listOf(today), null, now, cal, TidiedKind.PROMOS.id)
+        assertEquals(NotifyChoiceRow("Showing", "Promos · 3", "Showing Promos · 3. Opens the choices"), promos.kindRow)
+        assertEquals(NotifyChoiceRow("From", "All senders", "From All senders. Opens the senders"), promos.senderRow)
+
+        val kinds = ArchivedAllRules.kindSheet(promos)
+        assertEquals("Which tidied mail", kinds.title)
+        assertEquals(listOf("*", "all", "newsletters", "promos", "junk"), kinds.choices.map { it.name })
+        assertEquals(listOf("Last 30 days", "Today · 4", "Newsletters · 1", "Promos · 3", "Junk & scams · 0"), kinds.choices.map { it.label })
+        assertEquals(listOf("promos"), kinds.choices.filter { it.lit }.map { it.name })
+        assertEquals("Today's promos", kinds.choices[3].line)
+        assertEquals("Every email tidied in the last 30 days, while Put back works", kinds.choices[0].line)
+        assertNull(ArchivedAllRules.kindNamed("*"))
+        assertEquals("junk", ArchivedAllRules.kindNamed("junk"))
+
+        val senders = ArchivedAllRules.senderSheet(promos)
+        assertEquals(listOf("All senders", "Deliveroo", "Amazon"), senders.choices.map { it.label })
+        assertEquals(listOf("*", "deliveroo", "amazon"), senders.choices.map { it.name })
+        assertEquals("2 promos tidied today", senders.choices[1].line)
+        assertEquals("1 promo tidied today", senders.choices[2].line)
+        assertTrue(senders.choices[0].lit)
+        assertNull(ArchivedAllRules.senderNamed("*"))
+
+        // A chosen sender names itself on the row and is lit in the sheet; the last 30 days says emails.
+        val one = ArchivedAllRules.list(listOf(today), "deliveroo", now, cal)
+        assertEquals("Deliveroo", one.senderRow?.value)
+        assertEquals("Last 30 days", one.kindRow?.value)
+        val sheet = ArchivedAllRules.senderSheet(one)
+        assertEquals(listOf("deliveroo"), sheet.choices.filter { it.lit }.map { it.name })
+        assertEquals("2 emails tidied in the last 30 days", sheet.choices.first { it.name == "deliveroo" }.line)
+
+        // Nothing tidied today and no kind chosen: no kind row; nothing at all: no sender row either.
+        val old = mixed("mt2", listOf(email("e", "Deliveroo", "Tonight only", 8 * 60, day - 1)), at(18 * 60, day - 1))
+        assertNull(ArchivedAllRules.list(listOf(old), null, now, cal).kindRow)
+        assertNull(ArchivedAllRules.list(emptyList(), null, now, cal).senderRow)
+    }
 }

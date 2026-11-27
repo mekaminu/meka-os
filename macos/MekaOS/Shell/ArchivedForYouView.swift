@@ -390,10 +390,10 @@ private struct ArchivedPill: View {
 }
 
 /// "Archived for you" shows which emails, slice 3: **All tidied mail** — every email Navilife tidied in the last 30 days,
-/// newest first under its day, with the senders as filter chips ("Deliveroo · 12"; All first). Click an email: its
+/// newest first under its day, filtered by a "Showing" and a "From" row, each a menu of its choices (week 5, A17: they
+/// were chip rows). Click an email: its
 /// preview unfolds under it as on the card (Put back, Always keep, Unsubscribe, Undo on the bar inside the sheet).
-/// Motion: the sheet scale-fades (system); the summary cross-fades; a chosen chip blends to the accent with a tick
-/// haptic; days and rows stagger in and move on the expand spring as the filter changes; a preview unfolds on the
+/// Motion: the sheet scale-fades (system); the summary cross-fades; a pick from a filter menu ticks; days and rows stagger in and move on the expand spring as the filter changes; a preview unfolds on the
 /// expand spring. Reduce Motion: cross-fades. Read again every 20 s while open (the server's answers come by sync).
 struct ArchivedAllSheet: View {
     @Environment(CoreModel.self) private var model
@@ -470,24 +470,16 @@ struct ArchivedAllSheet: View {
                 .contentTransition(.opacity)
                 .accessibilityLabel(list?.spoken ?? "")
                 .staggeredAppear(0)
-            if let l = list, !l.kinds.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: MekaSpace.xs) {
-                        ForEach(l.kinds, id: \.label) { k in
-                            chip(k.label, spoken: k.spoken, selected: k.selected) { kind = k.kind; sender = nil }
-                        }
-                    }
+            // Week 5, A17: the kind and sender chip rows are a "Showing" and a "From" row, each a menu of its sheet.
+            if let l = list, let row = l.kindRow {
+                filterRow(row, sheet: ArchivedAllRules.shared.kindSheet(list: l)) { name in
+                    kind = ArchivedAllRules.shared.kindNamed(name: name); sender = nil
                 }
                 .staggeredAppear(1)
             }
-            if let l = list, !l.senders.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: MekaSpace.xs) {
-                        chip(ArchivedAllRules.shared.ALL, spoken: "Show every sender", selected: l.allSelected) { sender = nil }
-                        ForEach(l.senders, id: \.id) { s in
-                            chip(s.label, spoken: s.spoken, selected: s.selected) { sender = s.selected ? nil : s.id }
-                        }
-                    }
+            if let l = list, let row = l.senderRow {
+                filterRow(row, sheet: ArchivedAllRules.shared.senderSheet(list: l)) { name in
+                    sender = ArchivedAllRules.shared.senderNamed(name: name)
                 }
                 .staggeredAppear(1)
             }
@@ -533,21 +525,29 @@ struct ArchivedAllSheet: View {
         .background(palette.surface)
     }
 
-    private func chip(_ label: String, spoken: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button {
-            MekaHaptics.tick()
-            openEmail = nil
-            action()
-        } label: {
-            Text(label).font(MekaType.itemMeta).lineLimit(1)
-                .foregroundStyle(selected ? palette.accent : palette.textSecondary)
-                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                .background(selected ? palette.surfaceRaised : palette.background, in: Capsule())
-                .animation(MekaMotion.expand(reduced: reduceMotion), value: selected)
+    /// A filter row: its title, then a menu of its sheet's choices (each line as the help); a pick sends only its name.
+    private func filterRow(_ row: NotifyChoiceRow, sheet: NotifyChoiceSheet, choose: @escaping (String) -> Void) -> some View {
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack {
+            Text(row.title).foregroundStyle(palette.textPrimary)
+            Spacer()
+            Picker(sheet.title, selection: Binding(get: { lit }, set: { name in
+                guard name != lit else { return }
+                MekaHaptics.tick()
+                openEmail = nil
+                choose(name)
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text(c.label).tag(c.name) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(sheet.choices.first(where: { $0.lit })?.line ?? sheet.note)
+            .accessibilityLabel(row.spoken)
         }
-        .buttonStyle(MekaPressStyle())
-        .accessibilityLabel(spoken)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .font(MekaType.itemMeta)
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
     }
 
     /// Slice 4: Select / Done and "Trash all 38 promos"; while selecting, the bar ("3 selected · Select all · Trash 3 ·

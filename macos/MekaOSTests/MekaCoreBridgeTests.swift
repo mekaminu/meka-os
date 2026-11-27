@@ -2628,6 +2628,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(WakeBufferChoiceRules.shared.named(v: wake, name: "60"))
     }
 
+    func testArchivedAllFiltersReachSwift() {
+        // Walk-through week 5, A17: All tidied mail's kind and sender chip rows are a Showing and a From menu.
+        XCTAssertEqual(ArchivedAllRules.shared.SHOWING, "Showing")
+        XCTAssertEqual(ArchivedAllRules.shared.FROM, "From")
+        XCTAssertNil(ArchivedAllRules.shared.kindNamed(name: ArchivedAllRules.shared.EVERY))
+        XCTAssertEqual(ArchivedAllRules.shared.kindNamed(name: "promos"), "promos")
+        XCTAssertNil(ArchivedAllRules.shared.senderNamed(name: ArchivedAllRules.shared.EVERY))
+        XCTAssertEqual(ArchivedAllRules.shared.kindLine(kind: "promos"), "Today's promos")
+        XCTAssertEqual(ArchivedAllRules.shared.kindLine(kind: nil), "Every email tidied in the last 30 days, while Put back works")
+    }
+
     func testRenewalBoardReachesSwift() {
         // Renewals keep their email, slice 2: the cards' tiles, tabs and words reach the Mac (only Strings cross).
         let today = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 29)

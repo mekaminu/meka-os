@@ -19,6 +19,10 @@ data class ArchivedAllSender(
     val selected: Boolean,
     /** "Show only Deliveroo's 12 emails". */
     val spoken: String,
+    /** "Deliveroo" (week 5, A17: the From sheet's label). */
+    val name: String = "",
+    /** Its tidied emails in the list's window. */
+    val count: Int = 0,
 )
 
 /**
@@ -73,6 +77,13 @@ data class ArchivedAllList(
     val spoken: String,
     /** Tidied mail, slice 4: "Trash all 38 promos" behind a confirm, on a chosen kind; null otherwise or when none can go. */
     val trashAll: ArchivedTrashAll? = null,
+    /**
+     * Week 5, A17: "Showing" · "Last 30 days" › in place of the kind chip row (it ran off the cover's edge), opening
+     * [ArchivedAllRules.kindSheet]; null when there are no kinds.
+     */
+    val kindRow: NotifyChoiceRow? = null,
+    /** "From" · "All senders" › in place of the sender chip row, opening [ArchivedAllRules.senderSheet]; null with no senders. */
+    val senderRow: NotifyChoiceRow? = null,
 )
 
 /**
@@ -108,6 +119,68 @@ object ArchivedAllRules {
         "Tap one to see it, put it back or keep its sender. Shown as the sender wrote it, nothing in it is acted on."
 
     private const val DAY_MS = 86_400_000L
+
+    // ---- Week 5, A17: the kind and sender chip rows are rows opening a sheet (they ran off the cover's edge) ----
+
+    const val SHOWING = "Showing"
+    const val FROM = "From"
+    const val KIND_TITLE = "Which tidied mail"
+    const val KIND_NOTE = "Only changes what this list shows. Nothing is moved or put back."
+    const val SENDER_TITLE = "Whose mail"
+    const val SENDER_NOTE = "The senders Navilife tidied most, and the one you chose. Only changes what this list shows."
+    /** The sheet's name for "no filter": the last 30 days, or every sender. */
+    const val EVERY = "*"
+
+    /** What each kind shows, said in its sheet. */
+    fun kindLine(kind: String?): String = when (val k = TidiedKind.of(kind)) {
+        null -> "Every email tidied in the last 30 days, while Put back works"
+        TidiedKind.ALL -> "Everything tidied today"
+        else -> "Today's ${k.many}"
+    }
+
+    /** "Showing" · "Promos · 8" ›. */
+    fun kindRow(kinds: List<ArchivedAllKindChip>): NotifyChoiceRow? {
+        val lit = kinds.firstOrNull { it.selected } ?: kinds.firstOrNull() ?: return null
+        return NotifyChoiceRow(SHOWING, lit.label, "$SHOWING ${lit.label}. Opens the choices")
+    }
+
+    /** The kinds, each saying what it shows, the one in force lit. */
+    fun kindSheet(list: ArchivedAllList): NotifyChoiceSheet = NotifyChoiceSheet(
+        KIND_TITLE, KIND_NOTE,
+        list.kinds.map { k ->
+            val line = kindLine(k.kind)
+            NotifyChoice(k.kind ?: EVERY, k.label, line, k.selected, "${k.label}, $line" + if (k.selected) ", chosen" else "")
+        },
+    )
+
+    /** The kind a sheet choice names: a [TidiedKind.id], or null for the last 30 days. */
+    fun kindNamed(name: String): String? = name.takeIf { it != EVERY }
+
+    /** "From" · "Deliveroo" ›, "All senders" with none chosen. */
+    fun senderRow(senders: List<ArchivedAllSender>): NotifyChoiceRow? {
+        if (senders.isEmpty()) return null
+        val value = senders.firstOrNull { it.selected }?.name ?: ALL
+        return NotifyChoiceRow(FROM, value, "$FROM ${value}. Opens the senders")
+    }
+
+    /** All senders, then the senders by how many were tidied, each saying how many, the one in force lit. */
+    fun senderSheet(list: ArchivedAllList): NotifyChoiceSheet {
+        val since = if (list.kind != null) "today" else "in the last 30 days"
+        val noun = TidiedKind.of(list.kind)?.takeIf { it != TidiedKind.ALL }
+        fun nouns(n: Int) = if (noun != null) plural(n, noun.one, noun.many) else plural(n, "email")
+        val all = NotifyChoice(EVERY, ALL, "Every sender's mail on this list", list.allSelected,
+            "$ALL, every sender's mail on this list" + if (list.allSelected) ", chosen" else "")
+        return NotifyChoiceSheet(
+            SENDER_TITLE, SENDER_NOTE,
+            listOf(all) + list.senders.map { s ->
+                val line = "${nouns(s.count)} tidied $since"
+                NotifyChoice(s.id, s.name, line, s.selected, "${s.name}, $line" + if (s.selected) ", chosen" else "")
+            },
+        )
+    }
+
+    /** The sender a sheet choice names: an [ArchivedAllSender.id], or null for every sender. */
+    fun senderNamed(name: String): String? = name.takeIf { it != EVERY }
 
     private fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
 
@@ -175,7 +248,7 @@ object ArchivedAllRules {
         }
         val senders = top.map { (id, es) ->
             val name = es.first().second.from
-            ArchivedAllSender(id, "$name · ${es.size}", id == chosen, "Show only $name's ${plural(es.size, "email")}")
+            ArchivedAllSender(id, "$name · ${es.size}", id == chosen, "Show only $name's ${plural(es.size, "email")}", name, es.size)
         }
 
         val tiles = NeedsYouMailRules.tiles(todays)
@@ -239,6 +312,8 @@ object ArchivedAllRules {
                 shownEmails.filter { (b, e) -> MailTidiedAction.TRASH in MailTidiedAskRules.available(b, e, nowMs) }
                     .map { (b, e) -> "${b.id}|${e.key}" }.distinct(),
             ),
+            kindRow = kindRow(kinds),
+            senderRow = senderRow(senders),
         )
     }
 }

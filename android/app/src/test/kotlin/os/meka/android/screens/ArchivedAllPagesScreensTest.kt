@@ -9,7 +9,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
@@ -28,8 +37,10 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.android.today.ARCHIVED_ALL_PAGER_TAG
 import os.meka.android.today.ArchivedAllPane
+import os.meka.core.domain.ArchivedAllRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.TidiedKind
 import os.meka.core.facade.MekaCore
@@ -176,5 +187,63 @@ class ArchivedAllPagesScreensTest {
         compose.onNodeWithText("Clear this page").performClick()
         turns(800)
         if (!onScreen("5 selected")) fail("Clear this page should keep page one's five")
+    }
+
+    private fun sheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty()
+
+    private fun waitFor(ok: () -> Boolean) { repeat(30) { if (!ok()) turns(200) } }
+
+    private fun has(spoken: String) = compose.onAllNodes(hasContentDescription(spoken)).fetchSemanticsNodes().isNotEmpty()
+
+    /** A sheet line read with plain spaces (the sheet keeps short words with their neighbours). */
+    private fun sheetSays(line: String): Boolean {
+        val says = SemanticsMatcher("reads \"$line\"") { n ->
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.replace('\u00A0', ' ') == line
+        }
+        return compose.onAllNodes(says and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+    }
+
+    private fun pick(label: String) {
+        compose.onAllNodes(hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        waitFor { !sheetOpen() }
+        if (sheetOpen()) fail("choosing $label didn't close the sheet")
+        turns(1_000)
+    }
+
+    /**
+     * Week 5, A17: the kind and sender chip rows ran off the cover's edge ("Newsletter", "S" in "Sender 2 · 1 | S").
+     * Now "Showing" · "Promos · 8" › and "From" · "All senders" › rows open their sheets, and a pick filters the list.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun theFiltersAreRowsOpeningTheirSheetsByHand() {
+        open()
+        toTop()
+        val showing = "Showing Promos · 8. Opens the choices"
+        if (!has(showing)) fail("no \"$showing\" row")
+        if (!has("From All senders. Opens the senders")) fail("no From · All senders row")
+        // No open chip of a kind or a sender on the page.
+        listOf(ArchivedAllRules.LAST_30, "Newsletters · ", "${shops.first()} · 1").forEach { chip ->
+            if (ScreenShots.texts(compose).any { it.startsWith(chip) }) fail("an open \"$chip\" chip is still on the page")
+        }
+        compose.onNode(hasContentDescription(showing)).performClick()
+        waitFor { sheetOpen() }
+        if (!sheetOpen()) fail("Showing didn't open its sheet")
+        if (!sheetSays("Today's promos")) fail("the kind sheet doesn't say what Promos shows")
+        pick(ArchivedAllRules.LAST_30)
+        waitFor { has("Showing Last 30 days. Opens the choices") }
+        if (!has("Showing Last 30 days. Opens the choices")) fail("the row doesn't say Last 30 days")
+
+        val shop = shops.last()
+        compose.onNode(hasContentDescription("From All senders. Opens the senders")).performClick()
+        waitFor { sheetOpen() }
+        if (!sheetOpen()) fail("From didn't open its sheet")
+        if (!sheetSays("1 email tidied in the last 30 days")) fail("the sender sheet doesn't say how many each sent")
+        pick(shop)
+        waitFor { has("From $shop. Opens the senders") }
+        if (!has("From $shop. Opens the senders")) fail("the row doesn't say $shop")
+        if (!onScreen("$shop · 1 email tidied in the last 30 days")) fail("the list isn't filtered to $shop")
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("needs-you", "tidied-filters-cover-dark"))
     }
 }

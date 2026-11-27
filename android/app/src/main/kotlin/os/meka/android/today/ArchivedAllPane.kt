@@ -53,16 +53,17 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.ArchivedAllList
-import os.meka.core.domain.ArchivedAllKindChip
 import os.meka.core.domain.ArchivedAllRules
-import os.meka.core.domain.ArchivedAllSender
 import os.meka.core.domain.ArchivedEmailPreview
 import os.meka.core.domain.MailTidiedAction
 import os.meka.core.domain.MailTidiedBulkRules
 import os.meka.core.facade.MekaCore
 
 internal const val ARCHIVED_ALL_KINDS_TAG = "archived-all-kinds"
+internal const val ARCHIVED_ALL_SENDERS_TAG = "archived-all-senders"
 internal const val ARCHIVED_ALL_SELECT_TAG = "archived-all-select"
 internal const val ARCHIVED_ALL_CONFIRM_TAG = "archived-all-confirm"
 internal const val ARCHIVED_ALL_PAGER_TAG = "archived-all-pager"
@@ -78,10 +79,11 @@ internal fun ArchivedAllHost(core: MekaCore, moves: DecisionMoves) {
 
 /**
  * "Archived for you" shows which emails, slice 3: **All tidied mail** — every email Navilife tidied in the last 30 days,
- * newest first under its day, with the senders as filter chips ("Deliveroo · 12"; All first). Tap an email: its preview
+ * newest first under its day, filtered by a "Showing" row (the last 30 days or one of today's kinds) and a "From" row
+ * (All senders, or one sender), each opening its choice sheet (week 5, A17: they were chip rows cut at the cover's edge). Tap an email: its preview
  * unfolds under it as on the card (Put back, Always keep, Unsubscribe, Undo on the bar).
  *
- * Motion: the pane springs up (MekaPane); the summary cross-fades; a chip's colour blends to the accent with a tick
+ * Motion: the pane springs up (MekaPane); the summary cross-fades; a filter row opens its sheet (rising on the appear spring) and the chosen choice's dot blends to the accent with a tick
  * haptic when chosen; days and rows stagger in and move with the list's item motion as the filter changes; a preview
  * unfolds on the expand spring. Reduced motion: cross-fades.
  *
@@ -154,35 +156,29 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                     modifier = Modifier.appear(rememberAppearance(1)).semantics { contentDescription = l?.spoken ?: s })
             }
         }
-        if (l != null && l.kinds.isNotEmpty()) {
+        // Week 5, A17: the kind and sender chip rows ran off the cover's edge; each is a row opening its sheet.
+        l?.kindRow?.let { row ->
             item(key = "kinds") {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs)
-                        .appear(rememberAppearance(2)).testTag(ARCHIVED_ALL_KINDS_TAG),
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                ) {
-                    l.kinds.forEach { k: ArchivedAllKindChip ->
-                        SenderChip(k.label, k.spoken, k.selected) {
-                            haptics.tick(); kind = k.kind; sender = null; openEmail = null
-                        }
-                    }
-                }
+                var choosing by rememberSaveable { mutableStateOf(false) }
+                NotifyChoiceRowView(row, Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2))
+                    .testTag(ARCHIVED_ALL_KINDS_TAG)) { haptics.tick(); choosing = true }
+                if (choosing) NotifyChoiceSheetView(
+                    ArchivedAllRules.kindSheet(l),
+                    onChoose = { name -> kind = ArchivedAllRules.kindNamed(name); sender = null; openEmail = null },
+                    onClose = { choosing = false },
+                )
             }
         }
-        if (l != null && l.senders.isNotEmpty()) {
+        l?.senderRow?.let { row ->
             item(key = "senders") {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = MekaSpace.xs)
-                        .appear(rememberAppearance(2)),
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                ) {
-                    SenderChip(ArchivedAllRules.ALL, "Show every sender", l.allSelected) { haptics.tick(); sender = null; openEmail = null }
-                    l.senders.forEach { s: ArchivedAllSender ->
-                        SenderChip(s.label, s.spoken, s.selected) {
-                            haptics.tick(); sender = if (s.selected) null else s.id; openEmail = null
-                        }
-                    }
-                }
+                var choosing by rememberSaveable { mutableStateOf(false) }
+                NotifyChoiceRowView(row, Modifier.animateItem().padding(bottom = MekaSpace.xs).appear(rememberAppearance(2))
+                    .testTag(ARCHIVED_ALL_SENDERS_TAG)) { haptics.tick(); choosing = true }
+                if (choosing) NotifyChoiceSheetView(
+                    ArchivedAllRules.senderSheet(l),
+                    onChoose = { name -> sender = ArchivedAllRules.senderNamed(name); openEmail = null },
+                    onClose = { choosing = false },
+                )
             }
         }
         if (l != null && (MailTidiedBulkRules.selectable(shown).isNotEmpty() || l.trashAll != null)) {
@@ -287,22 +283,6 @@ internal fun ArchivedAllPane(core: MekaCore, undo: (String, (suspend () -> Unit)
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
-}
-
-@Composable
-private fun SenderChip(label: String, spoken: String, selected: Boolean, onClick: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val color by animateColorAsState(
-        if (selected) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "sender-chip",
-    )
-    Text(
-        label, style = MekaType.itemMeta, color = color, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-            .background(if (selected) Meka.colors.surfaceRaised else Meka.colors.surface)
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = spoken; this.selected = selected }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-    )
 }
 
 /** Slice 4: the pick ring beside a row while selecting; it fills gold when picked. */
