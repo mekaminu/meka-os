@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// Ask → More → Train queue on the Mac (train-time queue, slice 1), like the Fold's TrainQueuePane: links and podcasts
-/// saved for the commute (shared on the Fold, or pasted here), newest first. Click one to open it; Done when read or
+/// saved for the commute (shared on the Fold, or pasted in the "+ Add a link" sheet), newest first. Click one to open it; Done when read or
 /// listened to (it moves to "Done lately", with Back), Remove for good. Only Strings cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and the field's line cross-fade; rows stagger in and move
@@ -14,7 +14,7 @@ struct TrainQueueSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
-    @State private var text = ""
+    @State private var adding = false
     @State private var said: CoreModel.QueueSaid?
 
     var body: some View {
@@ -26,18 +26,8 @@ struct TrainQueueSheet: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
-            TextField(QueueRules.shared.HINT, text: $text)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel(QueueRules.shared.HINT_SPOKEN)
-                .onSubmit {
-                    let typed = text
-                    text = ""
-                    Task {
-                        guard let r = await model.addToQueue(typed) else { return }
-                        said = r
-                        if r.refused { text = typed } // keep the words to fix
-                    }
-                }
+            // Walk-through week 5, A17: no open link box on the page; "+ Add a link" is a row opening the link's sheet.
+            GoalAddRowButton(row: QueueRules.shared.addRow, palette: palette) { adding = true }
                 .staggeredAppear(2)
             if let said {
                 Text(LoneWordGlue.shared.kept(line: said.line)).font(MekaType.caption)
@@ -80,6 +70,15 @@ struct TrainQueueSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 480)
         .background(palette.surface)
+        .sheet(isPresented: $adding) {
+            LineAddSheet(sheet: QueueRules.shared.addSheet, palette: palette,
+                         canAdd: { QueueRules.shared.canAdd(text: $0) }, close: { adding = false }) { typed in
+                Task {
+                    guard let r = await model.addToQueue(typed) else { return }
+                    said = r
+                }
+            }
+        }
     }
 
     private func label(_ text: String) -> some View {

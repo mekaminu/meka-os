@@ -2961,6 +2961,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         let empty = QueueView.companion.EMPTY
         XCTAssertEqual(empty.summary, rules.EMPTY_SUMMARY)
         XCTAssertTrue(empty.waiting.isEmpty)
+        // Walk-through week 5, A17: "+ Add a link" opens a sheet whose Save waits for a link.
+        XCTAssertEqual(rules.addRow.label, "+ Add a link")
+        XCTAssertEqual(rules.addSheet.addLabel, "Save")
+        XCTAssertFalse(rules.canAdd(text: "just words"))
+        XCTAssertTrue(rules.canAdd(text: "https://www.bbc.co.uk/news/uk-123"))
     }
 
     func testAppointmentsReachSwift() {

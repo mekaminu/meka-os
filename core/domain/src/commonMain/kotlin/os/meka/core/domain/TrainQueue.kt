@@ -100,6 +100,24 @@ object QueueRules {
     const val HINT = "Paste a link for the train"
     const val HINT_SPOKEN = "Paste a web link to save it for the train. Sharing from any app works too: choose For the train."
     const val NO_LINK = "That has no link in it. Paste or share a web link (https://…)."
+
+    /**
+     * Walk-through week 5, A17 (the train-queue shots: an open "Paste a link for the train" box in every state): the page has
+     * one "+ Add a link" card row instead, opening [addSheet]. Sharing from any app stays the quick way in.
+     */
+    val addRow: GoalAddRow = GoalAddRow("+ Add a link", "Paste an article or podcast link to save it for the train")
+
+    /** The sheet the row opens: the link (pasted words with a link in them work too), what happens to it, Close · Save. */
+    val addSheet: GoalAddSheet = GoalAddSheet(
+        title = "Add a link",
+        hint = "https://…",
+        spokenHint = HINT_SPOKEN,
+        note = "Words around the link are fine: Navilife keeps the link and a title. Sharing from any app works too: choose For the train.",
+        addLabel = "Save",
+    )
+
+    /** Save lights only once the typed words hold a web link (so "That has no link in it" can't follow a tap). */
+    fun canAdd(text: String): Boolean = link(text) != null
     const val ALREADY = "Already in your train queue"
     const val ACTION = "For the train"
     const val NOTE = "Saved on both apps. On Wi-Fi the Fold keeps each waiting article's words (up to ${ReaderRules.MAX_SAVED}) to read on the train without a signal, and lets them go once it's done; podcasts open in your podcast app, which keeps its downloads."

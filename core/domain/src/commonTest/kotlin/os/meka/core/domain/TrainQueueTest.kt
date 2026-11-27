@@ -178,6 +178,23 @@ class TrainQueueTest {
     }
 
     @Test
+    fun addingALinkIsARowOpeningASheetWhoseSaveWaitsForALink() {
+        // Walk-through week 5, A17: no open box on the page; one "+ Add a link" row opens the sheet.
+        assertEquals("+ Add a link", QueueRules.addRow.label)
+        assertTrue(QueueRules.addRow.line.contains("for the train"))
+        assertEquals("Add a link", QueueRules.addSheet.title)
+        assertEquals("Save", QueueRules.addSheet.addLabel)
+        assertTrue(QueueRules.addSheet.note.contains(QueueRules.ACTION))
+        assertEquals(QueueRules.HINT_SPOKEN, QueueRules.addSheet.spokenHint)
+        // Save stays dark until there is a web link in the words, so a tap never ends in "That has no link in it".
+        assertFalse(QueueRules.canAdd(""))
+        assertFalse(QueueRules.canAdd("just words"))
+        assertFalse(QueueRules.canAdd("www.bbc.co.uk"))
+        assertTrue(QueueRules.canAdd("https://www.bbc.co.uk/news/why-trains-run-late"))
+        assertTrue(QueueRules.canAdd("Worth a read: https://bbc.co.uk/x."))
+    }
+
+    @Test
     fun actionsGoUnderTheWordsOnTheCoverScreen() {
         // The cover screen's row is ~312 dp inside its padding; unfolded it has room beside the words.
         assertTrue(QueueRules.actionsUnder(312f))

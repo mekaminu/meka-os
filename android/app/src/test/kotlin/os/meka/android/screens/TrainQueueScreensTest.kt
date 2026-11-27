@@ -10,16 +10,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -31,7 +30,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import os.meka.android.ask.QUEUE_ADD_ROW_TAG
 import os.meka.android.ask.TrainQueuePane
+import os.meka.android.goals.GOAL_ADD_SHEET_TAG
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
@@ -181,7 +182,12 @@ class TrainQueueScreensTest {
         ScreenShots.assertShows(compose, name, "Train queue")
         val v = core.queueView.value
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
-        ScreenShots.assertEachOneLine(compose, name, listOf(QueueRules.HINT))
+        ScreenShots.assertEachOneLine(compose, name, listOf(QueueRules.addRow.label))
+        // Walk-through week 5, A17: no open "Paste a link" box on the page in any state; the "+ Add a link" row is there.
+        if (compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: an open input box is on the page")
+        }
+        if (compose.onAllNodes(hasTestTag(QUEUE_ADD_ROW_TAG), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("$name: no + Add a link row")
         val rows = v.waiting + v.done
         val lines = listOf(v.summary) + rows.map { it.title } + rows.map { it.meta } + core.queuePages.value.values + core.queueOnline.value.values
         ScreenShots.assertNoLoneWords(compose, name, lines)
@@ -211,10 +217,28 @@ class TrainQueueScreensTest {
     private fun byHand(core: MekaCore) {
         val name = "train-queue-by-hand"
         now += 60_000 // a minute after the saved article, so the pasted link is the newest
-        compose.onAllNodes(hasContentDescription(QueueRules.HINT_SPOKEN) and hasSetTextAction())[0]
-            .performTextInput("Strike dates https://www.bbc.co.uk/news/strike-2")
+        // Walk-through week 5, A17: + Add a link opens its sheet; Save is dark until there's a link in the words.
+        fun sheetOpen() = compose.onAllNodes(hasTestTag(GOAL_ADD_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val box = hasContentDescription(QueueRules.HINT_SPOKEN) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText)
+        val save = hasContentDescription("${QueueRules.addSheet.addLabel}, ${QueueRules.addSheet.title}")
+        fun saveDark() = compose.onAllNodes(save, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == true
+        if (sheetOpen()) fail("$name: the link sheet is open before + Add a link is tapped")
+        compose.onNodeWithTag(QUEUE_ADD_ROW_TAG, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!sheetOpen()) fail("$name: + Add a link opened no sheet")
+        if (!saveDark()) fail("$name: Save is lit with nothing typed")
+        compose.onAllNodes(box, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("just words")) }
         turns(500)
-        compose.onAllNodes(hasContentDescription(QueueRules.HINT_SPOKEN) and hasSetTextAction())[0].performImeAction()
+        if (!saveDark()) fail("$name: Save is lit for words with no link")
+        compose.onAllNodes(box, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.SetText) {
+            it(AnnotatedString("Strike dates https://www.bbc.co.uk/news/strike-2"))
+        }
+        turns(500)
+        if (saveDark()) fail("$name: Save stayed dark with a link typed")
+        compose.onNodeWithTag(GOAL_ADD_SHEET_TAG, useUnmergedTree = true).captureRoboImage(ScreenShots.path("train-queue", "cover-dark-add-link"))
+        compose.onAllNodes(save, useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() }
+        if (sheetOpen()) fail("$name: the link sheet stayed open after Save")
         until { core.queueView.value.waiting.size == 2 }
         val top = core.queueView.value.waiting.firstOrNull() ?: fail("$name: the pasted link wasn't saved")
         if (!top.url.contains("strike-2")) fail("$name: the pasted link isn't at the top (${top.url})")

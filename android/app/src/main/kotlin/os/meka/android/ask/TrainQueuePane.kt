@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,7 +59,8 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
-import os.meka.android.lists.Field
+import os.meka.android.goals.GoalAddRowView
+import os.meka.android.goals.LineAddSheetView
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
@@ -72,7 +74,7 @@ import os.meka.core.facade.MekaCore
 
 /**
  * Ask → More → Train queue (V1, train-time queue slice 1), also opened from Today's "For the train" line: links and
- * podcasts shared to MEKA (the share sheet's For the train) or pasted here, newest first. Tap one to open it in its
+ * podcasts shared to MEKA (the share sheet's For the train) or pasted in the "+ Add a link" sheet, newest first. Tap one to open it in its
  * app or the browser; Done when read or listened to (it moves to "Done lately", with Back), Remove for good.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the field's line
@@ -113,7 +115,7 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
     val pages by core.queuePages.collectAsState()
     // Completeness: an article whose words couldn't be kept says it opens online (and whether the phone tries again).
     val online by core.queueOnline.collectAsState()
-    var text by remember { mutableStateOf("") }
+    var adding by rememberSaveable { mutableStateOf(false) }
     var said by remember { mutableStateOf<QueueAdded?>(null) }
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "queue-said",
@@ -138,14 +140,10 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
             }
         }
         item(key = "field") {
+            // Walk-through week 5, A17 (the train-queue shots): no open "Paste a link" box on the page in every state; one
+            // "+ Add a link" card row opens the link's sheet. Its line (saved, already there) cross-fades under the row.
             Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(QueueRules.HINT, value = text, onValue = { text = it }, description = QueueRules.HINT_SPOKEN) { typed ->
-                    scope.launch {
-                        val r = runCatching { core.addToQueue(typed) }.getOrNull() ?: return@launch
-                        said = r
-                        if (r.refused) { haptics.tick(); text = typed } else haptics.light()
-                    }
-                }
+                GoalAddRowView(QueueRules.addRow, Modifier.testTag(QUEUE_ADD_ROW_TAG)) { adding = true }
                 Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "queue-line") { l ->
                     l?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = saidColor) }
                 }
@@ -185,7 +183,23 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
+    if (adding) {
+        LineAddSheetView(
+            QueueRules.addSheet, canAdd = QueueRules::canAdd, maxLength = QueueRules.MAX_URL,
+            onAdd = { typed ->
+                scope.launch {
+                    val r = runCatching { core.addToQueue(typed) }.getOrNull() ?: return@launch
+                    said = r
+                    if (r.refused) haptics.tick()
+                }
+            },
+            onClose = { adding = false },
+        )
+    }
 }
+
+/** The tag the screen tests find the Train queue's "+ Add a link" row by. */
+const val QUEUE_ADD_ROW_TAG = "queue-add-row"
 
 /** Opens a saved link in its own app (a podcast app) or the browser. */
 private fun open(context: Context, url: String) {
