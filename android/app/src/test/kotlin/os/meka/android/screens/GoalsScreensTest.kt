@@ -696,7 +696,9 @@ class GoalsScreensTest {
         tapSaid(GoalAddRules.rowSpoken(L.row(g())))
         if (!sheetOpen()) fail("Goals: + Link a task opened no sheet")
         waitFor("the sheet didn't list the open tasks before anything was typed") { ids.all(::shown) }
-        if (compose.onAllNodes(hasText("On Get fit · linking moves it here", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // The row's words glue a lone last word with a no-break space, so read what the row says instead.
+        if (compose.onAllNodes(hasTestTag(GOAL_LINK_TASK_TAG + ids[2]) and hasContentDescription("On Get fit · linking moves it here", substring = true),
+                useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
             fail("Goals: the task on Get fit doesn't say linking moves it")
         if (linkEnabled()) fail("Goals: Link is lit before a task is picked")
         typeInto(L.sheet.spokenHint, "trainers")
