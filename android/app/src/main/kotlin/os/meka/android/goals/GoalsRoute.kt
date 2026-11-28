@@ -92,6 +92,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.drawscope.clipRect
 import os.meka.core.domain.GoalRules
 import os.meka.core.domain.GoalHabitChoiceRules
+import os.meka.core.domain.GoalSettingChoiceRules
 import os.meka.android.notify.NotifyChoiceRowView
 import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.Goals
@@ -634,6 +635,27 @@ private fun GoalRowBody(
     val modifier = Modifier
     val fill = remember(g.id) { Animatable(if (reduced) g.progressPct / 100f else 0f) }
     LaunchedEffect(g.progressPct) { fill.animateTo(g.progressPct / 100f, MekaMotion.replan(reduced)) }
+    var sheet by rememberSaveable(g.id, "goal-setting") { mutableStateOf<GoalSetting?>(null) }
+    sheet?.let { kind ->
+        val R = GoalSettingChoiceRules
+        NotifyChoiceSheetView(
+            when (kind) {
+                GoalSetting.HORIZON -> R.horizonSheet(g, details.today)
+                GoalSetting.DUE -> R.dueSheet(g, details.today)
+                GoalSetting.UNDER -> R.underSheet(g, details.parents)
+                GoalSetting.HABIT -> R.habitSheet(g, details.habits)
+            },
+            onChoose = { name ->
+                when (kind) {
+                    GoalSetting.HORIZON -> R.horizonNamed(g, name)?.let(horizon)
+                    GoalSetting.DUE -> R.dueNamed(g, details.today, name)?.let { details.due(it.day) }
+                    GoalSetting.UNDER -> R.underNamed(g, details.parents, name)?.let { details.parent(it.goalId) }
+                    GoalSetting.HABIT -> R.habitNamed(g, details.habits, name)?.let { details.numberHabit(it.habitId) }
+                }
+            },
+            onClose = { sheet = null },
+        )
+    }
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)) {
         Column(
             Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) "Hide actions" else "Show actions") { onToggle() }
@@ -671,16 +693,16 @@ private fun GoalRowBody(
                     Action("Delete", critical = true) { delete() }
                 }
                 if (g.counted) Text("Progress counts itself from the habits, tasks and goals linked to this goal.", style = MekaType.caption, color = Meka.colors.textTertiary)
-                Chips("Horizon", GoalRules.HORIZONS.map { GoalRules.horizonLabel(it) to (it == g.horizon) }) { i -> horizon(GoalRules.HORIZONS[i]) }
-                val dues = remember(details.today) { GoalRules.dueChoices(details.today) }
-                Chips("Done by", dues.map { it.label to (it.day == g.dueDay) }) { i -> details.due(dues[i].day) }
-                if (details.parents.isNotEmpty() || g.parentId != null) {
-                    Chips("Under", listOf("Nothing" to (g.parentId == null)) + details.parents.map { it.title to (it.id == g.parentId) }) { i ->
-                        details.parent(if (i == 0) null else details.parents[i - 1].id)
-                    }
+                // Walk-through week 5, A17: one card row per setting ("Horizon" · "This month" ›) opening its sheet, each
+                // choice saying what it does, not open chip rows under the goal.
+                val R = GoalSettingChoiceRules
+                NotifyChoiceRowView(R.horizonRow(g), Modifier.testTag("goals-goal-horizon-${g.id}"), raised = true) { sheet = GoalSetting.HORIZON }
+                NotifyChoiceRowView(R.dueRow(g, details.today), Modifier.testTag("goals-goal-due-${g.id}"), raised = true) { sheet = GoalSetting.DUE }
+                if (R.showsUnder(g, details.parents)) {
+                    NotifyChoiceRowView(R.underRow(g), Modifier.testTag("goals-goal-under-${g.id}"), raised = true) { sheet = GoalSetting.UNDER }
                 }
                 GoalTarget(g, details.target)
-                GoalNumber(g, details)
+                GoalNumber(g, details) { sheet = GoalSetting.HABIT }
                 GoalWhy(g, details.why)
                 Milestones(g, details)
                 BreakItDown(g, details.breakdown)
@@ -769,7 +791,7 @@ private fun Milestones(g: GoalItem, details: GoalDetails) {
  * The chart draws itself left to right on appear (reduced motion: at once); lines under the fields cross-fade.
  */
 @Composable
-private fun GoalNumber(g: GoalItem, details: GoalDetails) {
+private fun GoalNumber(g: GoalItem, details: GoalDetails, openHabit: () -> Unit) {
     val reduced = Meka.reducedMotion
     val m = g.metric
     var target by rememberSaveable(g.id, m?.targetText) { mutableStateOf(m?.targetText ?: "") }
@@ -813,8 +835,8 @@ private fun GoalNumber(g: GoalItem, details: GoalDetails) {
                 }
             }
             if (details.habits.isNotEmpty()) {
-                val options = listOf<HabitItem?>(null) + details.habits
-                Chips("Each tick of a habit adds 1", options.map { (it?.title ?: "No habit") to (it?.id == m.habitId) }) { i -> details.numberHabit(options[i]?.id) }
+                // Walk-through week 5, A17: "Counts a habit" · "Swim" › opening its sheet, not a chip per habit.
+                NotifyChoiceRowView(GoalSettingChoiceRules.habitRow(g, details.habits), Modifier.testTag("goals-goal-habit-${g.id}"), raised = true) { openHabit() }
             }
             Action("Stop counting a number") { target = ""; details.number("") { } }
         }
@@ -948,6 +970,9 @@ private fun Field(hint: String, value: String, onValue: (String) -> Unit, onDone
         )
     }
 }
+
+/** The goal setting whose sheet is open on Goals (walk-through week 5, A17). */
+internal enum class GoalSetting { HORIZON, DUE, UNDER, HABIT }
 
 /** The habit setting whose sheet is open on Goals (walk-through week 5, A17). */
 internal enum class HabitSetting { OFTEN, WHEN, LONG, BOOK, ROTATION, TOWARDS }

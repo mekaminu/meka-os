@@ -2636,6 +2636,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(R.oftenLine(perWeek: 7).hasPrefix("Every day"))
     }
 
+    func testGoalSettingChoicesReachSwift() {
+        // Walk-through week 5, A17: a goal's Horizon, Done by, Under and Counts a habit are menus of the Fold's sheets.
+        let R = GoalSettingChoiceRules.shared
+        XCTAssertEqual(R.HORIZON_HEAD, "Horizon")
+        XCTAssertEqual(R.dueValue(dueDay: nil, today: 20_000), "No date")
+        XCTAssertEqual(R.dueLine(day: 20_003, today: 20_000), "Due in 3 days")
+        XCTAssertEqual(R.horizonLine(h: .someday, today: 20_000), R.SOMEDAY_LINE)
+    }
+
     func testBriefLengthChoicesReachSwift() {
         // Walk-through week 5, A17: the brief's length is a row with a menu, not an open segmented row.
         let lengths = MorningBriefView.companion.EMPTY.lengths

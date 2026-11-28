@@ -315,6 +315,25 @@ private struct AppLinkField: View {
     }
 }
 
+/// A goal setting as "Horizon · This month" with a menu of its choices, each "This quarter · Ends Thu 31 Dec"
+/// (walk-through week 5, A17: the same choices as the Fold's sheet).
+private struct GoalChoiceMenu: View {
+    let row: NotifyChoiceRow
+    let sheet: NotifyChoiceSheet
+    let pick: (String) -> Void
+
+    var body: some View {
+        Menu("\(row.title) · \(row.value)") {
+            ForEach(sheet.choices, id: \.name) { c in
+                Button("\(c.lit ? "✓ " : "")\(c.label) · \(c.line)") { pick(c.name) }
+            }
+        }
+        .menuStyle(.button).fixedSize()
+        .help(sheet.note)
+        .accessibilityLabel(row.spoken)
+    }
+}
+
 /// A goal: title, target, a bar that fills on appear, and how progress is counted.
 private struct GoalRowView: View {
     @Environment(CoreModel.self) private var model
@@ -374,12 +393,12 @@ private struct GoalRowView: View {
                             Button("−10%") { model.stepGoal(goal.id, from: goal.progressPct, by: -10) }
                             Button("+10%") { model.stepGoal(goal.id, from: goal.progressPct, by: 10) }
                         }
-                        Menu(GoalRules.shared.horizonLabel(h: goal.horizon)) {
-                            ForEach(0..<GoalRules.shared.HORIZONS.count, id: \.self) { i in
-                                Button(GoalRules.shared.horizonLabel(h: GoalRules.shared.horizonAt(index: Int32(i)))) { model.setGoalHorizon(goal.id, index: i) }
-                            }
+                        // Walk-through week 5, A17: "Horizon · This month", a menu of the Fold's sheet, each saying when it ends.
+                        GoalChoiceMenu(row: GoalSettingChoiceRules.shared.horizonRow(g: goal),
+                                       sheet: GoalSettingChoiceRules.shared.horizonSheet(g: goal, today: model.todayEpochDay)) { name in
+                            if let h = GoalSettingChoiceRules.shared.horizonNamed(g: goal, name: name),
+                               let i = GoalRules.shared.HORIZONS.firstIndex(of: h) { model.setGoalHorizon(goal.id, index: i) }
                         }
-                        .menuStyle(.button).fixedSize()
                         Button("Finished") { model.finishGoal(goal.id) }
                         Button("Delete", role: .destructive) { model.deleteGoal(goal.id) }.foregroundStyle(palette.critical)
                     }
@@ -422,24 +441,19 @@ private struct GoalDetailsView: View {
     @State private var found: [MekaTask] = []
 
     var body: some View {
-        let dues = GoalRules.shared.dueChoices(today: model.todayEpochDay)
+        let R = GoalSettingChoiceRules.shared
+        let today = model.todayEpochDay
         let parents = GoalRules.shared.parentChoices(goals: all, goalId: goal.id)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            // Walk-through week 5, A17: "Done by · Mon 30 Nov" and "Under · Get fit", menus of the Fold's sheets.
             HStack(spacing: MekaSpace.l) {
-                Menu(goal.dueDay.map { GoalRules.shared.dueLabel(day: $0.int64Value, today: model.todayEpochDay) } ?? "Done by…") {
-                    ForEach(0..<dues.count, id: \.self) { i in
-                        Button(dues[i].label) { model.setGoalDue(goal.id, day: dues[i].day?.int64Value) }
-                    }
+                GoalChoiceMenu(row: R.dueRow(g: goal, today: today), sheet: R.dueSheet(g: goal, today: today)) { name in
+                    if let pick = R.dueNamed(g: goal, today: today, name: name) { model.setGoalDue(goal.id, day: pick.day?.int64Value) }
                 }
-                .menuStyle(.button).fixedSize()
-                if !parents.isEmpty || goal.parentId != nil {
-                    Menu(goal.parentTitle.map { "Under “\($0)”" } ?? "Under…") {
-                        Button("Nothing (top level)") { model.setGoalParent(goal.id, nil) }
-                        ForEach(parents, id: \.id) { p in
-                            Button(p.title) { model.setGoalParent(goal.id, p.id) }
-                        }
+                if R.showsUnder(g: goal, parents: parents) {
+                    GoalChoiceMenu(row: R.underRow(g: goal), sheet: R.underSheet(g: goal, parents: parents)) { name in
+                        if let pick = R.underNamed(g: goal, parents: parents, name: name) { model.setGoalParent(goal.id, pick.goalId) }
                     }
-                    .menuStyle(.button).fixedSize()
                 }
             }
             .font(MekaType.itemTitle).foregroundStyle(palette.accent)
@@ -691,13 +705,13 @@ private struct GoalNumberView: View {
                 }
                 let habits = model.goals?.habits ?? []
                 if !habits.isEmpty {
-                    Menu(m.habitTitle.map { "Each tick of “\($0)” adds 1" } ?? "Count a habit's ticks…") {
-                        Button("No habit") { model.setGoalNumberHabit(goal.id, nil) }
-                        ForEach(habits, id: \.id) { h in
-                            Button(h.title) { model.setGoalNumberHabit(goal.id, h.id) }
+                    // Walk-through week 5, A17: "Counts a habit · Swim", a menu of the Fold's sheet.
+                    GoalChoiceMenu(row: GoalSettingChoiceRules.shared.habitRow(g: goal, habits: habits),
+                                   sheet: GoalSettingChoiceRules.shared.habitSheet(g: goal, habits: habits)) { name in
+                        if let pick = GoalSettingChoiceRules.shared.habitNamed(g: goal, habits: habits, name: name) {
+                            model.setGoalNumberHabit(goal.id, pick.habitId)
                         }
                     }
-                    .menuStyle(.button).fixedSize()
                     .font(MekaType.itemTitle).foregroundStyle(palette.accent)
                 }
                 Button("Stop counting a number") { target = ""; setNumber("") }

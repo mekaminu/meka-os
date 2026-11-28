@@ -26,6 +26,8 @@ import os.meka.android.goals.GOAL_ADD_SHEET_TAG
 import os.meka.android.goals.STUDY_ADD_COURSE_TAG
 import os.meka.core.domain.GoalAddRules
 import os.meka.core.domain.GoalHabitChoiceRules
+import os.meka.core.domain.GoalSettingChoiceRules
+import os.meka.core.domain.GoalRules
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import kotlin.test.fail
@@ -371,6 +373,80 @@ class GoalsScreensTest {
         tapSaid(GoalHabitChoiceRules.towardsSheet(h(), goals).choices.first { it.name == goal }.spoken)
         waitFor("Towards didn't link the goal") { h().goalId == goal }
         waitFor("the Towards sheet stayed open") { !choiceSheetOpen() }
+    }
+
+    /**
+     * By hand (walk-through week 5, A17): a goal's own settings on Goals are rows opening sheets, not open chip rows.
+     * Horizon opens a sheet saying when each ends and This quarter saves; Done by's end of year saves; Under puts it
+     * beneath the bigger goal; a number goal's Counts a habit links the habit's ticks. Each sheet closes on a choice.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun goalSettingsByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        val (id, big, habit) = runBlocking {
+            core.tick()
+            val big = core.addGoal("Get fit", null, GoalHorizon.YEAR)
+            val id = core.addGoal("Swim a mile", null, GoalHorizon.MONTH)
+            val habit = core.addHabit("Swim", 3, HabitTiming.MORNING, 30, null)
+            core.setGoalNumber(id, "64 lengths")
+            core.tick()
+            Triple(id, big, habit)
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        fun g() = core.goalsView.value.goals.first { it.id == id }
+        val today = core.todayEpochDay()
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        val open = compose.onAllNodes(hasText("Swim a mile") and hasClickAction())
+        if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the goal has nothing to tap to show its settings")
+        open[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        // No open chip of any setting on the page: each is behind its row.
+        listOf("This quarter", "Someday", "No date", "Nothing", "No habit").forEach { label ->
+            if (compose.onAllNodes(hasText(label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+                fail("Goals: a \"$label\" chip on the page; it belongs in its row's sheet")
+        }
+
+        tapSaid(GoalSettingChoiceRules.horizonRow(g()).spoken)
+        waitFor("Horizon opened no sheet") { choiceSheetOpen() }
+        val quarter = GoalSettingChoiceRules.horizonSheet(g(), today).choices.first { it.name == GoalHorizon.QUARTER.name }
+        if (!quarter.line.startsWith("Ends ")) fail("Goals: This quarter says \"${quarter.line}\"")
+        tapSaid(quarter.spoken)
+        waitFor("This quarter didn't save") { g().horizon == GoalHorizon.QUARTER }
+        waitFor("the Horizon sheet stayed open after a choice") { !choiceSheetOpen() }
+
+        tapSaid(GoalSettingChoiceRules.dueRow(g(), today).spoken)
+        waitFor("Done by opened no sheet") { choiceSheetOpen() }
+        val endOfYear = GoalSettingChoiceRules.dueSheet(g(), today).choices.last()
+        tapSaid(endOfYear.spoken)
+        waitFor("end of year didn't save") { g().dueDay?.toString() == endOfYear.name }
+        waitFor("the Done by sheet stayed open") { !choiceSheetOpen() }
+
+        val parents = GoalRules.parentChoices(core.goalsView.value.goals, id)
+        tapSaid(GoalSettingChoiceRules.underRow(g()).spoken)
+        waitFor("Under opened no sheet") { choiceSheetOpen() }
+        tapSaid(GoalSettingChoiceRules.underSheet(g(), parents).choices.first { it.name == big }.spoken)
+        waitFor("Under didn't put it beneath Get fit") { g().parentId == big }
+        waitFor("the Under sheet stayed open") { !choiceSheetOpen() }
+
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        val habits = core.goalsView.value.habits
+        tapSaid(GoalSettingChoiceRules.habitRow(g(), habits).spoken)
+        waitFor("Counts a habit opened no sheet") { choiceSheetOpen() }
+        tapSaid(GoalSettingChoiceRules.habitSheet(g(), habits).choices.first { it.name == habit }.spoken)
+        waitFor("the habit's ticks didn't count") { g().metric?.habitId == habit }
+        waitFor("the habit sheet stayed open") { !choiceSheetOpen() }
     }
 
     /**
