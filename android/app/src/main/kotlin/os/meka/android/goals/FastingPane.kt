@@ -83,7 +83,9 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.EvidenceTone
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.FastingBesideRules
+import os.meka.core.domain.FastingChoiceRules
 import os.meka.core.domain.FastingHistoryRow
 import os.meka.core.domain.FastingRules
 import os.meka.core.domain.FastingScreen
@@ -210,10 +212,13 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit, backLabel: String 
                 )
                 PlanChip(s.planChip, planOpen) { haptics.tick(); planOpen = !planOpen }
             }
-            AnimatedVisibility(planOpen, enter = unfold(), exit = fold()) {
-                Chips("Plan", FastingRules.PLAN_CHOICES.map { it.label to (it.label == s.planChip) }) { i ->
-                    haptics.tick(); planOpen = false; act { core.chooseFastingPlan(i) }
-                }
+            // Walk-through week 5, A17: the plan chip opens a sheet of the plans, each saying its window, not an open chip row.
+            if (planOpen) {
+                NotifyChoiceSheetView(
+                    FastingChoiceRules.planSheet(v.plan),
+                    onChoose = { name -> FastingChoiceRules.planNamed(v.plan, name)?.let { i -> act { core.chooseFastingPlan(i) } } },
+                    onClose = { planOpen = false },
+                )
             }
         } }
         item(key = "title") {
@@ -239,22 +244,19 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit, backLabel: String 
                         haptics.tick(); editing = if (editing == "goal") null else "goal"
                     }
                 }
-                AnimatedVisibility(editing == "start", enter = unfold(), exit = fold()) {
-                    Chips("Move the start", FastingRules.MOVE_START_CHOICES.map { FastingRules.moveLabel(it) to false }) { i ->
-                        haptics.tick(); act { core.moveFastStart(FastingRules.MOVE_START_CHOICES[i]) }
-                    }
-                }
-                AnimatedVisibility(editing == "goal", enter = unfold(), exit = fold()) {
-                    val c = cur
-                    if (c != null && c.extended) {
-                        Chips("Goal", FastingRules.EXTENDED_CHOICES.map { it.label to (it.hours == c.targetHours) }) { i ->
-                            haptics.tick(); act { core.setFastTarget(FastingRules.EXTENDED_CHOICES[i].hours) }
-                        }
-                    } else {
-                        Chips("Goal", FastingRules.TARGET_CHOICES.map { "$it h" to (it == c?.targetHours) }) { i ->
-                            haptics.tick(); act { core.setFastTarget(FastingRules.TARGET_CHOICES[i]) }
-                        }
-                    }
+                // Walk-through week 5, A17: each tile opens a sheet of its choices, each saying what it does, not an open
+                // chip row under the tiles.
+                val c = cur
+                if (c != null && editing != null) {
+                    val R = FastingChoiceRules
+                    NotifyChoiceSheetView(
+                        if (editing == "start") R.startSheet(c, now) else R.goalSheet(c, now),
+                        onChoose = { name ->
+                            if (editing == "start") R.startNamed(c, now, name)?.let { m -> act { core.moveFastStart(m) } }
+                            else R.goalNamed(c, name)?.let { h -> act { core.setFastTarget(h) } }
+                        },
+                        onClose = { editing = null },
+                    )
                 }
             }
         }

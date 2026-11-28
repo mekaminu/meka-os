@@ -3,7 +3,7 @@ import SwiftUI
 
 /// FASTING, its own sheet on the Mac (Fasting rebuild slice 3, the approved design docs/design/fasting/fasting.dc.html,
 /// like the Fold's FastingPane): the plan chip, a big gold ring with a glowing tip and 4/8/12h markers, the time in
-/// the middle and "Ends in … · 12:00"; the Started and Goal tiles (each click unfolds its choices); one main button,
+/// the middle and "Ends in … · 12:00"; the Started and Goal tiles (each click opens a menu of its choices); one main button,
 /// Start fast or End fast, with Undo end after an end; "More options" for a fast started earlier, longer fasts (the GP
 /// note above them) and a day and time; what's happening now; the seven stages, each unfolding its words and
 /// evidence; this week as seven small rings; History as a list. Every word comes from core FastingScreenRules; only
@@ -28,9 +28,6 @@ struct FastingSheet: View {
     /// The fast whose "you did it" burst has already played here (shared with the old Goals card's key).
     @AppStorage("meka.fastBurst") private var burstFastId = ""
     @State private var burst: Double = 0
-    @State private var planOpen = false
-    /// "start" or "goal": the tile whose choices are open.
-    @State private var editing: String?
     @State private var moreOpen = false
     @State private var picking = false
     @State private var stageOpen: String?
@@ -59,21 +56,19 @@ struct FastingSheet: View {
         }
         .frame(width: 520)
         .background(palette.background)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: editing)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: moreOpen)
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: planOpen)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: picking)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: stageOpen)
         .animation(MekaMotion.replan(reduced: reduceMotion), value: v?.current?.id)
         // A fast that ends or starts folds whatever was open for the other state.
-        .onChange(of: v?.current?.id) { _, _ in editing = nil; picking = false; moreOpen = false }
+        .onChange(of: v?.current?.id) { _, _ in picking = false; moreOpen = false }
         .onChange(of: v?.current?.doneLine == nil ? nil : v?.current?.id, initial: true) { _, id in celebrate(id) }
     }
 
     @ViewBuilder
     private func content(_ v: FastingView, _ s: FastingScreen) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
-            header(s).staggeredAppear(0)
+            header(v, s).staggeredAppear(0)
             FastingBigRing(screen: s, palette: palette, burst: burst)
                 .frame(maxWidth: .infinity)
                 .staggeredAppear(1)
@@ -93,7 +88,7 @@ struct FastingSheet: View {
 
     // MARK: Header
 
-    private func header(_ s: FastingScreen) -> some View {
+    private func header(_ v: FastingView, _ s: FastingScreen) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Fasting")
@@ -101,21 +96,20 @@ struct FastingSheet: View {
                     .foregroundStyle(palette.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button { MekaHaptics.tick(); planOpen.toggle() } label: {
+                // Walk-through week 5, A17: the plan chip opens a menu of the plans, each saying its window, not an
+                // open chip row under the header.
+                let plan = v.plan
+                FastChoiceMenu(sheet: FastingChoiceRules.shared.planSheet(plan: plan), pick: { name in
+                    if let i = FastingChoiceRules.shared.planNamed(plan: plan, name: name) {
+                        MekaHaptics.tick(); model.chooseFastingPlan(Int(truncating: i))
+                    }
+                }) {
                     Text(s.planChip).font(MekaType.captionStrong)
-                        .foregroundStyle(planOpen ? palette.onAccent : palette.accent)
+                        .foregroundStyle(palette.accent)
                         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                        .background(Capsule().fill(planOpen ? palette.accent : palette.surfaceRaised))
+                        .background(Capsule().fill(palette.surfaceRaised))
                 }
-                .buttonStyle(MekaPressStyle())
-                .accessibilityLabel("Plan \(s.planChip)")
-            }
-            if planOpen {
-                FastChips(title: "Plan", labels: FastingRules.shared.PLAN_CHOICES.map(\.label),
-                          lit: { $0 == s.planChip }, palette: palette) { i in
-                    MekaHaptics.tick(); planOpen = false; model.chooseFastingPlan(i)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .accessibilityLabel(FastingChoiceRules.shared.planRow(plan: plan).spoken)
             }
         }
     }
@@ -123,61 +117,38 @@ struct FastingSheet: View {
     // MARK: Tiles and the main button
 
     private func tiles(_ v: FastingView, _ s: FastingScreen) -> some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            HStack(spacing: MekaSpace.xs) {
-                editTile("Started", s.startedTile ?? "", key: "start")
-                editTile("Goal", s.goalTile ?? "", key: "goal")
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            if editing == "start" {
-                let moves = FastingRules.shared.MOVE_START_CHOICES.map(\.int32Value)
-                FastChips(title: "Move the start", labels: moves.map { FastingRules.shared.moveLabel(min: $0) },
-                          lit: { _ in false }, palette: palette) { i in
-                    MekaHaptics.tick(); model.moveFastStart(moves[i])
-                }
-                .transition(.opacity)
-            }
-            if editing == "goal", let cur = v.current {
-                if cur.extended {
-                    let choices = FastingRules.shared.EXTENDED_CHOICES
-                    FastChips(title: "Goal", labels: choices.map(\.label), lit: { l in choices.first { $0.label == l }?.hours == cur.targetHours },
-                              palette: palette) { i in
-                        MekaHaptics.tick(); model.setFastTarget(choices[i].hours)
-                    }
-                    .transition(.opacity)
-                } else {
-                    let hours = FastingRules.shared.TARGET_CHOICES.map(\.int32Value)
-                    FastChips(title: "Goal", labels: hours.map { "\($0) h" }, lit: { $0 == "\(cur.targetHours) h" },
-                              palette: palette) { i in
-                        MekaHaptics.tick(); model.setFastTarget(hours[i])
-                    }
-                    .transition(.opacity)
-                }
+        // Walk-through week 5, A17: each tile opens a menu of its choices (the Fold's sheets), each saying what it does,
+        // not an open chip row under the tiles.
+        let R = FastingChoiceRules.shared
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return HStack(spacing: MekaSpace.xs) {
+            if let cur = v.current {
+                FastChoiceMenu(sheet: R.startSheet(cur: cur, nowMs: now), pick: { name in
+                    if let m = R.startNamed(cur: cur, nowMs: now, name: name) { MekaHaptics.tick(); model.moveFastStart(m.int32Value) }
+                }) { tileLabel("Started", s.startedTile ?? "") }
+                FastChoiceMenu(sheet: R.goalSheet(cur: cur, nowMs: now), pick: { name in
+                    if let h = R.goalNamed(cur: cur, name: name) { MekaHaptics.tick(); model.setFastTarget(h.int32Value) }
+                }) { tileLabel("Goal", s.goalTile ?? "") }
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func editTile(_ label: String, _ value: String, key: String) -> some View {
-        Button {
-            MekaHaptics.tick()
-            editing = editing == key ? nil : key
-        } label: {
-            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                HStack {
-                    Text(label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    Spacer()
-                    Image(systemName: "pencil").font(MekaType.caption).foregroundStyle(palette.accent)
-                }
-                Text(value).font(MekaType.metaStrong).monospacedDigit().foregroundStyle(palette.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
+    private func tileLabel(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            HStack {
+                Text(label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Spacer()
+                Image(systemName: "pencil").font(MekaType.caption).foregroundStyle(palette.accent)
             }
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(editing == key ? palette.surfaceRaised : palette.surface))
-            .contentShape(Rectangle())
+            Text(value).font(MekaType.metaStrong).monospacedDigit().foregroundStyle(palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .buttonStyle(MekaPressStyle())
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+        .contentShape(Rectangle())
         .accessibilityLabel("\(label) \(value). Change")
     }
 
@@ -515,6 +486,24 @@ private struct EvidenceBadge: View {
 }
 
 /// A titled row of choice chips, wrapping onto a second row past five; a lit chip fills gold.
+/// A Fasting choice as a menu round its chip or tile, each item "18:6 · Fast 18 h · eat 13:00–19:00" (walk-through
+/// week 5, A17: the same choices as the Fold's sheet), the one in force ticked.
+private struct FastChoiceMenu<Label: View>: View {
+    let sheet: NotifyChoiceSheet
+    let pick: (String) -> Void
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Menu {
+            ForEach(sheet.choices, id: \.name) { c in
+                Button("\(c.lit ? "✓ " : "")\(c.label) · \(c.line)") { pick(c.name) }
+            }
+        } label: { label() }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+        .help(sheet.note)
+    }
+}
+
 private struct FastChips: View {
     let title: String
     let labels: [String]

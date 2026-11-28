@@ -31,9 +31,12 @@ import os.meka.android.goals.FastingPane
 import os.meka.android.goals.GoalsRoute
 import os.meka.android.goals.HISTORY_ROW_TAG
 import os.meka.android.goals.STAGE_ROW_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.core.domain.FastingBesideRules
+import os.meka.core.domain.FastingChoiceRules
 import os.meka.core.domain.FastingRules
 import os.meka.core.domain.FastingScreenRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -285,10 +288,14 @@ class FastingScreensTest {
         ScreenShots.assertShows(compose, "more", "Started earlier")
         ScreenShots.assertShows(compose, "more", "check with your GP first")
         tap("Close")
-        // The plan chip opens the plans.
+        // The plan chip opens a sheet of the plans (walk-through week 5, A17: not an open chip row), each saying its
+        // window; choosing 18:6 makes it the plan and closes the sheet.
         tap("16:8")
-        ScreenShots.assertShows(compose, "plan", "18:6")
-        tap("16:8")
+        compose.onNodeWithTag(NOTIFY_CHOICE_SHEET_TAG).assertExists()
+        ScreenShots.assertShows(compose, "plan", LoneWordGlue.kept("Fast 18 h · eat 13:00–19:00"))
+        tap("18:6")
+        awaitCore("Choose 18:6") { core.fastingView.value.plan.targetHours == 18 }
+        if (shown(LoneWordGlue.kept(FastingChoiceRules.PLAN_NOTE))) fail("the plan sheet stayed open")
         // Start fast: the button becomes End fast and the Started and Goal tiles appear.
         compose.onNodeWithTag("fasting-main").performClick()
         awaitCore("Start fast") { core.fastingView.value.current != null }
@@ -298,7 +305,19 @@ class FastingScreensTest {
         compose.onAllNodes(hasText("Started", substring = false), useUnmergedTree = true).fetchSemanticsNodes()
             .ifEmpty { fail("no Started tile") }
         tap("Started")
-        ScreenShots.assertShows(compose, "tile", "Move the start")
+        ScreenShots.assertShows(compose, "tile", LoneWordGlue.kept(FastingChoiceRules.START_NOTE))
+        // Just started: only the moves that keep the start in the past (no +30 min).
+        if (shown("+30 min")) fail("the start sheet offers a move into the future")
+        val started = core.fastingView.value.current!!.startedAtMs
+        tap("−1 h")
+        awaitCore("Move the start") { core.fastingView.value.current?.startedAtMs == started - hourMs }
+        // The Goal tile opens this fast's goals (the new plan's 18 h lit); 20 h sets it.
+        compose.onAllNodes(hasText("Goal", substring = false), useUnmergedTree = true)[0].performClick()
+        settle()
+        ScreenShots.assertShows(compose, "goal", LoneWordGlue.kept(FastingChoiceRules.GOAL_NOTE))
+        tap("20 h")
+        awaitCore("Set the goal") { core.fastingView.value.current?.targetHours == 20 }
+        if (shown(LoneWordGlue.kept(FastingChoiceRules.GOAL_NOTE))) fail("the goal sheet stayed open")
         // Two hours on, End fast ends it and offers Undo end.
         clock += 2 * hourMs
         compose.onNodeWithTag("fasting-main").performClick()
