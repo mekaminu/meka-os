@@ -189,8 +189,12 @@ class EventDetailRemindersScreensTest {
 
     @Test
     fun whoseIsItIsARowOpeningTheChildrenByHand() {
-        Household.useTyped("Alex, U7\nSam, U10", "")
         val core = core()
+        kotlinx.coroutines.runBlocking {
+            check(!core.addAboutYouChild("Alex, U7, Oakfield School").refused)
+            check(!core.addAboutYouChild("Sam, U10, Oakfield School").refused)
+            core.tick()
+        }
         val training = CalendarEvent(
             id = "ev-training", title = "Training", startAtMs = START, endAtMs = START + 60 * 60_000L, allDay = false,
             location = null, provider = "google", account = "alex@example.com", calendarName = "Kids",
