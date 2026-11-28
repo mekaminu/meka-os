@@ -1,6 +1,11 @@
 package os.meka.android.goals
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -172,6 +177,38 @@ internal fun GoalTextSheetView(
         maxLength = maxLength,
         singleLine = singleLine,
     ) { }
+}
+
+/**
+ * A sheet whose line is checked before it goes (walk-through week 5, A17: a number goal's Number to reach and Add to
+ * it). It starts with [initial]; Save/Add stays dark until [canSave]; [submit] hands the line on and calls back with what
+ * was wrong (the sheet stays open, the words still there, the problem under the field in the critical colour) or null
+ * (the sheet closes). Typing clears the problem. Motion: the problem line unfolds (reduced motion: a cross-fade).
+ */
+@Composable
+internal fun CheckedLineSheetView(
+    sheet: os.meka.core.domain.GoalAddSheet, initial: String, canSave: (String) -> Boolean, maxLength: Int,
+    submit: (String, (String?) -> Unit) -> Unit, onClose: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    var typed by rememberSaveable { mutableStateOf(initial) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    GoalAddSheetFrame(
+        sheet, typed, { typed = it; problem = null },
+        add = { busy = true; submit(typed) { p -> busy = false; problem = p; if (p == null) onClose() } },
+        onClose = onClose,
+        canAdd = !busy && canSave(typed),
+        maxLength = maxLength,
+        closeOnAdd = false,
+    ) {
+        val enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false))
+        val exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false))
+        AnimatedVisibility(problem != null, enter = enter, exit = exit) {
+            Text(LoneWordGlue.kept(problem.orEmpty()), style = MekaType.caption, color = Meka.colors.critical,
+                modifier = Modifier.testTag("goal-sheet-problem"))
+        }
+    }
 }
 
 /**

@@ -28,6 +28,7 @@ import os.meka.core.domain.GoalAddRules
 import os.meka.core.domain.GoalHabitChoiceRules
 import os.meka.core.domain.GoalSettingChoiceRules
 import os.meka.core.domain.GoalTextRules
+import os.meka.core.domain.GoalNumberRules
 import os.meka.core.domain.GoalRules
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
@@ -516,6 +517,73 @@ class GoalsScreensTest {
         typeInto(GoalTextRules.whySheet.spokenHint, "")
         tapSaid("${GoalTextRules.SAVE}, ${GoalTextRules.WHY_LABEL}")
         waitFor("a blank Why it matters didn't clear it") { g().why == null }
+    }
+
+    /**
+     * By hand (walk-through week 5, A17): a number goal's Number to reach and Add to it are rows opening sheets, not open
+     * boxes. The number's sheet starts with the name's own number; a line that isn't a number keeps it open and says so
+     * under it; a real one saves and closes. Add to it adds the update and says so with Undo on the page.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun goalNumberByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        val id = runBlocking {
+            core.tick()
+            val id = core.addGoal("Save £2,000", null, GoalHorizon.MONTH)
+            core.tick()
+            id
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        fun g() = core.goalsView.value.goals.first { it.id == id }
+        fun problemShown() = compose.onAllNodes(hasTestTag("goal-sheet-problem"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        val open = compose.onAllNodes(hasText("Save £2,000") and hasClickAction())
+        if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the goal has nothing to tap to show its settings")
+        open[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        listOf("A number · £2,000 or 12 books (optional)", "Add to it · +200, -1 or =1200").forEach { hint ->
+            if (compose.onAllNodes(hasContentDescription(hint) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()) fail("Goals: \"$hint\" is an open box on the open goal")
+        }
+
+        tapSaid(GoalAddRules.rowSpoken(GoalNumberRules.numberRow(g())))
+        if (!sheetOpen()) fail("Goals: Number to reach opened no sheet")
+        val field = compose.onAllNodes(hasContentDescription(GoalNumberRules.numberSheet(g()).spokenHint) and hasText("£2,000"), useUnmergedTree = true)
+        if (field.fetchSemanticsNodes().isEmpty()) fail("Goals: the number's sheet doesn't start with the name's £2,000")
+        typeInto(GoalNumberRules.numberSheet(g()).spokenHint, "lots")
+        tapSaid("${GoalNumberRules.SAVE}, ${GoalNumberRules.NUMBER_LABEL}")
+        waitFor("a line that isn't a number wasn't said under the field") { problemShown() }
+        if (!sheetOpen()) fail("Goals: the number's sheet closed on a line that isn't a number")
+        typeInto(GoalNumberRules.numberSheet(g()).spokenHint, "£2,000")
+        if (problemShown()) fail("Goals: the problem stayed after typing")
+        tapSaid("${GoalNumberRules.SAVE}, ${GoalNumberRules.NUMBER_LABEL}")
+        waitFor("the number didn't save") { g().metric?.targetX100 == 200_000L }
+        waitFor("the number's sheet stayed open") { !sheetOpen() }
+
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        val m = g().metric ?: fail("Goals: no number")
+        tapSaid(GoalAddRules.rowSpoken(GoalNumberRules.addRow(m)))
+        if (!sheetOpen()) fail("Goals: Add to it opened no sheet")
+        if (addEnabled(GoalNumberRules.addSheet(m).title)) fail("Goals: Add is lit before anything is typed")
+        typeInto(GoalNumberRules.addSheet(m).spokenHint, "+200")
+        tapSaid("${GoalNumberRules.ADD}, ${GoalNumberRules.addSheet(m).title}")
+        waitFor("+200 wasn't added") { g().metric?.currentX100 == 20_000L }
+        waitFor("the Add to it sheet stayed open") { !sheetOpen() }
+        waitFor("the page doesn't say what was added") {
+            compose.onAllNodes(hasText("Added +200"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /**

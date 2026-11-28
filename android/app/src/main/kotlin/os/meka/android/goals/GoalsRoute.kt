@@ -88,6 +88,7 @@ import os.meka.core.domain.TextAutosave
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.GoalItem
 import os.meka.core.domain.GoalTextRules
+import os.meka.core.domain.GoalNumberRules
 import os.meka.core.domain.GoalMetricRules
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -785,42 +786,27 @@ private fun Milestones(g: GoalItem, details: GoalDetails) {
 }
 
 /**
- * A numeric goal (slice 3): the number to reach ("£2,000", "12 books"; the title's number is offered as one tap), then
- * the chart, "Add to it" (+200, -1, =1200) with Undo, the latest updates with Remove, and a habit whose ticks add 1.
- * The chart draws itself left to right on appear (reduced motion: at once); lines under the fields cross-fade.
+ * A numeric goal (slice 3): the number to reach ("£2,000", "12 books"), then the chart, "Add to it" (+200, -1, =1200)
+ * with Undo, the latest updates with Remove, and a habit whose ticks add 1. Walk-through week 5, A17: Number to reach and
+ * Add to it are card rows opening sheets (GoalNumberRules), not open boxes; a line that isn't a number keeps its sheet
+ * open and says so under it. The chart draws itself left to right on appear (reduced motion: at once); lines cross-fade.
  */
 @Composable
 private fun GoalNumber(g: GoalItem, details: GoalDetails, openHabit: () -> Unit) {
     val reduced = Meka.reducedMotion
     val m = g.metric
-    var target by rememberSaveable(g.id, m?.targetText) { mutableStateOf(m?.targetText ?: "") }
-    var badTarget by remember(g.id) { mutableStateOf(false) }
-    var update by rememberSaveable(g.id) { mutableStateOf("") }
+    var numberOpen by rememberSaveable(g.id, "goal-number") { mutableStateOf(false) }
+    var addOpen by rememberSaveable(g.id, "goal-add-to-it") { mutableStateOf(false) }
     var updateLine by remember(g.id) { mutableStateOf<Pair<String, String?>?>(null) } // text, id to undo
-    val suggestion = remember(g.title) { GoalMetricRules.suggestFromTitle(g.title) }
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text("Number to reach", style = MekaType.caption, color = Meka.colors.textTertiary)
-        Field("A number · £2,000 or 12 books (optional)", target, { target = it.take(40); badTarget = false }) {
-            details.number(target) { ok -> badTarget = !ok }
-        }
-        AnimatedContent(
-            when { badTarget -> "That isn't a number · try £2,000 or 12 books"; m != null -> "${m.line}${m.paceLine?.let { " · $it" } ?: ""}"; else -> null },
-            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "number-line",
-        ) { l -> if (l != null) Text(l, style = MekaType.caption, color = if (badTarget) Meka.colors.critical else Meka.colors.textSecondary) }
-        if (m == null && suggestion != null && !badTarget) Action("Count “$suggestion”") { target = suggestion; details.number(suggestion) { ok -> badTarget = !ok } }
+        GoalAddRowView(GoalNumberRules.numberRow(g), Modifier.testTag("goals-goal-number-${g.id}")) { numberOpen = true }
         if (m != null) {
             // Money manager (6): a £ goal that follows a Money account says so (linked and unlinked in Money, behind the lock).
             AnimatedContent(m.moneyLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "money-line") { l ->
                 if (l != null) Text(l, style = MekaType.caption, color = Meka.colors.accent)
             }
             MetricChart(m, details.today)
-            Field("Add to it · +200, -1 or =1200", update, { update = it.take(40) }) {
-                val typed = update
-                details.addUpdate(typed) { ok, id ->
-                    updateLine = if (!ok) "Type a number, like +200 or =1200" to null else if (id == null) "No change" to null else "Added ${typed.trim()}" to id
-                    if (ok) update = ""
-                }
-            }
+            GoalAddRowView(GoalNumberRules.addRow(m), Modifier.testTag("goals-goal-add-to-it-${g.id}")) { addOpen = true }
             AnimatedContent(updateLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "update-line") { u ->
                 if (u != null) Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(u.first, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
@@ -837,9 +823,26 @@ private fun GoalNumber(g: GoalItem, details: GoalDetails, openHabit: () -> Unit)
                 // Walk-through week 5, A17: "Counts a habit" · "Swim" › opening its sheet, not a chip per habit.
                 NotifyChoiceRowView(GoalSettingChoiceRules.habitRow(g, details.habits), Modifier.testTag("goals-goal-habit-${g.id}"), raised = true) { openHabit() }
             }
-            Action("Stop counting a number") { target = ""; details.number("") { } }
+            Action("Stop counting a number") { details.number("") { } }
         }
     }
+    if (numberOpen) CheckedLineSheetView(
+        GoalNumberRules.numberSheet(g), GoalNumberRules.numberInitial(g),
+        canSave = { GoalNumberRules.canSaveNumber(it, g) }, maxLength = GoalNumberRules.MAX_TYPED,
+        submit = { typed, then -> details.number(typed.trim()) { ok -> then(if (ok) null else GoalNumberRules.NOT_A_NUMBER) } },
+        onClose = { numberOpen = false },
+    )
+    if (addOpen && m != null) CheckedLineSheetView(
+        GoalNumberRules.addSheet(m), "",
+        canSave = GoalNumberRules::canAdd, maxLength = GoalNumberRules.MAX_TYPED,
+        submit = { typed, then ->
+            details.addUpdate(typed) { ok, id ->
+                if (ok) updateLine = GoalNumberRules.addedLine(typed, id != null) to id
+                then(if (ok) null else GoalNumberRules.NOT_AN_UPDATE)
+            }
+        },
+        onClose = { addOpen = false },
+    )
 }
 
 /** The number's chart: its line in the accent, the pace line and the target faint; it draws on from the left. */

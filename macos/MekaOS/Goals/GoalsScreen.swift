@@ -652,38 +652,24 @@ private struct BreakItDownView: View {
     }
 }
 
-/// Goals, properly, slice 3: a numeric goal. The number to reach ("£2,000", "12 books"; the title's number offered as
-/// one click), then the chart (it draws on from the left; Reduce Motion: at once), "Add to it" (+200, -1, =1200) with
-/// Undo, the latest updates with Remove, and a habit whose ticks add 1. Lines under the fields cross-fade.
+/// Goals, properly, slice 3: a numeric goal. The number to reach ("£2,000", "12 books"), then the chart (it draws on
+/// from the left; Reduce Motion: at once), "Add to it" (+200, -1, =1200) with Undo, the latest updates with Remove, and
+/// a habit whose ticks add 1. Walk-through week 5, A17: Number to reach and Add to it are rows opening sheets
+/// (GoalNumberRules), not open boxes; a line that isn't a number keeps its sheet open and says so under it.
 private struct GoalNumberView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let goal: GoalItem
     let palette: MekaPalette
-    @State private var target = ""
-    @State private var badTarget = false
-    @State private var update = ""
+    @State private var editing: GoalNumberSheetKind?
     @State private var updateLine: String?
     @State private var undoID: String?
 
     var body: some View {
         let metric = goal.metric
+        let N = GoalNumberRules.shared
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            Text("Number to reach").font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            TextField("A number · £2,000 or 12 books (optional)", text: $target)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { setNumber(target) }
-                .onChange(of: target) { badTarget = false }
-            if badTarget {
-                Text("That isn't a number · try £2,000 or 12 books").font(MekaType.caption).foregroundStyle(palette.critical)
-                    .transition(.opacity)
-            } else if let m = metric {
-                Text(m.line + (m.paceLine.map { " · \($0)" } ?? "")).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .contentTransition(.opacity)
-            } else if let s = GoalMetricRules.shared.suggestFromTitle(title: goal.title) {
-                Button("Count “\(s)”") { target = s; setNumber(s) }
-                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
-            }
+            GoalAddRowButton(row: N.numberRow(g: goal), palette: palette) { editing = .number }
             if let m = metric {
                 // Money manager (6): a £ goal that follows a Money account says so (linked in Money, behind Touch ID).
                 if let l = m.moneyLine {
@@ -692,9 +678,7 @@ private struct GoalNumberView: View {
                 }
                 MetricChartView(metric: m, today: model.todayEpochDay, palette: palette)
                     .frame(height: 48)
-                TextField("Add to it · +200, -1 or =1200", text: $update)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addUpdate)
+                GoalAddRowButton(row: N.addRow(m: m), palette: palette) { editing = .add }
                 if let line = updateLine {
                     HStack(spacing: MekaSpace.m) {
                         Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -725,31 +709,104 @@ private struct GoalNumberView: View {
                     }
                     .font(MekaType.itemTitle).foregroundStyle(palette.accent)
                 }
-                Button("Stop counting a number") { target = ""; setNumber("") }
+                Button("Stop counting a number") { stopCounting() }
                     .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
             }
         }
-        .onAppear { target = metric?.targetText ?? "" }
+        .sheet(item: $editing) { kind in
+            let gid = goal.id
+            switch kind {
+            case .number:
+                CheckedLineSheet(
+                    sheet: N.numberSheet(g: goal), palette: palette, initial: N.numberInitial(g: goal),
+                    canSave: { [goal] in N.canSaveNumber(typed: $0, g: goal) },
+                    close: { editing = nil }
+                ) { typed in
+                    await model.setGoalNumber(gid, typed) ? nil : N.NOT_A_NUMBER
+                }
+            case .add:
+                if let m = metric {
+                    CheckedLineSheet(
+                        sheet: N.addSheet(m: m), palette: palette, initial: "",
+                        canSave: { N.canAdd(typed: $0) },
+                        close: { editing = nil }
+                    ) { typed in
+                        switch await model.addGoalUpdate(gid, typed) {
+                        case .added(let id): updateLine = N.addedLine(typed: typed, changed: true); undoID = id; return nil
+                        case .noChange: updateLine = N.addedLine(typed: typed, changed: false); undoID = nil; return nil
+                        case .notANumber: return N.NOT_AN_UPDATE
+                        }
+                    }
+                }
+            }
+        }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: updateLine)
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: badTarget)
         .animation(MekaMotion.replan(reduced: reduceMotion), value: metric?.recent.map(\.id) ?? [])
     }
 
-    private func setNumber(_ text: String) {
+    private func stopCounting() {
         let gid = goal.id
-        Task { badTarget = !(await model.setGoalNumber(gid, text)) }
+        Task { _ = await model.setGoalNumber(gid, "") }
+    }
+}
+
+/// Which of a number goal's sheets is open (walk-through week 5, A17).
+private enum GoalNumberSheetKind: String, Identifiable {
+    case number, add
+    var id: String { rawValue }
+}
+
+/// A sheet whose line is checked before it goes, the Mac twin of the Fold's `CheckedLineSheetView` (walk-through week 5,
+/// A17): it starts with [initial]; Save/Add is disabled until [canSave] and while the line is checked; [submit] returns
+/// what was wrong (the sheet stays open with the words, the problem under the field in the critical colour) or nil (it
+/// closes). Typing clears the problem. Only Strings cross to the core.
+private struct CheckedLineSheet: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let sheet: GoalAddSheet
+    let palette: MekaPalette
+    let initial: String
+    let canSave: (String) -> Bool
+    let close: () -> Void
+    let submit: (String) async -> String?
+    @State private var line = ""
+    @State private var busy = false
+    @State private var problem: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            TextField(sheet.hint, text: $line).textFieldStyle(.roundedBorder).onSubmit(save)
+                .accessibilityLabel(sheet.spokenHint)
+                .onChange(of: line) { _, _ in problem = nil }
+            if let problem {
+                Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.critical)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+            Text(LoneWordGlue.shared.kept(line: sheet.note)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(GoalAddRules.shared.CLOSE, action: close).keyboardShortcut(.cancelAction)
+                Button(sheet.addLabel, action: save).keyboardShortcut(.defaultAction)
+                    .disabled(busy || !canSave(line))
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
+        .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: problem)
+        .onAppear { if line.isEmpty { line = initial } }
     }
 
-    private func addUpdate() {
-        let gid = goal.id
-        let typed = update.trimmingCharacters(in: .whitespaces)
-        guard !typed.isEmpty else { return }
+    private func save() {
+        let typed = line.trimmingCharacters(in: .whitespaces)
+        guard !busy, canSave(line) else { return }
+        busy = true
         Task {
-            switch await model.addGoalUpdate(gid, typed) {
-            case .added(let id): updateLine = "Added \(typed)"; undoID = id; update = ""
-            case .noChange: updateLine = "No change"; undoID = nil; update = ""
-            case .notANumber: updateLine = "Type a number, like +200 or =1200"; undoID = nil
-            }
+            let said = await submit(typed)
+            busy = false
+            if let said { problem = said; MekaHaptics.tick() } else { MekaHaptics.light(); close() }
         }
     }
 }

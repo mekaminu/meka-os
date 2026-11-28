@@ -2667,6 +2667,17 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(T.preview(words: "More energy\nand sleep"), "More energy…")
     }
 
+    func testGoalNumberSheetsReachSwift() {
+        // Walk-through week 5, A17: a number goal's Number to reach and Add to it are rows opening checked sheets.
+        let N = GoalNumberRules.shared
+        XCTAssertEqual(N.NUMBER_LABEL, "Number to reach")
+        XCTAssertEqual(N.ADD_LABEL, "+ Add to it")
+        XCTAssertTrue(N.numberOk(typed: "12 books"))
+        XCTAssertFalse(N.numberOk(typed: "lots"))
+        XCTAssertFalse(N.canAdd(typed: " "))
+        XCTAssertEqual(N.addedLine(typed: " +200 ", changed: true), "Added +200")
+    }
+
     func testEventDetailChoicesReachSwift() {
         // Walk-through week 5, A17: Whose is it? and Ring as an alarm are menus holding the Fold's sheets.
         let R = EventDetailChoiceRules.shared
