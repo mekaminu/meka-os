@@ -2645,6 +2645,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(R.named(start: 18 * 60, name: "1080"))
     }
 
+    func testEventReminderChoicesReachSwift() {
+        // Walk-through week 5, A17: an event's Remind me and Leave by menus hold the Fold's sheets, Off first.
+        let R = EventReminderChoiceRules.shared
+        XCTAssertEqual(R.remindRow(current: 10).value, "10 min before")
+        let remind = R.remindSheet(start: 14 * 60, choices: [5, 10].map { KotlinInt(int: $0) }, current: 10)
+        XCTAssertEqual(remind.choices.map(\.label), ["Off", "5 min before", "10 min before"])
+        XCTAssertEqual(remind.choices.filter(\.lit).map(\.line), ["Heads-up at 13:50"])
+        let leave = R.leaveSheet(start: 14 * 60, choices: [30].map { KotlinInt(int: $0) }, current: 30, alarm: true)
+        XCTAssertEqual(leave.choices.last?.line, "Leave at 13:30 · rings as an alarm")
+        XCTAssertEqual(R.named(choices: [5, 10].map { KotlinInt(int: $0) }, current: 10, name: "0")?.intValue, 0)
+    }
+
     func testFastingChoicesReachSwift() {
         // Walk-through week 5, A17: Fasting's plan chip and Started and Goal tiles open menus of the Fold's sheets.
         let R = FastingChoiceRules.shared

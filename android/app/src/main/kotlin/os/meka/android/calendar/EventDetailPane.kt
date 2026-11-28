@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalContext
 import os.meka.android.MekaApplication
-import os.meka.core.domain.ReminderRules
 import os.meka.core.domain.LeaveAlarmRules
 import androidx.compose.foundation.selection.toggleable
 import androidx.activity.compose.BackHandler
@@ -62,6 +61,9 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.facade.MekaCore
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.core.domain.EventReminderChoiceRules
 
 /**
  * Event detail (calendar redesign, slice 3): what, when and how soon, which calendar, where (tap to open Maps), a Join
@@ -301,18 +303,37 @@ private fun DetailContent(
                 }
             }
         }
-        // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply).
+        // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply). Walk-through week 5,
+        // A17: each is one card row ("Remind me" · "10 min before" ›) opening the shared choice sheet, Off first, each
+        // saying when its heads-up comes or when to leave (EventReminderChoiceRules); a choice saves and closes it.
+        var reminderSheet by remember(event.id) { mutableStateOf<String?>(null) }
         if (d.remindChoices.isNotEmpty() || d.remindMin != 0) {
-            ReminderChips("Remind me", d.remindChoices, d.remindMin, { "$it min" }, 1) { m ->
-                haptics.tick()
-                scope.launch { runCatching { core.setEventReminder(event.id, m) } }
-            }
+            NotifyChoiceRowView(EventReminderChoiceRules.remindRow(d.remindMin),
+                Modifier.padding(bottom = MekaSpace.xs).appear(rememberAppearance(1))) { haptics.tick(); reminderSheet = EventReminderChoiceRules.REMIND_HEAD }
         }
         if (d.travelChoices.isNotEmpty() || d.travelMin != 0) {
-            ReminderChips("Leave by · how long to get there", d.travelChoices, d.travelMin, { ReminderRules.travelLabel(it) }, 1) { m ->
-                haptics.tick()
-                scope.launch { runCatching { core.setEventLeaveBy(event.id, m) } }
-            }
+            NotifyChoiceRowView(EventReminderChoiceRules.leaveRow(d.travelMin),
+                Modifier.padding(bottom = MekaSpace.xs).appear(rememberAppearance(1))) { haptics.tick(); reminderSheet = EventReminderChoiceRules.LEAVE_HEAD }
+        }
+        when (reminderSheet) {
+            EventReminderChoiceRules.REMIND_HEAD -> NotifyChoiceSheetView(
+                EventReminderChoiceRules.remindSheet(d.startMinute, d.remindChoices, d.remindMin),
+                onChoose = { name ->
+                    EventReminderChoiceRules.named(d.remindChoices, d.remindMin, name)?.let { m ->
+                        scope.launch { runCatching { core.setEventReminder(event.id, m) } }
+                    }
+                },
+                onClose = { reminderSheet = null },
+            )
+            EventReminderChoiceRules.LEAVE_HEAD -> NotifyChoiceSheetView(
+                EventReminderChoiceRules.leaveSheet(d.startMinute, d.travelChoices, d.travelMin, d.leaveAlarm),
+                onChoose = { name ->
+                    EventReminderChoiceRules.named(d.travelChoices, d.travelMin, name)?.let { m ->
+                        scope.launch { runCatching { core.setEventLeaveBy(event.id, m) } }
+                    }
+                },
+                onClose = { reminderSheet = null },
+            )
         }
         // Alarms, slice 3: once a travel time is set, Leave by can ring like the wake alarm instead of a heads-up.
         val reducedMotion = Meka.reducedMotion

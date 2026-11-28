@@ -226,29 +226,32 @@ struct EventDetailSheet: View {
         if !remindChoices.isEmpty || d.remindMin != 0 || !travelChoices.isEmpty || d.travelMin != 0 {
             HStack(spacing: MekaSpace.m) {
                 if !remindChoices.isEmpty || d.remindMin != 0 {
-                    Picker("Remind me", selection: Binding(
+                    // Walk-through week 5, A17: the menu holds the Fold's sheet, Off first, each saying when its heads-up comes.
+                    let sheet = EventReminderChoiceRules.shared.remindSheet(start: d.startMinute, choices: d.remindChoices, current: d.remindMin)
+                    Picker(EventReminderChoiceRules.shared.REMIND_HEAD, selection: Binding(
                         get: { d.remindMin },
                         set: { model.setEventReminder(d.id, $0, offerUndo: false) }
                     )) {
-                        Text("No reminder").tag(Int32(0))
-                        ForEach(Self.withCurrent(remindChoices, d.remindMin), id: \.self) { m in
-                            Text(ReminderRules.shared.choiceLabel(minutes: m)).tag(m)
+                        ForEach(sheet.choices, id: \.name) { c in
+                            Text("\(c.label) · \(c.line)").tag(Int32(c.name) ?? 0)
                         }
                     }
                     .fixedSize()
+                    .help(EventReminderChoiceRules.shared.REMIND_NOTE)
                 }
                 if !travelChoices.isEmpty || d.travelMin != 0 {
-                    Picker("Leave by", selection: Binding(
+                    // Each travel time says when to leave ("Leave at 18:30"), as the Fold's sheet does.
+                    let sheet = EventReminderChoiceRules.shared.leaveSheet(start: d.startMinute, choices: d.travelChoices, current: d.travelMin, alarm: d.leaveAlarm)
+                    Picker(EventReminderChoiceRules.shared.LEAVE_HEAD, selection: Binding(
                         get: { d.travelMin },
                         set: { model.setEventLeaveBy(d.id, $0, offerUndo: false) }
                     )) {
-                        Text("Off").tag(Int32(0))
-                        ForEach(Self.withCurrent(travelChoices, d.travelMin), id: \.self) { m in
-                            Text(ReminderRules.shared.travelLabel(minutes: m)).tag(m)
+                        ForEach(sheet.choices, id: \.name) { c in
+                            Text("\(c.label) · \(c.line)").tag(Int32(c.name) ?? 0)
                         }
                     }
                     .fixedSize()
-                    .help("How long it takes to get there; Navilife says when to leave")
+                    .help(EventReminderChoiceRules.shared.LEAVE_NOTE)
                 }
             }
             .controlSize(.small)

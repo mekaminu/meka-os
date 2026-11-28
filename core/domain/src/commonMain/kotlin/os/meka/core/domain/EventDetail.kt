@@ -48,6 +48,8 @@ data class EventDetailView(
     val remindChoices: List<Int> = emptyList(),
     /** The travel times still ahead; empty when Leave by isn't offered (no place, all day, too late). */
     val travelChoices: List<Int> = emptyList(),
+    /** The start as a minute of the day here, for Remind me's and Leave by's sheets ([EventReminderChoiceRules]). */
+    val startMinute: Int = 0,
     /** "Reminder 10 min before" · "Leave by 13:30 · 30 min away"; null when neither is set. */
     val reminderLine: String? = null,
     /** The real event in Google Calendar or Outlook on the web (calendar actions, slice 3); null when unknown. */
@@ -235,6 +237,7 @@ object EventDetails {
             travelMin = marks.travelOf(e.id),
             remindChoices = if (e.isProvisional) emptyList() else ReminderRules.remindChoices(e, nowMs),
             travelChoices = if (e.isProvisional) emptyList() else ReminderRules.travelChoices(e, nowMs),
+            startMinute = if (e.allDay) 0 else calendar.minuteOfDay(e.startAtMs),
             reminderLine = if (e.startAtMs > nowMs) ReminderRules.line(e, marks, calendar) else null,
             openIn = openLink(e),
             leaveAlarm = e.id in marks.leaveAlarms,
