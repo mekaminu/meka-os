@@ -452,7 +452,7 @@ class GoalsScreensTest {
 
     /**
      * By hand (walk-through week 5, A17): a goal's What done looks like and Why it matters are rows opening sheets, not
-     * open boxes. No input box is on the open goal; each row opens its sheet with the words kept, Save dark until they
+     * open boxes. Neither box is on the open goal; each row opens its sheet with the words kept, Save dark until they
      * change; Save keeps the new words and the row shows them; blank clears them.
      */
     @Test @Config(qualifiers = ScreenShots.COVER)
@@ -484,8 +484,12 @@ class GoalsScreensTest {
         if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the goal has nothing to tap to show its settings")
         open[0].performSemanticsAction(SemanticsActions.OnClick)
         turns()
-        if (compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-            fail("Goals: an open input box is on the open goal")
+        // The goal's other boxes (milestones, steps, linking a task) come in later slices; these two are rows now.
+        listOf("Say what done looks like (optional)", "Say why, in a line (optional)").forEach { hint ->
+            if (compose.onAllNodes(hasContentDescription(hint) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()) fail("Goals: \"$hint\" is an open box on the open goal")
+        }
+        if (sheetOpen()) fail("Goals: a sheet is open before a row is tapped")
 
         tapSaid(GoalAddRules.rowSpoken(GoalTextRules.targetRow(g())))
         if (!sheetOpen()) fail("Goals: What done looks like opened no sheet")
