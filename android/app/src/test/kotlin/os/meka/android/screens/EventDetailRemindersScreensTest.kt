@@ -193,7 +193,7 @@ class EventDetailRemindersScreensTest {
         val core = core()
         val training = CalendarEvent(
             id = "ev-training", title = "Training", startAtMs = START, endAtMs = START + 60 * 60_000L, allDay = false,
-            provider = "google", account = "alex@example.com", calendarName = "Kids",
+            location = null, provider = "google", account = "alex@example.com", calendarName = "Kids",
         )
         compose.mainClock.autoAdvance = false
         compose.setContent {
