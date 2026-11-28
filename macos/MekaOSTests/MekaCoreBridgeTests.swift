@@ -2636,6 +2636,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(R.oftenLine(perWeek: 7).hasPrefix("Every day"))
     }
 
+    func testReflectionChoicesReachSwift() {
+        // Walk-through week 5, A17: the reflection's time is a "Comes on Sundays" row with a menu of the Fold's sheet.
+        let R = ReflectionChoiceRules.shared
+        XCTAssertEqual(R.row(start: 18 * 60).value, "18:00")
+        XCTAssertEqual(R.sheet(start: 19 * 60).choices.filter(\.lit).map(\.label), ["19:00"])
+        XCTAssertEqual(R.named(start: 18 * 60, name: "1200")?.intValue, 1200)
+        XCTAssertNil(R.named(start: 18 * 60, name: "1080"))
+    }
+
     func testFastingChoicesReachSwift() {
         // Walk-through week 5, A17: Fasting's plan chip and Started and Goal tiles open menus of the Fold's sheets.
         let R = FastingChoiceRules.shared

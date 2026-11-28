@@ -49,6 +49,9 @@ import os.meka.android.goals.fold
 import os.meka.android.goals.unfold
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.LoneWordGlue
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.core.domain.ReflectionChoiceRules
 import os.meka.core.domain.ReflectionEntry
 import os.meka.core.domain.ReflectionHint
 import os.meka.core.domain.ReflectionRules
@@ -154,32 +157,19 @@ private fun ReflectionCard(r: ReflectionView, said: ReflectionSaved?, modifier: 
 }
 
 /**
- * Slice 3: "Comes on Sundays at 18:00 · through Monday" with Change, which unfolds the times as chips (the set one lit);
- * a tap sets it for the review card, its heads-up and the reflection on both apps, and the chips fold away.
+ * Slice 3, as a row since walk-through week 5 (A17): "Comes on Sundays" · "18:00" › opens a sheet of the times, the set
+ * one lit, each saying when its heads-up comes and where Later tonight would put it; a tap sets it for the review card,
+ * its heads-up and the reflection on both apps, and the sheet closes (it gives its own tick haptic).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WhenRow(r: ReflectionView, act: ReflectionActions) {
     var open by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Crossfade(r.whenLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "reflect-when", modifier = Modifier.weight(1f)) { l ->
-                Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textTertiary)
-            }
-            Text(
-                if (open) "Done" else "Change", style = MekaType.caption, color = Meka.colors.accent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                    .clickable(role = Role.Button, onClickLabel = if (open) "Close the times" else "Change when it comes") { act.tick(); open = !open }
-                    .minTouch().padding(horizontal = MekaSpace.xs),
-            )
-        }
-        AnimatedVisibility(open, enter = unfold(), exit = fold()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                r.timeChoices.forEachIndexed { i, m ->
-                    val on = m == r.startMinute
-                    ReflectChip(r.timeLabels.getOrElse(i) { "" }, on) { if (!on) { act.setTime(m); open = false } }
-                }
-            }
+        NotifyChoiceRowView(ReflectionChoiceRules.row(r.startMinute), raised = true) { act.tick(); open = true }
+        if (open) {
+            NotifyChoiceSheetView(ReflectionChoiceRules.sheet(r.startMinute), onChoose = { name ->
+                ReflectionChoiceRules.named(r.startMinute, name)?.let { m -> act.setTime(m) }
+            }, onClose = { open = false })
         }
     }
 }

@@ -91,24 +91,30 @@ struct ReflectionSection: View {
         .onChange(of: r.weekStart) { reset() }
     }
 
-    /// Slice 3: "Comes on Sundays at 18:00 · through Monday" with a time picker; choosing one moves the review card,
+    /// Slice 3, as a row since walk-through week 5 (A17): "Comes on Sundays" · a menu of the times (the core's choice
+    /// sheet, each saying when its heads-up comes and where Later tonight puts it); choosing one moves the review card,
     /// its heads-up and the reflection on both apps, and says so under the card.
     private var whenRow: some View {
-        let start = Int(r.startMinute)
-        let choices = r.timeChoices.map { Int($0.int32Value) }
-        return HStack(spacing: MekaSpace.m) {
-            Text(LoneWordGlue.shared.kept(line: r.whenLine)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: r.whenLine)
-            Spacer()
-            Picker("Comes at", selection: Binding(get: { start }, set: { m in setTime(m) })) {
-                ForEach(Array(choices.enumerated()), id: \.element) { i, m in
-                    Text(i < r.timeLabels.count ? r.timeLabels[i] : "").tag(m)
-                }
+        let rules = ReflectionChoiceRules.shared
+        let row = rules.row(start: r.startMinute)
+        let sheet = rules.sheet(start: r.startMinute)
+        let lit = sheet.choices.first(where: { $0.lit })?.name ?? ""
+        return HStack(spacing: MekaSpace.xs) {
+            Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Spacer(minLength: MekaSpace.xs)
+            Picker(row.title, selection: Binding(get: { lit }, set: { name in
+                if let m = rules.named(start: r.startMinute, name: name)?.int32Value { setTime(Int(m)) }
+            })) {
+                ForEach(sheet.choices, id: \.name) { c in Text("\(c.label) · \(c.line)").tag(c.name) }
             }
-            .labelsHidden().frame(width: 90)
-            .accessibilityLabel("When the weekly review and reflection come on Sunday")
+            .labelsHidden().pickerStyle(.menu).fixedSize()
+            .help(LoneWordGlue.shared.kept(line: sheet.note))
         }
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.spoken)
         .padding(.top, MekaSpace.xs)
     }
 

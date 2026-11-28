@@ -47,6 +47,7 @@ import os.meka.core.domain.BalanceChoices
 import os.meka.core.domain.BalanceRules
 import os.meka.core.domain.BalanceTargetChoiceRules
 import os.meka.core.domain.BalanceView
+import os.meka.core.domain.ReflectionChoiceRules
 import os.meka.core.domain.CalendarEvent
 import os.meka.android.screens.ShotReviewWeek.Fill
 import os.meka.core.domain.CivilDate
@@ -81,7 +82,7 @@ import kotlin.test.fail
  * and durations, a grey line leaving a word alone or starting with a dot, and every button answering a 48 dp touch. By
  * hand: Targets opens and a target's row opens its sheet and a choice sets it, a "Count as" row opens its sheet and a choice counts an event, Undo, Reflect now opens the
  * questions, a suggestion fills its field, Save keeps the three, Skip this week, the journal opens and Remove, and
- * Change offers the times.
+ * Comes on Sundays opens its sheet of times and one sets it.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -349,7 +350,7 @@ class ReviewBalanceReflectScreensTest {
         ScreenShots.assertNumbersWhole(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
         ScreenShots.assertDurationsWhole(compose, name)
-        val lines = listOfNotNull(b.line, b.sources, b.uncounted, r.line, r.facts, r.whenLine) +
+        val lines = listOfNotNull(b.line, b.sources, b.uncounted, r.line, r.facts) +
             b.rows.map { it.line } + b.rows.flatMap { it.items } + b.rows.mapNotNull { it.trendLine }
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
@@ -509,11 +510,20 @@ class ReviewBalanceReflectScreensTest {
         clickNode(hasContentDescription("Remove Week of 5 Oct's reflection"), "$name: Remove")
         if (taps.removed != listOf(ws - 14)) fail("$name: Remove didn't remove that week (${taps.removed})")
 
-        scrollTo("Change")
-        clickNode(hasText("Change"), "$name: Change")
-        if (!onScreen("19:00")) fail("$name: Change didn't offer the times")
-        clickNode(hasText("19:00"), "$name: 19:00")
+        // Walk-through week 5, A17: when it comes is one row opening a sheet, not Change unfolding open time chips.
+        val start = reflection(Fill.MANY).startMinute
+        scrollTo(ReflectionChoiceRules.HEAD)
+        if (compose.onAllNodes(hasText("16:00") and hasClickAction()).fetchSemanticsNodes().isNotEmpty()) fail("$name: the times are open on the page")
+        clickNode(hasContentDescription(ReflectionChoiceRules.row(start).spoken), "$name: ${ReflectionChoiceRules.HEAD}")
+        until { sheetOpen() }
+        if (!sheetOpen()) fail("$name: the Comes on Sundays row didn't open its sheet")
+        if (!inSheet(ReflectionChoiceRules.TITLE)) fail("$name: the sheet isn't when the review comes")
+        if (!inSheet(ReflectionChoiceRules.line(19 * 60))) fail("$name: 19:00 doesn't say what it does")
+        compose.onAllNodes(hasText("19:00") and hasClickAction() and hasAnyAncestor(hasTestTag(NOTIFY_CHOICE_SHEET_TAG)))[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        until { !sheetOpen() }
         if (taps.times != listOf(19 * 60)) fail("$name: a time didn't set when it comes (${taps.times})")
+        if (sheetOpen()) fail("$name: a time didn't close the sheet")
     }
 
     /** Works by hand on a week not asked for: Reflect now opens the questions. */
