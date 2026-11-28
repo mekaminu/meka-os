@@ -430,7 +430,7 @@ private struct GoalRowView: View {
 
 /// Which of a goal's words is open in its sheet (walk-through week 5, A17).
 private enum GoalWords: String, Identifiable {
-    case target, why, step
+    case target, why, step, link
     var id: String { rawValue }
 }
 
@@ -441,8 +441,6 @@ private struct GoalDetailsView: View {
     let all: [GoalItem]
     let palette: MekaPalette
     @State private var editing: GoalWords?
-    @State private var query = ""
-    @State private var found: [MekaTask] = []
 
     var body: some View {
         let R = GoalSettingChoiceRules.shared
@@ -468,12 +466,8 @@ private struct GoalDetailsView: View {
             // Walk-through week 5, A17: "+ Add a step" is a row opening its sheet (the step becomes a task linked to the
             // goal), not an open box.
             GoalAddRowButton(row: GoalStepRules.shared.stepRow, palette: palette) { editing = .step }
-            TextField("Link a task…", text: $query).textFieldStyle(.roundedBorder)
-            ForEach(found, id: \.id) { t in
-                Button("+ \(t.title)") { model.setTaskGoal(t.id, goal.id); query = "" }
-                    .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
-                    .transition(.opacity)
-            }
+            // Walk-through week 5, A17: "+ Link a task" is a row opening a sheet of your open tasks, not an open box.
+            GoalAddRowButton(row: GoalLinkRules.shared.row(g: goal), palette: palette) { editing = .link }
         }
         .sheet(item: $editing) { kind in
             let T = GoalTextRules.shared
@@ -494,12 +488,76 @@ private struct GoalDetailsView: View {
                              close: { editing = nil }) { typed in
                     if let t = S.cleaned(typed: typed, max: S.MAX_STEP) { model.addGoalStep(id, t) }
                 }
+            case .link:
+                GoalLinkSheet(goalID: id, titles: Dictionary(all.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a }),
+                              palette: palette, close: { editing = nil })
             }
         }
-        .task(id: "\(query)|\(goal.tasksTotal)") {
-            let q = query
-            found = q.trimmingCharacters(in: .whitespaces).isEmpty ? [] : await model.goalLinkCandidates(goal.id, q)
+    }
+}
+
+/// An open goal's Link a task sheet (walk-through week 5, A17): a field narrowing the list, your open tasks not on this
+/// goal shown at once (one on another goal says so), a line when nothing is offered, Close · Link (disabled until a task
+/// still offered is picked). Motion: the picked row's fill fades in (reduced motion: none beyond the sheet's own).
+private struct GoalLinkSheet: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let goalID: String
+    let titles: [String: String]
+    let palette: MekaPalette
+    let close: () -> Void
+    @State private var query = ""
+    @State private var picked: String?
+    @State private var found: [MekaTask]?
+
+    var body: some View {
+        let R = GoalLinkRules.shared
+        let offered = found ?? []
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(R.sheet.title).font(MekaType.nowTitle).foregroundStyle(palette.textPrimary)
+            TextField(R.sheet.hint, text: $query).textFieldStyle(.roundedBorder).onSubmit(link)
+                .accessibilityLabel(R.sheet.spokenHint)
+            if let list = found, list.isEmpty {
+                Text(R.emptyLine(query: query)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            ForEach(offered, id: \.id) { t in
+                let lit = t.id == picked
+                let line = R.taskLine(t: t, goalId: goalID, goalTitles: titles)
+                Button { MekaHaptics.light(); picked = t.id } label: {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(t.title).font(MekaType.body).foregroundStyle(lit ? palette.onAccent : palette.textPrimary).lineLimit(2)
+                        if let line { Text(line).font(MekaType.caption).foregroundStyle(lit ? palette.onAccent : palette.textSecondary) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, MekaSpace.l).padding(.vertical, MekaSpace.m)
+                    .background(lit ? palette.accent : palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(R.spoken(t: t, line: line, picked: lit))
+            }
+            Text(R.sheet.note).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(GoalAddRules.shared.CLOSE, action: close).keyboardShortcut(.cancelAction)
+                Button(R.sheet.addLabel, action: link).keyboardShortcut(.defaultAction)
+                    .disabled(!R.canLink(picked: picked, offered: offered))
+            }
         }
+        .padding(MekaSpace.l)
+        .frame(width: 420)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: picked)
+        .task(id: query) {
+            let q = query
+            found = await model.goalLinkCandidates(goalID, q)
+        }
+    }
+
+    private func link() {
+        guard let id = picked, GoalLinkRules.shared.canLink(picked: id, offered: found ?? []) else { return }
+        MekaHaptics.light()
+        model.setTaskGoal(id, goalID)
+        close()
     }
 }
 

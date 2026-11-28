@@ -31,6 +31,8 @@ import os.meka.core.domain.GoalTextRules
 import os.meka.core.domain.GoalNumberRules
 import os.meka.core.domain.GoalRules
 import os.meka.core.domain.GoalStepRules
+import os.meka.core.domain.GoalLinkRules
+import os.meka.android.goals.GOAL_LINK_TASK_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import kotlin.test.fail
@@ -645,6 +647,76 @@ class GoalsScreensTest {
         tapSaid("${GoalStepRules.ADD}, ${GoalStepRules.stepSheet.title}")
         waitFor("the step didn't become a task linked to the goal") { g().tasksTotal == 1 }
         waitFor("the step's sheet stayed open") { !sheetOpen() }
+    }
+
+    /**
+     * By hand (walk-through week 5, A17): an open goal's "+ Link a task" is a row opening a sheet, not an open box. The
+     * sheet lists your open tasks before anything is typed (one on another goal says so), the words narrow it, Link is
+     * dark until a task is picked; linking counts it towards the goal and the sheet goes; words matching nothing say so.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun goalLinkTaskByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        val (id, ids) = runBlocking {
+            core.tick()
+            val id = core.addGoal("Run a half marathon", null, GoalHorizon.MONTH)
+            val other = core.addGoal("Get fit", null, GoalHorizon.YEAR)
+            val trainers = core.addTask("Buy trainers")
+            val tax = core.addTask("Pay council tax")
+            val stretch = core.addTask("Stretch every morning")
+            core.setTaskGoal(stretch, other)
+            core.tick()
+            id to listOf(trainers, tax, stretch)
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        fun g() = core.goalsView.value.goals.first { it.id == id }
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        val open = compose.onAllNodes(hasText("Run a half marathon") and hasClickAction())
+        if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the goal has nothing to tap to show its settings")
+        open[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        if (compose.onAllNodes(hasContentDescription("Link a task…") and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()) fail("Goals: \"Link a task…\" is an open box on the open goal")
+
+        val L = GoalLinkRules
+        fun linkEnabled() = compose.onAllNodes(hasContentDescription("${L.LINK}, ${L.sheet.title}"), useUnmergedTree = true)
+            .fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == false
+        fun shown(taskId: String) = compose.onAllNodes(hasTestTag(GOAL_LINK_TASK_TAG + taskId), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        tapSaid(GoalAddRules.rowSpoken(L.row(g())))
+        if (!sheetOpen()) fail("Goals: + Link a task opened no sheet")
+        waitFor("the sheet didn't list the open tasks before anything was typed") { ids.all(::shown) }
+        if (compose.onAllNodes(hasText("On Get fit · linking moves it here", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("Goals: the task on Get fit doesn't say linking moves it")
+        if (linkEnabled()) fail("Goals: Link is lit before a task is picked")
+        typeInto(L.sheet.spokenHint, "trainers")
+        waitFor("the words didn't narrow the list") { shown(ids[0]) && !shown(ids[1]) && !shown(ids[2]) }
+        compose.onAllNodes(hasTestTag(GOAL_LINK_TASK_TAG + ids[0]), useUnmergedTree = true)[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns(1_000)
+        if (!linkEnabled()) fail("Goals: Link stayed dark with a task picked")
+        tapSaid("${L.LINK}, ${L.sheet.title}")
+        waitFor("the picked task wasn't linked to the goal") { g().tasksTotal == 1 }
+        waitFor("the link sheet stayed open") { !sheetOpen() }
+
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        tapSaid(GoalAddRules.rowSpoken(L.row(g())))
+        if (!sheetOpen()) fail("Goals: + Link a task didn't open again")
+        if (shown(ids[0])) fail("Goals: the linked task is still offered")
+        typeInto(L.sheet.spokenHint, "dentist")
+        waitFor("words matching nothing didn't say so") {
+            compose.onAllNodes(hasTestTag("goal-link-empty"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /**

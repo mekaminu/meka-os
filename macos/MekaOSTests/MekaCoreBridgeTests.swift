@@ -2678,6 +2678,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(N.addedLine(typed: " +200 ", changed: true), "Added +200")
     }
 
+    func testGoalLinkSheetReachesSwift() {
+        // Walk-through week 5, A17: an open goal's + Link a task is a row opening a sheet of your open tasks.
+        let L = GoalLinkRules.shared
+        XCTAssertEqual(L.LABEL, "+ Link a task")
+        XCTAssertEqual(L.sheet.addLabel, "Link")
+        XCTAssertFalse(L.canLink(picked: nil, offered: []))
+        XCTAssertEqual(L.emptyLine(query: " "), L.NO_TASKS)
+    }
+
     func testGoalStepSheetsReachSwift() {
         // Walk-through week 5, A17: an open goal's + Add a milestone and + Add a step are rows opening sheets.
         let S = GoalStepRules.shared

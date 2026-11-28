@@ -7920,3 +7920,10 @@ An open goal unfolded two more always-open boxes, "Add a milestone…" under Mil
 - Fold: `GoalsRoute`'s `Milestones` and `AddStep` use `GoalAddRowView` and `LineAddSheetView`; `GoalsScreensTest.goalMilestoneAndStepByHand`.
 - Mac: `GoalsScreen.swift`'s `MilestonesView` and `GoalDetailsView` use `GoalAddRowButton` opening `LineAddSheet`; `testGoalStepSheetsReachSwift`. Mac checked nightly.
 - Motion catalogue: the Goals line names the two rows. Next on an open goal: Link a task, then the habit's workout-app link.
+
+### Found and fixing, week 5 — slice 147 (2026-11-28): A17 on an open goal's Link a task
+An open goal showed an always-open "Link a task…" box whose matches unfolded under it only after typing. It is now one card row, "+ Link a task" over "Count one of your open tasks towards this goal" (or "3 tasks count towards it · link another"), opening a sheet that lists your open tasks not on this goal at once (soonest first, at most six), narrowed by a few words of the task; one on another goal says "On Get fit · linking moves it here"; words matching nothing say "No open task has "…" in its name." and no open tasks at all point to + Add a step. Tapping a task picks it (lit); Link stays dark until a task still in the list is picked, then links it and the sheet goes.
+- Core: `GoalLinkSheet.kt` (`GoalLinkRules` row, sheet, `taskLine`, `emptyLine`, `canLink`, `spoken`); `GoalLinkSheetTest`.
+- Fold: `GoalsRoute`'s `LinkTask` uses `GoalAddRowView` opening `GoalLinkSheetView` (in `GoalAddSheetView.kt`, on `GoalAddSheetFrame`); `GoalDetails.goalTitles`; `GoalsScreensTest.goalLinkTaskByHand`.
+- Mac: `GoalsScreen.swift`'s `GoalDetailsView` uses `GoalAddRowButton` opening the new `GoalLinkSheet`; `testGoalLinkSheetReachesSwift`. Mac checked nightly.
+- Motion catalogue: the Goals line describes the row, the sheet and the pick. Next on an open goal: the habit's workout-app link.

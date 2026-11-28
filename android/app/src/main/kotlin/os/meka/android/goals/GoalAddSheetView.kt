@@ -315,3 +315,57 @@ private fun SheetField(
         )
     }
 }
+
+/** The tag of a task row in Link a task's sheet; the task's id follows. */
+const val GOAL_LINK_TASK_TAG = "goal-link-task-"
+
+/**
+ * An open goal's Link a task sheet (walk-through week 5, A17): a field narrowing the list by a few words, your open tasks
+ * not on this goal shown at once (one on another goal says so), a line when nothing is offered, Close · Link. Tapping a
+ * task picks it (lit, light haptic); Link stays dark until a task still offered is picked and hands [onLink] its id.
+ * Motion: the picked row's accent fill fades in (the sheet rises as the others do; reduced motion: a cross-fade).
+ */
+@Composable
+internal fun GoalLinkSheetView(
+    goalId: String, goalTitles: Map<String, String>,
+    candidates: suspend (String) -> List<os.meka.core.domain.Task>,
+    onLink: (String) -> Unit, onClose: () -> Unit,
+) {
+    val R = os.meka.core.domain.GoalLinkRules
+    val haptics = rememberMekaHaptics()
+    var query by rememberSaveable { mutableStateOf("") }
+    var picked by rememberSaveable { mutableStateOf<String?>(null) }
+    var found by remember { mutableStateOf<List<os.meka.core.domain.Task>?>(null) }
+    LaunchedEffect(query) { found = runCatching { candidates(query) }.getOrDefault(emptyList()) }
+    val offered = found.orEmpty()
+    GoalAddSheetFrame(
+        R.sheet, query, { query = it },
+        add = { picked?.takeIf { R.canLink(it, offered) }?.let(onLink) },
+        onClose = onClose,
+        canAdd = R.canLink(picked, offered),
+        maxLength = GoalAddRules.MAX_TITLE,
+    ) {
+        val list = found
+        if (list != null && list.isEmpty()) {
+            Text(LoneWordGlue.kept(R.emptyLine(query)), style = MekaType.caption, color = Meka.colors.textSecondary,
+                modifier = Modifier.testTag("goal-link-empty"))
+        }
+        list?.forEach { t ->
+            val lit = t.id == picked
+            val line = R.taskLine(t, goalId, goalTitles)
+            val bg by androidx.compose.animation.animateColorAsState(
+                if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "link-task",
+            )
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)
+                    .clickable(role = Role.Button) { haptics.light(); picked = t.id }
+                    .semantics { contentDescription = R.spoken(t, line, lit) }
+                    .testTag(GOAL_LINK_TASK_TAG + t.id)
+                    .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+            ) {
+                Text(t.title, style = MekaType.body, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 2)
+                line?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textSecondary) }
+            }
+        }
+    }
+}

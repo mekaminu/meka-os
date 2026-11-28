@@ -94,6 +94,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.drawscope.clipRect
 import os.meka.core.domain.GoalRules
 import os.meka.core.domain.GoalStepRules
+import os.meka.core.domain.GoalLinkRules
 import os.meka.core.domain.GoalHabitChoiceRules
 import os.meka.core.domain.GoalSettingChoiceRules
 import os.meka.android.notify.NotifyChoiceRowView
@@ -345,6 +346,7 @@ fun GoalsRoute(core: MekaCore) {
                         keep = { ms, ss -> runCatching { core.keepBreakdown(g.id, ms, ss) }.getOrNull() },
                         undo = { kept -> act { core.undoBreakdown(kept) } },
                     ),
+                    goalTitles = view.goals.associate { it.id to it.title },
                 ),
             )
         }
@@ -627,6 +629,8 @@ internal class GoalDetails(
     val numberHabit: (String?) -> Unit,
     /** Slice 4: Break it down (approval only). */
     val breakdown: BreakdownActions,
+    /** Open goals' titles by id, so Link a task can say a task sits on another goal. */
+    val goalTitles: Map<String, String> = emptyMap(),
 )
 
 @Composable
@@ -913,20 +917,15 @@ private fun AddStep(g: GoalItem, add: (String) -> Unit) {
     )
 }
 
-/** "Link a task": type a few words, tap one of your open tasks to count it towards the goal. */
+/**
+ * "+ Link a task": count one of your open tasks towards the goal. Walk-through week 5, A17: a card row opening its sheet
+ * (your open tasks shown at once, narrowed by a few words), not an open box with matches unfolding under it.
+ */
 @Composable
 private fun LinkTask(g: GoalItem, details: GoalDetails) {
-    var query by rememberSaveable(g.id) { mutableStateOf("") }
-    var found by remember(g.id) { mutableStateOf<List<os.meka.core.domain.Task>>(emptyList()) }
-    LaunchedEffect(g.id, query, g.tasksTotal) { found = if (query.isBlank()) emptyList() else runCatching { details.candidates(query) }.getOrDefault(emptyList()) }
-    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Field("Link a task…", query, { query = it }) {}
-        AnimatedVisibility(found.isNotEmpty(), enter = unfold(), exit = fold()) {
-            Column {
-                found.forEach { t -> Action("+ ${t.title}") { details.link(t.id); query = "" } }
-            }
-        }
-    }
+    var open by rememberSaveable(g.id, "goal-link-task") { mutableStateOf(false) }
+    GoalAddRowView(GoalLinkRules.row(g), Modifier.testTag("goals-goal-link-${g.id}")) { open = true }
+    if (open) GoalLinkSheetView(g.id, details.goalTitles, details.candidates, onLink = details.link, onClose = { open = false })
 }
 
 @Composable
