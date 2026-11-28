@@ -2657,6 +2657,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(R.named(choices: [5, 10].map { KotlinInt(int: $0) }, current: 10, name: "0")?.intValue, 0)
     }
 
+    func testEventDetailChoicesReachSwift() {
+        // Walk-through week 5, A17: Whose is it? and Ring as an alarm are menus holding the Fold's sheets.
+        let R = EventDetailChoiceRules.shared
+        let whose = R.whoseSheet(names: ["Alex", "Sam"], current: "Sam", every: "Wed 16:55")
+        XCTAssertEqual(whose.choices.map(\.label), ["Not set", "Alex", "Sam"])
+        XCTAssertEqual(whose.choices.filter(\.lit).map(\.line), ["Every Wed 16:55 reads Sam"])
+        XCTAssertEqual(whose.choices.first?.name, "")
+        let alarm = R.alarmSheet(on: false)
+        XCTAssertEqual(alarm.choices.map(\.label), ["On", "Off"])
+        XCTAssertEqual(alarm.choices.filter(\.lit).map(\.line), [R.ALARM_OFF_LINE])
+    }
+
     func testFastingChoicesReachSwift() {
         // Walk-through week 5, A17: Fasting's plan chip and Started and Goal tiles open menus of the Fold's sheets.
         let R = FastingChoiceRules.shared

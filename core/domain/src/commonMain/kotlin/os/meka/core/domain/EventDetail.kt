@@ -105,6 +105,8 @@ data class EventDetailView(
     val clubChildChoices: List<String> = emptyList(),
     val clubChild: String? = null,
     val clubChildLine: String? = null,
+    /** "Wed 16:55": the club series' weekday and start, for Whose is it?'s sheet; null when it isn't offered. */
+    val clubEvery: String? = null,
 )
 
 /**
@@ -256,6 +258,7 @@ object EventDetails {
             clubChildChoices = if (ClubChildRules.canSet(e)) ClubChildRules.NAMES else emptyList(),
             clubChild = if (ClubChildRules.canSet(e)) marks.clubChildren[ClubChildRules.seriesId(e, calendar)] else null,
             clubChildLine = ClubChildRules.setLine(e, marks.clubChildren, calendar),
+            clubEvery = if (ClubChildRules.canSet(e)) ClubChildRules.every(e, calendar) else null,
         )
     }
 

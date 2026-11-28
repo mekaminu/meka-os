@@ -206,14 +206,14 @@ struct EventDetailSheet: View {
 
         // Fold review 17:56, item 4: whose club session this is, set once for every session of the series.
         if !d.clubChildChoices.isEmpty {
-            Picker("Whose is it?", selection: Binding(
+            // Walk-through week 5, A17: a menu holding the Fold's sheet, Not set first, each saying what the series reads.
+            let sheet = EventDetailChoiceRules.shared.whoseSheet(names: d.clubChildChoices, current: d.clubChild, every: d.clubEvery)
+            Picker(EventDetailChoiceRules.shared.WHOSE_HEAD, selection: Binding(
                 get: { d.clubChild ?? "" },
                 set: { model.setClubChild(event, $0.isEmpty ? nil : $0) }
             )) {
-                Text("Not set").tag("")
-                ForEach(d.clubChildChoices, id: \.self) { name in Text(name).tag(name) }
+                ForEach(sheet.choices, id: \.name) { c in Text("\(c.label) · \(c.line)").tag(c.name) }
             }
-            .pickerStyle(.segmented)
             .fixedSize()
             .controlSize(.small)
             .help("Set once: every session at this time names them, and a clash with work asks who's taking them")
@@ -262,16 +262,20 @@ struct EventDetailSheet: View {
         Group {
             if d.travelMin != 0 {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Toggle(LeaveAlarmRules.shared.SWITCH_LABEL, isOn: Binding(
+                    // Walk-through week 5, A17: a menu of On · Off, each saying what happens when it's time to go
+                    // (the Fold's sheet; on the Mac the alarm is a notification with Snooze / Dismiss), not a switch.
+                    let alarm = EventDetailChoiceRules.shared.alarmSheet(on: d.leaveAlarm)
+                    Picker(LeaveAlarmRules.shared.SWITCH_LABEL, selection: Binding(
                         get: { d.leaveAlarm },
                         set: { model.setEventLeaveAlarm(d.id, $0) }
-                    ))
-                    .toggleStyle(.switch)
-                    Text(d.leaveAlarm ? "Rings when it's time to go · Snooze or Dismiss" : "A heads-up when it's time to go")
-                        .font(MekaType.caption)
-                        .foregroundStyle(palette.textSecondary)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: d.leaveAlarm)
+                    )) {
+                        ForEach(alarm.choices, id: \.name) { c in
+                            let on = c.name == CallChoiceRules.shared.ON
+                            Text("\(c.label) · \(on ? "Rings when it's time to go · Snooze or Dismiss" : c.line)").tag(on)
+                        }
+                    }
+                    .fixedSize()
+                    .help(EventDetailChoiceRules.shared.ALARM_NOTE)
                 }
                 .controlSize(.small)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))

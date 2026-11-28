@@ -80,9 +80,12 @@ object ClubChildRules {
     fun setLine(e: CalendarEvent, set: Map<String, String>, calendar: LocalCalendar): String? {
         if (!canSet(e)) return null
         val who = set[seriesId(e, calendar)]?.takeIf { it in NAMES } ?: return null
-        val weekday = weekday(e, calendar)
-        return "For $who · every $weekday ${LocalClock.formatMinute(calendar.minuteOfDay(e.startAtMs))}"
+        return "For $who · every ${every(e, calendar)}"
     }
+
+    /** "Wed 16:55": the series' weekday and start time, as the pane's line and its Whose is it? sheet say it. */
+    fun every(e: CalendarEvent, calendar: LocalCalendar): String =
+        "${weekday(e, calendar)} ${LocalClock.formatMinute(calendar.minuteOfDay(e.startAtMs))}"
 
     /** "Alex · “Training” every Wed" — the undo bar's line after setting. */
     fun savedLine(e: CalendarEvent, child: String?, calendar: LocalCalendar): String {

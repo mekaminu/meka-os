@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalContext
 import os.meka.android.MekaApplication
-import os.meka.core.domain.LeaveAlarmRules
-import androidx.compose.foundation.selection.toggleable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -64,6 +62,7 @@ import os.meka.core.facade.MekaCore
 import os.meka.android.notify.NotifyChoiceRowView
 import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.EventReminderChoiceRules
+import os.meka.core.domain.EventDetailChoiceRules
 
 /**
  * Event detail (calendar redesign, slice 3): what, when and how soon, which calendar, where (tap to open Maps), a Join
@@ -290,18 +289,26 @@ private fun DetailContent(
                 }
             }
         }
-        // Fold review 17:56, item 4: whose club session this is, set once for the whole series (every Wed 16:55);
-        // tapping the lit name again clears it. The Calendar and Today name the child from then on.
+        // Fold review 17:56, item 4: whose club session this is, set once for the whole series (every Wed 16:55). Walk-
+        // through week 5, A17: one "Whose is it?" · "Alex" › card row opening the choice sheet, Not set first, each
+        // saying what the series' sessions will read (EventDetailChoiceRules); a choice saves and closes it.
+        var whoseOpen by remember(event.id) { mutableStateOf(false) }
         if (d.clubChildChoices.isNotEmpty()) {
             val names = d.clubChildChoices
-            val current = d.clubChild?.let { names.indexOf(it) + 1 } ?: 0
-            ReminderChips("Whose is it? · every session", names.indices.map { it + 1 }, current, { names[it - 1] }, 1) { i ->
-                haptics.tick()
-                scope.launch {
-                    val saved = runCatching { core.setClubChild(event, if (i == 0) null else names[i - 1]) }.getOrNull() ?: return@launch
-                    undo?.show(saved.line) { core.undoClubChild(saved) }
-                }
-            }
+            NotifyChoiceRowView(EventDetailChoiceRules.whoseRow(d.clubChild),
+                Modifier.padding(bottom = MekaSpace.xs).appear(rememberAppearance(1))) { haptics.tick(); whoseOpen = true }
+            if (whoseOpen) NotifyChoiceSheetView(
+                EventDetailChoiceRules.whoseSheet(names, d.clubChild, d.clubEvery),
+                onChoose = { name ->
+                    EventDetailChoiceRules.whoseNamed(names, d.clubChild, name)?.let { pick ->
+                        scope.launch {
+                            val saved = runCatching { core.setClubChild(event, pick.child) }.getOrNull() ?: return@launch
+                            undo?.show(saved.line) { core.undoClubChild(saved) }
+                        }
+                    }
+                },
+                onClose = { whoseOpen = false },
+            )
         }
         // Remind me / Leave by: a heads-up through the notification governor (quiet hours apply). Walk-through week 5,
         // A17: each is one card row ("Remind me" · "10 min before" ›) opening the shared choice sheet, Off first, each
@@ -342,10 +349,21 @@ private fun DetailContent(
             enter = if (reducedMotion) fadeIn(MekaMotion.appear(true)) else androidx.compose.animation.expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reducedMotion) fadeOut(MekaMotion.appear(true)) else androidx.compose.animation.shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            LeaveAlarmSwitch(d.leaveAlarm) { on ->
-                haptics.tick()
-                scope.launch { runCatching { core.setEventLeaveAlarm(event.id, on) } }
+            // Walk-through week 5, A17: a "Ring as an alarm" · "Off" › card row opening On · Off, each saying what
+            // happens when it's time to go (EventDetailChoiceRules), not an open On/Off pill.
+            var alarmOpen by remember(event.id) { mutableStateOf(false) }
+            NotifyChoiceRowView(EventDetailChoiceRules.alarmRow(d.leaveAlarm), Modifier.padding(bottom = MekaSpace.m)) {
+                haptics.tick(); alarmOpen = true
             }
+            if (alarmOpen) NotifyChoiceSheetView(
+                EventDetailChoiceRules.alarmSheet(d.leaveAlarm),
+                onChoose = { name ->
+                    EventDetailChoiceRules.alarmNamed(d.leaveAlarm, name)?.let { on ->
+                        scope.launch { runCatching { core.setEventLeaveAlarm(event.id, on) } }
+                    }
+                },
+                onClose = { alarmOpen = false },
+            )
         }
         val context = LocalContext.current
         val exact = remember(tick, marks) { (context.applicationContext as? MekaApplication)?.governor?.exactAllowed() ?: true }
@@ -430,72 +448,6 @@ private fun DetailContent(
             modifier = Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(5)),
         )
         Spacer(Modifier.height(MekaSpace.xl))
-    }
-}
-
-/**
- * "Remind me" with a chip per choice still ahead; the one that's set is filled (tap it again to turn it off). Its
- * colour blends across when chosen. A set choice that's no longer offered still shows, so it can be turned off.
- */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun ReminderChips(label: String, choices: List<Int>, current: Int, text: (Int) -> String, index: Int, onPick: (Int) -> Unit) {
-    val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.m).appear(rememberAppearance(index))) {
-        Text(label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xs))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            (if (current != 0 && current !in choices) listOf(current) + choices else choices).forEach { m ->
-                val on = m == current
-                val bg by androidx.compose.animation.animateColorAsState(
-                    if (on) Meka.colors.accent else Meka.colors.background, MekaMotion.themeBlend(reduced), label = "reminder-chip",
-                )
-                TouchTarget({ onPick(if (on) 0 else m) }) {
-                    Text(
-                        text(m), style = MekaType.itemMeta, color = if (on) Meka.colors.onAccent else Meka.colors.accent,
-                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                            .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
-                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * "Ring as an alarm" for Leave by (Alarms, slice 3): an On/Off pill whose colour blends (like the reminder chips), with
- * the line under it cross-fading between what each choice does. The screen reader hears it as a switch.
- */
-@Composable
-private fun LeaveAlarmSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
-    val reduced = Meka.reducedMotion
-    val bg by androidx.compose.animation.animateColorAsState(
-        if (on) Meka.colors.accent else Meka.colors.background, MekaMotion.themeBlend(reduced), label = "leave-alarm",
-    )
-    Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.m)) {
-        Row(
-            Modifier.fillMaxWidth().toggleable(value = on, role = Role.Switch) { onChange(it) },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(LeaveAlarmRules.SWITCH_LABEL, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(
-                if (on) "On" else "Off", style = MekaType.itemMeta, color = if (on) Meka.colors.onAccent else Meka.colors.accent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                    .border(1.dp, Meka.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(MekaRadius.pill))
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            )
-        }
-        AnimatedContent(
-            targetState = on,
-            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
-            label = "leave-alarm-line",
-        ) { now ->
-            Text(
-                if (now) "Rings full screen when it's time to go · Snooze or slide to dismiss" else "A heads-up when it's time to go",
-                style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs),
-            )
-        }
     }
 }
 

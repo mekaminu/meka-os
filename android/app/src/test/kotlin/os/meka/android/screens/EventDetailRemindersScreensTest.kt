@@ -35,6 +35,9 @@ import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.DateGlue
 import os.meka.core.domain.EventReminderChoiceRules
+import os.meka.core.domain.EventDetailChoiceRules
+import os.meka.core.domain.Household
+import os.meka.core.domain.HouseholdNames
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
@@ -45,7 +48,9 @@ import kotlin.test.fail
  * · 15 min · 30 min, "LEAVE BY · HOW LONG TO GET THERE" 10 min away … 1 h away). By hand: no reminder or travel chip is
  * left on the page; the Remind me row opens its sheet, each choice saying when its heads-up comes, and a choice sets the
  * reminder and closes the sheet; the Leave by row opens its sheet, each saying when to leave, and a choice sets it; Off
- * turns the reminder off again. Invented data only (rule 13).
+ * turns the reminder off again; Ring as an alarm, once a travel time is set, is a row opening On · Off. On a club session
+ * Whose is it? is a row opening Not set · the children, each saying what the series reads, a name setting it.
+ * Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -68,6 +73,7 @@ class EventDetailRemindersScreensTest {
     @After
     fun zoneBack() {
         zoneBefore?.let { java.util.TimeZone.setDefault(it) }
+        Household.set(HouseholdNames.EMPTY)
     }
 
     private companion object {
@@ -164,8 +170,53 @@ class EventDetailRemindersScreensTest {
         choose("30 min away", "$name: Leave by")
         if (core.eventMarks.value.travelOf(event.id) != 30) fail("$name: 30 min away didn't set Leave by")
 
+        turns()
+        if (compose.onAllNodes(hasText("On") and hasClickAction()).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: Ring as an alarm is still an open On/Off pill")
+        }
+        clickRow(EventDetailChoiceRules.alarmRow(false).spoken, "$name: Ring as an alarm")
+        if (!inSheet(EventDetailChoiceRules.ALARM_ON_LINE)) fail("$name: On doesn't say it rings full screen")
+        choose("On", "$name: Ring as an alarm")
+        if (event.id !in core.eventMarks.value.leaveAlarms) fail("$name: On didn't make Leave by ring as an alarm")
+        if (compose.onAllNodes(hasContentDescription(EventDetailChoiceRules.alarmRow(true).spoken)).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: the alarm row doesn't say On")
+        }
+
         clickRow(EventReminderChoiceRules.remindRow(10).spoken, "$name: Remind me again")
         choose(EventReminderChoiceRules.OFF, "$name: Remind me")
         if (core.eventMarks.value.reminderOf(event.id) != 0) fail("$name: Off didn't turn the reminder off")
+    }
+
+    @Test
+    fun whoseIsItIsARowOpeningTheChildrenByHand() {
+        Household.useTyped("Alex, U7\nSam, U10", "")
+        val core = core()
+        val training = CalendarEvent(
+            id = "ev-training", title = "Training", startAtMs = START, endAtMs = START + 60 * 60_000L, allDay = false,
+            provider = "google", account = "alex@example.com", calendarName = "Kids",
+        )
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    EventDetailPane(core, training, onClose = {})
+                }
+            }
+        }
+        turns()
+        val name = "event-detail-whose"
+        for (chip in listOf("Alex", "Sam")) {
+            if (compose.onAllNodes(hasText(chip) and hasClickAction()).fetchSemanticsNodes().isNotEmpty()) {
+                fail("$name: \"$chip\" is an open chip on the page")
+            }
+        }
+        clickRow(EventDetailChoiceRules.whoseRow(null).spoken, "$name: Whose is it?")
+        if (!inSheet("Every Wed 19:00 reads Sam")) fail("$name: Sam doesn't say what the series reads")
+        if (!inSheet("Every Wed 19:00 asks Alex or Sam?")) fail("$name: Not set doesn't say what it asks")
+        choose("Sam", "$name: Whose is it?")
+        until { compose.onAllNodes(hasContentDescription(EventDetailChoiceRules.whoseRow("Sam").spoken)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasContentDescription(EventDetailChoiceRules.whoseRow("Sam").spoken)).fetchSemanticsNodes().isEmpty()) {
+            fail("$name: the row doesn't say Sam")
+        }
     }
 }
