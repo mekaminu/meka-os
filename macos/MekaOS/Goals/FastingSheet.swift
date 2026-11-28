@@ -191,19 +191,24 @@ struct FastingSheet: View {
                 Button("Discard this fast", role: .destructive) { MekaHaptics.light(); moreOpen = false; model.discardFast() }
                     .buttonStyle(MekaPressStyle()).font(MekaType.captionStrong).foregroundStyle(palette.critical)
             } else {
-                let ago = FastingRules.shared.STARTED_AGO_CHOICES.map(\.int32Value).filter { $0 > 0 }
-                FastChips(title: "Started earlier", labels: ago.map { FastingRules.shared.startedAgoLabel(min: $0) },
-                          lit: { _ in false }, palette: palette) { i in
-                    model.startFast(minutesAgo: ago[i])
-                }
-                // The GP note comes before any longer fast can be started.
+                // Walk-through week 5, A17: Started earlier and Longer fast are menus of their choices (the Fold's
+                // sheets), each saying what it does, not open chip rows. The GP note comes before any longer fast can be
+                // started, and is the menu's help too.
+                let R = FastingChoiceRules.shared
+                let until = v.untilChoices
+                let now = Int64(Date().timeIntervalSince1970 * 1000)
+                FastChoiceMenu(sheet: R.earlierSheet(plan: v.plan), pick: { name in
+                    if let m = R.earlierNamed(name: name) { model.startFast(minutesAgo: m.int32Value) }
+                }) { moreRow(R.earlierRow()) }
                 Text(FastingScreenRules.shared.GP_NOTE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                let ext = FastingRules.shared.EXTENDED_CHOICES
-                let until = v.untilChoices
-                FastChips(title: "Longer fast", labels: ext.map(\.label) + until.map(\.label), lit: { _ in false }, palette: palette) { i in
-                    if i < ext.count { model.startExtendedFast(hours: ext[i].hours) } else { model.startFastUntil(until[i - ext.count].untilMs) }
-                }
+                FastChoiceMenu(sheet: R.longerSheet(until: until, nowMs: now), pick: { name in
+                    if let h = R.longerHours(until: until, name: name) {
+                        model.startExtendedFast(hours: h.int32Value)
+                    } else if let ms = R.longerUntilMs(until: until, name: name) {
+                        model.startFastUntil(ms.int64Value)
+                    }
+                }) { moreRow(R.longerRow()) }
                 Button(picking ? "Close" : "Pick a day and time") { MekaHaptics.tick(); picking.toggle() }
                     .buttonStyle(MekaPressStyle()).font(MekaType.captionStrong).foregroundStyle(palette.accent)
                     .popover(isPresented: $picking, arrowEdge: .bottom) {
@@ -217,6 +222,21 @@ struct FastingSheet: View {
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surface))
+    }
+
+    /// More options' "Started earlier" · "30 min to 3 h ago" › row, the label of its menu.
+    private func moreRow(_ row: NotifyChoiceRow) -> some View {
+        HStack(spacing: MekaSpace.xs) {
+            Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            Spacer(minLength: MekaSpace.xs)
+            Text(row.value).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+            Text("›").font(MekaType.body).foregroundStyle(palette.textTertiary)
+        }
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .contentShape(Rectangle())
+        .accessibilityLabel(row.spoken)
     }
 
     // MARK: What's happening now, the stages

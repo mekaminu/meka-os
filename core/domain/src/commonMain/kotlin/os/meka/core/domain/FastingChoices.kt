@@ -139,4 +139,77 @@ object FastingChoiceRules {
         val m = name.toIntOrNull() ?: return null
         return m.takeIf { it in FastingRules.MOVE_START_CHOICES && canMove(cur, it, nowMs) }
     }
+
+    // ---- More options: a fast started earlier, a longer fast (no fast running) ----
+
+    const val EARLIER_HEAD = "Started earlier"
+    const val EARLIER_VALUE = "30 min to 3 h ago"
+    const val EARLIER_TITLE = "When did you start?"
+    const val EARLIER_NOTE = "Starts your fast from then, on your plan's goal."
+    const val LONGER_HEAD = "Longer fast"
+    const val LONGER_VALUE = "24 h to 7 days"
+    const val LONGER_TITLE = "Start a longer fast"
+
+    /** "Started earlier" · "30 min to 3 h ago" ›. */
+    fun earlierRow(): NotifyChoiceRow =
+        NotifyChoiceRow(EARLIER_HEAD, EARLIER_VALUE, "Started earlier: $EARLIER_VALUE. Opens its choices")
+
+    /** The minutes-ago choices past Now ([FastingRules.STARTED_AGO_CHOICES]). */
+    fun earlierMinutes(): List<Int> = FastingRules.STARTED_AGO_CHOICES.filter { it > 0 }
+
+    /** "Goal 16 h · 15 h 30 m to go" for a fast on [plan] started [minutesAgo] ago. */
+    fun earlierLine(plan: FastingPlan, minutesAgo: Int): String =
+        "Goal ${plan.targetHours} h · ${FastingRules.duration((plan.targetHours * 60L - minutesAgo) * 60_000L)} to go"
+
+    /** "30 min ago" … "3 h ago", each saying its goal and what's left; none lit, nothing is running. */
+    fun earlierSheet(plan: FastingPlan): NotifyChoiceSheet = NotifyChoiceSheet(EARLIER_TITLE, EARLIER_NOTE,
+        earlierMinutes().map { m -> choice(m.toString(), FastingRules.startedAgoLabel(m), earlierLine(plan, m), false) })
+
+    /** The minutes ago a choice starts the fast from; null when it isn't one. */
+    fun earlierNamed(name: String): Int? = name.toIntOrNull()?.takeIf { it in earlierMinutes() }
+
+    /** "Longer fast" · "24 h to 7 days" ›. */
+    fun longerRow(): NotifyChoiceRow =
+        NotifyChoiceRow(LONGER_HEAD, LONGER_VALUE, "Longer fast: $LONGER_VALUE. Opens its choices")
+
+    /** "Starts now · ends in 36 h"; over the GP line it says so first. */
+    private fun longerLine(hours: Long, ms: Long): String {
+        val base = "Starts now · ends in ${FastingRules.longDuration(ms)}"
+        return if (hours > FastingScreenRules.GP_NOTE_OVER_HOURS) "Check with your GP first · $base" else base
+    }
+
+    /**
+     * The lengths ([FastingRules.EXTENDED_CHOICES]) then the "Until …" days ([until]); the GP note is the sheet's note,
+     * so it's read before any longer fast can be started. Names: "h:<hours>" and "u:<index into until>".
+     */
+    fun longerSheet(until: List<FastUntilChoice>, nowMs: Long): NotifyChoiceSheet = NotifyChoiceSheet(
+        LONGER_TITLE, FastingScreenRules.GP_NOTE,
+        FastingRules.EXTENDED_CHOICES.map { c -> choice("h:${c.hours}", c.label, longerLine(c.hours.toLong(), c.hours * HOUR_MS), false) } +
+            until.mapIndexed { i, u ->
+                val ms = (u.untilMs - nowMs).coerceAtLeast(0)
+                choice("u:$i", u.label, longerLine(ms / HOUR_MS, ms), false)
+            },
+    )
+
+    /** What a longer-fast choice starts: hours, or an until moment. */
+    sealed interface LongerPick {
+        data class Hours(val hours: Int) : LongerPick
+        data class Until(val untilMs: Long) : LongerPick
+    }
+
+    /** The fast a longer choice starts; null when it isn't one. */
+    fun longerNamed(until: List<FastUntilChoice>, name: String): LongerPick? {
+        val n = name.substringAfter(':').toIntOrNull() ?: return null
+        return when {
+            name.startsWith("h:") -> FastingRules.EXTENDED_CHOICES.firstOrNull { it.hours == n }?.let { LongerPick.Hours(it.hours) }
+            name.startsWith("u:") -> until.getOrNull(n)?.let { LongerPick.Until(it.untilMs) }
+            else -> null
+        }
+    }
+
+    /** Swift: the hours a longer choice starts, or null (an until moment, or not a choice). */
+    fun longerHours(until: List<FastUntilChoice>, name: String): Int? = (longerNamed(until, name) as? LongerPick.Hours)?.hours
+
+    /** Swift: the moment a longer "Until …" choice runs to, or null. */
+    fun longerUntilMs(until: List<FastUntilChoice>, name: String): Long? = (longerNamed(until, name) as? LongerPick.Until)?.untilMs
 }

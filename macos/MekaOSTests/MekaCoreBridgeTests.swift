@@ -2644,6 +2644,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(R.planSheet(plan: plan).choices.filter(\.lit).map(\.label), ["16:8"])
         XCTAssertEqual(R.planNamed(plan: plan, name: "18:6")?.intValue, 2)
         XCTAssertNil(R.planNamed(plan: plan, name: "16:8"))
+        // More options' Started earlier and Longer fast are menus too.
+        XCTAssertEqual(R.earlierSheet(plan: plan).choices.map(\.label), ["30 min ago", "1 h ago", "2 h ago", "3 h ago"])
+        XCTAssertEqual(R.earlierNamed(name: "120")?.intValue, 120)
+        let until = [FastUntilChoice(label: "Until Sat 18:00", untilMs: 40 * 3_600_000)]
+        XCTAssertEqual(R.longerSheet(until: until, nowMs: 0).note, FastingScreenRules.shared.GP_NOTE)
+        XCTAssertEqual(R.longerHours(until: until, name: "h:48")?.intValue, 48)
+        XCTAssertEqual(R.longerUntilMs(until: until, name: "u:0")?.int64Value, 40 * 3_600_000)
+        XCTAssertNil(R.longerHours(until: until, name: "u:0"))
     }
 
     func testGoalSettingChoicesReachSwift() {

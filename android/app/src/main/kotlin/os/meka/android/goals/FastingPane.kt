@@ -84,6 +84,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.EvidenceTone
 import os.meka.android.notify.NotifyChoiceSheetView
+import os.meka.android.notify.NotifyChoiceRowView
 import os.meka.core.domain.FastingBesideRules
 import os.meka.core.domain.FastingChoiceRules
 import os.meka.core.domain.FastingHistoryRow
@@ -179,10 +180,11 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit, backLabel: String 
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var moreOpen by rememberSaveable { mutableStateOf(false) }
     var picking by rememberSaveable { mutableStateOf(false) }
+    var moreSheet by rememberSaveable { mutableStateOf<String?>(null) }
     var stageOpen by rememberSaveable { mutableStateOf<String?>(null) }
     val cur = v.current
     // A fast that ends or starts folds whatever was open for the other state.
-    LaunchedEffect(cur?.id) { editing = null; picking = false; moreOpen = false }
+    LaunchedEffect(cur?.id) { editing = null; picking = false; moreOpen = false; moreSheet = null }
 
     // The "you did it" burst: once per extended fast, the first time its goal is seen reached on this phone.
     val context = LocalContext.current
@@ -287,15 +289,29 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit, backLabel: String 
                         if (s.isFasting) {
                             Action("Discard this fast", critical = true) { haptics.light(); moreOpen = false; act { core.discardFast() } }
                         } else {
-                            Chips("Started earlier", FastingRules.STARTED_AGO_CHOICES.filter { it > 0 }.map { FastingRules.startedAgoLabel(it) to false }) { i ->
-                                haptics.light(); act { core.startFast(FastingRules.STARTED_AGO_CHOICES.filter { it > 0 }[i]) }
-                            }
+                            // Walk-through week 5, A17: Started earlier and Longer fast are rows opening sheets of their
+                            // choices, each saying what it does, not open chip rows; the GP note stays above Longer fast
+                            // and is the sheet's note too.
+                            NotifyChoiceRowView(FastingChoiceRules.earlierRow(), raised = true) { haptics.tick(); moreSheet = "earlier" }
                             Text(FastingScreenRules.GP_NOTE, style = MekaType.caption, color = Meka.colors.textSecondary)
-                            Chips("Longer fast", FastingRules.EXTENDED_CHOICES.map { it.label to false } + v.untilChoices.map { it.label to false }) { i ->
-                                haptics.light()
-                                val n = FastingRules.EXTENDED_CHOICES.size
-                                if (i < n) act { core.startExtendedFast(FastingRules.EXTENDED_CHOICES[i].hours, 0) }
-                                else act { core.startFastUntil(v.untilChoices[i - n].untilMs, 0) }
+                            NotifyChoiceRowView(FastingChoiceRules.longerRow(), raised = true) { haptics.tick(); moreSheet = "longer" }
+                            when (moreSheet) {
+                                "earlier" -> NotifyChoiceSheetView(
+                                    FastingChoiceRules.earlierSheet(v.plan),
+                                    onChoose = { name -> FastingChoiceRules.earlierNamed(name)?.let { m -> haptics.light(); act { core.startFast(m) } } },
+                                    onClose = { moreSheet = null },
+                                )
+                                "longer" -> NotifyChoiceSheetView(
+                                    FastingChoiceRules.longerSheet(v.untilChoices, now),
+                                    onChoose = { name ->
+                                        when (val p = FastingChoiceRules.longerNamed(v.untilChoices, name)) {
+                                            is FastingChoiceRules.LongerPick.Hours -> { haptics.light(); act { core.startExtendedFast(p.hours, 0) } }
+                                            is FastingChoiceRules.LongerPick.Until -> { haptics.light(); act { core.startFastUntil(p.untilMs, 0) } }
+                                            null -> Unit
+                                        }
+                                    },
+                                    onClose = { moreSheet = null },
+                                )
                             }
                             Action(if (picking) "Close" else "Pick a day and time") { haptics.tick(); picking = !picking }
                             AnimatedVisibility(picking, enter = unfold(), exit = fold()) {

@@ -79,4 +79,36 @@ class FastingChoicesTest {
         assertNull(R.startNamed(justStarted, now, "30"))
         assertEquals("Counts an hour earlier · goal an hour sooner", R.startLine(extended(), -60))
     }
+
+    @Test fun startedEarlierIsARowOpeningTheTimesAgoEachSayingWhatIsLeft() {
+        val plan = FastingRules.DEFAULT_PLAN
+        assertEquals("Started earlier", R.earlierRow().title)
+        val s = R.earlierSheet(plan)
+        assertEquals(listOf("30 min ago", "1 h ago", "2 h ago", "3 h ago"), s.choices.map { it.label })
+        assertTrue(s.choices.none { it.lit }, "nothing is running, so nothing is lit")
+        assertEquals("Goal 16 h · 15 h 30 m to go", s.choices[0].line)
+        assertEquals("Goal 16 h · 13 h 00 m to go", s.choices[3].line)
+        assertEquals(120, R.earlierNamed("120"))
+        assertNull(R.earlierNamed("0"), "Now is the main button, not a choice here")
+        assertNull(R.earlierNamed("nonsense"))
+    }
+
+    @Test fun longerFastIsARowOpeningLengthsAndDaysWithTheGpNoteFirst() {
+        val until = listOf(FastUntilChoice("Until Sat 18:00", now + 40 * hour), FastUntilChoice("Until Sun 18:00", now + 88 * hour))
+        val s = R.longerSheet(until, now)
+        assertEquals(FastingScreenRules.GP_NOTE, s.note, "the GP note is read before any longer fast can be started")
+        assertEquals(listOf("24 h", "36 h", "2 days", "3 days", "5 days", "7 days", "Until Sat 18:00", "Until Sun 18:00"), s.choices.map { it.label })
+        assertTrue(s.choices.none { it.lit })
+        assertEquals("Starts now · ends in 36 h 00 m", s.choices[1].line)
+        assertEquals("Starts now · ends in 3 d 00 h", s.choices[3].line, "72 h is not over the GP line")
+        assertEquals("Check with your GP first · Starts now · ends in 5 d 00 h", s.choices[4].line)
+        assertEquals("Check with your GP first · Starts now · ends in 3 d 16 h", s.choices[7].line)
+        assertEquals(FastingChoiceRules.LongerPick.Hours(48), R.longerNamed(until, "h:48"))
+        assertEquals(FastingChoiceRules.LongerPick.Until(now + 88 * hour), R.longerNamed(until, "u:1"))
+        assertEquals(120, R.longerHours(until, "h:120"))
+        assertEquals(now + 40 * hour, R.longerUntilMs(until, "u:0"))
+        assertNull(R.longerNamed(until, "h:50"))
+        assertNull(R.longerNamed(until, "u:5"))
+        assertNull(R.longerNamed(until, "nonsense"))
+    }
 }

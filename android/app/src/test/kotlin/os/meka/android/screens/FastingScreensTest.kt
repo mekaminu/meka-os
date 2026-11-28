@@ -277,6 +277,35 @@ class FastingScreensTest {
         if (shown("‹ Goals and habits")) fail("the Fasting screen didn't close")
     }
 
+    /** Walk-through week 5, A17: More options' Started earlier and Longer fast are rows opening sheets, not chip rows. */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun moreOptionsRowsOpenTheirSheetsByHand() {
+        val core = prepared(Fill.EMPTY)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { MekaTheme { FastingPane(core, onClose = {}) } }
+        settle()
+        tap(FastingScreenRules.MORE_OPTIONS)
+        if (shown("30 min ago")) fail("Started earlier's times are open on the page")
+        if (shown("36 h")) fail("Longer fast's lengths are open on the page")
+        tap(FastingChoiceRules.EARLIER_HEAD)
+        compose.onNodeWithTag(NOTIFY_CHOICE_SHEET_TAG).assertExists()
+        ScreenShots.assertShows(compose, "earlier", LoneWordGlue.kept("Goal 16 h · 14 h 00 m to go"))
+        tap("2 h ago")
+        awaitCore("Started 2 h ago") { core.fastingView.value.current != null }
+        val cur = core.fastingView.value.current!!
+        if (cur.extended || cur.targetHours != 16) fail("a fast started earlier isn't on the plan's goal")
+        if (shown(LoneWordGlue.kept(FastingChoiceRules.EARLIER_NOTE))) fail("the Started earlier sheet stayed open")
+        runBlocking { core.discardFast() }
+        settle()
+        tap(FastingScreenRules.MORE_OPTIONS)
+        tap(FastingChoiceRules.LONGER_HEAD)
+        compose.onNodeWithTag(NOTIFY_CHOICE_SHEET_TAG).assertExists()
+        ScreenShots.assertShows(compose, "longer", LoneWordGlue.kept("Check with your GP first · Starts now · ends in 5 d 00 h"))
+        tap("2 days")
+        awaitCore("Start a 2-day fast") { core.fastingView.value.current?.extended == true }
+        if (core.fastingView.value.current!!.targetHours != 48) fail("2 days didn't start a 48 h fast")
+    }
+
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun startEndTilesStagesAndMoreOptionsAllDoSomething() {
         val core = prepared(Fill.EMPTY)
