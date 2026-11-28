@@ -430,7 +430,7 @@ private struct GoalRowView: View {
 
 /// Which of a goal's words is open in its sheet (walk-through week 5, A17).
 private enum GoalWords: String, Identifiable {
-    case target, why
+    case target, why, step
     var id: String { rawValue }
 }
 
@@ -441,7 +441,6 @@ private struct GoalDetailsView: View {
     let all: [GoalItem]
     let palette: MekaPalette
     @State private var editing: GoalWords?
-    @State private var step = ""
     @State private var query = ""
     @State private var found: [MekaTask] = []
 
@@ -466,9 +465,9 @@ private struct GoalDetailsView: View {
             // kept (Close · Save, Save disabled until they change; blank clears), not open boxes on the page.
             GoalAddRowButton(row: GoalTextRules.shared.targetRow(g: goal), palette: palette) { editing = .target }
             GoalAddRowButton(row: GoalTextRules.shared.whyRow(g: goal), palette: palette) { editing = .why }
-            TextField("Add a step…", text: $step)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { model.addGoalStep(goal.id, step); step = "" }
+            // Walk-through week 5, A17: "+ Add a step" is a row opening its sheet (the step becomes a task linked to the
+            // goal), not an open box.
+            GoalAddRowButton(row: GoalStepRules.shared.stepRow, palette: palette) { editing = .step }
             TextField("Link a task…", text: $query).textFieldStyle(.roundedBorder)
             ForEach(found, id: \.id) { t in
                 Button("+ \(t.title)") { model.setTaskGoal(t.id, goal.id); query = "" }
@@ -488,6 +487,13 @@ private struct GoalDetailsView: View {
                 LineAddSheet(sheet: T.whySheet, palette: palette, initial: goal.why ?? "",
                              canAdd: { [saved = goal.why] in T.canSave(typed: $0, saved: saved, max: T.MAX_WHY) },
                              close: { editing = nil }) { typed in model.setGoalWhy(id, typed) }
+            case .step:
+                let S = GoalStepRules.shared
+                LineAddSheet(sheet: S.stepSheet, palette: palette,
+                             canAdd: { S.canAddStep(typed: $0) },
+                             close: { editing = nil }) { typed in
+                    if let t = S.cleaned(typed: typed, max: S.MAX_STEP) { model.addGoalStep(id, t) }
+                }
             }
         }
         .task(id: "\(query)|\(goal.tasksTotal)") {
@@ -504,7 +510,7 @@ private struct MilestonesView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let goal: GoalItem
     let palette: MekaPalette
-    @State private var title = ""
+    @State private var adding = false
     @State private var removed: String?
 
     var body: some View {
@@ -533,10 +539,19 @@ private struct MilestonesView: View {
                 }
                 .transition(.opacity)
             }
-            if goal.milestones.count < Int(GoalRules.shared.MAX_MILESTONES) {
-                TextField("Add a milestone…", text: $title)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { model.addGoalMilestone(goal.id, title); title = ""; removed = nil }
+            // Walk-through week 5, A17: "+ Add a milestone" is a row opening its sheet, not an open box; Add stays
+            // disabled for a name the goal already has.
+            if GoalStepRules.shared.showsMilestoneRow(g: goal) {
+                GoalAddRowButton(row: GoalStepRules.shared.milestoneRow(g: goal), palette: palette) { adding = true }
+            }
+        }
+        .sheet(isPresented: $adding) {
+            let S = GoalStepRules.shared
+            let id = goal.id
+            LineAddSheet(sheet: S.milestoneSheet(g: goal), palette: palette,
+                         canAdd: { [g = goal] in S.canAddMilestone(typed: $0, g: g) },
+                         close: { adding = false }) { typed in
+                if let t = S.cleaned(typed: typed, max: S.MAX_MILESTONE) { model.addGoalMilestone(id, t); removed = nil }
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: removed)

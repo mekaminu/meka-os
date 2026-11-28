@@ -93,6 +93,7 @@ import os.meka.core.domain.GoalMetricRules
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.drawscope.clipRect
 import os.meka.core.domain.GoalRules
+import os.meka.core.domain.GoalStepRules
 import os.meka.core.domain.GoalHabitChoiceRules
 import os.meka.core.domain.GoalSettingChoiceRules
 import os.meka.android.notify.NotifyChoiceRowView
@@ -708,7 +709,7 @@ private fun GoalRowBody(
                 GoalWhy(g, details.why)
                 Milestones(g, details)
                 BreakItDown(g, details.breakdown)
-                AddStep(details.addStep)
+                AddStep(g, details.addStep)
                 LinkTask(g, details)
             }
         }
@@ -756,7 +757,7 @@ private fun GoalTarget(g: GoalItem, save: (String?) -> Unit) {
 @Composable
 private fun Milestones(g: GoalItem, details: GoalDetails) {
     val reduced = Meka.reducedMotion
-    var title by rememberSaveable(g.id) { mutableStateOf("") }
+    var adding by rememberSaveable(g.id, "goal-milestone-add") { mutableStateOf(false) }
     var removed by remember(g.id) { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text(if (g.milestones.isEmpty()) "Milestones" else "Milestones · ${g.milestonesDone} of ${g.milestones.size}", style = MekaType.caption, color = Meka.colors.textTertiary)
@@ -779,10 +780,16 @@ private fun Milestones(g: GoalItem, details: GoalDetails) {
                 Action("Undo") { details.addMilestone(r); removed = null }
             }
         }
-        if (g.milestones.size < GoalRules.MAX_MILESTONES) {
-            Field("Add a milestone…", title, { title = it.take(GoalRules.MAX_MILESTONE_TITLE) }) { details.addMilestone(title.trim()); title = ""; removed = null }
+        // Walk-through week 5, A17: "+ Add a milestone" is a card row opening its sheet, not an open box.
+        if (GoalStepRules.showsMilestoneRow(g)) {
+            GoalAddRowView(GoalStepRules.milestoneRow(g), Modifier.testTag("goals-goal-milestone-add-${g.id}")) { adding = true }
         }
     }
+    if (adding) LineAddSheetView(
+        GoalStepRules.milestoneSheet(g), { GoalStepRules.canAddMilestone(it, g) }, GoalStepRules.MAX_MILESTONE,
+        onAdd = { t -> GoalStepRules.cleaned(t, GoalStepRules.MAX_MILESTONE)?.let(details.addMilestone); removed = null },
+        onClose = { adding = false },
+    )
 }
 
 /**
@@ -891,11 +898,19 @@ private fun GoalWhy(g: GoalItem, save: (String?) -> Unit) {
     )
 }
 
-/** "Add a step": a new task linked to the goal; it shows as the next step when nothing is planned sooner. */
+/**
+ * "+ Add a step": a new task linked to the goal; it shows as the next step when nothing is planned sooner. Walk-through
+ * week 5, A17: a card row opening its sheet, not an open box.
+ */
 @Composable
-private fun AddStep(add: (String) -> Unit) {
-    var title by rememberSaveable { mutableStateOf("") }
-    Field("Add a step…", title, { title = it }) { add(title.trim()); title = "" }
+private fun AddStep(g: GoalItem, add: (String) -> Unit) {
+    var open by rememberSaveable(g.id, "goal-step-add") { mutableStateOf(false) }
+    GoalAddRowView(GoalStepRules.stepRow, Modifier.testTag("goals-goal-step-add-${g.id}")) { open = true }
+    if (open) LineAddSheetView(
+        GoalStepRules.stepSheet, GoalStepRules::canAddStep, GoalStepRules.MAX_STEP,
+        onAdd = { t -> GoalStepRules.cleaned(t, GoalStepRules.MAX_STEP)?.let(add) },
+        onClose = { open = false },
+    )
 }
 
 /** "Link a task": type a few words, tap one of your open tasks to count it towards the goal. */

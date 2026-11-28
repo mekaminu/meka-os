@@ -30,6 +30,7 @@ import os.meka.core.domain.GoalSettingChoiceRules
 import os.meka.core.domain.GoalTextRules
 import os.meka.core.domain.GoalNumberRules
 import os.meka.core.domain.GoalRules
+import os.meka.core.domain.GoalStepRules
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import kotlin.test.fail
@@ -584,6 +585,66 @@ class GoalsScreensTest {
         waitFor("the page doesn't say what was added") {
             compose.onAllNodes(hasText("Added +200"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    /**
+     * By hand (walk-through week 5, A17): an open goal's "+ Add a milestone" and "+ Add a step" are rows opening sheets,
+     * not open boxes. Add is dark with nothing typed and for a milestone the goal already has; a new one adds it and the
+     * sheet goes; a step becomes a task linked to the goal.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun goalMilestoneAndStepByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        val id = runBlocking {
+            core.tick()
+            val id = core.addGoal("Run a half marathon", null, GoalHorizon.MONTH)
+            core.addGoalMilestone(id, "Run 5k")
+            core.tick()
+            id
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        fun g() = core.goalsView.value.goals.first { it.id == id }
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        val open = compose.onAllNodes(hasText("Run a half marathon") and hasClickAction())
+        if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the goal has nothing to tap to show its settings")
+        open[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        listOf("Add a milestone…", "Add a step…").forEach { hint ->
+            if (compose.onAllNodes(hasContentDescription(hint) and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()) fail("Goals: \"$hint\" is an open box on the open goal")
+        }
+
+        val sheet = GoalStepRules.milestoneSheet(g())
+        tapSaid(GoalAddRules.rowSpoken(GoalStepRules.milestoneRow(g())))
+        if (!sheetOpen()) fail("Goals: + Add a milestone opened no sheet")
+        if (addEnabled(sheet.title)) fail("Goals: the milestone's Add is lit before anything is typed")
+        typeInto(sheet.spokenHint, "run 5K")
+        if (addEnabled(sheet.title)) fail("Goals: the milestone's Add is lit for one the goal already has")
+        typeInto(sheet.spokenHint, "Run 10k")
+        tapSaid("${GoalStepRules.ADD}, ${sheet.title}")
+        waitFor("the milestone wasn't added") { g().milestones.map { it.title } == listOf("Run 5k", "Run 10k") }
+        waitFor("the milestone's sheet stayed open") { !sheetOpen() }
+
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        tapSaid(GoalAddRules.rowSpoken(GoalStepRules.stepRow))
+        if (!sheetOpen()) fail("Goals: + Add a step opened no sheet")
+        if (addEnabled(GoalStepRules.stepSheet.title)) fail("Goals: the step's Add is lit before anything is typed")
+        typeInto(GoalStepRules.stepSheet.spokenHint, "Book a running coach")
+        tapSaid("${GoalStepRules.ADD}, ${GoalStepRules.stepSheet.title}")
+        waitFor("the step didn't become a task linked to the goal") { g().tasksTotal == 1 }
+        waitFor("the step's sheet stayed open") { !sheetOpen() }
     }
 
     /**

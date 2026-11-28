@@ -2678,6 +2678,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(N.addedLine(typed: " +200 ", changed: true), "Added +200")
     }
 
+    func testGoalStepSheetsReachSwift() {
+        // Walk-through week 5, A17: an open goal's + Add a milestone and + Add a step are rows opening sheets.
+        let S = GoalStepRules.shared
+        XCTAssertEqual(S.MILESTONE_LABEL, "+ Add a milestone")
+        XCTAssertEqual(S.stepRow.label, "+ Add a step")
+        XCTAssertFalse(S.canAddStep(typed: " "))
+        XCTAssertEqual(S.cleaned(typed: "  Run   10k ", max: S.MAX_MILESTONE), "Run 10k")
+    }
+
     func testEventDetailChoicesReachSwift() {
         // Walk-through week 5, A17: Whose is it? and Ring as an alarm are menus holding the Fold's sheets.
         let R = EventDetailChoiceRules.shared

@@ -7913,3 +7913,10 @@ A goal counting a number unfolded two always-open boxes on the open goal, "A num
 - Fold: `CheckedLineSheetView` in `GoalAddSheetView.kt` (stays open on a refusal, the problem tagged `goal-sheet-problem`); `GoalsRoute`'s `GoalNumber` uses the two rows; `GoalsScreensTest.goalNumberByHand` (no open box on the goal, the sheet starts with £2,000, "lots" is refused with the sheet open, £2,000 saves and closes, +200 is added and said on the page).
 - Mac: `GoalsScreen.swift`'s `GoalNumberView` uses `GoalAddRowButton` rows opening a new `CheckedLineSheet` (async submit returning the problem or nil); `testGoalNumberSheetsReachSwift`. Mac checked nightly.
 - Motion catalogue: the Goals line names the rows and the problem line. Gradle can't fetch its wrapper in this container, so the Fold tests run on CI; core-verify 4899 tests green.
+
+### Found and fixing, week 5 — slice 146 (2026-11-28): A17 on an open goal's Milestones add and Add a step
+An open goal unfolded two more always-open boxes, "Add a milestone…" under Milestones and "Add a step…" under Break it down. Each is now one card row: "+ Add a milestone" over "A point on the way, ticked off as you reach it" (or "Room for 9 more" once there are some; the row goes at 12, as the box did) and "+ Add a step" over "A task for this goal; the first open one shows as its next step", each opening a sheet with its name, what it does, Close · Add. The milestone's Add stays dark for a name the goal already has (any case, spaces squeezed); its note says ticking counts towards the ring, or for a number goal that the ring follows the number.
+- Core: `GoalStepSheets.kt` (`GoalStepRules` rows, sheets, `cleaned`, `canAddMilestone`, `canAddStep`); `GoalStepSheetsTest`.
+- Fold: `GoalsRoute`'s `Milestones` and `AddStep` use `GoalAddRowView` and `LineAddSheetView`; `GoalsScreensTest.goalMilestoneAndStepByHand`.
+- Mac: `GoalsScreen.swift`'s `MilestonesView` and `GoalDetailsView` use `GoalAddRowButton` opening `LineAddSheet`; `testGoalStepSheetsReachSwift`. Mac checked nightly.
+- Motion catalogue: the Goals line names the two rows. Next on an open goal: Link a task, then the habit's workout-app link.
