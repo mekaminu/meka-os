@@ -34,7 +34,6 @@ import os.meka.core.domain.GoalStepRules
 import os.meka.core.domain.GoalLinkRules
 import os.meka.core.domain.GoalAppLinkRules
 import os.meka.core.domain.GoalAddRow
-import os.meka.core.domain.GoalAppLinkRules
 import os.meka.android.goals.GOAL_LINK_TASK_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
