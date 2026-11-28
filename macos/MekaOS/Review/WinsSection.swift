@@ -131,6 +131,8 @@ private struct WinRowView: View {
 struct LineAddSheet: View {
     let sheet: GoalAddSheet
     let palette: MekaPalette
+    /// The words the field starts with (a goal's words to change); empty for a new line.
+    var initial: String = ""
     let canAdd: (String) -> Bool
     let close: () -> Void
     let add: (String) -> Void
@@ -151,6 +153,7 @@ struct LineAddSheet: View {
         }
         .padding(MekaSpace.l)
         .frame(width: 420)
+        .onAppear { if line.isEmpty { line = initial } }
     }
 
     private func save() {

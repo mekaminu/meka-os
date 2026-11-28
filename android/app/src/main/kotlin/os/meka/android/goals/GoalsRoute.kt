@@ -87,6 +87,7 @@ import os.meka.android.today.TypingSaves
 import os.meka.core.domain.TextAutosave
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.GoalItem
+import os.meka.core.domain.GoalTextRules
 import os.meka.core.domain.GoalMetricRules
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -733,20 +734,18 @@ internal fun ProgressRing(fill: Float, pct: Int) {
     }
 }
 
-/** "What done looks like": Done saves it, and so does closing the settings (typing is never lost). */
+/**
+ * "What done looks like" (walk-through week 5, A17): one card row over the words kept ("Not said yet · …" while there are
+ * none) opening its sheet with the words to change, Close · Save; not an open box on the page.
+ */
 @Composable
 private fun GoalTarget(g: GoalItem, save: (String?) -> Unit) {
-    var target by rememberSaveable(g.id) { mutableStateOf(g.target ?: "") }
-    val typed by rememberUpdatedState(target)
-    val saved by rememberUpdatedState(g.target ?: "")
-    val saveTarget by rememberUpdatedState(save)
-    DisposableEffect(Unit) {
-        onDispose { if (typed.trim() != saved) saveTarget(typed.trim().ifBlank { null }) }
-    }
-    Column {
-        Text("What done looks like", style = MekaType.caption, color = Meka.colors.textTertiary)
-        Field("Say what done looks like (optional)", target, { target = it.take(Goals.MAX_TITLE) }) { save(target.trim().ifBlank { null }) }
-    }
+    var open by rememberSaveable(g.id, "goal-target") { mutableStateOf(false) }
+    GoalAddRowView(GoalTextRules.targetRow(g), Modifier.testTag("goals-goal-target-${g.id}")) { open = true }
+    if (open) GoalTextSheetView(
+        GoalTextRules.targetSheet, g.target, GoalTextRules.MAX_TARGET, singleLine = true,
+        onSave = save, onClose = { open = false },
+    )
 }
 
 /**
@@ -875,20 +874,18 @@ private fun MetricChart(m: os.meka.core.domain.GoalMetric, today: Long) {
     }
 }
 
-/** "Why it matters": Done saves it, and so does closing the settings (typing is never lost, TextAutosave). */
+/**
+ * "Why it matters" (walk-through week 5, A17): one card row over the words kept opening its sheet (a few lines, Return a
+ * new line), Close · Save; not an open box on the page.
+ */
 @Composable
 private fun GoalWhy(g: GoalItem, save: (String?) -> Unit) {
-    var why by rememberSaveable(g.id) { mutableStateOf(g.why ?: "") }
-    val typed by rememberUpdatedState(why)
-    val saved by rememberUpdatedState(g.why ?: "")
-    val saveWhy by rememberUpdatedState(save)
-    DisposableEffect(Unit) {
-        onDispose { if (typed.trim() != saved) saveWhy(typed.trim().ifBlank { null }) }
-    }
-    Column {
-        Text("Why it matters", style = MekaType.caption, color = Meka.colors.textTertiary)
-        Field("Say why, in a line (optional)", why, { why = it.take(GoalRules.MAX_WHY) }) { save(why.trim().ifBlank { null }) }
-    }
+    var open by rememberSaveable(g.id, "goal-why") { mutableStateOf(false) }
+    GoalAddRowView(GoalTextRules.whyRow(g), Modifier.testTag("goals-goal-why-${g.id}")) { open = true }
+    if (open) GoalTextSheetView(
+        GoalTextRules.whySheet, g.why, GoalTextRules.MAX_WHY, singleLine = false,
+        onSave = save, onClose = { open = false },
+    )
 }
 
 /** "Add a step": a new task linked to the goal; it shows as the next step when nothing is planned sooner. */

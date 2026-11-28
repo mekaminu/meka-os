@@ -154,6 +154,27 @@ internal fun LineAddSheetView(
 }
 
 /**
+ * A goal's words to change (walk-through week 5, A17): What done looks like or Why it matters, opened from its row with
+ * the words kept, the note, Close · Save. Save stays dark until the words would change what's kept; blank clears them.
+ * [onSave] gets the cleaned words (null clears).
+ */
+@Composable
+internal fun GoalTextSheetView(
+    sheet: os.meka.core.domain.GoalAddSheet, saved: String?, maxLength: Int, singleLine: Boolean,
+    onSave: (String?) -> Unit, onClose: () -> Unit,
+) {
+    var typed by rememberSaveable { mutableStateOf(saved ?: "") }
+    GoalAddSheetFrame(
+        sheet, typed, { typed = it },
+        add = { onSave(os.meka.core.domain.GoalTextRules.cleaned(typed, maxLength)) },
+        onClose = onClose,
+        canAdd = os.meka.core.domain.GoalTextRules.canSave(typed, saved, maxLength),
+        maxLength = maxLength,
+        singleLine = singleLine,
+    ) { }
+}
+
+/**
  * The sheet all of them share. Motion: rises over a fading scrim (reduced motion: a cross-fade); the scrim, Close or Back
  * closes it; Add closes it at once (light haptic), unless [closeOnAdd] is false (Watch's Link: the caller closes it once
  * the server says yes). [keyboard] picks the field's keyboard (Watch's code: digits).

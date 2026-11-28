@@ -428,14 +428,19 @@ private struct GoalRowView: View {
     private var fraction: Double { min(1, max(0, Double(goal.progressPct) / 100)) }
 }
 
+/// Which of a goal's words is open in its sheet (walk-through week 5, A17).
+private enum GoalWords: String, Identifiable {
+    case target, why
+    var id: String { rawValue }
+}
+
 /// Goals, properly, slice 1: done-by date, the goal it sits under, why it matters, Add a step and Link a task.
 private struct GoalDetailsView: View {
     @Environment(CoreModel.self) private var model
     let goal: GoalItem
     let all: [GoalItem]
     let palette: MekaPalette
-    @State private var why = ""
-    @State private var target = ""
+    @State private var editing: GoalWords?
     @State private var step = ""
     @State private var query = ""
     @State private var found: [MekaTask] = []
@@ -457,12 +462,10 @@ private struct GoalDetailsView: View {
                 }
             }
             .font(MekaType.itemTitle).foregroundStyle(palette.accent)
-            TextField("What done looks like (optional)", text: $target)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { model.setGoalTarget(goal.id, target) }
-            TextField("Why it matters (optional)", text: $why)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { model.setGoalWhy(goal.id, why) }
+            // Walk-through week 5, A17: What done looks like and Why it matters are rows opening a sheet with the words
+            // kept (Close · Save, Save disabled until they change; blank clears), not open boxes on the page.
+            GoalAddRowButton(row: GoalTextRules.shared.targetRow(g: goal), palette: palette) { editing = .target }
+            GoalAddRowButton(row: GoalTextRules.shared.whyRow(g: goal), palette: palette) { editing = .why }
             TextField("Add a step…", text: $step)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { model.addGoalStep(goal.id, step); step = "" }
@@ -473,11 +476,19 @@ private struct GoalDetailsView: View {
                     .transition(.opacity)
             }
         }
-        .onAppear { why = goal.why ?? ""; target = goal.target ?? "" }
-        // Typing is never lost: a changed "why" or "what done looks like" saves when the settings close.
-        .onDisappear {
-            if why.trimmingCharacters(in: .whitespacesAndNewlines) != (goal.why ?? "") { model.setGoalWhy(goal.id, why) }
-            if target.trimmingCharacters(in: .whitespacesAndNewlines) != (goal.target ?? "") { model.setGoalTarget(goal.id, target) }
+        .sheet(item: $editing) { kind in
+            let T = GoalTextRules.shared
+            let id = goal.id
+            switch kind {
+            case .target:
+                LineAddSheet(sheet: T.targetSheet, palette: palette, initial: goal.target ?? "",
+                             canAdd: { [saved = goal.target] in T.canSave(typed: $0, saved: saved, max: T.MAX_TARGET) },
+                             close: { editing = nil }) { typed in model.setGoalTarget(id, typed) }
+            case .why:
+                LineAddSheet(sheet: T.whySheet, palette: palette, initial: goal.why ?? "",
+                             canAdd: { [saved = goal.why] in T.canSave(typed: $0, saved: saved, max: T.MAX_WHY) },
+                             close: { editing = nil }) { typed in model.setGoalWhy(id, typed) }
+            }
         }
         .task(id: "\(query)|\(goal.tasksTotal)") {
             let q = query

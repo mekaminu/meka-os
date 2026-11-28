@@ -2657,6 +2657,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(R.named(choices: [5, 10].map { KotlinInt(int: $0) }, current: 10, name: "0")?.intValue, 0)
     }
 
+    func testGoalTextsReachSwift() {
+        // Walk-through week 5, A17: a goal's What done looks like and Why it matters are rows opening a sheet.
+        let T = GoalTextRules.shared
+        XCTAssertEqual(T.targetSheet.addLabel, "Save")
+        XCTAssertEqual(T.whySheet.title, "Why it matters")
+        XCTAssertFalse(T.canSave(typed: " More energy ", saved: "More energy", max: T.MAX_WHY))
+        XCTAssertTrue(T.canSave(typed: "", saved: "More energy", max: T.MAX_WHY))
+        XCTAssertEqual(T.preview(words: "More energy\nand sleep"), "More energy…")
+    }
+
     func testEventDetailChoicesReachSwift() {
         // Walk-through week 5, A17: Whose is it? and Ring as an alarm are menus holding the Fold's sheets.
         let R = EventDetailChoiceRules.shared

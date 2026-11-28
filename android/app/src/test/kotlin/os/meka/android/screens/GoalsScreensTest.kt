@@ -27,6 +27,7 @@ import os.meka.android.goals.STUDY_ADD_COURSE_TAG
 import os.meka.core.domain.GoalAddRules
 import os.meka.core.domain.GoalHabitChoiceRules
 import os.meka.core.domain.GoalSettingChoiceRules
+import os.meka.core.domain.GoalTextRules
 import os.meka.core.domain.GoalRules
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
@@ -447,6 +448,70 @@ class GoalsScreensTest {
         tapSaid(GoalSettingChoiceRules.habitSheet(g(), habits).choices.first { it.name == habit }.spoken)
         waitFor("the habit's ticks didn't count") { g().metric?.habitId == habit }
         waitFor("the habit sheet stayed open") { !choiceSheetOpen() }
+    }
+
+    /**
+     * By hand (walk-through week 5, A17): a goal's What done looks like and Why it matters are rows opening sheets, not
+     * open boxes. No input box is on the open goal; each row opens its sheet with the words kept, Save dark until they
+     * change; Save keeps the new words and the row shows them; blank clears them.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun goalWordsByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        val id = runBlocking {
+            core.tick()
+            val id = core.addGoal("Run a 10k", "Under an hour", GoalHorizon.MONTH)
+            core.tick()
+            id
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        fun g() = core.goalsView.value.goals.first { it.id == id }
+        fun saveDark(title: String) = compose.onAllNodes(hasContentDescription("${GoalTextRules.SAVE}, $title"), useUnmergedTree = true)
+            .fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) != false
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        val open = compose.onAllNodes(hasText("Run a 10k") and hasClickAction())
+        if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the goal has nothing to tap to show its settings")
+        open[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        if (compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            fail("Goals: an open input box is on the open goal")
+
+        tapSaid(GoalAddRules.rowSpoken(GoalTextRules.targetRow(g())))
+        if (!sheetOpen()) fail("Goals: What done looks like opened no sheet")
+        if (!saveDark(GoalTextRules.TARGET_LABEL)) fail("Goals: Save is lit before the words change")
+        typeInto(GoalTextRules.targetSheet.spokenHint, "Under 55 minutes")
+        if (saveDark(GoalTextRules.TARGET_LABEL)) fail("Goals: Save stayed dark with new words")
+        tapSaid("${GoalTextRules.SAVE}, ${GoalTextRules.TARGET_LABEL}")
+        waitFor("What done looks like didn't save") { g().target == "Under 55 minutes" }
+        waitFor("the What done looks like sheet stayed open") { !sheetOpen() }
+
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("g-$id")
+        turns()
+        tapSaid(GoalAddRules.rowSpoken(GoalTextRules.whyRow(g())))
+        if (!sheetOpen()) fail("Goals: Why it matters opened no sheet")
+        typeInto(GoalTextRules.whySheet.spokenHint, "  More energy  ")
+        tapSaid("${GoalTextRules.SAVE}, ${GoalTextRules.WHY_LABEL}")
+        waitFor("Why it matters didn't save") { g().why == "More energy" }
+        waitFor("the Why it matters sheet stayed open") { !sheetOpen() }
+        waitFor("the row doesn't show the why") {
+            compose.onAllNodes(hasContentDescription(GoalAddRules.rowSpoken(GoalTextRules.whyRow(g()))), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        tapSaid(GoalAddRules.rowSpoken(GoalTextRules.whyRow(g())))
+        typeInto(GoalTextRules.whySheet.spokenHint, "")
+        tapSaid("${GoalTextRules.SAVE}, ${GoalTextRules.WHY_LABEL}")
+        waitFor("a blank Why it matters didn't clear it") { g().why == null }
     }
 
     /**
