@@ -25,6 +25,9 @@ import os.meka.android.goals.GOALS_ADD_HABIT_TAG
 import os.meka.android.goals.GOAL_ADD_SHEET_TAG
 import os.meka.android.goals.STUDY_ADD_COURSE_TAG
 import os.meka.core.domain.GoalAddRules
+import os.meka.core.domain.GoalHabitChoiceRules
+import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
+import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
 import kotlin.test.fail
 import kotlin.math.abs
 import kotlin.test.assertTrue
@@ -304,6 +307,70 @@ class GoalsScreensTest {
         val g = core.goalsView.value.goals.first { it.title == "Swim a mile" }
         if (g.target != "1.6 km without stopping" || g.horizon != GoalHorizon.YEAR) fail("Goals: the goal was added as ${g.target}, ${g.horizon}")
         waitFor("the goal sheet stayed open after Add") { !sheetOpen() }
+    }
+
+    private fun choiceSheetOpen() = compose.onAllNodes(hasTestTag(NOTIFY_CHOICE_SHEET_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /**
+     * By hand (walk-through week 5, A17): a habit's settings on Goals are rows opening sheets, not open chip rows. Its
+     * How often row opens a sheet saying what each target does; 3 a week saves and closes it; Book my sessions On brings
+     * its Rotation row; Towards links the goal.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun habitSettingsByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        val (id, goal) = runBlocking {
+            core.tick()
+            val id = core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
+            val goal = core.addGoal("Swim a mile", null, GoalHorizon.YEAR)
+            core.tick()
+            id to goal
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        fun h() = core.goalsView.value.habits.first { it.id == id }
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("h-$id")
+        turns()
+        val open = compose.onAllNodes(hasText("Read 20 pages") and hasClickAction())
+        if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the habit has nothing to tap to show its settings")
+        open[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        // No open chip of any setting on the page: each is behind its row.
+        listOf("Twice a week", "Morning", "45 min", "No goal").forEach { label ->
+            if (compose.onAllNodes(hasText(label) and hasClickAction() and !hasTestTag(NOTIFY_CHOICE_ROW_TAG), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+                fail("Goals: a \"$label\" chip on the page; it belongs in its row's sheet")
+        }
+        tapSaid(GoalHabitChoiceRules.oftenRow(h()).spoken)
+        waitFor("How often opened no sheet") { choiceSheetOpen() }
+        val three = GoalHabitChoiceRules.oftenSheet(h()).choices.first { it.name == "3" }
+        if (!three.line.contains("weekly streak")) fail("Goals: 3 a week says \"${three.line}\"")
+        tapSaid(three.spoken)
+        waitFor("3 a week didn't save") { h().targetPerWeek == 3 }
+        waitFor("the sheet stayed open after a choice") { !choiceSheetOpen() }
+
+        tapSaid(GoalHabitChoiceRules.bookRow(h()).spoken)
+        waitFor("Book my sessions opened no sheet") { choiceSheetOpen() }
+        tapSaid(GoalHabitChoiceRules.bookSheet(h()).choices.first { it.name == GoalHabitChoiceRules.ON }.spoken)
+        waitFor("booking didn't turn on") { h().booked }
+        waitFor("no Rotation row once booked") {
+            compose.onAllNodes(hasContentDescription(GoalHabitChoiceRules.rotationRow(h()).spoken), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        val goals = core.goalsView.value.goals
+        tapSaid(GoalHabitChoiceRules.towardsRow(h(), goals).spoken)
+        waitFor("Towards opened no sheet") { choiceSheetOpen() }
+        tapSaid(GoalHabitChoiceRules.towardsSheet(h(), goals).choices.first { it.name == goal }.spoken)
+        waitFor("Towards didn't link the goal") { h().goalId == goal }
+        waitFor("the Towards sheet stayed open") { !choiceSheetOpen() }
     }
 
     /**

@@ -91,6 +91,9 @@ import os.meka.core.domain.GoalMetricRules
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.drawscope.clipRect
 import os.meka.core.domain.GoalRules
+import os.meka.core.domain.GoalHabitChoiceRules
+import os.meka.android.notify.NotifyChoiceRowView
+import os.meka.android.notify.NotifyChoiceSheetView
 import os.meka.core.domain.Goals
 import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
@@ -394,6 +397,31 @@ private fun HabitRow(
 ) {
     val reduced = Meka.reducedMotion
     val bg by animateColorAsState(if (expanded) Meka.colors.surface else Color.Transparent, MekaMotion.appear(reduced), label = "habit-bg")
+    var sheet by rememberSaveable(h.id, "setting") { mutableStateOf<HabitSetting?>(null) }
+    sheet?.let { kind ->
+        val R = GoalHabitChoiceRules
+        NotifyChoiceSheetView(
+            when (kind) {
+                HabitSetting.OFTEN -> R.oftenSheet(h)
+                HabitSetting.WHEN -> R.whenSheet(h)
+                HabitSetting.LONG -> R.longSheet(h)
+                HabitSetting.BOOK -> R.bookSheet(h)
+                HabitSetting.ROTATION -> R.rotationSheet(h)
+                HabitSetting.TOWARDS -> R.towardsSheet(h, goals)
+            },
+            onChoose = { name ->
+                when (kind) {
+                    HabitSetting.OFTEN -> R.oftenNamed(h, name)?.let { edit(it, null, null) }
+                    HabitSetting.WHEN -> R.whenNamed(h, name)?.let { edit(null, it, null) }
+                    HabitSetting.LONG -> R.longNamed(h, name)?.let { edit(null, null, it) }
+                    HabitSetting.BOOK -> R.bookNamed(h, name)?.let(book)
+                    HabitSetting.ROTATION -> R.rotationNamed(h, name)?.let(rotate)
+                    HabitSetting.TOWARDS -> R.towardsNamed(h, goals, name)?.let { link(it.goalId) }
+                }
+            },
+            onClose = { sheet = null },
+        )
+    }
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(bg)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             TickCircle(h.doneToday, h.title, tick)
@@ -420,12 +448,15 @@ private fun HabitRow(
                 Modifier.fillMaxWidth().padding(start = MekaSpace.xs, end = MekaSpace.xs, bottom = MekaSpace.m),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {
-                Chips("How often", GoalRules.TARGET_CHOICES.map { it.label to (it.perWeek == h.targetPerWeek) }) { i -> edit(GoalRules.TARGET_CHOICES[i].perWeek, null, null) }
-                Chips("When", GoalRules.TIMINGS.map { GoalRules.timingLabel(it) to (it == h.timing) }) { i -> edit(null, GoalRules.TIMINGS[i], null) }
-                Chips("How long", GoalRules.MINUTE_CHOICES.map { "$it min" to (it == h.minutes) }) { i -> edit(null, null, GoalRules.MINUTE_CHOICES[i]) }
-                Chips("Book my sessions", listOf("On" to h.booked, "Off" to !h.booked)) { i -> book(i == 0) }
+                // Walk-through week 5, A17: one card row per setting ("How often" · "5 a week" ›) opening its sheet, each
+                // choice saying what it does, not six open chip rows under the habit.
+                val R = GoalHabitChoiceRules
+                NotifyChoiceRowView(R.oftenRow(h), Modifier.testTag("goals-habit-often-${h.id}"), raised = true) { sheet = HabitSetting.OFTEN }
+                NotifyChoiceRowView(R.whenRow(h), Modifier.testTag("goals-habit-when-${h.id}"), raised = true) { sheet = HabitSetting.WHEN }
+                NotifyChoiceRowView(R.longRow(h), Modifier.testTag("goals-habit-long-${h.id}"), raised = true) { sheet = HabitSetting.LONG }
+                NotifyChoiceRowView(R.bookRow(h), Modifier.testTag("goals-habit-book-${h.id}"), raised = true) { sheet = HabitSetting.BOOK }
                 if (h.booked) {
-                    Chips("Rotation", SessionRules.ROTATIONS.map { SessionRules.rotationLabel(it) to (it == h.rotation) }) { i -> rotate(i) }
+                    NotifyChoiceRowView(R.rotationRow(h), Modifier.testTag("goals-habit-rotation-${h.id}"), raised = true) { sheet = HabitSetting.ROTATION }
                     AppLinkField(h.appLink, h.appName, appLink)
                     Text(
                         "Booked around your calendar and work, a rest day between when there's room. Missed ones are rebooked.",
@@ -433,8 +464,7 @@ private fun HabitRow(
                     )
                 }
                 if (goals.isNotEmpty()) {
-                    val options = listOf<GoalItem?>(null) + goals
-                    Chips("Towards", options.map { (it?.title ?: "No goal") to (it?.id == h.goalId) }) { i -> link(options[i]?.id) }
+                    NotifyChoiceRowView(R.towardsRow(h, goals), Modifier.testTag("goals-habit-towards-${h.id}"), raised = true) { sheet = HabitSetting.TOWARDS }
                 }
                 Action("Delete", critical = true) { delete() }
             }
@@ -918,6 +948,9 @@ private fun Field(hint: String, value: String, onValue: (String) -> Unit, onDone
         )
     }
 }
+
+/** The habit setting whose sheet is open on Goals (walk-through week 5, A17). */
+internal enum class HabitSetting { OFTEN, WHEN, LONG, BOOK, ROTATION, TOWARDS }
 
 /** The add sheet open over Goals. */
 private enum class Adding { HABIT, GOAL }

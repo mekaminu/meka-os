@@ -153,6 +153,19 @@ private struct HabitRowView: View {
     let expanded: Bool
     let palette: MekaPalette
     let toggle: () -> Void
+    private var R: GoalHabitChoiceRules { GoalHabitChoiceRules.shared }
+
+    /// "How often · 5 a week" with a menu of its choices, each "3 a week · 3 days Monday to Sunday…".
+    private func choiceMenu(_ row: NotifyChoiceRow, _ sheet: NotifyChoiceSheet, pick: @escaping (String) -> Void) -> some View {
+        Menu("\(row.title) · \(row.value)") {
+            ForEach(sheet.choices, id: \.name) { c in
+                Button("\(c.lit ? "✓ " : "")\(c.label) · \(c.line)") { pick(c.name) }
+            }
+        }
+        .menuStyle(.button).fixedSize()
+        .help(sheet.note)
+        .accessibilityLabel(row.spoken)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -206,31 +219,17 @@ private struct HabitRowView: View {
                 .accessibilityHint(expanded ? "Hides settings" : "Shows settings")
             }
             if expanded {
+                // Walk-through week 5, A17: each setting a "How often · 5 a week" menu of the same choices as the
+                // Fold's sheet, each saying what it does.
                 HStack(spacing: MekaSpace.l) {
-                    Menu(GoalRules.shared.targetLabel(perWeek: habit.targetPerWeek)) {
-                        ForEach(GoalRules.shared.TARGET_CHOICES, id: \.perWeek) { c in
-                            Button(c.label) { model.setHabitTarget(habit.id, c.perWeek) }
-                        }
+                    choiceMenu(R.oftenRow(h: habit), R.oftenSheet(h: habit)) { name in
+                        if let n = R.oftenNamed(h: habit, name: name) { model.setHabitTarget(habit.id, n.int32Value) }
                     }
-                    .menuStyle(.button).fixedSize()
-                    Menu(GoalRules.shared.timingLabel(t: habit.timing)) {
-                        ForEach(GoalsScreen.timings, id: \.self) { t in
-                            Button(GoalRules.shared.timingLabel(t: t)) { model.setHabitTiming(habit.id, t) }
-                        }
+                    choiceMenu(R.whenRow(h: habit), R.whenSheet(h: habit)) { name in
+                        if let t = R.whenNamed(h: habit, name: name) { model.setHabitTiming(habit.id, t) }
                     }
-                    .menuStyle(.button).fixedSize()
-                    Menu("\(habit.minutes) min") {
-                        ForEach(GoalRules.shared.MINUTE_CHOICES, id: \.intValue) { m in
-                            Button("\(m.intValue) min") { model.setHabitMinutes(habit.id, m.int32Value) }
-                        }
-                    }
-                    .menuStyle(.button).fixedSize()
-                    if !goals.isEmpty {
-                        Menu(goals.first { $0.id == habit.goalId }?.title ?? "No goal") {
-                            Button("No goal") { model.setHabitGoal(habit.id, nil) }
-                            ForEach(goals, id: \.id) { g in Button(g.title) { model.setHabitGoal(habit.id, g.id) } }
-                        }
-                        .menuStyle(.button).fixedSize()
+                    choiceMenu(R.longRow(h: habit), R.longSheet(h: habit)) { name in
+                        if let m = R.longNamed(h: habit, name: name) { model.setHabitMinutes(habit.id, m.int32Value) }
                     }
                     Button("Delete", role: .destructive) { model.deleteHabit(habit.id) }
                         .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.critical)
@@ -238,15 +237,18 @@ private struct HabitRowView: View {
                 .padding(.leading, 22 + MekaSpace.m)
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 HStack(spacing: MekaSpace.l) {
-                    Toggle("Book my sessions", isOn: Binding(get: { habit.booked }, set: { model.setHabitBooked(habit.id, $0) }))
-                        .toggleStyle(.switch).font(MekaType.body).fixedSize()
+                    choiceMenu(R.bookRow(h: habit), R.bookSheet(h: habit)) { name in
+                        if let on = R.bookNamed(h: habit, name: name) { model.setHabitBooked(habit.id, on.boolValue) }
+                    }
                     if habit.booked {
-                        Menu(habit.rotationLabel) {
-                            ForEach(Array(SessionRules.shared.ROTATIONS.enumerated()), id: \.offset) { i, r in
-                                Button(SessionRules.shared.rotationLabel(r: r)) { model.setHabitRotation(habit.id, i) }
-                            }
+                        choiceMenu(R.rotationRow(h: habit), R.rotationSheet(h: habit)) { name in
+                            if let i = R.rotationNamed(h: habit, name: name) { model.setHabitRotation(habit.id, i.intValue) }
                         }
-                        .menuStyle(.button).fixedSize()
+                    }
+                    if !goals.isEmpty {
+                        choiceMenu(R.towardsRow(h: habit, goals: goals), R.towardsSheet(h: habit, goals: goals)) { name in
+                            if let pick = R.towardsNamed(h: habit, goals: goals, name: name) { model.setHabitGoal(habit.id, pick.goalId) }
+                        }
                     }
                 }
                 .padding(.leading, 22 + MekaSpace.m)

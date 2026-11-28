@@ -2627,6 +2627,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MailLabelChoiceRules.shared.named(label: .personal, name: "PERSONAL"))
     }
 
+    func testGoalHabitChoicesReachSwift() {
+        // Walk-through week 5, A17: Goals' habit settings are menus of the same choices as the Fold's sheets.
+        let R = GoalHabitChoiceRules.shared
+        XCTAssertEqual(R.OFTEN_HEAD, "How often")
+        XCTAssertEqual(R.longValue(minutes: 20), "20 min")
+        XCTAssertEqual(R.whenLine(t: .morning), "Planned between 06:00 and 12:00")
+        XCTAssertTrue(R.oftenLine(perWeek: 7).hasPrefix("Every day"))
+    }
+
     func testBriefLengthChoicesReachSwift() {
         // Walk-through week 5, A17: the brief's length is a row with a menu, not an open segmented row.
         let lengths = MorningBriefView.companion.EMPTY.lengths
