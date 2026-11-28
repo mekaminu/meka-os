@@ -32,6 +32,9 @@ import os.meka.core.domain.GoalNumberRules
 import os.meka.core.domain.GoalRules
 import os.meka.core.domain.GoalStepRules
 import os.meka.core.domain.GoalLinkRules
+import os.meka.core.domain.GoalAppLinkRules
+import os.meka.core.domain.GoalAddRow
+import os.meka.core.domain.GoalAppLinkRules
 import os.meka.android.goals.GOAL_LINK_TASK_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_ROW_TAG
 import os.meka.android.notify.NOTIFY_CHOICE_SHEET_TAG
@@ -520,6 +523,77 @@ class GoalsScreensTest {
         typeInto(GoalTextRules.whySheet.spokenHint, "")
         tapSaid("${GoalTextRules.SAVE}, ${GoalTextRules.WHY_LABEL}")
         waitFor("a blank Why it matters didn't clear it") { g().why == null }
+    }
+
+    /**
+     * By hand (walk-through week 5, A17): a booked habit's workout-app link is a "Workout app" row opening a sheet, not
+     * an open box. Save stays dark until the link would change; a line that isn't a web address keeps the sheet open and
+     * says so under the field; a good one saves, closes and shows on the row; a blank box removes it.
+     */
+    @Test @Config(qualifiers = ScreenShots.COVER)
+    fun habitAppLinkByHand() {
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        ThemeChoice.save(context, ThemeChoice.DARK)
+        val core = core()
+        context.useCoreForScreens(core)
+        clock = now
+        val id = runBlocking {
+            core.tick()
+            val id = core.addHabit("Gym", 3, HabitTiming.EVENING, 60, null)
+            core.setHabitBooked(id, true)
+            core.tick()
+            id
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) { GoalsRoute(core) }
+            }
+        }
+        turns()
+        fun h() = core.goalsView.value.habits.first { it.id == id }
+        fun problemShown() = compose.onAllNodes(hasTestTag("goal-sheet-problem"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val saveSaid = "${GoalAppLinkRules.SAVE}, ${GoalAppLinkRules.LABEL}"
+        fun saveEnabled() = compose.onAllNodes(hasContentDescription(saveSaid), useUnmergedTree = true)
+            .fetchSemanticsNodes().firstOrNull()?.config?.contains(SemanticsProperties.Disabled) == false
+        fun rowSays(line: String) = compose.onAllNodes(
+            hasContentDescription(GoalAddRules.rowSpoken(GoalAddRow(GoalAppLinkRules.LABEL, line))), useUnmergedTree = true,
+        ).fetchSemanticsNodes().isNotEmpty()
+        compose.onNodeWithTag(GOALS_LIST_TAG).performScrollToKey("h-$id")
+        turns()
+        val open = compose.onAllNodes(hasText("Gym") and hasClickAction())
+        if (open.fetchSemanticsNodes().isEmpty()) fail("Goals: the habit has nothing to tap to show its settings")
+        open[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        if (compose.onAllNodes(hasContentDescription("Link to your workout app · hevy.com (optional)") and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            fail("Goals: an open box on the open booked habit; the workout app's link belongs in its row's sheet")
+        waitFor("the Workout app row doesn't say what it's for") { rowSays(GoalAppLinkRules.EMPTY) }
+
+        tapSaid(GoalAddRules.rowSpoken(GoalAppLinkRules.row(h())))
+        if (!sheetOpen()) fail("Goals: Workout app opened no sheet")
+        if (saveEnabled()) fail("Goals: Save is lit before a link is typed")
+        val spoken = GoalAppLinkRules.sheet(h()).spokenHint
+        typeInto(spoken, "not a link")
+        tapSaid(saveSaid)
+        waitFor("a line that isn't a web address wasn't said under the field") { problemShown() }
+        if (!sheetOpen()) fail("Goals: the link's sheet closed on a line that isn't a web address")
+        if (h().appLink != null) fail("Goals: a line that isn't a web address was kept")
+        typeInto(spoken, "hevy.com")
+        waitFor("the problem stayed after typing") { !problemShown() }
+        tapSaid(saveSaid)
+        waitFor("the link didn't save") { h().appLink == "https://hevy.com" }
+        waitFor("the link's sheet stayed open") { !sheetOpen() }
+        waitFor("the row doesn't say the link and what Today's card does") { rowSays("hevy.com · Today's card opens Hevy") }
+
+        tapSaid(GoalAddRules.rowSpoken(GoalAppLinkRules.row(h())))
+        if (!sheetOpen()) fail("Goals: Workout app opened no sheet the second time")
+        if (compose.onAllNodes(hasContentDescription(spoken) and hasText("hevy.com"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("Goals: the link's sheet doesn't start with the link kept")
+        if (saveEnabled()) fail("Goals: Save is lit for the same link")
+        typeInto(spoken, "")
+        tapSaid(saveSaid)
+        waitFor("a blank box didn't remove the link") { h().appLink == null }
+        waitFor("the link's sheet stayed open after removing it") { !sheetOpen() }
     }
 
     /**

@@ -254,7 +254,7 @@ private struct HabitRowView: View {
                 .padding(.leading, 22 + MekaSpace.m)
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 if habit.booked {
-                    AppLinkField(habit: habit, palette: palette)
+                    AppLinkRow(habit: habit, palette: palette)
                         .padding(.leading, 22 + MekaSpace.m)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -266,52 +266,34 @@ private struct HabitRowView: View {
     }
 }
 
-/// Gym: the workout app's link ("hevy.com"), so Today's card can open it. Return saves it; a link that isn't a web
-/// address says so; Remove clears it. The line under the field cross-fades as it changes.
-private struct AppLinkField: View {
+/// Gym: the workout app's link ("hevy.com"), so Today's card can open it. Walk-through week 5, A17: one card row,
+/// "Workout app" over the link and what Today's card does with it (`GoalAppLinkRules`), opening a sheet that starts with
+/// the link kept, the Mac twin of the Fold's row: Save is disabled until the link would change, a blank line removes it,
+/// and a line that isn't a web address keeps the sheet open and says so under the field. Only Strings cross to the core.
+private struct AppLinkRow: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let habit: HabitItem
     let palette: MekaPalette
-    @State private var text = ""
-    @State private var bad = false
-
-    private var line: String {
-        if bad { return "That isn't a web address · try hevy.com" }
-        if let name = habit.appName { return "Today's card opens \(name)" }
-        return "Today's card can open the app you log workouts in"
-    }
+    @State private var open = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            HStack(spacing: MekaSpace.m) {
-                TextField("Workout app link · hevy.com (optional)", text: $text)
-                    .textFieldStyle(.roundedBorder).font(MekaType.body).frame(maxWidth: 320)
-                    .onSubmit { save(text) }
-                    .onChange(of: text) { bad = false }
-                if habit.appLink != nil {
-                    Button("Remove") { save("") }
-                        .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
+        let R = GoalAppLinkRules.shared
+        let row = R.row(h: habit)
+        GoalAddRowButton(row: row, palette: palette) { open = true }
+            .id(row.line).transition(.opacity)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)
+            .sheet(isPresented: $open) {
+                let id = habit.id
+                CheckedLineSheet(
+                    sheet: R.sheet(h: habit), palette: palette, initial: R.initial(h: habit),
+                    canSave: { [habit] in R.canSave(typed: $0, h: habit) },
+                    close: { open = false }
+                ) { typed in
+                    let value = String(typed.prefix(Int(SessionRules.shared.MAX_LINK)))
+                    return await model.setHabitAppLink(id, value) ? nil : R.NOT_A_LINK
                 }
             }
-            Text(line).font(MekaType.caption).foregroundStyle(bad ? palette.critical : palette.textTertiary)
-                .id(line).transition(.opacity)
-        }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
-        .onAppear { text = habit.appLink ?? "" }
-        .onChange(of: habit.appLink) { text = habit.appLink ?? "" }
-        // Typing is never lost (TextAutosave): a changed link saves when the settings close, as if Return had been
-        // pressed (one that isn't a web address is refused there as on Return, and the old one stays).
-        .onDisappear {
-            if let link = TextAutosave.shared.pendingAdd(typed: text), link != (habit.appLink ?? "") { save(link) }
-        }
-    }
-
-    private func save(_ link: String) {
-        let id = habit.id
-        let value = String(link.prefix(Int(SessionRules.shared.MAX_LINK)))
-        guard !value.trimmingCharacters(in: .whitespaces).isEmpty || habit.appLink != nil else { return }
-        Task { bad = !(await model.setHabitAppLink(id, value)) }
     }
 }
 

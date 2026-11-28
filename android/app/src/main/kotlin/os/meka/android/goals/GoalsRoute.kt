@@ -37,12 +37,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -60,7 +55,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
@@ -69,7 +63,6 @@ import os.meka.android.designsystem.minTouch
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.TickRing
@@ -84,7 +77,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.android.today.TypingSaves
-import os.meka.core.domain.TextAutosave
+import os.meka.core.domain.GoalAppLinkRules
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.GoalItem
 import os.meka.core.domain.GoalTextRules
@@ -463,7 +456,7 @@ private fun HabitRow(
                 NotifyChoiceRowView(R.bookRow(h), Modifier.testTag("goals-habit-book-${h.id}"), raised = true) { sheet = HabitSetting.BOOK }
                 if (h.booked) {
                     NotifyChoiceRowView(R.rotationRow(h), Modifier.testTag("goals-habit-rotation-${h.id}"), raised = true) { sheet = HabitSetting.ROTATION }
-                    AppLinkField(h.appLink, h.appName, appLink)
+                    AppLinkRow(h, appLink)
                     Text(
                         "Booked around your calendar and work, a rest day between when there's room. Missed ones are rebooked.",
                         style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -479,43 +472,27 @@ private fun HabitRow(
 }
 
 /**
- * Gym: the workout app's link ("hevy.com"), so Today's card can open it. Done saves it; a link that isn't a web address
- * says so; Remove clears it. The line under the field cross-fades as it changes.
+ * Gym: the workout app's link ("hevy.com"), so Today's card can open it. Walk-through week 5, A17: one card row,
+ * "Workout app" over the link and what Today's card does with it (GoalAppLinkRules), opening a sheet that starts with
+ * the link kept; Save stays dark until it would change, a blank box removes it, and a line that isn't a web address
+ * keeps the sheet open and says so under the field. The row's line cross-fades as the link changes.
  */
 @Composable
-private fun AppLinkField(current: String?, name: String?, save: (String, (Boolean) -> Unit) -> Unit) {
-    val haptics = rememberMekaHaptics()
+private fun AppLinkRow(h: HabitItem, save: (String, (Boolean) -> Unit) -> Unit) {
     val reduced = Meka.reducedMotion
-    var text by rememberSaveable(current) { mutableStateOf(current.orEmpty()) }
-    var bad by rememberSaveable(current) { mutableStateOf(false) }
-    // Typing is never lost (TextAutosave): a changed link saves when the settings close, as if Done had been pressed
-    // (one that isn't a web address is refused there as on Done, and the old one stays).
-    val typed by rememberUpdatedState(text)
-    val saved by rememberUpdatedState(current)
-    val saveLink by rememberUpdatedState(save)
-    DisposableEffect(Unit) {
-        onDispose { TextAutosave.pendingAdd(typed)?.let { if (it != saved) saveLink(it) { } } }
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Text("Workout app", style = MekaType.caption, color = Meka.colors.textTertiary)
-        Field("Link to your workout app · hevy.com (optional)", text, { text = it.take(SessionRules.MAX_LINK); bad = false }) {
-            save(text) { ok -> bad = !ok; if (ok) haptics.light() else haptics.tick() }
-        }
-        val line = when {
-            bad -> "That isn't a web address · try hevy.com"
-            name != null -> "Today's card opens $name"
-            else -> "Today's card can open the app you log workouts in"
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AnimatedContent(
-                targetState = line,
-                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
-                label = "app-link-line",
-                modifier = Modifier.weight(1f),
-            ) { l -> Text(l, style = MekaType.caption, color = if (bad) Meka.colors.critical else Meka.colors.textTertiary) }
-            if (current != null) Action("Remove") { haptics.tick(); save("") { } }
-        }
-    }
+    var open by rememberSaveable(h.id, "app-link") { mutableStateOf(false) }
+    val row = GoalAppLinkRules.row(h)
+    AnimatedContent(
+        targetState = row,
+        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+        label = "app-link-row",
+    ) { r -> GoalAddRowView(r, Modifier.testTag("goals-habit-app-${h.id}")) { open = true } }
+    if (open) CheckedLineSheetView(
+        GoalAppLinkRules.sheet(h), GoalAppLinkRules.initial(h),
+        canSave = { GoalAppLinkRules.canSave(it, h) }, maxLength = SessionRules.MAX_LINK,
+        submit = { typed, then -> save(typed.trim()) { ok -> then(if (ok) null else GoalAppLinkRules.NOT_A_LINK) } },
+        onClose = { open = false },
+    )
 }
 
 /** The tick: the ring sweeps round, fills and draws the check, and the circle pops ([TickRing]; Off: at once). */
@@ -962,27 +939,6 @@ private fun Chip(label: String, lit: Boolean, onClick: () -> Unit) {
             .semantics { selected = lit }
             .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
-}
-
-/** A one-line field in a raised pill; Done submits. */
-@Composable
-private fun Field(hint: String, value: String, onValue: (String) -> Unit, onDone: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
-    ) {
-        if (value.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
-        BasicTextField(
-            value = value,
-            onValueChange = onValue,
-            singleLine = true,
-            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
-            cursorBrush = SolidColor(Meka.colors.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { if (value.isNotBlank()) onDone() }),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = hint },
-        )
-    }
 }
 
 /** The goal setting whose sheet is open on Goals (walk-through week 5, A17). */

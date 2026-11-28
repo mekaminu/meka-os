@@ -2678,6 +2678,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(N.addedLine(typed: " +200 ", changed: true), "Added +200")
     }
 
+    func testGoalAppLinkSheetReachesSwift() {
+        // Walk-through week 5, A17: a booked habit's workout-app link is a row opening a checked sheet.
+        let A = GoalAppLinkRules.shared
+        XCTAssertEqual(A.LABEL, "Workout app")
+        XCTAssertEqual(A.SAVE, "Save")
+        XCTAssertEqual(A.shown(link: "https://www.hevy.com/"), "hevy.com")
+        XCTAssertTrue(A.linkOk(typed: "hevy.com"))
+        XCTAssertFalse(A.linkOk(typed: "not a link"))
+    }
+
     func testGoalLinkSheetReachesSwift() {
         // Walk-through week 5, A17: an open goal's + Link a task is a row opening a sheet of your open tasks.
         let L = GoalLinkRules.shared
