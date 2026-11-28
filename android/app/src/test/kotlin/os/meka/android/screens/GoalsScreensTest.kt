@@ -566,7 +566,7 @@ class GoalsScreensTest {
         waitFor("a line that isn't a number wasn't said under the field") { problemShown() }
         if (!sheetOpen()) fail("Goals: the number's sheet closed on a line that isn't a number")
         typeInto(GoalNumberRules.numberSheet(g()).spokenHint, "£2,000")
-        if (problemShown()) fail("Goals: the problem stayed after typing")
+        waitFor("the problem stayed after typing") { !problemShown() } // it folds away on the expand spring
         tapSaid("${GoalNumberRules.SAVE}, ${GoalNumberRules.NUMBER_LABEL}")
         waitFor("the number didn't save") { g().metric?.targetX100 == 200_000L }
         waitFor("the number's sheet stayed open") { !sheetOpen() }
